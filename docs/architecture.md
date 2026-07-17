@@ -28,6 +28,16 @@ Pointer Event binding, pointer capture and cancellation, touch intent arbitratio
 normalization, ResizeObserver and visual-viewport observation, reduced-motion changes, DOM layout
 measurement, and lifecycle cleanup.
 
+The package also owns a style-light production component layer above those composables. The layer
+encodes carousel and slide roles, stable accessibility relationships, inactive-slide inertness,
+native dialog lifecycle, explicit focus entry and return, settled status announcements, controlled
+models and events, and the bottom sheet's native radio snap alternative. Consumers still own media,
+captions, application layout, routing, and visual treatment.
+
+The generic reduced-motion media query, resize observation, and event-listener cleanup use
+`@vueuse/core`. Snap Motion keeps its domain-specific controller, pointer-intent, focus-policy, and
+semantic completion behavior because those contracts are not generic browser wrappers.
+
 The Motion driver implements the core animation-driver contract through imperative `animate` from
 `motion`. It receives an already-selected `from`, `to`, initial velocity in pixels per second, and
 physical spring parameters. It reports every scalar update and can be stopped immediately.
@@ -54,6 +64,10 @@ Remeasurement is a controller transition, not a passive correction:
    pointer-relative displacement while dragging.
 
 No stale offset from the old geometry becomes authoritative.
+
+During SSR, carousels begin with deterministic zero-width semantic anchors. The controlled active
+ID therefore exists before geometry does. The first client measurement preserves that ID and places
+it exactly without an entrance spring.
 
 ## Toolchain compatibility
 

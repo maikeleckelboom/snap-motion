@@ -9,6 +9,10 @@ This repository is not published to npm. Its internal package names are workspac
 
 ## Workspace
 
+The production-facing Vue package now includes the style-light carousel, native dialog, and bottom
+sheet component layer. `apps/router-fixture` owns Vue Router history integration and
+`apps/nuxt-fixture` owns SSR, hydration, and progressive full-route proof.
+
 - `packages/core` — framework-neutral geometry, target policy, velocity, elasticity, and scalar
   controller
 - `packages/vue` — Vue state, Pointer Events, responsive measurement, and the imperative Motion
@@ -42,7 +46,9 @@ no Vue or DOM dependency; the Vue package owns DOM integration and delegates tem
 the imperative `animate` API from Motion.
 
 See [architecture](docs/architecture.md), [geometry](docs/geometry.md), and the
-[interaction contract](docs/interaction-contract.md).
+[interaction contract](docs/interaction-contract.md). Production consumers must also read the
+[certification status](docs/production-certification.md); automated checks are not a complete
+accessibility claim.
 
 ## Origin and direction
 

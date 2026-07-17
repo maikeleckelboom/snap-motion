@@ -8,6 +8,8 @@ export default defineConfig({
   ignorePatterns: [
     "legacy/**",
     "**/dist/**",
+    "**/.nuxt/**",
+    "**/.output/**",
     "coverage/**",
     "blob-report/**",
     "playwright-report/**",
@@ -42,7 +44,7 @@ export default defineConfig({
       env: { browser: true, node: true, vitest: true },
     },
     {
-      files: ["e2e/**/*.ts"],
+      files: ["e2e/**/*.ts", "fixture-e2e/**/*.ts"],
       env: { browser: true, node: true },
     },
   ],

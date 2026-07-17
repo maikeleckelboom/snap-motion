@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @snap-motion/lab dev",
-    "build": "pnpm --filter @snap-motion/core build && pnpm --filter @snap-motion/vue build && pnpm --filter @snap-motion/lab build",
+    "build": "pnpm --filter @snap-motion/core build && pnpm --filter @snap-motion/vue build && pnpm --filter @snap-motion/lab build && pnpm --filter @snap-motion/router-fixture build && pnpm --filter @snap-motion/nuxt-fixture build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "oxlint .",
     "format": "oxfmt --write .",
@@ -13,20 +13,25 @@
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm build && pnpm test:e2e",
+    "test:fixtures": "playwright test --config playwright.fixtures.config.ts",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm build && pnpm test:e2e && pnpm test:fixtures",
     "clean": "node scripts/clean.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "catalog:",
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
+    "@vue/server-renderer": "catalog:",
     "happy-dom": "catalog:",
+    "nuxt": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
     "vue": "catalog:",
+    "vue-router": "catalog:",
     "vue-tsc": "catalog:"
   },
   "engines": {

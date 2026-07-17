@@ -10,6 +10,8 @@
   "ignorePatterns": [
     "legacy/**",
     "**/dist/**",
+    "**/.nuxt/**",
+    "**/.output/**",
     "coverage/**",
     "playwright-report/**",
     "test-results/**"

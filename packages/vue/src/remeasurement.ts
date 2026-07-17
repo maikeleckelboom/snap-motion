@@ -1,4 +1,5 @@
-import { onMounted, onScopeDispose, watch, type Ref } from "vue";
+import { useEventListener, useResizeObserver } from "@vueuse/core";
+import { computed, onMounted, type Ref } from "vue";
 
 export interface RemeasurementOptions {
   additionalTargets?: readonly Readonly<Ref<Element | undefined>>[];
@@ -7,48 +8,35 @@ export interface RemeasurementOptions {
 }
 
 export function useRemeasurement(options: RemeasurementOptions) {
-  let resizeObserver: ResizeObserver | undefined;
-  let stopTargetWatch: (() => void) | undefined;
-
-  function observeTargets(targets: readonly (Element | undefined)[]) {
-    resizeObserver?.disconnect();
-    for (const target of targets) {
-      if (target) {
-        resizeObserver?.observe(target);
-      }
-    }
-  }
-
   function remeasure() {
     options.measure();
   }
 
+  const targets = [options.target, ...(options.additionalTargets ?? [])];
+  const observedTargets = computed(() =>
+    targets
+      .map((target) => target.value)
+      .filter(
+        (target): target is HTMLElement | SVGElement =>
+          typeof Element !== "undefined" &&
+          Boolean(target) &&
+          (target instanceof HTMLElement || target instanceof SVGElement),
+      ),
+  );
+  useResizeObserver(observedTargets, remeasure);
+  useEventListener(
+    () => (typeof window === "undefined" ? undefined : window),
+    ["resize", "orientationchange"],
+    remeasure,
+  );
+  useEventListener(
+    () => (typeof window === "undefined" ? undefined : window.visualViewport),
+    "resize",
+    remeasure,
+  );
+
   onMounted(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    if (typeof window.ResizeObserver === "function") {
-      resizeObserver = new window.ResizeObserver(remeasure);
-    }
-    const targetRefs = [options.target, ...(options.additionalTargets ?? [])];
-    stopTargetWatch = watch(() => targetRefs.map((target) => target.value), observeTargets, {
-      immediate: true,
-    });
-    window.addEventListener("resize", remeasure);
-    window.addEventListener("orientationchange", remeasure);
-    window.visualViewport?.addEventListener("resize", remeasure);
     remeasure();
-  });
-
-  onScopeDispose(() => {
-    stopTargetWatch?.();
-    resizeObserver?.disconnect();
-    if (typeof window !== "undefined") {
-      window.removeEventListener("resize", remeasure);
-      window.removeEventListener("orientationchange", remeasure);
-      window.visualViewport?.removeEventListener("resize", remeasure);
-    }
   });
 
   return { remeasure };

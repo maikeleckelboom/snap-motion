@@ -28,6 +28,15 @@ export default defineConfig({
           name: "vue",
           environment: "happy-dom",
           include: ["packages/vue/test/**/*.{test,spec}.ts"],
+          exclude: ["packages/vue/test/ssr-render.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "vue-ssr",
+          environment: "node",
+          include: ["packages/vue/test/ssr-render.test.ts"],
         },
       },
     ],

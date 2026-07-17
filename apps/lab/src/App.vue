@@ -90,7 +90,11 @@ function resetPreset() {
 
       <label class="motion-override">
         <span>Motion</span>
-        <select v-model="reducedMotionMode" data-testid="reduced-motion-mode">
+        <select
+          v-model="reducedMotionMode"
+          aria-label="Motion preference"
+          data-testid="reduced-motion-mode"
+        >
           <option value="system">System</option>
           <option value="no-preference">Full</option>
           <option value="reduce">Reduced</option>

@@ -14,7 +14,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./style.css": "./dist/style.css"
   },
   "scripts": {
     "build": "vue-tsc -p tsconfig.build.json --declaration --emitDeclarationOnly && vite build",
@@ -23,6 +24,7 @@
   },
   "dependencies": {
     "@snap-motion/core": "workspace:*",
+    "@vueuse/core": "catalog:",
     "motion": "catalog:",
     "vue": "catalog:"
   },

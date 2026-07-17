@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { createFixedStageGeometry } from "@snap-motion/core";
-import { captureFocusOpener, focusInside, restoreFocus, useCarouselMotion } from "@snap-motion/vue";
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import {
+  captureFocusOpener,
+  focusInitial,
+  maintainModalTabOrder,
+  restoreFocus,
+  useCarouselMotion,
+} from "@snap-motion/vue";
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
 import {
@@ -19,12 +25,16 @@ const props = defineProps<{
 }>();
 
 const dialog = ref<HTMLDialogElement>();
+const closeButton = ref<HTMLButtonElement>();
+const previousFocused = ref(false);
+const nextFocused = ref(false);
 const opener = ref<HTMLButtonElement>();
 const viewport = ref<HTMLElement>();
 const track = ref<HTMLElement>();
 const delayedReady = ref(false);
 const fixtureMode = ref<"all" | "one">("all");
 const liveMessage = ref("");
+const titleId = `media-lightbox-title-${useId()}`;
 const isOpen = ref(false);
 const reducedOverride = computed(() => props.reducedMotionOverride);
 let storedOpener: HTMLElement | undefined;
@@ -101,20 +111,17 @@ function announceCurrent() {
 
 function previous() {
   motion.previous();
-  window.requestAnimationFrame(announceCurrent);
 }
 
 function next() {
   motion.next();
-  window.requestAnimationFrame(announceCurrent);
 }
 
 function onKeyDown(event: KeyboardEvent) {
-  const handled = ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key);
-  motion.onKeyDown(event);
-  if (handled) {
-    window.requestAnimationFrame(announceCurrent);
+  if (event.target !== event.currentTarget) {
+    return;
   }
+  motion.onKeyDown(event);
 }
 
 async function openLightbox() {
@@ -134,7 +141,7 @@ async function openLightbox() {
 
   await nextTick();
   motion.remeasure();
-  focusInside(target);
+  focusInitial("close", { close: closeButton.value, container: target });
   announceCurrent();
 }
 
@@ -174,6 +181,12 @@ watch(fixtureMode, async () => {
   await nextTick();
   motion.remeasure();
   announceCurrent();
+});
+
+watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
+  if (phase === "idle" && activeId !== undefined && activeId !== previousId) {
+    announceCurrent();
+  }
 });
 
 onBeforeUnmount(() => {
@@ -232,25 +245,26 @@ onBeforeUnmount(() => {
 
     <dialog
       ref="dialog"
-      aria-label="Media lightbox"
+      :aria-labelledby="titleId"
       class="lightbox-dialog"
       data-testid="media-lightbox"
       :data-open-state="isOpen ? 'open' : 'closed'"
       @cancel="onCancel"
       @close="onDialogClose"
       @click="onDialogSurfaceClick"
+      @keydown="maintainModalTabOrder($event, dialog)"
     >
       <div class="lightbox-shell" :style="stageStyle">
         <header class="lightbox-header">
           <div>
             <p>Media inspection</p>
-            <h2 data-testid="media-title">{{ activeFixture?.title }}</h2>
+            <h2 :id="titleId" data-testid="media-title">{{ activeFixture?.title }}</h2>
           </div>
           <p class="media-position tabular" data-testid="media-count">
             {{ activeIndex + 1 }} / {{ visibleFixtures.length }}
           </p>
           <button
-            autofocus
+            ref="closeButton"
             aria-label="Close media lightbox"
             class="icon-button"
             data-testid="close-lightbox"
@@ -269,14 +283,22 @@ onBeforeUnmount(() => {
           </button>
         </header>
 
-        <div class="carousel-frame">
+        <section
+          aria-label="Media"
+          aria-roledescription="carousel"
+          class="carousel-frame"
+          role="group"
+        >
           <button
             aria-label="Previous media"
+            :aria-disabled="!motion.canPrevious.value"
             class="carousel-control previous-control"
             data-testid="media-previous"
-            :disabled="!motion.canPrevious.value"
+            :disabled="!motion.canPrevious.value && !previousFocused"
             type="button"
-            @click="previous"
+            @blur="previousFocused = false"
+            @click="motion.canPrevious.value && previous()"
+            @focus="previousFocused = true"
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
               <path
@@ -292,8 +314,7 @@ onBeforeUnmount(() => {
 
           <section
             ref="viewport"
-            aria-label="Media"
-            aria-roledescription="carousel"
+            aria-describedby="media-keyboard-help"
             class="carousel-viewport"
             data-testid="media-carousel"
             :data-active-id="semanticId"
@@ -305,7 +326,7 @@ onBeforeUnmount(() => {
             @wheel="motion.onWheel"
           >
             <div ref="track" class="media-track" :style="motion.trackStyle.value">
-              <article
+              <div
                 v-for="(fixture, index) in visibleFixtures"
                 :key="fixture.id"
                 :aria-label="`${fixture.title}, ${index + 1} of ${visibleFixtures.length}`"
@@ -313,6 +334,7 @@ onBeforeUnmount(() => {
                 class="media-slide"
                 :data-fixture="fixture.mode"
                 :inert="semanticId !== fixture.id"
+                role="group"
               >
                 <div class="media-frame">
                   <div
@@ -336,17 +358,20 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
                 </div>
-              </article>
+              </div>
             </div>
           </section>
 
           <button
             aria-label="Next media"
+            :aria-disabled="!motion.canNext.value"
             class="carousel-control next-control"
             data-testid="media-next"
-            :disabled="!motion.canNext.value"
+            :disabled="!motion.canNext.value && !nextFocused"
             type="button"
-            @click="next"
+            @blur="nextFocused = false"
+            @click="motion.canNext.value && next()"
+            @focus="nextFocused = true"
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
               <path
@@ -359,13 +384,16 @@ onBeforeUnmount(() => {
               />
             </svg>
           </button>
-        </div>
+          <p id="media-keyboard-help" class="sr-only">
+            Use Left and Right Arrow to move between items. Use Home and End to jump.
+          </p>
+          <p class="sr-only" aria-atomic="true" role="status">{{ liveMessage }}</p>
+        </section>
 
         <footer class="lightbox-footer">
           <p>{{ activeFixture?.description }}</p>
           <p class="tabular">x {{ motion.position.value.toFixed(2) }} px</p>
         </footer>
-        <p class="sr-only" aria-live="polite">{{ liveMessage }}</p>
       </div>
     </dialog>
   </div>

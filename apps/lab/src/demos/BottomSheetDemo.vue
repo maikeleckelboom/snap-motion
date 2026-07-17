@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import {
   captureFocusOpener,
-  focusInside,
+  focusInitial,
+  maintainModalTabOrder,
   restoreFocus,
   useBottomSheetMotion,
   type BottomSheetOpenSnapId,
 } from "@snap-motion/vue";
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
 import { springFromSettings } from "@/fixtures/lab-settings";
@@ -19,11 +20,14 @@ const props = defineProps<{
 }>();
 
 const dialog = ref<HTMLDialogElement>();
+const closeButton = ref<HTMLButtonElement>();
 const panel = ref<HTMLElement>();
 const opener = ref<HTMLButtonElement>();
 const sheetBody = ref<HTMLElement>();
 const reducedOverride = computed(() => props.reducedMotionOverride);
 const liveMessage = ref("");
+const titleId = `bottom-sheet-title-${useId()}`;
+const snapPickerName = `bottom-sheet-snap-${useId()}`;
 let storedOpener: HTMLElement | undefined;
 let closingFromMotion = false;
 let focusRestoreFrame: number | undefined;
@@ -93,7 +97,7 @@ async function openSheet() {
   await nextTick();
   motion.remeasure();
   motion.open();
-  focusInside(panel.value);
+  focusInitial("close", { close: closeButton.value, container: panel.value });
   target.scrollTop = 0;
 }
 
@@ -204,7 +208,7 @@ onBeforeUnmount(() => {
 
     <dialog
       ref="dialog"
-      aria-labelledby="sheet-title"
+      :aria-labelledby="titleId"
       class="sheet-dialog"
       data-testid="bottom-sheet"
       :data-sheet-snap="motion.activeSnapId.value"
@@ -212,13 +216,13 @@ onBeforeUnmount(() => {
       :style="dialogStyle"
       @cancel="onCancel"
       @close="onNativeClose"
+      @keydown="maintainModalTabOrder($event, dialog)"
     >
-      <button
-        aria-label="Close bottom sheet"
+      <div
+        aria-hidden="true"
         class="sheet-scrim"
         data-testid="sheet-scrim"
         :style="scrimStyle"
-        type="button"
         @click="requestClose"
       />
 
@@ -241,10 +245,11 @@ onBeforeUnmount(() => {
             <span class="sheet-handle" aria-hidden="true" />
             <div>
               <p>Viewport-defined sheet</p>
-              <h2 id="sheet-title">Motion tuning notes</h2>
+              <h2 :id="titleId">Motion tuning notes</h2>
             </div>
           </div>
           <button
+            ref="closeButton"
             aria-label="Close bottom sheet"
             class="close-button"
             data-testid="close-sheet"
@@ -257,15 +262,42 @@ onBeforeUnmount(() => {
           </button>
         </header>
 
-        <div class="snap-actions" aria-label="Move sheet to snap point">
-          <button data-testid="snap-full" type="button" @click="snapTo('full')">Full</button>
-          <button data-testid="snap-comfortable" type="button" @click="snapTo('comfortable')">
-            Comfortable
-          </button>
-          <button data-testid="snap-compact" type="button" @click="snapTo('compact')">
-            Compact
-          </button>
-        </div>
+        <fieldset class="snap-actions">
+          <legend class="sr-only">Sheet height</legend>
+          <label>
+            <input
+              data-testid="snap-full"
+              :name="snapPickerName"
+              type="radio"
+              value="full"
+              :checked="motion.activeSnapId.value === 'full'"
+              @change="snapTo('full')"
+            />
+            <span>Full</span>
+          </label>
+          <label>
+            <input
+              data-testid="snap-comfortable"
+              :name="snapPickerName"
+              type="radio"
+              value="comfortable"
+              :checked="motion.activeSnapId.value === 'comfortable'"
+              @change="snapTo('comfortable')"
+            />
+            <span>Comfortable</span>
+          </label>
+          <label>
+            <input
+              data-testid="snap-compact"
+              :name="snapPickerName"
+              type="radio"
+              value="compact"
+              :checked="motion.activeSnapId.value === 'compact'"
+              @change="snapTo('compact')"
+            />
+            <span>Compact</span>
+          </label>
+        </fieldset>
 
         <div ref="sheetBody" class="sheet-body" data-testid="sheet-body" tabindex="0">
           <p class="sheet-lede">
@@ -290,7 +322,7 @@ onBeforeUnmount(() => {
           </section>
         </div>
       </section>
-      <p class="sr-only" aria-live="polite">{{ liveMessage }}</p>
+      <p class="sr-only" aria-atomic="true" role="status">{{ liveMessage }}</p>
     </dialog>
   </div>
 </template>
@@ -491,12 +523,42 @@ onBeforeUnmount(() => {
   gap: 0.5rem;
   padding: 0.65rem clamp(1rem, 3vw, 1.5rem);
   border-block-end: 1px solid var(--line);
+  border-inline: 0;
+  border-block-start: 0;
+  margin: 0;
 }
 
-.snap-actions button {
+.snap-actions label {
+  position: relative;
+  display: inline-grid;
+  min-block-size: 2.75rem;
+  place-items: center;
+}
+
+.snap-actions input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.snap-actions span {
+  display: grid;
+  min-block-size: 2.75rem;
+  place-items: center;
   min-block-size: 2rem;
   padding-inline: 0.65rem;
+  border: 1px solid var(--strong);
   font-size: 0.72rem;
+}
+
+.snap-actions input:checked + span {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.snap-actions input:focus-visible + span {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 .sheet-body {

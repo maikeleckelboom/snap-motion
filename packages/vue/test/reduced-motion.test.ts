@@ -7,7 +7,7 @@ import { useReducedMotionPreference } from "../src/reduced-motion";
 describe("reduced-motion preference", () => {
   it("reacts to media-query changes and supports a deterministic override", async () => {
     let matches = false;
-    let changeListener: (() => void) | undefined;
+    let changeListener: ((event: MediaQueryListEvent) => void) | undefined;
     const remove = vi.fn<MediaQueryList["removeEventListener"]>();
     vi.spyOn(window, "matchMedia").mockImplementation(
       () =>
@@ -18,7 +18,7 @@ describe("reduced-motion preference", () => {
           media: "(prefers-reduced-motion: reduce)",
           onchange: null,
           addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
-            changeListener = listener as () => void;
+            changeListener = listener as (event: MediaQueryListEvent) => void;
           },
           removeEventListener: remove,
           addListener: vi.fn<MediaQueryList["addListener"]>(),
@@ -41,7 +41,10 @@ describe("reduced-motion preference", () => {
 
     expect(reduced?.value).toBe(false);
     matches = true;
-    changeListener?.();
+    changeListener?.({
+      matches: true,
+      media: "(prefers-reduced-motion: reduce)",
+    } as MediaQueryListEvent);
     await nextTick();
     expect(reduced?.value).toBe(true);
 

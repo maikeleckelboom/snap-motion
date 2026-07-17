@@ -33,6 +33,15 @@ Carousels support ArrowLeft, ArrowRight, Home, and End. A paged grid moves by se
 focused child control owns the key. Tab remains normal focus traversal and is never pagination.
 Non-looping boundaries disable previous or next actions.
 
+When activating a control reaches a boundary, applying `disabled` immediately makes Chromium drop
+focus. Snap Motion therefore defers native `disabled` only while that now-boundary control still
+owns focus, exposes `aria-disabled="true"`, and makes activation a no-op. Native `disabled` is applied
+on blur. This preserves repeated-control focus without leaving ordinary boundary controls tabbable.
+
+Native modal dialog traversal remains authoritative. Cross-browser certification exposed one
+Chromium edge where Tab from the final control transiently moved focus to the inert document. The
+dialog helpers intercept only first/last Tab boundaries; all intermediate traversal stays native.
+
 ## Accessibility and focus
 
 Carousel regions use stable accessible names and `aria-roledescription="carousel"` where it adds
@@ -43,6 +52,11 @@ The media lightbox and bottom sheet use native modal dialogs. Escape uses the di
 path. Both provide an explicit close button, move focus inside after opening, restore the connected
 opener on close, and clean modal document state on unmount. The bottom sheet keeps a dedicated drag
 handle and an independently scrollable body with safe-area padding.
+
+Initial focus is explicit: close button, title/static introduction, first interactive element, or a
+provided element/resolver. Focus restoration accepts both an opener and a route-safe fallback.
+Bottom-sheet scrims are non-focusable pointer surfaces. Meaningful sheet snaps are also exposed as a
+native single-choice radio group.
 
 ## Reduced motion
 

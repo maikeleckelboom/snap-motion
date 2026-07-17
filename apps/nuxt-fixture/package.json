@@ -1,0 +1,14 @@
+{
+  "name": "@snap-motion/nuxt-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@snap-motion/vue": "workspace:*",
+    "nuxt": "catalog:"
+  }
+}

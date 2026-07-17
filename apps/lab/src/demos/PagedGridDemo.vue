@@ -36,6 +36,8 @@ let nextItemNumber = 10;
 const viewport = ref<HTMLElement>();
 const track = ref<HTMLElement>();
 const liveMessage = ref("");
+const previousFocused = ref(false);
+const nextFocused = ref(false);
 const reducedOverride = computed(() => props.reducedMotionOverride);
 const pageCapacity = computed(() => rows.value * columns.value);
 const pages = computed(() => {
@@ -112,20 +114,17 @@ function announce() {
 
 function previous() {
   motion.previous();
-  window.requestAnimationFrame(announce);
 }
 
 function next() {
   motion.next();
-  window.requestAnimationFrame(announce);
 }
 
 function onKeyDown(event: KeyboardEvent) {
-  const handled = ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key);
-  motion.onKeyDown(event);
-  if (handled) {
-    window.requestAnimationFrame(announce);
+  if (event.target !== event.currentTarget) {
+    return;
   }
+  motion.onKeyDown(event);
 }
 
 function addItem() {
@@ -158,6 +157,12 @@ watch(
   () => void nextTick(motion.remeasure),
   { flush: "post" },
 );
+
+watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
+  if (phase === "idle" && activeId !== undefined && activeId !== previousId) {
+    announce();
+  }
+});
 </script>
 
 <template>
@@ -203,14 +208,23 @@ watch(
         </button>
       </div>
 
-      <div class="grid-stage" :style="stageStyle">
+      <div
+        aria-labelledby="grid-title"
+        aria-roledescription="carousel"
+        class="grid-stage"
+        role="group"
+        :style="stageStyle"
+      >
         <button
           aria-label="Previous page"
+          :aria-disabled="!motion.canPrevious.value"
           class="page-control"
           data-testid="grid-previous"
-          :disabled="!motion.canPrevious.value"
+          :disabled="!motion.canPrevious.value && !previousFocused"
           type="button"
-          @click="previous"
+          @blur="previousFocused = false"
+          @click="motion.canPrevious.value && previous()"
+          @focus="previousFocused = true"
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
             <path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" />
@@ -219,8 +233,7 @@ watch(
 
         <section
           ref="viewport"
-          aria-label="Paged study grid"
-          aria-roledescription="carousel"
+          aria-describedby="grid-keyboard-help"
           class="grid-viewport"
           data-testid="paged-grid"
           :data-active-id="currentPageId"
@@ -244,6 +257,7 @@ watch(
               class="grid-page"
               :data-page-id="page.id"
               :inert="currentPageId !== page.id"
+              role="group"
             >
               <div class="item-grid" :style="gridStyle">
                 <article
@@ -265,18 +279,24 @@ watch(
 
         <button
           aria-label="Next page"
+          :aria-disabled="!motion.canNext.value"
           class="page-control"
           data-testid="grid-next"
-          :disabled="!motion.canNext.value"
+          :disabled="!motion.canNext.value && !nextFocused"
           type="button"
-          @click="next"
+          @blur="nextFocused = false"
+          @click="motion.canNext.value && next()"
+          @focus="nextFocused = true"
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
             <path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" />
           </svg>
         </button>
+        <p id="grid-keyboard-help" class="sr-only">
+          Use Left and Right Arrow to move between pages. Use Home and End to jump.
+        </p>
       </div>
-      <p class="sr-only" aria-live="polite">{{ liveMessage }}</p>
+      <p class="sr-only" aria-atomic="true" role="status">{{ liveMessage }}</p>
     </section>
 
     <DiagnosticsPanel :diagnostics="diagnostics" />

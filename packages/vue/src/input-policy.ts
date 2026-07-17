@@ -73,15 +73,16 @@ export function elementOwnsCarouselKeyboard(target: EventTarget | null) {
 
   return (
     target.closest(
-      "input, textarea, select, [contenteditable='true'], [data-snap-motion-keyboard-owner]",
+      "input, textarea, select, [contenteditable='true'], [role='slider'], [role='menu'], [role='listbox'], [data-snap-motion-keyboard-owner]",
     ) !== null
   );
 }
 
 export function carouselKeyAction(
-  event: Pick<KeyboardEvent, "key" | "target">,
+  event: Pick<KeyboardEvent, "key" | "target"> &
+    Partial<Pick<KeyboardEvent, "altKey" | "ctrlKey" | "metaKey">>,
 ): "end" | "home" | "next" | "previous" | undefined {
-  if (elementOwnsCarouselKeyboard(event.target)) {
+  if (event.altKey || event.ctrlKey || event.metaKey || elementOwnsCarouselKeyboard(event.target)) {
     return undefined;
   }
 

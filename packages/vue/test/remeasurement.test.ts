@@ -40,7 +40,7 @@ describe("remeasurement lifecycle", () => {
     );
     await nextTick();
 
-    expect(observe).toHaveBeenCalledWith(wrapper.element);
+    expect(observe).toHaveBeenCalledWith(wrapper.element, {});
     expect(measure).toHaveBeenCalled();
 
     observerCallback?.([], {} as ResizeObserver);

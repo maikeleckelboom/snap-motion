@@ -156,10 +156,10 @@ export function useBottomSheetMotion(options: UseBottomSheetMotionOptions) {
 
   useRemeasurement({ target: panel, measure: remeasure });
 
-  function open() {
+  function open(id: BottomSheetOpenSnapId = defaultOpenSnapId) {
     remeasure();
     sheetState.value = "opening";
-    return motion.moveTo(defaultOpenSnapId);
+    return motion.moveTo(id);
   }
 
   function close() {

@@ -86,13 +86,31 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
   });
 
   function onKeyDown(event: KeyboardEvent) {
-    const action = carouselKeyAction(event);
+    let action = carouselKeyAction(event);
     if (!action) {
       return;
     }
 
+    const direction = viewport.value
+      ? viewport.value.ownerDocument.defaultView?.getComputedStyle(viewport.value).direction
+      : "ltr";
+    if (direction === "rtl") {
+      if (action === "previous") action = "next";
+      else if (action === "next") action = "previous";
+    }
+
     const anchors = orderedAnchors.value;
     const target = action === "home" ? anchors[0] : anchors.at(-1);
+    const current = semanticAnchor.value;
+    const canHandle =
+      (action === "previous" && canPrevious.value) ||
+      (action === "next" && canNext.value) ||
+      ((action === "home" || action === "end") &&
+        target !== undefined &&
+        target.id !== current?.id);
+    if (!canHandle) {
+      return;
+    }
     event.preventDefault();
     wheel.stopWheel();
     wheelActive = false;
