@@ -40,7 +40,7 @@ const activeDemo = computed(
   () => demos.find((demo) => demo.id === activeDemoId.value) ?? demos[0]!,
 );
 const activeComponent = computed(() => activeDemo.value.component);
-const preset = ref<LabPresetName>("tight");
+const preset = ref<LabPresetName>("balanced");
 const settings = shallowRef<LabPhysicsSettings>(settingsFromPreset(preset.value));
 const stageWidth = ref(1_120);
 const reducedMotionMode = ref<ReducedMotionMode>("system");
