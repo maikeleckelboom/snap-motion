@@ -29,7 +29,7 @@ catalog:
   oxfmt: 0.59.0
   oxlint: 1.74.0
   publint: 0.3.21
-  typescript: 6.0.3
+  typescript: 7.0.2
   vite: 8.1.5
   vitest: 4.1.10
   vue: 3.5.40
