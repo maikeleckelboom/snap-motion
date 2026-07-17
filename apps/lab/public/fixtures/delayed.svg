@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 1600" role="img" aria-labelledby="title description">
+  <title id="title">Delayed media geometry fixture</title>
+  <desc id="description">A clock-like fixture attached after a delay.</desc>
+  <rect width="2400" height="1600" fill="#e2e2e2"/>
+  <circle cx="1200" cy="800" r="540" fill="#fff" stroke="#111" stroke-width="20"/>
+  <path d="M1200 800V410M1200 800l310 180" stroke="#111" stroke-width="28" stroke-linecap="round"/>
+</svg>

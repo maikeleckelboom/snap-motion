@@ -1,0 +1,27 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+autoInstallPeers: false
+catalogMode: strict
+engineStrict: true
+nodeVersion: 24.16.0
+saveExact: true
+strictPeerDependencies: true
+
+catalog:
+  "@playwright/test": 1.61.1
+  "@types/node": 24.13.3
+  "@vitejs/plugin-vue": 6.0.8
+  "@vue/test-utils": 2.4.11
+  happy-dom: 20.10.6
+  motion: 12.42.2
+  oxfmt: 0.59.0
+  oxlint: 1.74.0
+  typescript: 6.0.3
+  vite: 8.1.5
+  vitest: 4.1.10
+  vue: 3.5.40
+  vue-tsc: 3.3.7

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" role="img" aria-labelledby="title description">
+  <title id="title">Transformed media fixture</title>
+  <desc id="description">A precise grid that makes visual scaling easy to inspect.</desc>
+  <defs><pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M100 0H0v100" fill="none" stroke="#777" stroke-width="4"/></pattern></defs>
+  <rect width="1600" height="1000" fill="#eee"/><rect width="1600" height="1000" fill="url(#grid)"/>
+  <rect x="300" y="200" width="1000" height="600" fill="none" stroke="#111" stroke-width="16"/>
+</svg>

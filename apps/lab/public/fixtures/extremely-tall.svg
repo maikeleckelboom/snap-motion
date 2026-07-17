@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 12000" role="img" aria-labelledby="title description">
+  <title id="title">Extremely tall geometry fixture</title>
+  <desc id="description">A twelve-thousand unit portrait used to prove intrinsic height containment.</desc>
+  <rect width="1600" height="12000" fill="#d4d4d4"/>
+  <path d="M800 0v12000M0 6000h1600" stroke="#111" stroke-width="24" stroke-dasharray="72 48"/>
+  <g fill="#111" font-family="system-ui, sans-serif" font-size="220" text-anchor="middle">
+    <text x="800" y="1100">TOP</text><text x="800" y="6100">CENTER</text><text x="800" y="11100">BOTTOM</text>
+  </g>
+</svg>

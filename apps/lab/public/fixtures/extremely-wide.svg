@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12000 1600" role="img" aria-labelledby="title description">
+  <title id="title">Extremely wide geometry fixture</title>
+  <desc id="description">A twelve-thousand unit panorama used to prove intrinsic width isolation.</desc>
+  <rect width="12000" height="1600" fill="#dedede"/>
+  <path d="M0 800h12000M6000 0v1600" stroke="#111" stroke-width="24" stroke-dasharray="72 48"/>
+  <g fill="#111" font-family="system-ui, sans-serif" font-size="240" text-anchor="middle">
+    <text x="1000" y="900">START</text><text x="6000" y="900">CENTER</text><text x="11000" y="900">END</text>
+  </g>
+</svg>
