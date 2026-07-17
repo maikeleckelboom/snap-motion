@@ -417,8 +417,19 @@ onBeforeUnmount(() => {
   border-block-end: 0;
   background: var(--paper);
   outline: none;
-  overflow: hidden;
+  overflow: visible;
   pointer-events: auto;
+}
+
+.sheet-panel::after {
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline: -1px;
+  block-size: 100dvh;
+  border-inline: 1px solid var(--strong);
+  background: var(--paper);
+  content: "";
+  pointer-events: none;
 }
 
 .sheet-header {

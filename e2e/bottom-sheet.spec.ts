@@ -74,6 +74,17 @@ test.describe("bottom sheet", () => {
         const overdraggedTop = await panelTop(page);
         expect(overdraggedTop).toBeLessThan(24);
         expect(overdraggedTop).toBeGreaterThan(-100);
+        const continuation = await page.getByTestId("sheet-panel").evaluate((element) => {
+          const panelStyle = getComputedStyle(element);
+          const style = getComputedStyle(element, "::after");
+          return {
+            backgroundColor: style.backgroundColor,
+            height: Number.parseFloat(style.height),
+            panelBackgroundColor: panelStyle.backgroundColor,
+          };
+        });
+        expect(continuation.backgroundColor).toBe(continuation.panelBackgroundColor);
+        expect(continuation.height).toBeGreaterThanOrEqual(800);
       },
       stepDelay: 35,
       steps: 9,
