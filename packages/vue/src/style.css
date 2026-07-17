@@ -1,0 +1,174 @@
+.snap-motion-visually-hidden {
+  position: absolute !important;
+  inline-size: 1px !important;
+  block-size: 1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}
+
+.snap-motion-dialog {
+  max-inline-size: calc(100% - 2rem);
+  max-block-size: calc(100% - 2rem);
+}
+
+.snap-motion-dialog-content {
+  position: relative;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+.snap-motion-dialog-close,
+.snap-motion-sheet-close,
+.snap-motion-carousel-next,
+.snap-motion-carousel-previous,
+.snap-motion-carousel-pagination-item {
+  min-inline-size: var(--snap-motion-control-target-size, 44px);
+  min-block-size: var(--snap-motion-control-target-size, 44px);
+}
+
+.snap-motion-dialog-close:focus-visible,
+.snap-motion-sheet-close:focus-visible,
+.snap-motion-carousel-next:focus-visible,
+.snap-motion-carousel-previous:focus-visible,
+.snap-motion-carousel-pagination-item:focus-visible,
+.snap-motion-carousel-viewport:focus-visible,
+.snap-motion-sheet-title:focus-visible {
+  outline: var(--snap-motion-focus-width, 2px) solid var(--snap-motion-focus-color, Highlight);
+  outline-offset: 2px;
+}
+
+.snap-motion-sheet {
+  position: fixed;
+  inset: 0;
+  inline-size: 100%;
+  max-inline-size: none;
+  block-size: 100%;
+  max-block-size: none;
+  padding: 0;
+  border: 0;
+  margin: 0;
+  background: transparent;
+  overflow: clip;
+  pointer-events: none;
+}
+
+.snap-motion-sheet::backdrop {
+  background: transparent;
+}
+
+.snap-motion-sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  pointer-events: auto;
+}
+
+.snap-motion-sheet-panel {
+  position: absolute;
+  inset: 24px 0 auto;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  block-size: calc(100dvh - 24px);
+  background: Canvas;
+  color: CanvasText;
+  pointer-events: auto;
+}
+
+.snap-motion-sheet-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.snap-motion-sheet-drag-region {
+  min-inline-size: 0;
+  padding: 0.75rem 1rem;
+  cursor: grab;
+  user-select: none;
+}
+
+.snap-motion-sheet-handle {
+  display: block;
+  inline-size: 3rem;
+  block-size: 0.25rem;
+  margin-inline: auto;
+  background: currentColor;
+}
+
+.snap-motion-sheet-close {
+  margin: 0.75rem 1rem;
+}
+
+.snap-motion-sheet-picker {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  margin: 0;
+}
+
+.snap-motion-sheet-picker-option {
+  position: relative;
+  min-block-size: var(--snap-motion-control-target-size, 44px);
+  display: inline-grid;
+  place-items: center;
+}
+
+.snap-motion-sheet-picker-option input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.snap-motion-sheet-picker-option span {
+  padding: 0.65rem;
+  border: 1px solid currentColor;
+}
+
+.snap-motion-sheet-picker-option input:checked + span {
+  background: CanvasText;
+  color: Canvas;
+}
+
+.snap-motion-sheet-picker-option input:focus-visible + span {
+  outline: var(--snap-motion-focus-width, 2px) solid var(--snap-motion-focus-color, Highlight);
+  outline-offset: 2px;
+}
+
+.snap-motion-sheet-picker-option input:disabled + span {
+  opacity: 0.55;
+}
+
+.snap-motion-sheet-body {
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (forced-colors: active) {
+  .snap-motion-sheet-scrim {
+    background: CanvasText;
+  }
+
+  .snap-motion-sheet-handle,
+  .snap-motion-sheet-picker-option input:checked + span {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
+@container (max-width: 24rem) {
+  .snap-motion-sheet-picker {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 24rem) {
+  .snap-motion-dialog {
+    max-inline-size: calc(100% - 1rem);
+  }
+}

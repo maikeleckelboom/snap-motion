@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="Id extends string = BottomSheetOpenSnapId">
 import type {
   ElasticityOptions,
   ReleaseTargetPolicy,
@@ -6,7 +6,12 @@ import type {
 } from "@snap-motion/core";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, useId, watch } from "vue";
 
-import type { BottomSheetOpenSnapId, BottomSheetViewportPolicy } from "../bottom-sheet-policy";
+import {
+  createViewportBottomSheetSnapPoints,
+  type BottomSheetOpenSnapId,
+  type BottomSheetSnapPoint,
+  type BottomSheetViewportPolicy,
+} from "../bottom-sheet-policy.js";
 import {
   captureFocusOpener,
   focusInitial,
@@ -14,15 +19,16 @@ import {
   restoreFocus,
   type FocusReturnOptions,
   type InitialFocus,
-} from "../focus";
-import { useBottomSheetMotion } from "../use-bottom-sheet-motion";
-import { bottomSheetContextKey } from "./bottom-sheet-context";
+} from "../focus.js";
+import { createEnglishSnapMotionMessages, type SnapMotionMessages } from "../messages.js";
+import { useBottomSheetMotion } from "../use-bottom-sheet-motion.js";
+import { bottomSheetContextKey, type BottomSheetContext } from "./bottom-sheet-context.js";
 import BottomSheetSnapPicker from "./BottomSheetSnapPicker.vue";
-import type { CloseReason, NavigationReason } from "./contracts";
+import type { CloseReason, NavigationReason } from "./contracts.js";
 
 const props = withDefaults(
   defineProps<{
-    activeId: BottomSheetOpenSnapId;
+    activeId: Id;
     closeLabel?: string;
     descriptionId?: string;
     elasticity?: ElasticityOptions;
@@ -30,18 +36,19 @@ const props = withDefaults(
     initialFocus?: InitialFocus;
     initialViewportHeight?: number;
     maximumScrimOpacity?: number;
+    messages?: Partial<SnapMotionMessages>;
     open: boolean;
     programmaticImpulse?: number;
     reducedMotionOverride?: boolean;
     releasePolicy?: Partial<ReleaseTargetPolicy>;
     showSnapPicker?: boolean;
-    snapLabels?: Partial<Record<BottomSheetOpenSnapId, string>>;
+    snapLabels?: Partial<Record<Id, string>>;
+    snapPoints?: readonly BottomSheetSnapPoint<Id>[];
     spring?: SpringConfiguration;
     titleId?: string;
     viewportPolicy?: Partial<BottomSheetViewportPolicy>;
   }>(),
   {
-    closeLabel: "Close bottom sheet",
     initialFocus: "title",
     initialViewportHeight: 800,
     maximumScrimOpacity: 0.56,
@@ -51,13 +58,13 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (event: "update:open", open: boolean): void;
-  (event: "update:activeId", id: BottomSheetOpenSnapId): void;
+  (event: "update:activeId", id: Id): void;
   (event: "requestClose", reason: CloseReason): void;
-  (event: "requestActiveId", id: BottomSheetOpenSnapId, reason: NavigationReason): void;
+  (event: "requestActiveId", id: Id, reason: NavigationReason): void;
   (event: "opened"): void;
   (event: "closed"): void;
-  (event: "settled", id: BottomSheetOpenSnapId): void;
-  (event: "targetChanged", id: BottomSheetOpenSnapId, reason: NavigationReason): void;
+  (event: "settled", id: Id): void;
+  (event: "targetChanged", id: Id, reason: NavigationReason): void;
 }>();
 
 const dialog = ref<HTMLDialogElement>();
@@ -67,28 +74,58 @@ const title = ref<HTMLElement>();
 const generatedTitleId = `snap-motion-sheet-title-${useId()}`;
 const resolvedTitleId = props.titleId ?? generatedTitleId;
 const pickerName = `snap-motion-sheet-snap-${useId()}`;
-const labels: Record<BottomSheetOpenSnapId, string> = {
-  full: props.snapLabels?.full ?? "Full",
-  comfortable: props.snapLabels?.comfortable ?? "Comfortable",
-  compact: props.snapLabels?.compact ?? "Compact",
-};
 const statusText = ref("");
 const reducedMotionOverride = computed(() => props.reducedMotionOverride);
+const messages = computed(() => createEnglishSnapMotionMessages(props.messages));
+const configuredPoints = computed(
+  () =>
+    props.snapPoints ??
+    (createViewportBottomSheetSnapPoints(
+      props.viewportPolicy,
+    ) as readonly BottomSheetSnapPoint<Id>[]),
+);
+const intendedId = ref<Id>(props.activeId);
 let mounted = false;
 let capturedOpener: HTMLElement | undefined;
 let closeReason: CloseReason = "programmatic";
+let targetGeneration = 0;
+let settledGeneration = 0;
 
-const motion = useBottomSheetMotion({
+function acceptTarget(id: Id, reason: NavigationReason, userOriginated: boolean) {
+  if (id === intendedId.value) return false;
+  intendedId.value = id;
+  targetGeneration += 1;
+  emit("targetChanged", id, reason);
+  if (userOriginated) {
+    emit("requestActiveId", id, reason);
+    emit("update:activeId", id);
+  }
+  return true;
+}
+
+const motion = useBottomSheetMotion<Id>({
   defaultOpenSnapId: props.activeId,
   initialViewportHeight: props.initialViewportHeight,
   maximumScrimOpacity: props.maximumScrimOpacity,
   onHidden: completeClose,
   onSnap(id) {
-    statusText.value = `Sheet height: ${labels[id]}`;
-    emit("settled", id);
+    queueMicrotask(() => {
+      if (id !== intendedId.value || settledGeneration === targetGeneration) return;
+      settledGeneration = targetGeneration;
+      const label =
+        props.snapLabels?.[id as Id] ??
+        motion.resolvedSnapPoints.value.find((point) => point.id === id)?.label ??
+        id;
+      statusText.value = messages.value.sheetStatus({ id, label });
+      emit("settled", id);
+    });
+  },
+  onTargetSelected(id) {
+    acceptTarget(id, "drag", true);
   },
   panel,
   reducedMotionOverride,
+  snapPoints: configuredPoints.value,
   ...(props.elasticity === undefined ? {} : { elasticity: props.elasticity }),
   ...(props.programmaticImpulse === undefined
     ? {}
@@ -97,6 +134,13 @@ const motion = useBottomSheetMotion({
   ...(props.spring === undefined ? {} : { spring: props.spring }),
   ...(props.viewportPolicy === undefined ? {} : { viewportPolicy: props.viewportPolicy }),
 });
+
+const resolvedPoints = computed(() =>
+  motion.resolvedSnapPoints.value.map((point) => ({
+    ...point,
+    label: props.snapLabels?.[point.id as Id] ?? point.label,
+  })),
+);
 
 async function show() {
   const target = dialog.value;
@@ -148,13 +192,9 @@ function onClose() {
   }
 }
 
-function requestSnap(id: BottomSheetOpenSnapId, reason: NavigationReason) {
-  if (id === motion.activeSnapId.value && motion.sheetState.value === "open") return;
-  const target = motion.snapTo(id);
-  if (!target) return;
-  emit("targetChanged", id, reason);
-  emit("requestActiveId", id, reason);
-  emit("update:activeId", id);
+function requestSnap(id: Id, reason: NavigationReason) {
+  if (!acceptTarget(id, reason, reason !== "route")) return;
+  motion.snapTo(id);
 }
 
 watch(
@@ -168,7 +208,7 @@ watch(
 watch(
   () => props.activeId,
   (id) => {
-    if (props.open && id !== motion.activeSnapId.value) requestSnap(id, "route");
+    if (props.open && id !== intendedId.value) requestSnap(id, "route");
   },
 );
 
@@ -188,14 +228,12 @@ watch(
 );
 
 provide(bottomSheetContextKey, {
-  activeId: () => {
-    const id = motion.activeSnapId.value;
-    return id === undefined || id === "hidden" ? props.activeId : id;
-  },
-  labels,
+  activeId: computed(() => motion.activeSnapId.value ?? intendedId.value),
+  messages,
   name: pickerName,
+  points: resolvedPoints,
   requestSnap,
-});
+} as unknown as BottomSheetContext);
 
 onMounted(() => {
   mounted = true;
@@ -218,11 +256,11 @@ defineExpose({ dialog, motion, panel, requestClose, requestSnap, titleId: resolv
 <template>
   <dialog
     ref="dialog"
-    :aria-describedby="descriptionId"
     :aria-labelledby="resolvedTitleId"
     class="snap-motion-sheet"
     :data-sheet-snap="motion.activeSnapId.value"
     :data-sheet-state="motion.sheetState.value"
+    v-bind="descriptionId ? { 'aria-describedby': descriptionId } : {}"
     @cancel="onCancel"
     @close="onClose"
     @keydown="maintainModalTabOrder($event, dialog)"
@@ -247,12 +285,12 @@ defineExpose({ dialog, motion, panel, requestClose, requestSnap, titleId: resolv
         </div>
         <button
           ref="closeButton"
-          :aria-label="closeLabel"
+          :aria-label="closeLabel ?? messages.closeBottomSheet"
           class="snap-motion-sheet-close"
           type="button"
           @click="requestClose('close-button')"
         >
-          <slot name="close">Close</slot>
+          <slot name="close">{{ messages.closeBottomSheet }}</slot>
         </button>
       </header>
       <slot name="picker">
@@ -265,100 +303,3 @@ defineExpose({ dialog, motion, panel, requestClose, requestSnap, titleId: resolv
     <p aria-atomic="true" class="snap-motion-visually-hidden" role="status">{{ statusText }}</p>
   </dialog>
 </template>
-
-<style>
-.snap-motion-sheet {
-  position: fixed;
-  inset: 0;
-  inline-size: 100%;
-  max-inline-size: none;
-  block-size: 100%;
-  max-block-size: none;
-  padding: 0;
-  border: 0;
-  margin: 0;
-  background: transparent;
-  overflow: clip;
-  pointer-events: none;
-}
-.snap-motion-sheet::backdrop {
-  background: transparent;
-}
-.snap-motion-sheet-scrim {
-  position: absolute;
-  inset: 0;
-  background: #000;
-  pointer-events: auto;
-}
-.snap-motion-sheet-panel {
-  position: absolute;
-  inset: 24px 0 auto;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  block-size: calc(100dvh - 24px);
-  background: Canvas;
-  color: CanvasText;
-  pointer-events: auto;
-}
-.snap-motion-sheet-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-.snap-motion-sheet-drag-region {
-  min-inline-size: 0;
-  padding: 0.75rem 1rem;
-  cursor: grab;
-  user-select: none;
-}
-.snap-motion-sheet-handle {
-  display: block;
-  inline-size: 3rem;
-  block-size: 0.25rem;
-  margin-inline: auto;
-  background: currentColor;
-}
-.snap-motion-sheet-title:focus {
-  outline: 2px solid currentColor;
-  outline-offset: 4px;
-}
-.snap-motion-sheet-close {
-  min-inline-size: 44px;
-  min-block-size: 44px;
-  margin: 0.75rem 1rem;
-}
-.snap-motion-sheet-picker {
-  display: flex;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border: 0;
-  margin: 0;
-}
-.snap-motion-sheet-picker-option {
-  position: relative;
-  min-block-size: 44px;
-  display: inline-grid;
-  place-items: center;
-}
-.snap-motion-sheet-picker-option input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-}
-.snap-motion-sheet-picker-option span {
-  padding: 0.65rem;
-  border: 1px solid currentColor;
-}
-.snap-motion-sheet-picker-option input:checked + span {
-  background: CanvasText;
-  color: Canvas;
-}
-.snap-motion-sheet-picker-option input:focus-visible + span {
-  outline: 2px solid Highlight;
-  outline-offset: 2px;
-}
-.snap-motion-sheet-body {
-  min-block-size: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-</style>

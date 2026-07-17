@@ -1,0 +1,16 @@
+{
+  "name": "snap-motion-packed-minimum-vue-consumer",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@snap-motion/core": "file:__CORE_TARBALL__",
+    "@snap-motion/vue": "file:__VUE_TARBALL__",
+    "@vitejs/plugin-vue": "6.0.8",
+    "@vue/server-renderer": "3.5.0",
+    "typescript": "6.0.3",
+    "vite": "8.1.5",
+    "vue": "3.5.0",
+    "vue-router": "4.6.4",
+    "vue-tsc": "3.3.7"
+  }
+}

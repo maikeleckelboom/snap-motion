@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { inject, onBeforeUnmount, ref, watchEffect } from "vue";
 
-import { carouselContextKey } from "./carousel-context";
+import { carouselContextKey } from "./carousel-context.js";
 
 const context = inject(carouselContextKey);
 if (!context) throw new Error("CarouselViewport must be used inside CarouselRoot.");

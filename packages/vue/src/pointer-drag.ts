@@ -1,10 +1,11 @@
 import { onScopeDispose, ref } from "vue";
 
 import {
+  elementOwnsSnapMotionDrag,
   isSupportedPrimaryPointerStart,
   resolvePointerIntent,
   type PointerIntent,
-} from "./input-policy";
+} from "./input-policy.js";
 
 export interface PointerDragSample {
   delta: number;
@@ -190,7 +191,11 @@ export function usePointerDrag(options: PointerDragOptions) {
   }
 
   function onPointerDown(event: PointerEvent) {
-    if (!isSupportedPrimaryPointerStart(event) || pointerId !== undefined) {
+    if (
+      !isSupportedPrimaryPointerStart(event) ||
+      pointerId !== undefined ||
+      elementOwnsSnapMotionDrag(event.target)
+    ) {
       return;
     }
 

@@ -1,64 +1,74 @@
 # Snap Motion
 
-Snap Motion is a private interaction research and production workspace for interruptible
-carousels and bottom sheets. It reconstructs the physical character of the earlier vSlides
-experiment and combines it with the semantic snap-point, elasticity, and accessibility work
-from a later bottom sheet.
+Snap Motion is a private, public-beta release candidate for interruptible Vue carousels, modal
+lightboxes, and bottom sheets. The framework-neutral core owns semantic geometry and one scalar
+physical position; the Vue package owns DOM integration and uses Motion as its imperative spring
+driver.
 
-This repository is not published to npm. Its internal package names are workspace-only.
+The packages are not published. Their npm names are unverified and both manifests intentionally
+remain `private`.
 
-## Workspace
+## Quick start
 
-The production-facing Vue package now includes the style-light carousel, native dialog, and bottom
-sheet component layer. `apps/router-fixture` owns Vue Router history integration and
-`apps/nuxt-fixture` owns SSR, hydration, and progressive full-route proof.
-
-- `packages/core` — framework-neutral geometry, target policy, velocity, elasticity, and scalar
-  controller
-- `packages/vue` — Vue state, Pointer Events, responsive measurement, and the imperative Motion
-  spring driver
-- `apps/lab` — media lightbox, paged-grid, variable-rail, and bottom-sheet tuning instrument
-- `e2e` — Chromium, Firefox, and WebKit regression coverage
-- `legacy` — frozen donor sources excluded from production tooling
-- `docs` — architecture, interaction contracts, tuning guidance, and decisions
-
-## Run it
-
-Requires Node 24 or newer and the exact pnpm version declared in `packageManager`.
+The repository uses Node 24 and the pinned pnpm version for maintenance. Package consumers only
+need ESM and Vue 3.5 or newer.
 
 ```sh
 corepack enable
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Run the authoritative local gate with:
+Import the minimal structural stylesheet once in an application entry:
 
-```sh
-pnpm verify
+```ts
+import "@snap-motion/vue/style.css";
 ```
 
-## Architecture
+```vue
+<script setup lang="ts">
+import {
+  CarouselNext,
+  CarouselPrevious,
+  CarouselRoot,
+  CarouselSlide,
+  CarouselTrack,
+  CarouselViewport,
+} from "@snap-motion/vue";
+import { ref } from "vue";
 
-Layout produces legal semantic anchors. Interaction policy selects an intended anchor. Motion
-only carries one scalar position to that already-selected target. The framework-neutral core has
-no Vue or DOM dependency; the Vue package owns DOM integration and delegates temporal settling to
-the imperative `animate` API from Motion.
+const ids = ["overview", "system", "outcome"] as const;
+const activeId = ref<(typeof ids)[number]>("overview");
+</script>
 
-See [architecture](docs/architecture.md), [geometry](docs/geometry.md), and the
-[interaction contract](docs/interaction-contract.md). Production consumers must also read the
-[certification status](docs/production-certification.md); automated checks are not a complete
-accessibility claim.
+<template>
+  <CarouselRoot v-model:active-id="activeId" :ids="ids" label="Case study media">
+    <CarouselPrevious />
+    <CarouselViewport>
+      <CarouselTrack>
+        <CarouselSlide v-for="id in ids" :id="id" :key="id" :label="id">
+          {{ id }}
+        </CarouselSlide>
+      </CarouselTrack>
+    </CarouselViewport>
+    <CarouselNext />
+  </CarouselRoot>
+</template>
+```
 
-## Origin and direction
+## Workspace
 
-The source donors are the
-[vSlides and VCarousel experiments](https://github.com/maikeleckelboom/new-design/tree/develop/src/components)
-and the
-[portfolio bottom sheet](https://github.com/maikeleckelboom/portfolio-2026-v1/tree/main/app/components/sheet).
-Frozen source-level snapshots and factual provenance are kept in `legacy`.
+- `packages/core` — zero-dependency geometry, target policy, velocity, elasticity, and controller
+- `packages/vue` — Vue components, composables, accessibility, input ownership, and Motion adapter
+- `apps/lab` — media, paged-grid, variable-rail, render-window, and bottom-sheet fixtures
+- `apps/router-fixture` and `apps/nuxt-fixture` — routing, SSR, hydration, and fallback proof
+- `e2e` and `fixture-e2e` — Chromium, Firefox, WebKit, Router, and Nuxt certification
+- `etc` — tracked API Extractor reports
 
-The first intended production consumer is `maikel.site`. That future source-level integration
-will keep gallery presentation, captions, visual treatment, and project data in the application;
-Snap Motion will own physics, geometry, and Vue motion primitives. Integration is deliberately
-outside this repository's current scope.
+Run the authoritative gate with `pnpm verify`. It includes source tests, builds, API reports,
+package size, actual packed tarball consumers, and browser suites.
+
+Start with [getting started](docs/getting-started.md), then see the [component API](docs/components.md),
+[keyboard contract](docs/keyboard.md), and [package contract](docs/package-contract.md). Automated
+checks do not establish full accessibility; the unresolved physical test matrix is recorded in
+[production certification](docs/production-certification.md).

@@ -7,9 +7,13 @@ export default defineConfig({
     emptyOutDir: false,
     lib: {
       cssFileName: "style",
-      entry: "src/index.ts",
+      entry: {
+        components: "src/components.ts",
+        composables: "src/composables.ts",
+        index: "src/index.ts",
+        styleEntry: "src/style-entry.ts",
+      },
       formats: ["es"],
-      fileName: "index",
     },
     rollupOptions: {
       external: ["@snap-motion/core", "@vueuse/core", "motion", "vue"],

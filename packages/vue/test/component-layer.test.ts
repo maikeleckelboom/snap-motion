@@ -25,12 +25,16 @@ describe("production carousel components", () => {
           h(CarouselPrevious),
           h(CarouselViewport, null, {
             default: () =>
-              h(CarouselTrack, null, {
-                default: () => [
-                  h(CarouselSlide, { id: "one", label: "One, 1 of 2" }, () => "One"),
-                  h(CarouselSlide, { id: "two", label: "Two, 2 of 2" }, () => "Two"),
-                ],
-              }),
+              h(
+                CarouselTrack,
+                { endInset: 24, startInset: "1rem" },
+                {
+                  default: () => [
+                    h(CarouselSlide, { id: "one", label: "One, 1 of 2" }, () => "One"),
+                    h(CarouselSlide, { id: "two", label: "Two, 2 of 2" }, () => "Two"),
+                  ],
+                },
+              ),
           }),
           h(CarouselNext),
           h(CarouselStatus),
@@ -43,6 +47,13 @@ describe("production carousel components", () => {
     expect(wrapper.attributes("aria-roledescription")).toBe("carousel");
     const slides = wrapper.findAll('[role="group"][aria-roledescription="slide"]');
     expect(slides).toHaveLength(2);
+    expect(wrapper.get(".snap-motion-carousel-track").attributes("style")).toContain(
+      "padding-inline-start: 1rem",
+    );
+    expect(wrapper.get(".snap-motion-carousel-track").attributes("style")).toContain(
+      "padding-inline-end: 24px",
+    );
+    expect(wrapper.get(".snap-motion-carousel-track").attributes("dir")).toBe("ltr");
     expect(slides[0]?.attributes("inert")).toBeUndefined();
     expect(slides[1]?.attributes()).toHaveProperty("inert");
     expect(wrapper.get(".snap-motion-carousel-previous").attributes()).toHaveProperty("disabled");
@@ -54,6 +65,31 @@ describe("production carousel components", () => {
     expect(slides[0]?.attributes()).toHaveProperty("inert");
     expect(slides[1]?.attributes("inert")).toBeUndefined();
     expect(wrapper.get('[role="status"]').text()).toBe("Two, 2 of 2");
+  });
+
+  it("keeps physical track coordinates LTR while restoring RTL slide content", async () => {
+    const wrapper = mount(CarouselRoot, {
+      props: {
+        activeId: "one",
+        direction: "rtl",
+        ids: ["one"],
+        reducedMotionOverride: true,
+      },
+      slots: {
+        default: () =>
+          h(CarouselViewport, null, {
+            default: () =>
+              h(CarouselTrack, null, {
+                default: () => h(CarouselSlide, { id: "one", label: "One" }),
+              }),
+          }),
+      },
+    });
+    await nextTick();
+
+    expect(wrapper.get(".snap-motion-carousel").attributes("dir")).toBe("rtl");
+    expect(wrapper.get(".snap-motion-carousel-track").attributes("dir")).toBe("ltr");
+    expect(wrapper.get(".snap-motion-carousel-slide").attributes("dir")).toBe("rtl");
   });
 
   it("navigates from a non-first controlled initial ID", async () => {

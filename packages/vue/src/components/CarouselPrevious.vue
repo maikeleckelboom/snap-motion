@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { inject } from "vue";
-import { ref } from "vue";
+import { inject, ref } from "vue";
 
-import { carouselContextKey } from "./carousel-context";
-const props = withDefaults(defineProps<{ label?: string }>(), { label: "Previous item" });
+import { carouselContextKey } from "./carousel-context.js";
+const props = defineProps<{ label?: string }>();
 const context = inject(carouselContextKey);
 if (!context) throw new Error("CarouselPrevious must be used inside CarouselRoot.");
 const focused = ref(false);
@@ -11,7 +10,7 @@ const focused = ref(false);
 <template>
   <button
     :aria-disabled="!context.canPrevious.value"
-    :aria-label="props.label"
+    :aria-label="props.label ?? context.messages.value.previousItem"
     class="snap-motion-carousel-previous"
     :disabled="!context.canPrevious.value && !focused"
     type="button"
@@ -19,6 +18,8 @@ const focused = ref(false);
     @click="context.canPrevious.value && context.previous()"
     @focus="focused = true"
   >
-    <slot>Previous</slot>
+    <slot :disabled="!context.canPrevious.value" :previous="context.previous">
+      {{ context.messages.value.previousItem }}
+    </slot>
   </button>
 </template>

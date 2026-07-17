@@ -33,10 +33,12 @@ const viewport = ref<HTMLElement>();
 const track = ref<HTMLElement>();
 const delayedReady = ref(false);
 const fixtureMode = ref<"all" | "one">("all");
+const directionMode = ref<"ltr" | "rtl">("ltr");
 const liveMessage = ref("");
 const titleId = `media-lightbox-title-${useId()}`;
 const isOpen = ref(false);
 const reducedOverride = computed(() => props.reducedMotionOverride);
+const direction = computed(() => directionMode.value);
 let storedOpener: HTMLElement | undefined;
 let decodeTimer: ReturnType<typeof setTimeout> | undefined;
 let focusRestoreFrame: number | undefined;
@@ -60,6 +62,7 @@ function measureGeometry() {
 const motion = useCarouselMotion({
   anchors: initialGeometry.anchors,
   bounds: initialGeometry.bounds,
+  direction,
   elasticity: symmetricElasticityFromSettings(props.settings),
   initialTargetId: fixtureIds.value[0]!,
   measure: measureGeometry,
@@ -117,11 +120,13 @@ function next() {
   motion.next();
 }
 
-function onKeyDown(event: KeyboardEvent) {
-  if (event.target !== event.currentTarget) {
-    return;
-  }
+function onViewportKeyDown(event: KeyboardEvent) {
   motion.onKeyDown(event);
+}
+
+function onDialogKeyDown(event: KeyboardEvent) {
+  maintainModalTabOrder(event, dialog.value);
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") motion.onKeyDown(event);
 }
 
 async function openLightbox() {
@@ -234,6 +239,14 @@ onBeforeUnmount(() => {
       </select>
     </label>
 
+    <label class="fixture-mode">
+      <span>Direction</span>
+      <select v-model="directionMode" data-testid="media-direction-mode">
+        <option value="ltr">LTR</option>
+        <option value="rtl">RTL</option>
+      </select>
+    </label>
+
     <div class="fixture-index" aria-label="Included media fixtures">
       <span v-for="(fixture, index) in visibleFixtures" :key="fixture.id">
         <strong class="tabular">{{ String(index + 1).padStart(2, "0") }}</strong>
@@ -247,12 +260,13 @@ onBeforeUnmount(() => {
       ref="dialog"
       :aria-labelledby="titleId"
       class="lightbox-dialog"
+      :dir="directionMode"
       data-testid="media-lightbox"
       :data-open-state="isOpen ? 'open' : 'closed'"
       @cancel="onCancel"
       @close="onDialogClose"
       @click="onDialogSurfaceClick"
-      @keydown="maintainModalTabOrder($event, dialog)"
+      @keydown="onDialogKeyDown"
     >
       <div class="lightbox-shell" :style="stageStyle">
         <header class="lightbox-header">
@@ -321,18 +335,20 @@ onBeforeUnmount(() => {
             :data-phase="motion.phase.value"
             :style="motion.surfaceStyle"
             tabindex="0"
-            @keydown="onKeyDown"
+            @keydown="onViewportKeyDown"
             @pointerdown="motion.onPointerDown"
             @wheel="motion.onWheel"
           >
-            <div ref="track" class="media-track" :style="motion.trackStyle.value">
+            <div ref="track" class="media-track" dir="ltr" :style="motion.trackStyle.value">
               <div
                 v-for="(fixture, index) in visibleFixtures"
                 :key="fixture.id"
                 :aria-label="`${fixture.title}, ${index + 1} of ${visibleFixtures.length}`"
                 aria-roledescription="slide"
                 class="media-slide"
+                :data-slide-id="fixture.id"
                 :data-fixture="fixture.mode"
+                :dir="directionMode"
                 :inert="semanticId !== fixture.id"
                 role="group"
               >
@@ -357,6 +373,13 @@ onBeforeUnmount(() => {
                       <span>Waiting for source</span>
                     </div>
                   </div>
+                  <button
+                    class="slide-action"
+                    :data-testid="`slide-action-${fixture.id}`"
+                    type="button"
+                  >
+                    Inspect details
+                  </button>
                 </div>
               </div>
             </div>
@@ -392,6 +415,19 @@ onBeforeUnmount(() => {
 
         <footer class="lightbox-footer">
           <p>{{ activeFixture?.description }}</p>
+          <div aria-label="Keyboard ownership probes" class="ownership-probes" role="group">
+            <button data-testid="caption-action" type="button">Caption details</button>
+            <label>
+              Note
+              <input aria-label="Caption note" data-testid="caption-input" type="text" />
+            </label>
+            <label>
+              <input data-testid="caption-radio" name="caption-mode" type="radio" value="pinned" />
+              Pin
+            </label>
+            <video aria-label="Media controls" controls data-testid="media-controls" muted />
+            <button data-testid="ownership-end" type="button">Done</button>
+          </div>
           <p class="tabular">x {{ motion.position.value.toFixed(2) }} px</p>
         </footer>
       </div>
@@ -595,6 +631,7 @@ onBeforeUnmount(() => {
 
 .media-frame,
 .media-layer {
+  position: relative;
   display: grid;
   place-items: center;
   min-inline-size: 0;
@@ -602,6 +639,14 @@ onBeforeUnmount(() => {
   inline-size: 100%;
   block-size: 100%;
   overflow: clip;
+}
+
+.slide-action {
+  position: absolute;
+  z-index: 1;
+  inset-block-end: 0.75rem;
+  inset-inline-start: 0.75rem;
+  min-block-size: 2.25rem;
 }
 
 .media-layer {
@@ -659,8 +704,29 @@ onBeforeUnmount(() => {
 }
 
 .lightbox-footer {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(12rem, 1fr) auto auto;
   border-block: 1px solid #444;
+}
+
+.ownership-probes {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ownership-probes label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ownership-probes input[type="text"] {
+  inline-size: 7rem;
+}
+
+.ownership-probes video {
+  inline-size: 7rem;
+  block-size: 2.25rem;
 }
 
 .lightbox-footer p {
@@ -692,6 +758,30 @@ onBeforeUnmount(() => {
   .carousel-viewport {
     inline-size: calc(100vw - 7rem);
     aspect-ratio: 3 / 4;
+  }
+
+  .lightbox-footer {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .ownership-probes {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
+}
+
+@media (forced-colors: active) {
+  .lightbox-dialog,
+  .icon-button,
+  .carousel-control {
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  .lightbox-header p,
+  .media-position,
+  .lightbox-footer p {
+    color: CanvasText;
   }
 }
 </style>

@@ -1,6 +1,7 @@
+import { useTimeoutFn } from "@vueuse/core";
 import { onScopeDispose, ref } from "vue";
 
-import { horizontalWheelDelta } from "./input-policy";
+import { elementOwnsSnapMotionWheel, horizontalWheelDelta } from "./input-policy.js";
 
 export interface WheelInputOptions {
   disabled?: () => boolean;
@@ -12,13 +13,18 @@ export interface WheelInputOptions {
 
 export function useHorizontalWheel(options: WheelInputOptions) {
   const isWheeling = ref(false);
-  let settleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const settleTimer = useTimeoutFn(
+    () => {
+      isWheeling.value = false;
+      options.onSettle();
+    },
+    () => Math.max(0, options.settleDelay ?? 90),
+    { immediate: false },
+  );
 
   function clearSettleTimer() {
-    if (settleTimer !== undefined) {
-      clearTimeout(settleTimer);
-      settleTimer = undefined;
-    }
+    settleTimer.stop();
   }
 
   function stopWheel() {
@@ -27,19 +33,15 @@ export function useHorizontalWheel(options: WheelInputOptions) {
   }
 
   function scheduleSettle() {
-    clearSettleTimer();
-    settleTimer = setTimeout(
-      () => {
-        settleTimer = undefined;
-        isWheeling.value = false;
-        options.onSettle();
-      },
-      Math.max(0, options.settleDelay ?? 90),
-    );
+    settleTimer.start();
   }
 
   function onWheel(event: WheelEvent) {
-    if (options.disabled?.()) {
+    if (
+      event.defaultPrevented ||
+      elementOwnsSnapMotionWheel(event.target) ||
+      options.disabled?.()
+    ) {
       return;
     }
 

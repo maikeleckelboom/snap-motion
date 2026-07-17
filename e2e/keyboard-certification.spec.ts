@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { expectCarouselAt, expectSheetOpenAt, openLabDemo } from "./helpers";
 
 test.describe("keyboard certification", () => {
-  test("lightbox keeps viewport focus, leaves button focus stable, wraps Tab, and restores opener", async ({
+  test("lightbox navigates immediately from close focus, keeps focus stable, and restores opener", async ({
     page,
   }) => {
     await openLabDemo(page, "media");
@@ -14,6 +14,13 @@ test.describe("keyboard certification", () => {
     const close = page.getByTestId("close-lightbox");
     const previous = page.getByTestId("media-previous");
     const viewport = page.getByTestId("media-carousel");
+    await expect(close).toBeFocused();
+
+    await page.keyboard.press("ArrowRight");
+    await expectCarouselAt(viewport, "extremely-wide");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expectCarouselAt(viewport, "regular");
     await expect(close).toBeFocused();
 
     await page.keyboard.press("Tab");
@@ -29,10 +36,70 @@ test.describe("keyboard certification", () => {
     await viewport.focus();
     await page.keyboard.press("End");
     await expectCarouselAt(viewport, "delayed");
+    await page.getByTestId("ownership-end").focus();
     await page.keyboard.press("Tab");
     await expect(close).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(opener).toBeFocused();
+  });
+
+  test("dialog controls navigate while input, radio, video, and active-slide children retain keys", async ({
+    page,
+  }) => {
+    await openLabDemo(page, "media");
+    await page.getByTestId("open-lightbox").click();
+    const viewport = page.getByTestId("media-carousel");
+
+    const next = page.getByTestId("media-next");
+    await next.focus();
+    await page.keyboard.press("ArrowRight");
+    await expectCarouselAt(viewport, "extremely-wide");
+    await expect(next).toBeFocused();
+
+    const caption = page.getByTestId("caption-action");
+    await caption.focus();
+    await page.keyboard.press("ArrowRight");
+    await expectCarouselAt(viewport, "extremely-tall");
+    await expect(caption).toBeFocused();
+
+    for (const testId of [
+      "caption-input",
+      "caption-radio",
+      "media-controls",
+      "slide-action-extremely-tall",
+    ]) {
+      const owner = page.getByTestId(testId);
+      await owner.focus();
+      await page.keyboard.press("ArrowRight");
+      await expectCarouselAt(viewport, "extremely-tall");
+      await expect(owner).toBeFocused();
+    }
+  });
+
+  test("dialog-wide keys map physical direction in RTL while retaining close focus", async ({
+    page,
+  }) => {
+    await openLabDemo(page, "media");
+    await page.getByTestId("media-direction-mode").selectOption("rtl");
+    await page.getByTestId("open-lightbox").click();
+
+    const close = page.getByTestId("close-lightbox");
+    const viewport = page.getByTestId("media-carousel");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expectCarouselAt(viewport, "extremely-wide");
+    const centerOffset = await viewport.evaluate((element) => {
+      const active = element.querySelector<HTMLElement>('[data-slide-id="extremely-wide"]');
+      if (!active) return Number.POSITIVE_INFINITY;
+      const viewportBox = element.getBoundingClientRect();
+      const activeBox = active.getBoundingClientRect();
+      return Math.abs(viewportBox.left - activeBox.left);
+    });
+    expect(centerOffset).toBeLessThanOrEqual(1.5);
+    await expect(close).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expectCarouselAt(viewport, "regular");
+    await expect(close).toBeFocused();
   });
 
   test("bottom-sheet radio group supplies the non-drag Arrow-key path", async ({ page }) => {

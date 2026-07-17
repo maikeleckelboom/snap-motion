@@ -1,24 +1,44 @@
 <script setup lang="ts" generic="Id extends string">
 import { createFixedStageGeometry, type ControllerSnapshot } from "@snap-motion/core";
-import { computed, nextTick, provide, ref, useId, watch } from "vue";
+import { useEventListener } from "@vueuse/core";
+import { computed, nextTick, onBeforeUnmount, provide, ref, useId, watch, watchEffect } from "vue";
 
-import { useCarouselMotion } from "../use-carousel-motion";
-import { carouselContextKey, type CarouselContext } from "./carousel-context";
-import type { NavigationReason } from "./contracts";
+import {
+  createFixedStageCarouselGeometryStrategy,
+  type CarouselGeometryStrategy,
+} from "../carousel-geometry.js";
+import {
+  carouselOwnsScopedKeyboardEvent,
+  registerDialogCarousel,
+  resolveCarouselKeyboardTarget,
+} from "../carousel-keyboard.js";
+import { carouselKeyAction } from "../input-policy.js";
+import { createEnglishSnapMotionMessages, type SnapMotionMessages } from "../messages.js";
+import { useCarouselMotion } from "../use-carousel-motion.js";
+import { carouselContextKey, type CarouselContext } from "./carousel-context.js";
+import type { CarouselKeyboardScope, NavigationReason, SnapMotionDirection } from "./contracts.js";
 
 const props = withDefaults(
   defineProps<{
     activeId: Id;
+    direction?: SnapMotionDirection;
+    geometryStrategy?: CarouselGeometryStrategy<Id>;
     ids: readonly Id[];
     keyboardInstructions?: string;
+    keyboardNavigation?: boolean;
+    keyboardPrimary?: boolean;
+    keyboardScope?: CarouselKeyboardScope;
     label?: string;
     labelledby?: string;
     landmark?: boolean;
+    messages?: Partial<SnapMotionMessages>;
     reducedMotionOverride?: boolean;
   }>(),
   {
-    keyboardInstructions:
-      "Use Left and Right Arrow to move between items. Use Home and End to jump.",
+    direction: "auto",
+    keyboardNavigation: true,
+    keyboardPrimary: false,
+    keyboardScope: "auto",
     landmark: false,
   },
 );
@@ -30,15 +50,24 @@ const emit = defineEmits<{
   (event: "targetChanged", id: Id, reason: NavigationReason): void;
 }>();
 
+const root = ref<HTMLElement>();
 const viewport = ref<HTMLElement>();
 const track = ref<HTMLElement>();
 const instructionId = `snap-motion-carousel-instructions-${useId()}`;
 const statusId = `snap-motion-carousel-status-${useId()}`;
 const statusText = ref("");
-const slideLabels = new Map<string, string>();
+const slideRegistrations = new Map<Id, { element?: HTMLElement; label: string }>();
 const reducedMotionOverride = computed(() => props.reducedMotionOverride);
-let pendingReason: NavigationReason = "route";
-let lastCompletedId: Id | undefined;
+const requestedDirection = computed(() => props.direction);
+const ids = computed(() => props.ids);
+const messages = computed(() => createEnglishSnapMotionMessages(props.messages));
+const defaultGeometryStrategy = createFixedStageCarouselGeometryStrategy<Id>();
+const intendedId = ref<Id>(props.activeId);
+let latestSnapshot: ControllerSnapshot<Id>;
+let targetGeneration = 0;
+let settledGeneration = 0;
+let settleCheckQueued = false;
+let unmounted = false;
 
 function moveFocusOutsideOutgoingSlide(id: Id) {
   const target = viewport.value;
@@ -51,115 +80,185 @@ function moveFocusOutsideOutgoingSlide(id: Id) {
     return;
   }
   const activeSlide = activeElement.closest<HTMLElement>("[data-slide-id]");
-  if (activeSlide?.dataset.slideId !== id) {
-    target.focus({ preventScroll: true });
-  }
+  if (activeSlide?.dataset.slideId !== id) target.focus({ preventScroll: true });
 }
 
 function measure() {
-  return createFixedStageGeometry({
-    itemIds: props.ids,
-    viewportSize: viewport.value?.clientWidth ?? 0,
+  const surface = viewport.value;
+  if (!surface) {
+    return createFixedStageGeometry({ itemIds: props.ids, viewportSize: 0 });
+  }
+  const slides = new Map<Id, HTMLElement>();
+  for (const [id, registration] of slideRegistrations) {
+    if (registration.element) slides.set(id, registration.element);
+  }
+  return (props.geometryStrategy ?? defaultGeometryStrategy).measure({
+    ids: props.ids,
+    slides,
+    viewport: surface,
+    ...(track.value ? { track: track.value } : {}),
   });
 }
 
-function onControllerChange(snapshot: ControllerSnapshot<Id>) {
-  if (snapshot.phase !== "idle" || !snapshot.active || snapshot.active.id === lastCompletedId) {
+function publishSettlement() {
+  settleCheckQueued = false;
+  const snapshot = latestSnapshot;
+  const active = snapshot.active;
+  if (
+    snapshot.phase !== "idle" ||
+    !active ||
+    active.id !== intendedId.value ||
+    settledGeneration === targetGeneration
+  ) {
     return;
   }
-  moveFocusOutsideOutgoingSlide(snapshot.active.id);
-  lastCompletedId = snapshot.active.id;
-  const label = slideLabels.get(snapshot.active.id);
-  statusText.value = label ?? `${snapshot.active.order + 1} of ${snapshot.anchors.length}`;
-  emit("settled", snapshot.active.id);
+  moveFocusOutsideOutgoingSlide(active.id);
+  settledGeneration = targetGeneration;
+  const label = slideRegistrations.get(active.id)?.label;
+  statusText.value = messages.value.itemStatus({
+    id: active.id,
+    index: active.order,
+    count: snapshot.anchors.length,
+    ...(label ? { label } : {}),
+  });
+  emit("settled", active.id);
 }
 
-const initialGeometry = createFixedStageGeometry({
-  itemIds: props.ids,
-  viewportSize: 0,
-});
+function onControllerChange(snapshot: ControllerSnapshot<Id>) {
+  latestSnapshot = snapshot;
+  if (snapshot.phase === "idle" && !settleCheckQueued) {
+    settleCheckQueued = true;
+    queueMicrotask(publishSettlement);
+  }
+}
 
+function acceptTarget(id: Id, reason: NavigationReason, userOriginated: boolean) {
+  if (id === intendedId.value) return false;
+  intendedId.value = id;
+  targetGeneration += 1;
+  emit("targetChanged", id, reason);
+  if (userOriginated) {
+    emit("requestActiveId", id, reason);
+    emit("update:activeId", id);
+  }
+  return true;
+}
+
+const initialGeometry = createFixedStageGeometry({ itemIds: props.ids, viewportSize: 0 });
 const motion = useCarouselMotion<Id>({
   anchors: initialGeometry.anchors,
   bounds: initialGeometry.bounds,
+  direction: requestedDirection,
   initialPosition: 0,
   initialTargetId: props.activeId,
   measure,
   onChange: onControllerChange,
+  onTargetSelected(id, reason) {
+    acceptTarget(id, reason, true);
+  },
   reducedMotionOverride,
   track,
   viewport,
 });
 
-function requestNavigation(id: Id, reason: NavigationReason) {
-  pendingReason = reason;
-  emit("targetChanged", id, reason);
-  emit("requestActiveId", id, reason);
-  emit("update:activeId", id);
+function scheduleRemeasure() {
+  void nextTick(() => {
+    if (!unmounted) motion.remeasure();
+  });
 }
 
 function navigate(id: Id, reason: NavigationReason) {
-  pendingReason = reason;
-  const target = motion.moveTo(id);
-  if (target) {
-    requestNavigation(target.id, reason);
-  }
+  if (!props.ids.includes(id) || !acceptTarget(id, reason, reason !== "route")) return;
+  motion.moveTo(id);
+}
+
+function adjacentId(direction: -1 | 1): Id | undefined {
+  const index = props.ids.indexOf(intendedId.value);
+  return index < 0 ? undefined : props.ids[index + direction];
 }
 
 function previous(reason: NavigationReason = "previous") {
-  pendingReason = reason;
-  const target = motion.previous();
-  if (target) {
-    requestNavigation(target.id, reason);
-  }
+  const id = adjacentId(-1);
+  if (id !== undefined) navigate(id, reason);
 }
 
 function next(reason: NavigationReason = "next") {
-  pendingReason = reason;
-  const target = motion.next();
-  if (target) {
-    requestNavigation(target.id, reason);
-  }
+  const id = adjacentId(1);
+  if (id !== undefined) navigate(id, reason);
 }
 
 function onKeyDown(event: KeyboardEvent) {
-  if (event.target !== event.currentTarget || event.ctrlKey || event.altKey || event.metaKey) {
+  if (effectiveKeyboardScope.value === "off") return;
+  let action = carouselKeyAction(event);
+  if (!action) return;
+  if (motion.direction.value === "rtl") {
+    if (action === "previous") action = "next";
+    else if (action === "next") action = "previous";
+  }
+  const id =
+    action === "home"
+      ? props.ids[0]
+      : action === "end"
+        ? props.ids.at(-1)
+        : adjacentId(action === "previous" ? -1 : 1);
+  if (id === undefined || id === intendedId.value) return;
+  event.preventDefault();
+  navigate(id, "keyboard");
+}
+
+const effectiveKeyboardScope = computed<CarouselKeyboardScope>(() =>
+  props.keyboardNavigation ? props.keyboardScope : "off",
+);
+const keyboardTarget = computed(() =>
+  resolveCarouselKeyboardTarget(root.value, effectiveKeyboardScope.value),
+);
+
+useEventListener(keyboardTarget, "keydown", (event) => {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
     return;
   }
-  const before = motion.targetId.value ?? motion.activeId.value;
-  motion.onKeyDown(event);
-  const after = motion.targetId.value ?? motion.activeId.value;
-  if (event.defaultPrevented && after !== undefined && after !== before) {
-    requestNavigation(after, "keyboard");
-  }
-}
+  const rootElement = root.value;
+  if (!rootElement || !carouselOwnsScopedKeyboardEvent(rootElement, event)) return;
+  onKeyDown(event);
+});
+
+watchEffect((onCleanup) => {
+  const target = keyboardTarget.value;
+  if (typeof HTMLDialogElement === "undefined" || !(target instanceof HTMLDialogElement)) return;
+  onCleanup(
+    registerDialogCarousel(target, {
+      primary: () => props.keyboardPrimary,
+      root: root.value!,
+    }),
+  );
+});
 
 watch(
   () => props.ids,
-  async (ids) => {
-    const semanticId = motion.targetId.value ?? motion.activeId.value;
+  async (nextIds) => {
     const activeElement = viewport.value?.ownerDocument.activeElement;
     const focusNeedsFallback =
-      semanticId !== undefined &&
-      !ids.includes(semanticId) &&
+      !nextIds.includes(intendedId.value) &&
       typeof HTMLElement !== "undefined" &&
       activeElement instanceof HTMLElement &&
       viewport.value?.contains(activeElement);
     if (focusNeedsFallback) viewport.value?.focus({ preventScroll: true });
     await nextTick();
-    motion.remeasure();
+    if (unmounted) return;
+    const target = motion.remeasure();
+    if (target && target.id !== intendedId.value) acceptTarget(target.id, "route", false);
   },
   { deep: true },
 );
 
+watch(() => props.geometryStrategy, scheduleRemeasure);
+
 watch(
   () => props.activeId,
   (id) => {
-    if (id !== motion.targetId.value && id !== motion.activeId.value && props.ids.includes(id)) {
-      pendingReason = "route";
-      motion.moveTo(id);
-      emit("targetChanged", id, "route");
-    }
+    if (id === intendedId.value || !props.ids.includes(id)) return;
+    acceptTarget(id, "route", false);
+    motion.moveTo(id);
   },
 );
 
@@ -167,22 +266,21 @@ provide(carouselContextKey, {
   activeId: motion.activeId,
   canNext: motion.canNext,
   canPrevious: motion.canPrevious,
+  count: computed(() => props.ids.length),
+  direction: motion.direction,
+  ids,
   instructionId,
+  messages,
   navigate,
   next,
   onKeyDown,
-  onPointerDown(event) {
-    pendingReason = "drag";
-    motion.onPointerDown(event);
-  },
-  onWheel(event) {
-    pendingReason = "wheel";
-    motion.onWheel(event);
-  },
+  onPointerDown: motion.onPointerDown,
+  onWheel: motion.onWheel,
   phase: motion.phase,
   previous,
-  registerSlide(id, label) {
-    slideLabels.set(id, label);
+  registerSlide(id, label, element) {
+    slideRegistrations.set(id as Id, { label, ...(element ? { element } : {}) });
+    if (element) scheduleRemeasure();
   },
   registerTrack(element) {
     track.value = element;
@@ -191,7 +289,7 @@ provide(carouselContextKey, {
     viewport.value = element;
   },
   unregisterSlide(id) {
-    slideLabels.delete(id);
+    slideRegistrations.delete(id as Id);
   },
   statusId,
   statusText,
@@ -200,32 +298,28 @@ provide(carouselContextKey, {
 } satisfies CarouselContext<Id> as unknown as CarouselContext);
 
 defineExpose({ motion, navigate, next, previous });
+
+onBeforeUnmount(() => {
+  unmounted = true;
+});
 </script>
 
 <template>
   <component
     :is="landmark ? 'section' : 'div'"
+    ref="root"
     :aria-label="label"
     :aria-labelledby="labelledby"
     aria-roledescription="carousel"
     class="snap-motion-carousel"
+    data-snap-motion-carousel-root
+    :data-snap-motion-primary-carousel="keyboardPrimary ? '' : undefined"
+    :dir="direction === 'auto' ? undefined : direction"
     :role="landmark ? 'region' : 'group'"
   >
     <slot />
-    <p :id="instructionId" class="snap-motion-visually-hidden">{{ keyboardInstructions }}</p>
+    <p :id="instructionId" class="snap-motion-visually-hidden">
+      {{ keyboardInstructions ?? messages.carouselInstructions }}
+    </p>
   </component>
 </template>
-
-<style>
-.snap-motion-visually-hidden {
-  position: absolute !important;
-  inline-size: 1px !important;
-  block-size: 1px !important;
-  padding: 0 !important;
-  border: 0 !important;
-  margin: -1px !important;
-  overflow: hidden !important;
-  clip-path: inset(50%) !important;
-  white-space: nowrap !important;
-}
-</style>

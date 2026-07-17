@@ -1,0 +1,22 @@
+{
+  "core": {
+    "entry": "packages/core/dist/index.js",
+    "maxBytes": 24000,
+    "maxGzipBytes": 7500
+  },
+  "vueComposables": {
+    "entry": "packages/vue/dist/composables.js",
+    "maxBytes": 32000,
+    "maxGzipBytes": 10000
+  },
+  "vueComponents": {
+    "entry": "packages/vue/dist/components.js",
+    "maxBytes": 52000,
+    "maxGzipBytes": 15000
+  },
+  "baseCss": {
+    "entry": "packages/vue/dist/style.css",
+    "maxBytes": 5000,
+    "maxGzipBytes": 1600
+  }
+}

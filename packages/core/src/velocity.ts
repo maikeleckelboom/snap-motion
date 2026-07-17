@@ -1,4 +1,4 @@
-import { assertFiniteNumber, assertNonNegative } from "./bounds";
+import { assertFiniteNumber, assertNonNegative } from "./bounds.js";
 
 export interface VelocitySample {
   readonly position: number;

@@ -8,9 +8,9 @@ import {
 } from "@snap-motion/core";
 import { computed, onScopeDispose, shallowRef, watch, type Ref } from "vue";
 
-import { createMotionDriver } from "./motion-driver";
-import { usePointerDrag } from "./pointer-drag";
-import { useReducedMotionPreference } from "./reduced-motion";
+import { createMotionDriver } from "./motion-driver.js";
+import { usePointerDrag } from "./pointer-drag.js";
+import { useReducedMotionPreference } from "./reduced-motion.js";
 
 export interface UseSnapMotionOptions<Id extends string> extends Omit<
   SnapControllerOptions<Id>,
@@ -20,6 +20,8 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<
   driver?: AnimationDriver;
   onChange?: (snapshot: ControllerSnapshot<Id>) => void;
   pointerIntent?: "horizontal" | "immediate";
+  pointerDeltaMultiplier?: () => number;
+  onReleaseTargetSelected?: (id: Id | undefined) => void;
   reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
   resolveReleaseTarget?: (context: {
     controller: SnapController<Id>;
@@ -34,6 +36,8 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     driver = createMotionDriver(),
     onChange,
     pointerIntent = "immediate",
+    pointerDeltaMultiplier,
+    onReleaseTargetSelected,
     reducedMotionOverride,
     resolveReleaseTarget,
     ...controllerOptions
@@ -75,25 +79,28 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     },
     onMove(sample) {
       velocityTracker.add(sample.position, sample.time);
-      controller.dragTo(dragOrigin + sample.delta);
+      controller.dragTo(dragOrigin + sample.delta * (pointerDeltaMultiplier?.() ?? 1));
     },
     onEnd(sample) {
       velocityTracker.add(sample.position, sample.time);
-      const releaseVelocity = velocityTracker.getVelocity();
+      const releaseVelocity = velocityTracker.getVelocity() * (pointerDeltaMultiplier?.() ?? 1);
       const targetId = resolveReleaseTarget?.({
         controller,
         snapshot: controller.getSnapshot(),
         velocity: releaseVelocity,
       });
       if (targetId === undefined) {
-        controller.release(releaseVelocity);
+        const target = controller.release(releaseVelocity);
+        onReleaseTargetSelected?.(target?.id);
       } else {
-        controller.moveTo(targetId, { initialVelocity: releaseVelocity });
+        const target = controller.moveTo(targetId, { initialVelocity: releaseVelocity });
+        onReleaseTargetSelected?.(target?.id);
       }
     },
     onCancel() {
       velocityTracker.reset();
-      controller.release(0);
+      const target = controller.release(0);
+      onReleaseTargetSelected?.(target?.id);
     },
   });
 

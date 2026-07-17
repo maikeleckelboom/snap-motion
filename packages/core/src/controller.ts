@@ -1,7 +1,7 @@
-import type { AnimationDriver, AnimationPlaybackControls } from "./animation-driver";
-import { assertFiniteNumber, assertNonNegative, clampToBounds, createBounds } from "./bounds";
-import { applyElasticity, validateElasticityOptions } from "./elastic";
-import { tightPreset } from "./presets";
+import type { AnimationDriver, AnimationPlaybackControls } from "./animation-driver.js";
+import { assertFiniteNumber, assertNonNegative, clampToBounds, createBounds } from "./bounds.js";
+import { applyElasticity, validateElasticityOptions } from "./elastic.js";
+import { tightPreset } from "./presets.js";
 import {
   clampAnchorsToBounds,
   directionalAnchor,
@@ -9,7 +9,7 @@ import {
   nearestAnchor,
   resolveReleaseTarget,
   validateReleaseTargetPolicy,
-} from "./snap-targets";
+} from "./snap-targets.js";
 import type {
   ControllerConfiguration,
   ControllerConfigurationUpdate,
@@ -25,7 +25,7 @@ import type {
   SnapAnchor,
   SnapDirection,
   SpringConfiguration,
-} from "./types";
+} from "./types.js";
 
 const POSITION_EPSILON = 1e-9;
 

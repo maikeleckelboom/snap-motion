@@ -1,27 +1,52 @@
 import { sortAnchors, type ControllerMeasurement } from "@snap-motion/core";
-import { computed, type Ref } from "vue";
+import { computed, isRef, type Ref } from "vue";
 
-import { carouselKeyAction, isSupportedPrimaryPointerStart } from "./input-policy";
-import { useRemeasurement } from "./remeasurement";
-import { useSnapMotion, type UseSnapMotionOptions } from "./use-snap-motion";
-import { useHorizontalWheel } from "./wheel";
+import type { SnapMotionDirection } from "./components/contracts.js";
+import { carouselKeyAction, isSupportedPrimaryPointerStart } from "./input-policy.js";
+import { useRemeasurement } from "./remeasurement.js";
+import { useSnapMotion, type UseSnapMotionOptions } from "./use-snap-motion.js";
+import { useHorizontalWheel } from "./wheel.js";
 
 export interface UseCarouselMotionOptions<Id extends string> extends Omit<
   UseSnapMotionOptions<Id>,
   "axis" | "pointerIntent"
 > {
   measure: () => ControllerMeasurement<Id>;
+  direction?: SnapMotionDirection | Readonly<Ref<SnapMotionDirection>>;
+  onTargetSelected?: (id: Id, reason: "drag" | "wheel") => void;
   track?: Ref<HTMLElement | undefined>;
   viewport: Ref<HTMLElement | undefined>;
   wheelSettleDelay?: number;
 }
 
 export function useCarouselMotion<Id extends string>(options: UseCarouselMotionOptions<Id>) {
-  const { measure, track, viewport, wheelSettleDelay, ...snapOptions } = options;
+  const {
+    direction = "auto",
+    measure,
+    onTargetSelected,
+    track,
+    viewport,
+    wheelSettleDelay,
+    ...snapOptions
+  } = options;
+
+  function resolvedDirection(): "ltr" | "rtl" {
+    const requested = isRef(direction) ? direction.value : direction;
+    if (requested !== "auto") return requested;
+    const surface = viewport.value;
+    return surface?.ownerDocument.defaultView?.getComputedStyle(surface).direction === "rtl"
+      ? "rtl"
+      : "ltr";
+  }
+
   const motion = useSnapMotion({
     ...snapOptions,
     axis: "x",
     pointerIntent: "horizontal",
+    pointerDeltaMultiplier: () => (resolvedDirection() === "rtl" ? -1 : 1),
+    onReleaseTargetSelected(id) {
+      if (id !== undefined) onTargetSelected?.(id, "drag");
+    },
   });
   let wheelActive = false;
   let wheelRawPosition = motion.position.value;
@@ -58,7 +83,7 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
         wheelActive = true;
         wheelRawPosition = motion.position.value;
       }
-      wheelRawPosition -= delta;
+      wheelRawPosition -= delta * (resolvedDirection() === "rtl" ? -1 : 1);
       motion.controller.dragTo(wheelRawPosition);
     },
     onSettle() {
@@ -66,7 +91,8 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
         return;
       }
       wheelActive = false;
-      motion.controller.release(0);
+      const target = motion.controller.release(0);
+      if (target) onTargetSelected?.(target.id, "wheel");
     },
   });
 
@@ -91,10 +117,7 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
       return;
     }
 
-    const direction = viewport.value
-      ? viewport.value.ownerDocument.defaultView?.getComputedStyle(viewport.value).direction
-      : "ltr";
-    if (direction === "rtl") {
+    if (resolvedDirection() === "rtl") {
       if (action === "previous") action = "next";
       else if (action === "next") action = "previous";
     }
@@ -176,6 +199,7 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
     ...motion,
     canNext,
     canPrevious,
+    direction: computed(resolvedDirection),
     isWheeling: wheel.isWheeling,
     interrupt,
     moveBy,

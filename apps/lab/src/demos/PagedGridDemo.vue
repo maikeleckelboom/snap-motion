@@ -4,6 +4,7 @@ import { useCarouselMotion } from "@snap-motion/vue";
 import { computed, nextTick, ref, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
+import RenderWindowFixture from "@/demos/RenderWindowFixture.vue";
 import VariableRailFixture from "@/demos/VariableRailFixture.vue";
 import {
   carouselReleaseFromSettings,
@@ -305,6 +306,7 @@ watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
       :settings="settings"
       :stage-width="stageWidth"
     />
+    <RenderWindowFixture />
   </div>
 </template>
 

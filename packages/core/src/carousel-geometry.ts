@@ -1,5 +1,5 @@
-import { assertFiniteNumber, assertNonNegative, clampToBounds, getTrackBounds } from "./bounds";
-import type { ScalarBounds, SemanticId, SnapAnchor } from "./types";
+import { assertFiniteNumber, assertNonNegative, clampToBounds, getTrackBounds } from "./bounds.js";
+import type { ScalarBounds, SemanticId, SnapAnchor } from "./types.js";
 
 export interface MeasuredItemBox<Id extends SemanticId = SemanticId> {
   readonly id: Id;

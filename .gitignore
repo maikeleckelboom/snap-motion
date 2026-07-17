@@ -9,6 +9,8 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
+.artifacts/
+temp/
 *.tsbuildinfo
 *.log
 .DS_Store

@@ -28,6 +28,11 @@ const gap = 12;
 const viewport = ref<HTMLElement>();
 const track = ref<HTMLElement>();
 const reducedOverride = computed(() => props.reducedMotionOverride);
+const measuredViewportSize = ref(Math.max(1, props.stageWidth));
+const railInsetStyle = computed(() => ({
+  paddingInlineStart: `${Math.max(0, (measuredViewportSize.value - railItems[0]!.width) / 2)}px`,
+  paddingInlineEnd: `${Math.max(0, (measuredViewportSize.value - railItems.at(-1)!.width) / 2)}px`,
+}));
 
 function fallbackBoxes(): MeasuredItemBox<string>[] {
   let start = 0;
@@ -54,12 +59,14 @@ function measureBoxes() {
 function geometry() {
   const boxes = measureBoxes();
   const last = boxes.at(-1);
-  const trackExtent = last ? last.start + last.size : 0;
+  const viewportSize = Math.max(1, viewport.value?.clientWidth ?? props.stageWidth);
+  measuredViewportSize.value = viewportSize;
+  const trackExtent = track.value?.scrollWidth ?? (last ? last.start + last.size : 0);
   return createVariableWidthGeometry({
     alignment: "center",
     items: boxes,
     trackExtent,
-    viewportSize: Math.max(1, viewport.value?.clientWidth ?? props.stageWidth),
+    viewportSize,
   });
 }
 
@@ -128,6 +135,7 @@ watch(
       <div class="rail-controls">
         <button
           aria-label="Previous rail item"
+          data-testid="variable-previous"
           :disabled="!motion.canPrevious.value"
           type="button"
           @click="motion.previous()"
@@ -138,6 +146,7 @@ watch(
         </button>
         <button
           aria-label="Next rail item"
+          data-testid="variable-next"
           :disabled="!motion.canNext.value"
           type="button"
           @click="motion.next()"
@@ -162,7 +171,7 @@ watch(
       @pointerdown="motion.onPointerDown"
       @wheel="motion.onWheel"
     >
-      <div ref="track" class="rail-track" :style="motion.trackStyle.value">
+      <div ref="track" class="rail-track" :style="[railInsetStyle, motion.trackStyle.value]">
         <article
           v-for="(item, index) in railItems"
           :key="item.id"

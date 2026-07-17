@@ -21,6 +21,116 @@ export interface BottomSheetReleasePolicy {
   projectionSeconds: number;
 }
 
+export interface BottomSheetMeasureContext {
+  readonly viewportWidth: number;
+  readonly viewportHeight: number;
+  readonly visualViewportHeight: number;
+  readonly panelIntrinsicSize: number;
+  readonly safeAreaTop: number;
+  readonly safeAreaBottom: number;
+  readonly topGap: number;
+  readonly closedOffset: number;
+}
+
+/** A semantic open bottom-sheet position. Hidden remains an internal closing state. */
+export interface BottomSheetSnapPoint<Id extends string> {
+  readonly id: Id;
+  readonly label: string;
+  readonly resolve: (context: BottomSheetMeasureContext) => number;
+  readonly disabled?: boolean | ((context: BottomSheetMeasureContext) => boolean);
+}
+
+export interface ResolvedBottomSheetSnapPoint<Id extends string> {
+  readonly disabled: boolean;
+  readonly id: Id;
+  readonly label: string;
+  readonly order: number;
+  readonly position: number;
+}
+
+export type BottomSheetSnapResolver = (context: BottomSheetMeasureContext) => number;
+
+function finitePosition(value: number, fallback: number) {
+  return Number.isFinite(value) ? Math.max(0, value) : fallback;
+}
+
+export const bottomSheetSnapPosition = {
+  pixels(position: number): BottomSheetSnapResolver {
+    return () => finitePosition(position, 0);
+  },
+  viewportFraction(visibleFraction: number): BottomSheetSnapResolver {
+    return (context) => {
+      const fraction = Math.min(1, Math.max(0, finitePosition(visibleFraction, 0)));
+      return context.visualViewportHeight * (1 - fraction);
+    };
+  },
+  intrinsicContent(context: BottomSheetMeasureContext): number {
+    return Math.max(
+      context.topGap + context.safeAreaTop,
+      context.visualViewportHeight - context.panelIntrinsicSize - context.safeAreaBottom,
+    );
+  },
+  safeArea(resolver: BottomSheetSnapResolver): BottomSheetSnapResolver {
+    return (context) =>
+      Math.max(context.topGap + context.safeAreaTop, resolver(context) - context.safeAreaBottom);
+  },
+  min(...resolvers: readonly BottomSheetSnapResolver[]): BottomSheetSnapResolver {
+    return (context) => Math.min(...resolvers.map((resolver) => resolver(context)));
+  },
+  max(...resolvers: readonly BottomSheetSnapResolver[]): BottomSheetSnapResolver {
+    return (context) => Math.max(...resolvers.map((resolver) => resolver(context)));
+  },
+} as const;
+
+/** Resolves semantic snap points while retaining duplicate physical positions and disabled IDs. */
+export function resolveBottomSheetSnapPoints<Id extends string>(
+  points: readonly BottomSheetSnapPoint<Id>[],
+  context: BottomSheetMeasureContext,
+): ResolvedBottomSheetSnapPoint<Id>[] {
+  const seen = new Set<Id>();
+  return points.map((point, order) => {
+    if (!point.id || seen.has(point.id)) {
+      throw new RangeError(`Bottom-sheet snap IDs must be unique non-empty strings: ${point.id}`);
+    }
+    seen.add(point.id);
+    const disabled =
+      typeof point.disabled === "function" ? point.disabled(context) : (point.disabled ?? false);
+    return {
+      disabled,
+      id: point.id,
+      label: point.label,
+      order,
+      position: finitePosition(point.resolve(context), context.topGap),
+    };
+  });
+}
+
+/** Creates the built-in full, comfortable, and compact viewport preset. */
+export function createViewportBottomSheetSnapPoints(
+  overrides: Partial<BottomSheetViewportPolicy> = {},
+): readonly BottomSheetSnapPoint<BottomSheetOpenSnapId>[] {
+  const policy = { ...defaultBottomSheetViewportPolicy, ...overrides };
+  return [
+    {
+      id: "full",
+      label: "Full",
+      resolve: (context) => context.topGap,
+    },
+    {
+      id: "comfortable",
+      label: "Comfortable",
+      resolve: (context) =>
+        Math.max(context.topGap, context.visualViewportHeight - policy.comfortableHeight),
+    },
+    {
+      id: "compact",
+      label: "Compact",
+      resolve: (context) =>
+        Math.max(context.topGap, context.visualViewportHeight - policy.compactHeight),
+    },
+  ];
+}
+
 export const defaultBottomSheetViewportPolicy: Readonly<BottomSheetViewportPolicy> = {
   comfortableHeight: 620,
   compactHeight: 360,

@@ -22,7 +22,7 @@ describe("horizontal wheel binding", () => {
             onDelta,
             onSettle,
           });
-          return () => h("div", { onWheel: wheel.onWheel });
+          return () => h("div", { onWheel: wheel.onWheel }, [h("textarea", { id: "owner" })]);
         },
       }),
     );
@@ -33,6 +33,14 @@ describe("horizontal wheel binding", () => {
     wrapper.element.dispatchEvent(
       new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 2, deltaY: 20 }),
     );
+    wrapper
+      .get("#owner")
+      .element.dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 20 }),
+      );
+    const prevented = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 20 });
+    prevented.preventDefault();
+    wrapper.element.dispatchEvent(prevented);
 
     expect(onDelta).toHaveBeenCalledOnce();
     vi.advanceTimersByTime(90);

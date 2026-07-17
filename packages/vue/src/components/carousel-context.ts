@@ -1,13 +1,18 @@
 import type { ControllerSnapshot } from "@snap-motion/core";
 import type { ComputedRef, InjectionKey, Ref } from "vue";
 
-import type { NavigationReason } from "./contracts";
+import type { SnapMotionMessages } from "../messages.js";
+import type { NavigationReason } from "./contracts.js";
 
 export interface CarouselContext<Id extends string = string> {
   activeId: ComputedRef<Id | undefined>;
   canNext: ComputedRef<boolean>;
   canPrevious: ComputedRef<boolean>;
+  count: ComputedRef<number>;
+  direction: ComputedRef<"ltr" | "rtl">;
+  ids: ComputedRef<readonly Id[]>;
   instructionId: string;
+  messages: ComputedRef<SnapMotionMessages>;
   navigate: (id: Id, reason: NavigationReason) => void;
   next: (reason?: NavigationReason) => void;
   onKeyDown: (event: KeyboardEvent) => void;
@@ -15,7 +20,7 @@ export interface CarouselContext<Id extends string = string> {
   onWheel: (event: WheelEvent) => void;
   phase: ComputedRef<ControllerSnapshot<Id>["phase"]>;
   previous: (reason?: NavigationReason) => void;
-  registerSlide: (id: string, label: string) => void;
+  registerSlide: (id: string, label: string, element: HTMLElement | undefined) => void;
   registerTrack: (element: HTMLElement | undefined) => void;
   registerViewport: (element: HTMLElement | undefined) => void;
   unregisterSlide: (id: string) => void;

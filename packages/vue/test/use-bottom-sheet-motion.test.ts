@@ -88,7 +88,7 @@ describe("useBottomSheetMotion", () => {
     driver.latest?.complete();
 
     expect(motion?.sheetState.value).toBe("closed");
-    expect(motion?.activeSnapId.value).toBe("hidden");
+    expect(motion?.activeSnapId.value).toBeUndefined();
     expect(onHidden).toHaveBeenCalledOnce();
     wrapper.unmount();
   });

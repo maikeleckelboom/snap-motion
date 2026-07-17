@@ -15,6 +15,7 @@ test.describe("paged grid", () => {
     await expect(grid).toHaveAttribute("data-page-count", "3");
     await expect(page.locator('[data-page-id="page-1"] .grid-item')).toHaveCount(4);
     await expect(page.locator('[data-page-id="page-3"] .grid-item')).toHaveCount(1);
+    await expect(page.getByTestId("render-window-mounted").locator("li")).toHaveCount(3);
 
     async function readFirstPageGeometry() {
       return page.locator('[data-page-id="page-1"] .item-grid').evaluate((itemGrid) => {

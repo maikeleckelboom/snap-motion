@@ -1,13 +1,15 @@
-import type { InjectionKey } from "vue";
+import type { ComputedRef, InjectionKey } from "vue";
 
-import type { BottomSheetOpenSnapId } from "../bottom-sheet-policy";
-import type { NavigationReason } from "./contracts";
+import type { ResolvedBottomSheetSnapPoint } from "../bottom-sheet-policy.js";
+import type { SnapMotionMessages } from "../messages.js";
+import type { NavigationReason } from "./contracts.js";
 
-export interface BottomSheetContext {
-  activeId: () => BottomSheetOpenSnapId;
-  labels: Record<BottomSheetOpenSnapId, string>;
+export interface BottomSheetContext<Id extends string = string> {
+  activeId: ComputedRef<Id>;
+  messages: ComputedRef<SnapMotionMessages>;
   name: string;
-  requestSnap: (id: BottomSheetOpenSnapId, reason: NavigationReason) => void;
+  points: ComputedRef<readonly ResolvedBottomSheetSnapPoint<Id>[]>;
+  requestSnap: (id: Id, reason: NavigationReason) => void;
 }
 
 export const bottomSheetContextKey = Symbol(

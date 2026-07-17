@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createMotionDriver, type NumericMotionValueAdapter } from "../src/motion-driver";
+import {
+  createMotionDriverWithFactory,
+  type NumericMotionValueAdapter,
+} from "../src/motion-driver";
 
 function createHarness() {
   let changeListener: ((value: number) => void) | undefined;
@@ -44,7 +47,7 @@ describe("Motion animation driver", () => {
     const harness = createHarness();
     const onUpdate = vi.fn<(position: number, velocity: number) => void>();
     const onComplete = vi.fn<() => void>();
-    const driver = createMotionDriver(() => harness.adapter);
+    const driver = createMotionDriverWithFactory(() => harness.adapter);
 
     driver.animate({
       from: 20,
@@ -86,7 +89,7 @@ describe("Motion animation driver", () => {
     const onComplete = vi.fn<() => void>();
     const onStop = vi.fn<() => void>();
     const onUpdate = vi.fn<(position: number, velocity: number) => void>();
-    const driver = createMotionDriver(() => harness.adapter);
+    const driver = createMotionDriverWithFactory(() => harness.adapter);
 
     const playback = driver.animate({
       from: 0,

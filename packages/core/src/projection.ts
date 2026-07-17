@@ -1,4 +1,4 @@
-import { assertFiniteNumber, assertNonNegative } from "./bounds";
+import { assertFiniteNumber, assertNonNegative } from "./bounds.js";
 
 export function projectPosition(
   position: number,

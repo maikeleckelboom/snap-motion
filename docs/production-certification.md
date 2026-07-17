@@ -13,6 +13,12 @@ browser keyboard tests cannot establish assistive-technology interoperability.
 
 `pnpm verify` certifies:
 
+- default dialog-wide Left/Right navigation while the visible close button retains focus
+- nested key ownership, form/media/radio exclusions, and multiple-carousel primary ownership
+- exact controlled target/settle ordering for controls, keyboard, drag, wheel, pagination, and route
+- LTR/RTL keys, drag, wheel, geometry, interruption, and remeasurement
+- localized component messages and generic custom snap-point radio states
+- pagination semantics and bounded deterministic render/preload windows
 - Node `renderToString()` with no browser globals
 - deterministic multi-instance `useId()` relationships and cross-request markup
 - no server-rendered dialog `open` attribute and no default Teleport
@@ -24,6 +30,8 @@ browser keyboard tests cannot establish assistive-technology interoperability.
   all sheet snaps, reduced motion, mobile layout, and 200%/400% zoom
 - keyboard and focus behavior in Chromium, Firefox, and WebKit
 - controller interruption, pointer, wheel, mutation, resize, and reduced-motion unit/E2E coverage
+- forced-colors rules and automated emulation coverage
+- actual packed CSS, exports, declarations, Vite, Router, and Nuxt consumer artifacts
 
 Axe passing is a regression gate, not a conformance claim.
 
@@ -48,17 +56,20 @@ complete.
 
 For each screen reader/browser pair:
 
-1. Open the lightbox from its named button and verify the close button receives focus.
-2. Read the dialog name and carousel name; ensure neither redundantly repeats "carousel."
-3. Tab through close, available boundary controls, viewport, active-slide controls, and back.
-4. Use viewport Arrow keys, Home, and End. Confirm focus remains on the viewport and status speaks
-   only after the physical target becomes active.
-5. Repeatedly activate previous/next and verify focus does not move or disappear at a boundary.
-6. Close with Escape and the visible close button; verify logical focus restoration.
-7. Open the bottom sheet, verify title focus, select every height with the radio group, and close via
-   Escape and the visible button.
-8. Change the route while open, use browser Back, delete the active item, and unmount the overlay.
-   Confirm focus never lands on body or remains inside inert content.
+1. Open the lightbox and verify the visible close button receives focus.
+2. Without pressing Tab, press Right Arrow, then Left Arrow. Verify the item changes, the close
+   button retains focus, and status speaks only after each target physically settles.
+3. Read the dialog and carousel names; ensure neither redundantly repeats "carousel."
+4. Tab through close, available boundary controls, viewport, caption and active-slide controls.
+5. Verify inputs, radio groups, media controls, composite widgets, and nested carousels retain their
+   directional keys. Verify the unique primary carousel owns dialog-wide keys when two are present.
+6. Test LTR and RTL. From the viewport, verify Left/Right, Home, End, repeated keys, and interruption.
+7. Repeatedly activate previous, next, and pagination controls; verify focus and announcements.
+8. Open the bottom sheet, verify title focus, select every enabled custom snap radio, and close via
+   Escape and the visible button. Test a carousel in the scrollable sheet body.
+9. Close the lightbox with Escape and the visible close button; verify logical focus restoration.
+10. Change the route while open, use browser Back, delete the active item, and unmount the overlay.
+    Confirm focus never lands on body or remains inside inert content.
 
 maikel.site integration remains blocked until every required row has a recorded passing result or a
 documented, accepted browser/AT limitation.

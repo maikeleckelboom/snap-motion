@@ -13,6 +13,7 @@
     "**/.nuxt/**",
     "**/.output/**",
     "coverage/**",
+    "etc/*.api.md",
     "playwright-report/**",
     "test-results/**"
   ]

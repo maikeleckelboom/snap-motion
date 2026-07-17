@@ -1,12 +1,31 @@
 {
   "name": "@snap-motion/vue",
-  "version": "0.0.0",
+  "version": "0.1.0-beta.0",
   "private": true,
+  "description": "Accessible interruptible Vue carousels, modal lightboxes, and bottom sheets.",
+  "keywords": [
+    "accessibility",
+    "bottom-sheet",
+    "carousel",
+    "motion",
+    "vue"
+  ],
+  "homepage": "https://github.com/maikeleckelboom/snap-motion#readme",
+  "bugs": "https://github.com/maikeleckelboom/snap-motion/issues",
+  "license": "MIT",
+  "author": "Maikel Eckelboom",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maikeleckelboom/snap-motion.git",
+    "directory": "packages/vue"
+  },
   "files": [
     "dist"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,18 +34,25 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./components": {
+      "types": "./dist/components.d.ts",
+      "import": "./dist/components.js"
+    },
+    "./composables": {
+      "types": "./dist/composables.d.ts",
+      "import": "./dist/composables.js"
+    },
     "./style.css": "./dist/style.css"
   },
   "scripts": {
-    "build": "vue-tsc -p tsconfig.build.json --declaration --emitDeclarationOnly && vite build",
+    "build": "node ../../scripts/clean-package-dist.mjs && vue-tsc -p tsconfig.build.json --declaration --emitDeclarationOnly && node ../../scripts/prepare-vue-declarations.mjs && vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
-    "@snap-motion/core": "workspace:*",
+    "@snap-motion/core": "workspace:^",
     "@vueuse/core": "catalog:",
-    "motion": "catalog:",
-    "vue": "catalog:"
+    "motion": "catalog:"
   },
   "devDependencies": {
     "@vue/test-utils": "catalog:",
@@ -34,6 +60,10 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
+    "vue": "catalog:",
     "vue-tsc": "catalog:"
+  },
+  "peerDependencies": {
+    "vue": ">=3.5.0 <4"
   }
 }

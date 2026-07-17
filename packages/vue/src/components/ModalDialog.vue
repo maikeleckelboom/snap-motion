@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 
 import {
   captureFocusOpener,
@@ -8,8 +8,9 @@ import {
   restoreFocus,
   type FocusReturnOptions,
   type InitialFocus,
-} from "../focus";
-import type { CloseReason } from "./contracts";
+} from "../focus.js";
+import { createEnglishSnapMotionMessages, type SnapMotionMessages } from "../messages.js";
+import type { CloseReason } from "./contracts.js";
 
 const props = withDefaults(
   defineProps<{
@@ -17,11 +18,11 @@ const props = withDefaults(
     descriptionId?: string;
     focusReturn?: FocusReturnOptions;
     initialFocus?: InitialFocus;
+    messages?: Partial<SnapMotionMessages>;
     open: boolean;
     titleId?: string;
   }>(),
   {
-    closeLabel: "Close dialog",
     initialFocus: "close",
   },
 );
@@ -39,6 +40,7 @@ const closeButton = ref<HTMLButtonElement>();
 const title = ref<HTMLElement>();
 const generatedTitleId = `snap-motion-dialog-title-${useId()}`;
 const resolvedTitleId = props.titleId ?? generatedTitleId;
+const messages = computed(() => createEnglishSnapMotionMessages(props.messages));
 let capturedOpener: HTMLElement | undefined;
 let mounted = false;
 let closingIntentionally = false;
@@ -119,9 +121,9 @@ defineExpose({ close: closeNative, dialog, requestClose, titleId: resolvedTitleI
 <template>
   <dialog
     ref="dialog"
-    :aria-describedby="descriptionId"
     :aria-labelledby="resolvedTitleId"
     class="snap-motion-dialog"
+    v-bind="descriptionId ? { 'aria-describedby': descriptionId } : {}"
     @cancel="onCancel"
     @close="onClose"
     @keydown="maintainModalTabOrder($event, dialog)"
@@ -132,21 +134,14 @@ defineExpose({ close: closeNative, dialog, requestClose, titleId: resolvedTitleI
       </div>
       <button
         ref="closeButton"
-        :aria-label="closeLabel"
+        :aria-label="closeLabel ?? messages.closeDialog"
         class="snap-motion-dialog-close"
         type="button"
         @click="requestClose('close-button')"
       >
-        <slot name="close">Close</slot>
+        <slot name="close">{{ messages.closeDialog }}</slot>
       </button>
       <slot :request-close="requestClose" />
     </div>
   </dialog>
 </template>
-
-<style>
-.snap-motion-dialog-close {
-  min-inline-size: 44px;
-  min-block-size: 44px;
-}
-</style>

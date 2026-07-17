@@ -1,4 +1,4 @@
-import type { MotionPreset, MotionPresetName } from "./types";
+import type { MotionPreset, MotionPresetName } from "./types.js";
 
 export const tightPreset = {
   name: "tight",

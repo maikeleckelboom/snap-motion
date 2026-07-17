@@ -1,22 +1,67 @@
-export * from "./bottom-sheet-policy";
-export * from "./focus";
-export * from "./input-policy";
-export * from "./motion-driver";
-export * from "./pointer-drag";
-export * from "./reduced-motion";
-export * from "./remeasurement";
-export * from "./use-bottom-sheet-motion";
-export * from "./use-carousel-motion";
-export * from "./use-snap-motion";
-export * from "./wheel";
-export { default as CarouselNext } from "./components/CarouselNext.vue";
-export { default as CarouselPrevious } from "./components/CarouselPrevious.vue";
-export { default as CarouselRoot } from "./components/CarouselRoot.vue";
-export { default as CarouselSlide } from "./components/CarouselSlide.vue";
-export { default as CarouselStatus } from "./components/CarouselStatus.vue";
-export { default as CarouselTrack } from "./components/CarouselTrack.vue";
-export { default as CarouselViewport } from "./components/CarouselViewport.vue";
-export { default as ModalDialog } from "./components/ModalDialog.vue";
-export { default as BottomSheet } from "./components/BottomSheet.vue";
-export { default as BottomSheetSnapPicker } from "./components/BottomSheetSnapPicker.vue";
-export * from "./components/contracts";
+/**
+ * Accessible, interruptible Vue carousel and bottom-sheet primitives.
+ *
+ * @packageDocumentation
+ */
+
+export * from "./components.js";
+export * from "./composables.js";
+
+export {
+  bottomSheetSnapPosition,
+  createViewportBottomSheetSnapPoints,
+  defaultBottomSheetReleasePolicy,
+  defaultBottomSheetViewportPolicy,
+  resolveBottomSheetSnapPoints,
+} from "./bottom-sheet-policy.js";
+export type {
+  BottomSheetMeasureContext,
+  BottomSheetOpenSnapId,
+  BottomSheetReleasePolicy,
+  BottomSheetSnapResolver,
+  BottomSheetSnapPoint,
+  BottomSheetViewportPolicy,
+  ResolvedBottomSheetSnapPoint,
+} from "./bottom-sheet-policy.js";
+export {
+  createFixedStageCarouselGeometryStrategy,
+  createVariableWidthCenteredCarouselGeometryStrategy,
+} from "./carousel-geometry.js";
+export type {
+  CarouselGeometryMeasureContext,
+  CarouselGeometryStrategy,
+  FixedStageCarouselGeometryOptions,
+  VariableWidthCenteredCarouselGeometryOptions,
+} from "./carousel-geometry.js";
+export type {
+  CarouselKeyboardScope,
+  CloseReason,
+  NavigationReason,
+  SnapMotionDirection,
+} from "./components/contracts.js";
+export {
+  carouselKeyAction,
+  elementOwnsCarouselKeyboard,
+  elementOwnsSnapMotionDrag,
+  elementOwnsSnapMotionWheel,
+  horizontalWheelDelta,
+  normalizeWheelDelta,
+  resolvePointerIntent,
+} from "./input-policy.js";
+export type { NormalizedWheelDelta, PointerIntent, PointerIntentOptions } from "./input-policy.js";
+export {
+  captureFocusOpener,
+  firstInteractive,
+  focusInitial,
+  focusInside,
+  interactiveElements,
+  maintainModalTabOrder,
+  resolveInitialFocus,
+  restoreFocus,
+} from "./focus.js";
+export type { FocusReturnOptions, InitialFocus } from "./focus.js";
+export { createEnglishSnapMotionMessages } from "./messages.js";
+export type { SnapMotionMessages } from "./messages.js";
+export { createMotionDriver } from "./motion-driver.js";
+export { useReducedMotionPreference } from "./reduced-motion.js";
+export type { ReducedMotionOptions } from "./reduced-motion.js";

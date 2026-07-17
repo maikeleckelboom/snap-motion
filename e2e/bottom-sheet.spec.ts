@@ -101,9 +101,10 @@ test.describe("bottom sheet", () => {
 
     let opened = await openSheet(page);
     await expect(page.getByTestId("close-sheet")).toBeFocused();
-    await dragMouseBy(page, page.getByTestId("sheet-handle"), 0, 90, {
+    await dragSyntheticPointerBy(page, page.getByTestId("sheet-handle"), 0, 600, {
+      eventIntervalMs: 12,
       stepDelay: 0,
-      steps: 1,
+      steps: 2,
     });
     await expect(opened.dialog).not.toBeVisible();
     await expect(opened.opener).toBeFocused();

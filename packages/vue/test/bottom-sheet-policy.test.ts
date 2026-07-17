@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  bottomSheetSnapPosition,
+  createViewportBottomSheetSnapPoints,
   resolveBottomSheetReleaseAnchor,
   resolveBottomSheetScrimOpacity,
   resolveBottomSheetSnapAnchors,
+  resolveBottomSheetSnapPoints,
 } from "../src/bottom-sheet-policy";
 
 describe("bottom-sheet viewport policy", () => {
@@ -70,5 +73,41 @@ describe("bottom-sheet viewport policy", () => {
     expect(resolveBottomSheetScrimOpacity(anchors, 24)).toBe(0.56);
     expect(resolveBottomSheetScrimOpacity(anchors, 960)).toBe(0);
     expect(resolveBottomSheetScrimOpacity(anchors, 492)).toBe(0.28);
+  });
+
+  it("resolves arbitrary semantic IDs, duplicate positions, safe areas, and disabled points", () => {
+    const context = {
+      viewportWidth: 400,
+      viewportHeight: 800,
+      visualViewportHeight: 760,
+      panelIntrinsicSize: 300,
+      safeAreaTop: 20,
+      safeAreaBottom: 16,
+      topGap: 24,
+      closedOffset: 120,
+    };
+    const points = resolveBottomSheetSnapPoints(
+      [
+        { id: "peek", label: "Peek", resolve: bottomSheetSnapPosition.pixels(500) },
+        { id: "content", label: "Content", resolve: bottomSheetSnapPosition.intrinsicContent },
+        {
+          id: "duplicate",
+          label: "Duplicate",
+          resolve: bottomSheetSnapPosition.pixels(500),
+          disabled: ({ viewportWidth }) => viewportWidth < 500,
+        },
+      ] as const,
+      context,
+    );
+    expect(points.map(({ id, position, disabled }) => ({ id, position, disabled }))).toEqual([
+      { id: "peek", position: 500, disabled: false },
+      { id: "content", position: 444, disabled: false },
+      { id: "duplicate", position: 500, disabled: true },
+    ]);
+    expect(createViewportBottomSheetSnapPoints().map((point) => point.id)).toEqual([
+      "full",
+      "comfortable",
+      "compact",
+    ]);
   });
 });

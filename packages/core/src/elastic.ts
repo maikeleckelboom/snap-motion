@@ -1,5 +1,5 @@
-import { assertFiniteNumber, assertNonNegative, createBounds } from "./bounds";
-import type { ElasticBoundaryOptions, ElasticityOptions, ScalarBounds } from "./types";
+import { assertFiniteNumber, assertNonNegative, createBounds } from "./bounds.js";
+import type { ElasticBoundaryOptions, ElasticityOptions, ScalarBounds } from "./types.js";
 
 function validateBoundary(
   boundary: ElasticBoundaryOptions | false | undefined,

@@ -1,0 +1,9 @@
+{
+  "dragPublicationOverhead": 4,
+  "maxActiveAnimationsPerController": 1,
+  "maxMountedWindowItems": 5,
+  "maxPreloadWindowItems": 9,
+  "navigationBurstActions": 250,
+  "simultaneousInstances": 20,
+  "stormIterations": 250
+}

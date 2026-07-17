@@ -1,0 +1,8 @@
+packages: []
+
+allowBuilds:
+  "@parcel/watcher": true
+  esbuild: true
+
+overrides:
+  "@snap-motion/core": "file:__CORE_TARBALL__"

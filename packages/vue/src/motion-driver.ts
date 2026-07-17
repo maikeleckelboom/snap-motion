@@ -48,8 +48,13 @@ const defaultMotionValueFactory: NumericMotionValueFactory = (initialValue) => {
   };
 };
 
-export function createMotionDriver(
-  createMotionValue: NumericMotionValueFactory = defaultMotionValueFactory,
+export function createMotionDriver(): AnimationDriver {
+  return createMotionDriverWithFactory(defaultMotionValueFactory);
+}
+
+/** @internal Test seam for the otherwise private Motion adapter. */
+export function createMotionDriverWithFactory(
+  createMotionValue: NumericMotionValueFactory,
 ): AnimationDriver {
   return {
     animate(request: ScalarAnimationRequest): AnimationPlaybackControls {

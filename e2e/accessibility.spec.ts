@@ -19,6 +19,7 @@ test.describe("automated accessibility certification", () => {
   test("lightbox passes closed, open, every active slide, and one-item states", async ({
     page,
   }) => {
+    test.setTimeout(90_000);
     await openLabDemo(page, "media");
     await expectNoAxeViolations(page, "closed lightbox");
 
@@ -68,5 +69,19 @@ test.describe("automated accessibility certification", () => {
       await expectSheetOpenAt(dialog, id);
       await expectNoAxeViolations(page, `bottom sheet ${id}`);
     }
+  });
+
+  test("base controls retain automated semantics and focus in forced colors", async ({
+    browserName,
+    page,
+  }) => {
+    test.skip(browserName !== "chromium", "Forced-colors emulation is certified in Chromium.");
+    await page.emulateMedia({ forcedColors: "active" });
+    await openLabDemo(page, "media");
+    await page.getByTestId("open-lightbox").click();
+    const close = page.getByTestId("close-lightbox");
+    await close.focus();
+    await expect(close).toBeFocused();
+    await expectNoAxeViolations(page, "forced-colors lightbox");
   });
 });

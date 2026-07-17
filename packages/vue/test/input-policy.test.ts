@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   carouselKeyAction,
+  elementOwnsCarouselKeyboard,
+  elementOwnsSnapMotionDrag,
+  elementOwnsSnapMotionWheel,
   horizontalWheelDelta,
   isSupportedPrimaryPointerStart,
   normalizeWheelDelta,
@@ -61,5 +64,33 @@ describe("browser input policy", () => {
     expect(carouselKeyAction({ key: "Home", target: document.body })).toBe("home");
     expect(carouselKeyAction({ key: "Tab", target: document.body })).toBeUndefined();
     expect(carouselKeyAction({ key: "ArrowRight", target: input })).toBeUndefined();
+  });
+
+  it("preserves composite, media, slide-interactive, and explicit nested ownership", () => {
+    const slide = document.createElement("div");
+    slide.dataset.slideId = "one";
+    const button = document.createElement("button");
+    const radioGroup = document.createElement("div");
+    radioGroup.setAttribute("role", "radiogroup");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    const video = document.createElement("video");
+    video.controls = true;
+    slide.append(button, radioGroup, video);
+    radioGroup.append(radio);
+
+    expect(elementOwnsCarouselKeyboard(button)).toBe(true);
+    expect(elementOwnsCarouselKeyboard(radio)).toBe(true);
+    expect(elementOwnsCarouselKeyboard(video)).toBe(true);
+    expect(elementOwnsSnapMotionDrag(button)).toBe(true);
+    expect(elementOwnsSnapMotionDrag(video)).toBe(true);
+    expect(elementOwnsSnapMotionWheel(video)).toBe(true);
+
+    const wheelOwner = document.createElement("div");
+    wheelOwner.dataset.snapMotionWheelOwner = "";
+    expect(elementOwnsSnapMotionWheel(wheelOwner)).toBe(true);
+
+    button.dataset.snapMotionKeyboardNavigation = "";
+    expect(elementOwnsCarouselKeyboard(button)).toBe(false);
   });
 });

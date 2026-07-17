@@ -5,6 +5,7 @@ export type ReducedMotionMode = "no-preference" | "reduce" | "system";
 
 interface DragOptions {
   beforeRelease?: () => Promise<void> | void;
+  eventIntervalMs?: number;
   stepDelay?: number;
   steps?: number;
 }
@@ -178,40 +179,59 @@ export async function dragSyntheticPointerBy(
   const pointerId = 83;
   const steps = Math.max(1, options.steps ?? 8);
   const stepDelay = Math.max(0, options.stepDelay ?? 20);
+  const baseTimestamp = await page.evaluate(() => performance.now());
+  const eventIntervalMs = options.eventIntervalMs;
 
-  await target.dispatchEvent("pointerdown", {
-    bubbles: true,
-    button: 0,
-    buttons: 1,
-    cancelable: true,
-    clientX: start.x,
-    clientY: start.y,
-    isPrimary: true,
-    pointerId,
-    pointerType: "mouse",
-  });
+  await target.evaluate(
+    (element, point) => {
+      const event = new PointerEvent("pointerdown", {
+        bubbles: true,
+        button: 0,
+        buttons: 1,
+        cancelable: true,
+        clientX: point.x,
+        clientY: point.y,
+        isPrimary: true,
+        pointerId: point.pointerId,
+        pointerType: "mouse",
+      });
+      if (point.timestamp !== undefined) {
+        Object.defineProperty(event, "timeStamp", { value: point.timestamp });
+      }
+      element.dispatchEvent(event);
+    },
+    {
+      ...start,
+      pointerId,
+      timestamp: eventIntervalMs === undefined ? undefined : baseTimestamp,
+    },
+  );
 
   for (let step = 1; step <= steps; step += 1) {
     await page.evaluate(
       (point) => {
-        window.dispatchEvent(
-          new PointerEvent("pointermove", {
-            bubbles: true,
-            button: 0,
-            buttons: 1,
-            cancelable: true,
-            clientX: point.x,
-            clientY: point.y,
-            isPrimary: true,
-            pointerId: point.pointerId,
-            pointerType: "mouse",
-          }),
-        );
+        const event = new PointerEvent("pointermove", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          cancelable: true,
+          clientX: point.x,
+          clientY: point.y,
+          isPrimary: true,
+          pointerId: point.pointerId,
+          pointerType: "mouse",
+        });
+        if (point.timestamp !== undefined) {
+          Object.defineProperty(event, "timeStamp", { value: point.timestamp });
+        }
+        window.dispatchEvent(event);
       },
       {
         x: start.x + (deltaX * step) / steps,
         y: start.y + (deltaY * step) / steps,
         pointerId,
+        timestamp:
+          eventIntervalMs === undefined ? undefined : baseTimestamp + eventIntervalMs * step,
       },
     );
     if (stepDelay > 0) {
@@ -222,21 +242,29 @@ export async function dragSyntheticPointerBy(
   await options.beforeRelease?.();
   await page.evaluate(
     (point) => {
-      window.dispatchEvent(
-        new PointerEvent("pointerup", {
-          bubbles: true,
-          button: 0,
-          buttons: 0,
-          cancelable: true,
-          clientX: point.x,
-          clientY: point.y,
-          isPrimary: true,
-          pointerId: point.pointerId,
-          pointerType: "mouse",
-        }),
-      );
+      const event = new PointerEvent("pointerup", {
+        bubbles: true,
+        button: 0,
+        buttons: 0,
+        cancelable: true,
+        clientX: point.x,
+        clientY: point.y,
+        isPrimary: true,
+        pointerId: point.pointerId,
+        pointerType: "mouse",
+      });
+      if (point.timestamp !== undefined) {
+        Object.defineProperty(event, "timeStamp", { value: point.timestamp });
+      }
+      window.dispatchEvent(event);
     },
-    { x: start.x + deltaX, y: start.y + deltaY, pointerId },
+    {
+      x: start.x + deltaX,
+      y: start.y + deltaY,
+      pointerId,
+      timestamp:
+        eventIntervalMs === undefined ? undefined : baseTimestamp + eventIntervalMs * (steps + 1),
+    },
   );
 }
 
