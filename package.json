@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "pnpm --filter @snap-motion/lab dev",
     "build": "pnpm --filter @snap-motion/core build && pnpm --filter @snap-motion/vue build && pnpm --filter @snap-motion/lab build && pnpm --filter @snap-motion/router-fixture build && pnpm --filter @snap-motion/nuxt-fixture build",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "typecheck": "pnpm build:packages && pnpm -r --if-present typecheck",
     "lint": "oxlint .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
