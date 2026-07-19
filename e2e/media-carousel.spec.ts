@@ -8,6 +8,19 @@ import {
   observeMediaAssets,
 } from "./mediaFixtureAssertions";
 
+interface CapturedMediaRect {
+  height: number;
+  layoutHeight: number;
+  layoutWidth: number;
+  testId: string | undefined;
+  width: number;
+}
+
+interface CapturedMediaTransition {
+  new: CapturedMediaRect | undefined;
+  old: CapturedMediaRect | undefined;
+}
+
 function channelToLinear(value: number): number {
   const channel = value / 255;
   return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
@@ -469,13 +482,31 @@ test.describe("media lightbox", () => {
       const browserWindow = window as Window & {
         mediaTransitionCalls?: number;
         mediaTransitionDestinationStates?: string[];
+        mediaTransitionRects?: CapturedMediaTransition[];
       };
       browserWindow.mediaTransitionCalls = 0;
       browserWindow.mediaTransitionDestinationStates = [];
+      browserWindow.mediaTransitionRects = [];
       Object.defineProperty(document, "startViewTransition", {
         configurable: true,
         value(update: () => Promise<void> | void) {
           browserWindow.mediaTransitionCalls = (browserWindow.mediaTransitionCalls ?? 0) + 1;
+          // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper must serialize with the browser init callback.
+          const captureNamedRect = () => {
+            const element = Array.from(document.querySelectorAll<HTMLElement>("*")).find(
+              (candidate) => candidate.style.viewTransitionName === "media-inspection-media",
+            );
+            if (!element) return undefined;
+            const rect = element.getBoundingClientRect();
+            return {
+              height: rect.height,
+              layoutHeight: element.offsetHeight,
+              layoutWidth: element.offsetWidth,
+              testId: element.dataset.testid,
+              width: rect.width,
+            };
+          };
+          const old = captureNamedRect();
           const finished = Promise.resolve()
             .then(update)
             .then(() => {
@@ -488,6 +519,7 @@ test.describe("media lightbox", () => {
               browserWindow.mediaTransitionDestinationStates?.push(
                 activeFrame?.dataset.mediaState ?? "closed",
               );
+              browserWindow.mediaTransitionRects?.push({ new: captureNamedRect(), old });
               return undefined;
             });
           return { finished };
@@ -518,6 +550,15 @@ test.describe("media lightbox", () => {
             .mediaTransitionDestinationStates,
       ),
     ).toEqual(["loaded"]);
+    const [openingRect] = await page.evaluate(
+      () =>
+        (window as Window & { mediaTransitionRects?: CapturedMediaTransition[] })
+          .mediaTransitionRects,
+    );
+    expect(openingRect?.old?.testId).toBe("media-thumbnail-image-extremely-tall");
+    expect(openingRect?.new?.testId).toBe("media-image-extremely-tall");
+    expect(openingRect?.old?.width / (openingRect?.old?.height ?? 1)).toBeCloseTo(1_600 / 12_000);
+    expect(openingRect?.new?.width / (openingRect?.new?.height ?? 1)).toBeCloseTo(1_600 / 12_000);
 
     await page.getByTestId("close-lightbox").click();
     await expect(page.getByTestId("media-lightbox")).not.toBeVisible();
@@ -535,6 +576,51 @@ test.describe("media lightbox", () => {
       ),
     ).toEqual(["loaded", "closed"]);
 
+    const wideThumbnail = page.getByTestId("media-thumbnail-extremely-wide");
+    await wideThumbnail.click();
+    await expect(page.getByTestId("media-lightbox")).toBeVisible();
+    await expectCarouselAt(page.getByTestId("media-carousel"), "extremely-wide");
+    await page.getByTestId("close-lightbox").click();
+    await expect(page.getByTestId("media-lightbox")).not.toBeVisible();
+
+    const transitionRects = await page.evaluate(
+      () =>
+        (window as Window & { mediaTransitionRects?: CapturedMediaTransition[] })
+          .mediaTransitionRects,
+    );
+    const wideOpeningRect = transitionRects?.[2];
+    expect(wideOpeningRect?.old?.testId).toBe("media-thumbnail-image-extremely-wide");
+    expect(wideOpeningRect?.new?.testId).toBe("media-image-extremely-wide");
+    expect(wideOpeningRect?.old?.width / (wideOpeningRect?.old?.height ?? 1)).toBeCloseTo(
+      12_000 / 1_600,
+    );
+    expect(wideOpeningRect?.new?.width / (wideOpeningRect?.new?.height ?? 1)).toBeCloseTo(
+      12_000 / 1_600,
+    );
+
+    const transformedThumbnail = page.getByTestId("media-thumbnail-transformed");
+    await transformedThumbnail.click();
+    await expect(page.getByTestId("media-lightbox")).toBeVisible();
+    await expectCarouselAt(page.getByTestId("media-carousel"), "transformed");
+    await page.getByTestId("close-lightbox").click();
+    await expect(page.getByTestId("media-lightbox")).not.toBeVisible();
+
+    const transformedOpeningRect = (
+      await page.evaluate(
+        () =>
+          (window as Window & { mediaTransitionRects?: CapturedMediaTransition[] })
+            .mediaTransitionRects,
+      )
+    )?.[4];
+    expect(transformedOpeningRect?.old?.testId).toBe("media-thumbnail-image-transformed");
+    expect(transformedOpeningRect?.new?.testId).toBe("media-image-transformed");
+    expect(
+      transformedOpeningRect?.old?.layoutWidth / (transformedOpeningRect?.old?.layoutHeight ?? 1),
+    ).toBeCloseTo(1_600 / 1_000, 1);
+    expect(
+      transformedOpeningRect?.new?.layoutWidth / (transformedOpeningRect?.new?.layoutHeight ?? 1),
+    ).toBeCloseTo(1_600 / 1_000, 1);
+
     await page.getByTestId("media-transition-toggle").uncheck();
     await page.getByTestId("media-thumbnail-regular").click();
     await expect(page.getByTestId("media-lightbox")).toBeVisible();
@@ -543,7 +629,7 @@ test.describe("media lightbox", () => {
       await page.evaluate(
         () => (window as Window & { mediaTransitionCalls?: number }).mediaTransitionCalls,
       ),
-    ).toBe(2);
+    ).toBe(6);
   });
 
   test("keeps one-item boundaries stable and retargets an active settle through resize", async ({

@@ -53,7 +53,7 @@ const reducedOverride = computed(() => props.reducedMotionOverride);
 const direction = computed(() => directionMode.value);
 const { height: renderedStageHeight, width: renderedStageWidth } = useElementSize(viewport);
 const thumbnailElements = new Map<MediaFixtureId, HTMLElement>();
-const mediaTransformElements = new Map<MediaFixtureId, HTMLElement>();
+const mediaTransitionElements = new Map<MediaFixtureId, HTMLElement>();
 const mediaPreloads = new Map(
   mediaFixtures.map((fixture) => [
     fixture.id,
@@ -269,9 +269,21 @@ function setThumbnailElement(fixtureId: MediaFixtureId, element: HTMLElement | n
   else thumbnailElements.delete(fixtureId);
 }
 
-function setMediaTransformElement(fixtureId: MediaFixtureId, element: HTMLElement | null) {
-  if (element) mediaTransformElements.set(fixtureId, element);
-  else mediaTransformElements.delete(fixtureId);
+function setMediaTransitionElement(fixtureId: MediaFixtureId, element: HTMLElement | null) {
+  if (element) mediaTransitionElements.set(fixtureId, element);
+  else mediaTransitionElements.delete(fixtureId);
+}
+
+function mediaTransitionStyle(fixture: MediaFixture): Record<string, string> {
+  const stageAspectRatio = 16 / 10;
+  const mediaAspectRatio = fixture.intrinsicSize.width / fixture.intrinsicSize.height;
+
+  return {
+    "--media-transition-aspect-ratio": `${fixture.intrinsicSize.width} / ${fixture.intrinsicSize.height}`,
+    ...(mediaAspectRatio >= stageAspectRatio
+      ? { "--media-transition-inline-size": "100%" }
+      : { "--media-transition-block-size": "100%" }),
+  };
 }
 
 async function preloadMediaForTransition(fixture: MediaFixture): Promise<boolean> {
@@ -307,7 +319,8 @@ async function openLightbox(fixtureId?: MediaFixtureId) {
 
   const thumbnailOpener = fixtureId ? thumbnailElements.get(fixtureId) : undefined;
   const transitionSource =
-    thumbnailOpener?.querySelector<HTMLElement>(".media-thumbnail-visual") ?? undefined;
+    thumbnailOpener?.querySelector<HTMLImageElement>(".media-transition-surface > img") ??
+    undefined;
   const fixture = fixtureId ? mediaFixtures.find(({ id }) => id === fixtureId) : undefined;
   storedOpener = thumbnailOpener ?? opener.value ?? captureFocusOpener(document);
   openedFromThumbnailId = fixtureId;
@@ -329,7 +342,7 @@ async function openLightbox(fixtureId?: MediaFixtureId) {
     await runMediaTransition({
       destination: () =>
         destinationReady
-          ? mediaTransformElements.get(fixtureId ?? semanticId.value ?? "regular")
+          ? mediaTransitionElements.get(fixtureId ?? semanticId.value ?? "regular")
           : undefined,
       document: target.ownerDocument,
       enabled: openingMotionReady,
@@ -373,7 +386,7 @@ async function closeLightbox() {
   const activeId = semanticId.value;
   const canReturnToThumbnail =
     openedFromThumbnailId !== undefined && openedFromThumbnailId === activeId;
-  const source = canReturnToThumbnail ? mediaTransformElements.get(activeId) : undefined;
+  const source = canReturnToThumbnail ? mediaTransitionElements.get(activeId) : undefined;
   isTransitioning.value = true;
 
   try {
@@ -382,7 +395,7 @@ async function closeLightbox() {
         canReturnToThumbnail
           ? (thumbnailElements
               .get(activeId)
-              ?.querySelector<HTMLElement>(".media-thumbnail-visual") ?? undefined)
+              ?.querySelector<HTMLImageElement>(".media-transition-surface > img") ?? undefined)
           : undefined,
       document: target.ownerDocument,
       enabled: transitionMotionEnabled.value && canReturnToThumbnail,
@@ -510,7 +523,17 @@ onBeforeUnmount(() => {
         @click="openLightbox(fixture.id)"
       >
         <span class="media-thumbnail-visual">
-          <img :src="fixture.src" alt="" aria-hidden="true" draggable="false" />
+          <span class="media-transition-surface" :style="mediaTransitionStyle(fixture)">
+            <img
+              :src="fixture.src"
+              alt=""
+              aria-hidden="true"
+              :data-testid="`media-thumbnail-image-${fixture.id}`"
+              draggable="false"
+              :height="fixture.intrinsicSize.height"
+              :width="fixture.intrinsicSize.width"
+            />
+          </span>
         </span>
         <span class="fixture-thumbnail-copy">
           <strong class="tabular">{{ String(index + 1).padStart(2, "0") }}</strong>
@@ -674,10 +697,6 @@ onBeforeUnmount(() => {
                         ]"
                       >
                         <div
-                          :ref="
-                            (element) =>
-                              setMediaTransformElement(fixture.id, element as HTMLElement | null)
-                          "
                           class="media-transform-surface"
                           :data-testid="`media-transform-${fixture.id}`"
                           :style="
@@ -686,21 +705,37 @@ onBeforeUnmount(() => {
                               : undefined
                           "
                         >
-                          <img
-                            v-if="isOpen && fixtureSourceReady(fixture)"
-                            :alt="fixtureLoadState(fixture) === 'loaded' ? fixture.description : ''"
-                            :aria-hidden="fixtureLoadState(fixture) !== 'loaded'"
-                            class="media-image"
-                            :data-load-generation="mediaLoadGeneration"
-                            :data-media-state="fixtureLoadState(fixture)"
-                            :data-testid="`media-image-${fixture.id}`"
-                            decoding="async"
-                            draggable="false"
-                            :src="fixture.src"
-                            @dragstart="motion.onNativeDragStart"
-                            @error="onMediaError(fixture, $event)"
-                            @load="onMediaLoad(fixture, $event)"
-                          />
+                          <div
+                            class="media-transition-surface"
+                            :style="mediaTransitionStyle(fixture)"
+                          >
+                            <img
+                              v-if="isOpen && fixtureSourceReady(fixture)"
+                              :ref="
+                                (element) =>
+                                  setMediaTransitionElement(
+                                    fixture.id,
+                                    element as HTMLElement | null,
+                                  )
+                              "
+                              :alt="
+                                fixtureLoadState(fixture) === 'loaded' ? fixture.description : ''
+                              "
+                              :aria-hidden="fixtureLoadState(fixture) !== 'loaded'"
+                              class="media-image"
+                              :data-load-generation="mediaLoadGeneration"
+                              :data-media-state="fixtureLoadState(fixture)"
+                              :data-testid="`media-image-${fixture.id}`"
+                              decoding="async"
+                              draggable="false"
+                              :height="fixture.intrinsicSize.height"
+                              :src="fixture.src"
+                              :width="fixture.intrinsicSize.width"
+                              @dragstart="motion.onNativeDragStart"
+                              @error="onMediaError(fixture, $event)"
+                              @load="onMediaLoad(fixture, $event)"
+                            />
+                          </div>
                         </div>
                         <div
                           v-if="fixtureLoadState(fixture) === 'pending'"
@@ -1004,6 +1039,15 @@ onBeforeUnmount(() => {
   max-inline-size: 100%;
   block-size: 100%;
   object-fit: contain;
+}
+
+.media-transition-surface {
+  position: relative;
+  display: grid;
+  place-items: center;
+  inline-size: var(--media-transition-inline-size, auto);
+  block-size: var(--media-transition-block-size, auto);
+  aspect-ratio: var(--media-transition-aspect-ratio);
 }
 
 .fixture-thumbnail-copy {
