@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { expectCarouselAt, expectSheetOpenAt, openLabDemo } from "./helpers";
 
 test.describe("keyboard certification", () => {
-  test("lightbox navigates immediately from close focus, keeps focus stable, and restores opener", async ({
+  test("lightbox keeps focus stable through zoom and carousel controls, then restores the opener", async ({
     page,
   }) => {
     await openLabDemo(page, "media");
@@ -13,6 +13,7 @@ test.describe("keyboard certification", () => {
 
     const close = page.getByTestId("close-lightbox");
     const previous = page.getByTestId("media-previous");
+    const zoomIn = page.getByTestId("media-zoom-in");
     const viewport = page.getByTestId("media-carousel");
     await expect(close).toBeFocused();
 
@@ -23,6 +24,14 @@ test.describe("keyboard certification", () => {
     await expectCarouselAt(viewport, "regular");
     await expect(close).toBeFocused();
 
+    await page.keyboard.press("Tab");
+    await expect(zoomIn).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expectCarouselAt(viewport, "extremely-wide");
+    await expect(zoomIn).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expectCarouselAt(viewport, "regular");
+    await expect(zoomIn).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(viewport).toBeFocused();
     await page.keyboard.press("ArrowRight");
