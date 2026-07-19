@@ -19,8 +19,9 @@ projectedPosition = position + velocity * projectionSeconds
 ```
 
 A slow release resolves the nearest appropriate semantic anchor with deterministic ties. A decisive
-fling uses direction and projection but is capped by the configured maximum logical anchor skip.
-The carousel default permits at most two anchors. Start and end never loop.
+fling uses direction and projection. Both paths are capped by the configured maximum logical anchor
+skip, so a long drag cannot bypass a surface's one-at-a-time policy. The carousel default permits at
+most two anchors. Start and end never loop.
 
 ## Springs
 

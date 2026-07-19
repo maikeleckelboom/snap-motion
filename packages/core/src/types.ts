@@ -28,6 +28,7 @@ export interface ReleaseTargetPolicy {
   readonly projectionSeconds: number;
   /** Absolute release velocity in CSS pixels per second that constitutes a fling. */
   readonly flingVelocity: number;
+  /** Maximum logical anchor distance selected by any pointer release. */
   readonly maxAnchorSkip: number;
   /** Physical position sign corresponding to increasing logical anchor order. */
   readonly forwardSign: SnapDirection;

@@ -96,6 +96,48 @@ describe("semantic anchor policies", () => {
     ).toBe("c");
   });
 
+  it("caps slow long releases in either direction by logical anchor distance", () => {
+    expect(
+      resolveReleaseTarget({
+        anchors,
+        position: -290,
+        velocity: -50,
+        activeId: "a",
+        policy: { ...policy, maxAnchorSkip: 1 },
+      })?.id,
+    ).toBe("b");
+    expect(
+      resolveReleaseTarget({
+        anchors,
+        position: -10,
+        velocity: 50,
+        activeId: "d",
+        policy: { ...policy, maxAnchorSkip: 1 },
+      })?.id,
+    ).toBe("c");
+  });
+
+  it("keeps the active anchor when all pointer release travel is disabled", () => {
+    expect(
+      resolveReleaseTarget({
+        anchors,
+        position: -290,
+        velocity: -50,
+        activeId: "a",
+        policy: { ...policy, maxAnchorSkip: 0 },
+      })?.id,
+    ).toBe("a");
+    expect(
+      resolveReleaseTarget({
+        anchors,
+        position: -100,
+        velocity: -10_000,
+        activeId: "b",
+        policy: { ...policy, maxAnchorSkip: 0 },
+      })?.id,
+    ).toBe("b");
+  });
+
   it("advances at least one semantic anchor for a decisive fling", () => {
     expect(
       resolveReleaseTarget({

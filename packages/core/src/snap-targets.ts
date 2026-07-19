@@ -153,6 +153,26 @@ export function validateReleaseTargetPolicy(policy: ReleaseTargetPolicy): void {
   validateDirection(policy.forwardSign);
 }
 
+function capAnchorSkip<Id extends SemanticId>(
+  ordered: readonly SnapAnchor<Id>[],
+  base: SnapAnchor<Id>,
+  candidate: SnapAnchor<Id> | null,
+  maximumSkip: number,
+): SnapAnchor<Id> {
+  const baseIndex = ordered.findIndex((anchor) => anchor.id === base.id);
+  const candidateIndex = candidate
+    ? ordered.findIndex((anchor) => anchor.id === candidate.id)
+    : baseIndex;
+  const targetIndex = Math.min(
+    ordered.length - 1,
+    Math.max(
+      0,
+      baseIndex + Math.max(-maximumSkip, Math.min(maximumSkip, candidateIndex - baseIndex)),
+    ),
+  );
+  return ordered[targetIndex] ?? base;
+}
+
 export function resolveReleaseTarget<Id extends SemanticId>(
   input: ReleaseTargetInput<Id>,
 ): SnapAnchor<Id> | null {
@@ -177,12 +197,17 @@ export function resolveReleaseTarget<Id extends SemanticId>(
     return null;
   }
 
-  if (Math.abs(velocity) < policy.flingVelocity) {
-    return nearestAnchor<Id>(ordered, position, { activeId: base.id });
-  }
-
   if (policy.maxAnchorSkip === 0) {
     return base;
+  }
+
+  if (Math.abs(velocity) < policy.flingVelocity) {
+    return capAnchorSkip(
+      ordered,
+      base,
+      nearestAnchor<Id>(ordered, position, { activeId: base.id }),
+      policy.maxAnchorSkip,
+    );
   }
 
   const direction: SnapDirection = velocity * policy.forwardSign > 0 ? 1 : -1;

@@ -487,7 +487,6 @@ export interface ReleaseTargetInput<Id extends SemanticId = SemanticId> {
 export interface ReleaseTargetPolicy {
     readonly flingVelocity: number;
     readonly forwardSign: SnapDirection;
-    // (undocumented)
     readonly maxAnchorSkip: number;
     readonly projectionSeconds: number;
 }
