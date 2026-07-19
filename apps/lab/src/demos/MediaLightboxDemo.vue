@@ -447,7 +447,9 @@ onBeforeUnmount(() => {
                       <div
                         :class="[
                           'media-layer',
-                          { 'is-transformed': fixture.mode === 'transformed' },
+                          {
+                            'media-layer--transformed': fixture.mode === 'transformed',
+                          },
                         ]"
                       >
                         <img
@@ -915,7 +917,7 @@ onBeforeUnmount(() => {
   transform-origin: center;
 }
 
-.media-layer.is-transformed {
+.media-layer--transformed {
   transform: scale(1.16) rotate(-1.5deg);
 }
 
