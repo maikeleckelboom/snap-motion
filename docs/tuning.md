@@ -14,8 +14,8 @@ variant. **Reset to preset** discards those edits.
 - **Rest distance** is the remaining target distance allowed at completion.
 - **Projection duration** controls how far release velocity looks ahead before target selection.
 - **Fling threshold** defines when direction becomes decisive.
-- **Maximum anchor skip** caps logical travel for every pointer release, including a slow long drag
-  and a projected fling.
+- **Maximum anchor skip** caps rendered pointer travel and logical travel for every release,
+  including a slow long drag and a projected fling.
 - **Elastic resistance** changes how quickly out-of-bounds movement is resisted.
 - **Maximum elastic distance** caps temporary visual overdrag.
 - **Programmatic impulse** gives button and keyboard actions directional momentum inside the same

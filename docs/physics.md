@@ -20,8 +20,9 @@ projectedPosition = position + velocity * projectionSeconds
 
 A slow release resolves the nearest appropriate semantic anchor with deterministic ties. A decisive
 fling uses direction and projection. Both paths are capped by the configured maximum logical anchor
-skip, so a long drag cannot bypass a surface's one-at-a-time policy. The carousel default permits at
-most two anchors. Start and end never loop.
+skip. Direct pointer movement is bounded by that same semantic window, so a long drag cannot render
+or settle beyond a surface's one-at-a-time policy. Physical start and end edges retain their
+configured elasticity. The carousel default permits at most two anchors. Start and end never loop.
 
 ## Springs
 

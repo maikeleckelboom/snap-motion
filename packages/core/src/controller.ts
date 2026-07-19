@@ -365,15 +365,11 @@ export class SnapController<Id extends SemanticId = SemanticId> {
         nearestAnchor<Id>(nextAnchors, clampToBounds(previousPosition, nextBounds));
       const anchorDelta = (nextAnchor?.position ?? 0) - (previousAnchor?.position ?? 0);
       this.#dragStartPosition += anchorDelta;
-      this.#position = applyElasticity(
-        previousPosition + anchorDelta,
-        nextBounds,
-        this.#elasticity,
-      );
+      this.#dragAnchorId = nextAnchor?.id ?? null;
+      this.#position = this.#constrainDragPosition(previousPosition + anchorDelta);
       this.#phase = "dragging";
       this.#velocity = 0;
       this.#target = null;
-      this.#dragAnchorId = nextAnchor?.id ?? null;
       this.#active = nearestAnchor<Id>(
         nextAnchors,
         this.#position,
@@ -442,7 +438,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
   }
 
   #writeDragPosition(rawPosition: number): void {
-    this.#position = applyElasticity(rawPosition, this.#bounds, this.#elasticity);
+    this.#position = this.#constrainDragPosition(rawPosition);
     this.#velocity = 0;
     this.#active = nearestAnchor<Id>(
       this.#anchors,
@@ -450,6 +446,37 @@ export class SnapController<Id extends SemanticId = SemanticId> {
       this.#active ? { activeId: this.#active.id } : {},
     );
     this.#emit();
+  }
+
+  #constrainDragPosition(rawPosition: number): number {
+    const baseIndex = this.#anchors.findIndex((anchor) => anchor.id === this.#dragAnchorId);
+    if (baseIndex < 0) {
+      return applyElasticity(rawPosition, this.#bounds, this.#elasticity);
+    }
+
+    const firstIndex = Math.max(0, baseIndex - this.#releasePolicy.maxAnchorSkip);
+    const lastIndex = Math.min(
+      this.#anchors.length - 1,
+      baseIndex + this.#releasePolicy.maxAnchorSkip,
+    );
+    const firstPosition = this.#anchors[firstIndex]?.position ?? this.#bounds.min;
+    const lastPosition = this.#anchors[lastIndex]?.position ?? this.#bounds.max;
+    const localBounds = createBounds(
+      Math.min(firstPosition, lastPosition),
+      Math.max(firstPosition, lastPosition),
+    );
+
+    // Interior release limits are hard paint boundaries: a one-step carousel may reveal
+    // either adjacent item, but never pixels from the item beyond it. Physical gallery
+    // edges retain the configured elasticity so edge resistance still feels native.
+    let locallyConstrained = rawPosition;
+    if (localBounds.min > this.#bounds.min) {
+      locallyConstrained = Math.max(localBounds.min, locallyConstrained);
+    }
+    if (localBounds.max < this.#bounds.max) {
+      locallyConstrained = Math.min(localBounds.max, locallyConstrained);
+    }
+    return applyElasticity(locallyConstrained, this.#bounds, this.#elasticity);
   }
 
   #startSettlement(target: SnapAnchor<Id>, initialVelocity: number): void {
