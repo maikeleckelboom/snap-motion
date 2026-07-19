@@ -7,7 +7,7 @@ import {
   maintainModalTabOrder,
   restoreFocus,
 } from "@snap-motion/vue/dialog";
-import { useTimeoutFn } from "@vueuse/core";
+import { useElementSize, useTimeoutFn } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
@@ -44,6 +44,7 @@ const titleId = `media-lightbox-title-${useId()}`;
 const isOpen = ref(false);
 const reducedOverride = computed(() => props.reducedMotionOverride);
 const direction = computed(() => directionMode.value);
+const { height: renderedStageHeight, width: renderedStageWidth } = useElementSize(viewport);
 let storedOpener: HTMLElement | undefined;
 let focusRestoreFrame: number | undefined;
 
@@ -340,7 +341,7 @@ onBeforeUnmount(() => {
       @click="onDialogSurfaceClick"
       @keydown="onDialogKeyDown"
     >
-      <div class="lightbox-shell" :style="stageStyle">
+      <div class="lightbox-shell" data-testid="media-lightbox-shell" :style="stageStyle">
         <header class="lightbox-header">
           <div class="lightbox-title">
             <p class="lightbox-eyebrow">Media inspection</p>
@@ -378,11 +379,21 @@ onBeforeUnmount(() => {
           </button>
         </header>
 
-        <section class="stage-workspace" aria-label="Media stage workspace">
+        <section
+          class="stage-workspace"
+          aria-label="Media stage workspace"
+          data-testid="media-stage-workspace"
+        >
           <div class="stage-instrument" data-testid="media-stage-instrument">
             <div class="stage-readout">
               <span>Fixed-stage geometry</span>
-              <span class="tabular">{{ props.stageWidth }} px target</span>
+              <span class="stage-dimensions">
+                <span class="tabular">Target {{ props.stageWidth }} px</span>
+                <span class="tabular" data-testid="media-rendered-size">
+                  Rendered {{ Math.round(renderedStageWidth) }} ×
+                  {{ Math.round(renderedStageHeight) }} px
+                </span>
+              </span>
             </div>
             <section
               aria-label="Media"
@@ -533,8 +544,12 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <footer class="lightbox-footer">
-          <section class="caption-rail" aria-labelledby="caption-rail-title">
+        <footer class="lightbox-footer" data-testid="media-lightbox-footer">
+          <section
+            class="caption-rail"
+            aria-labelledby="caption-rail-title"
+            data-testid="media-caption-rail"
+          >
             <div>
               <p id="caption-rail-title" class="rail-label">Caption</p>
               <p class="caption-copy">{{ activeFixture?.description }}</p>
@@ -544,7 +559,11 @@ onBeforeUnmount(() => {
             </button>
           </section>
 
-          <section class="test-rail" aria-labelledby="ownership-rail-title">
+          <section
+            class="test-rail"
+            aria-labelledby="ownership-rail-title"
+            data-testid="media-test-rail"
+          >
             <div class="test-rail-intro">
               <p id="ownership-rail-title" class="rail-label">Keyboard ownership test rail</p>
               <p>Interactive descendants retain their directional keys.</p>
@@ -696,17 +715,21 @@ onBeforeUnmount(() => {
   --lightbox-error-text: #ffd8d8;
   --lightbox-error-border: #ff8a8a;
 
-  inline-size: 100vw;
+  position: fixed;
+  inset: 0;
+  inline-size: 100%;
   max-inline-size: none;
-  block-size: 100dvh;
-  max-block-size: none;
+  block-size: 100vh;
+  block-size: 100dvb;
+  max-block-size: 100svb;
   padding: 0;
   border: 0;
   margin: 0;
   background: var(--lightbox-canvas);
   color: var(--lightbox-text);
   color-scheme: dark;
-  overflow: auto;
+  overflow: clip;
+  overscroll-behavior: none;
 }
 
 .lightbox-dialog::backdrop {
@@ -716,9 +739,12 @@ onBeforeUnmount(() => {
 .lightbox-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  min-block-size: 100dvh;
+  block-size: 100%;
+  min-block-size: 0;
+  max-block-size: 100%;
   background: var(--lightbox-canvas);
   color: var(--lightbox-text);
+  overflow: clip;
 }
 
 .lightbox-header {
@@ -727,7 +753,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: clamp(0.75rem, 2vw, 1.5rem);
   min-block-size: 4.5rem;
-  padding: 0.75rem clamp(0.75rem, 2vw, 1.5rem);
+  padding-block: 0.75rem;
+  padding-block-start: max(0.75rem, env(safe-area-inset-top));
+  padding-inline: clamp(0.75rem, 2vw, 1.5rem);
+  padding-inline-start: max(clamp(0.75rem, 2vw, 1.5rem), env(safe-area-inset-left));
+  padding-inline-end: max(clamp(0.75rem, 2vw, 1.5rem), env(safe-area-inset-right));
   border-block-end: 1px solid var(--lightbox-separator);
   background: var(--lightbox-surface);
 }
@@ -821,10 +851,11 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   min-inline-size: 0;
-  min-block-size: 25rem;
-  padding: clamp(0.75rem, 2vw, 1.5rem);
+  min-block-size: 0;
+  padding: clamp(0.5rem, 1.5vw, 1rem);
   background: var(--lightbox-canvas);
-  overflow: hidden;
+  overflow: clip;
+  container-type: size;
 }
 
 .stage-instrument {
@@ -832,8 +863,12 @@ onBeforeUnmount(() => {
   grid-template-rows: auto minmax(0, 1fr);
   inline-size: min(calc(var(--lab-stage-width) + 10rem), 100%);
   min-inline-size: 0;
+  block-size: 100%;
+  min-block-size: 0;
+  max-block-size: 100%;
   border: 1px solid var(--lightbox-control-border);
   background: var(--lightbox-surface);
+  overflow: clip;
 }
 
 .stage-readout {
@@ -849,24 +884,39 @@ onBeforeUnmount(() => {
   font-weight: 650;
 }
 
+.stage-dimensions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem 1rem;
+}
+
 .carousel-frame {
   display: grid;
   grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
   align-items: center;
+  justify-items: center;
   gap: clamp(0.5rem, 1.5vw, 1rem);
   min-inline-size: 0;
+  block-size: 100%;
+  min-block-size: 0;
+  max-block-size: 100%;
   padding: clamp(0.5rem, 1.5vw, 1rem);
+  overflow: clip;
+  container-type: size;
 }
 
 .carousel-viewport {
   position: relative;
-  inline-size: min(var(--lab-stage-width), 100%);
+  inline-size: min(var(--lab-stage-width), 100%, 160cqb);
   min-inline-size: 0;
   max-inline-size: 100%;
+  min-block-size: 0;
+  max-block-size: 100%;
   aspect-ratio: 16 / 10;
   border: 1px solid var(--lightbox-control-border);
   background: var(--lightbox-surface-raised);
-  overflow: hidden;
+  overflow: clip;
   cursor: grab;
 }
 
@@ -976,8 +1026,13 @@ onBeforeUnmount(() => {
 
 .lightbox-footer {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-block-size: 0;
+  max-block-size: min(34dvb, 22rem);
+  padding-block-end: env(safe-area-inset-bottom);
   border-block-start: 1px solid var(--lightbox-separator);
   background: var(--lightbox-surface);
+  overflow: clip;
 }
 
 .caption-rail {
@@ -986,6 +1041,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 1rem;
   min-inline-size: 0;
+  min-block-size: 0;
   padding: 0.75rem clamp(0.75rem, 2vw, 1.5rem);
 }
 
@@ -1016,9 +1072,14 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: clamp(0.75rem, 2vw, 1.5rem);
   min-inline-size: 0;
+  min-block-size: 0;
   padding: 0.75rem clamp(0.75rem, 2vw, 1.5rem);
   border-block-start: 1px solid var(--lightbox-separator);
   background: var(--lightbox-canvas);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .ownership-probes {
@@ -1128,7 +1189,6 @@ onBeforeUnmount(() => {
   }
 
   .stage-workspace {
-    min-block-size: 20rem;
     padding: 0.5rem;
   }
 
@@ -1139,26 +1199,6 @@ onBeforeUnmount(() => {
   .carousel-frame {
     grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
     padding: 0.5rem;
-  }
-
-  .carousel-viewport {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    inline-size: 100%;
-    aspect-ratio: 3 / 4;
-  }
-
-  .previous-control,
-  .next-control {
-    grid-row: 2;
-  }
-
-  .previous-control {
-    grid-column: 1;
-  }
-
-  .next-control {
-    grid-column: 3;
   }
 
   .caption-rail {
@@ -1181,6 +1221,63 @@ onBeforeUnmount(() => {
   .lightbox-diagnostics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+@media (max-height: 36rem) {
+  .lightbox-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-block-size: 3.5rem;
+    padding-block: 0.375rem;
+    padding-block-start: max(0.375rem, env(safe-area-inset-top));
+  }
+
+  .lightbox-eyebrow,
+  .header-diagnostics {
+    display: none;
+  }
+
+  .icon-button {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .stage-workspace,
+  .carousel-frame {
+    padding: 0.25rem;
+  }
+
+  .stage-readout {
+    min-block-size: 1.75rem;
+    padding-block: 0.2rem;
+  }
+
+  .stage-readout > span:first-child,
+  .stage-dimensions > span:first-child {
+    display: none;
+  }
+
+  .caption-rail {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    padding-block: 0.375rem;
+  }
+
+  .caption-rail .rail-label {
+    display: none;
+  }
+
+  .caption-copy {
+    line-height: 1.25;
+  }
+
+  .test-rail {
+    padding-block: 0.375rem;
+  }
+}
+
+:global(html:has(.lightbox-dialog[open])),
+:global(html:has(.lightbox-dialog[open]) body) {
+  overflow: clip;
 }
 
 @media (forced-colors: active) {

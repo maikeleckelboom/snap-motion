@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { createPagedGridGeometry } from "@snap-motion/core";
+import { createFixedStageGeometry, createPagedGridGeometry } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
 import { computed, nextTick, ref, watch } from "vue";
 
@@ -53,7 +53,7 @@ const pages = computed(() => {
 });
 
 function geometry() {
-  return createPagedGridGeometry({
+  const gridGeometry = createPagedGridGeometry({
     columns: columns.value,
     gap: gap.value,
     getPageId: ({ pageIndex }) => `page-${pageIndex + 1}`,
@@ -61,6 +61,19 @@ function geometry() {
     rows: rows.value,
     viewportSize: Math.max(1, viewport.value?.clientWidth ?? props.stageWidth),
   });
+  const pageGeometry = createFixedStageGeometry({
+    gap: gap.value,
+    itemIds: gridGeometry.anchors.map((anchor) => anchor.id),
+    viewportSize: gridGeometry.viewportSize,
+  });
+
+  return {
+    ...gridGeometry,
+    anchors: pageGeometry.anchors,
+    bounds: pageGeometry.bounds,
+    stageSize: pageGeometry.stageSize,
+    trackExtent: pageGeometry.trackExtent,
+  };
 }
 
 const initialGeometry = geometry();
@@ -214,7 +227,7 @@ watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
         aria-roledescription="carousel"
         class="grid-stage"
         role="group"
-        :style="stageStyle"
+        :style="[stageStyle, gridStyle]"
       >
         <button
           aria-label="Previous page"
@@ -424,6 +437,7 @@ watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
 .page-track {
   display: flex;
   align-items: stretch;
+  gap: var(--grid-gap);
   transform: translate3d(0, 0, 0);
 }
 

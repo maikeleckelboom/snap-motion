@@ -20,17 +20,32 @@ test.describe("paged grid", () => {
     async function readFirstPageGeometry() {
       return page.locator('[data-page-id="page-1"] .item-grid').evaluate((itemGrid) => {
         const items = Array.from(itemGrid.querySelectorAll<HTMLElement>(".grid-item"));
+        const track = itemGrid.closest<HTMLElement>(".page-track");
+        const viewport = itemGrid.closest<HTMLElement>('[data-testid="paged-grid"]');
+        const pages = Array.from(track?.querySelectorAll<HTMLElement>(".grid-page") ?? []);
         const style = getComputedStyle(itemGrid);
+        const firstPageRect = pages[0]?.getBoundingClientRect();
+        const secondPageRect = pages[1]?.getBoundingClientRect();
         return {
           columnGap: Number.parseFloat(style.columnGap),
           gridWidth: itemGrid.getBoundingClientRect().width,
           itemWidths: items.slice(0, 2).map((item) => item.getBoundingClientRect().width),
+          pageGap:
+            firstPageRect && secondPageRect
+              ? secondPageRect.left - firstPageRect.right
+              : Number.NaN,
+          trackGap: track ? Number.parseFloat(getComputedStyle(track).columnGap) : Number.NaN,
+          trackWidth: track?.scrollWidth ?? 0,
+          viewportWidth: viewport?.clientWidth ?? 0,
         };
       });
     }
 
     const initial = await readFirstPageGeometry();
     expect(initial.columnGap).toBe(16);
+    expect(initial.pageGap).toBeCloseTo(16, 1);
+    expect(initial.trackGap).toBe(16);
+    expect(initial.trackWidth).toBeCloseTo(initial.viewportWidth * 3 + 16 * 2, 0);
     expect(initial.itemWidths).toHaveLength(2);
     expect(
       Math.abs(
@@ -42,6 +57,9 @@ test.describe("paged grid", () => {
     await expect(grid).toHaveAttribute("data-gap", "24");
     const changed = await readFirstPageGeometry();
     expect(changed.columnGap).toBe(24);
+    expect(changed.pageGap).toBeCloseTo(24, 1);
+    expect(changed.trackGap).toBe(24);
+    expect(changed.trackWidth).toBeCloseTo(changed.viewportWidth * 3 + 24 * 2, 0);
     expect(
       Math.abs(
         changed.itemWidths[0]! + changed.itemWidths[1]! + changed.columnGap - changed.gridWidth,
@@ -61,10 +79,29 @@ test.describe("paged grid", () => {
     }
 
     await dragMouseBy(page, grid, -box.width * 0.62, 0, {
+      beforeRelease: async () => {
+        const revealedSeam = await grid.evaluate((viewport) => {
+          const pages = Array.from(viewport.querySelectorAll<HTMLElement>(".grid-page"));
+          const firstPageRect = pages[0]?.getBoundingClientRect();
+          const secondPageRect = pages[1]?.getBoundingClientRect();
+          return firstPageRect && secondPageRect
+            ? secondPageRect.left - firstPageRect.right
+            : Number.NaN;
+        });
+        expect(revealedSeam).toBeCloseTo(16, 1);
+      },
       stepDelay: 35,
       steps: 12,
     });
     await expectCarouselAt(grid, "page-2");
+    const settledSecondPage = await grid.evaluate((viewport) => {
+      const viewportRect = viewport.getBoundingClientRect();
+      const secondPageRect = viewport
+        .querySelector<HTMLElement>('[data-page-id="page-2"]')
+        ?.getBoundingClientRect();
+      return secondPageRect ? secondPageRect.left - viewportRect.left : Number.NaN;
+    });
+    expect(settledSecondPage).toBeCloseTo(0, 1);
 
     await grid.focus();
     await page.keyboard.press("ArrowRight");

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { dragMouseBy, dragTouchBy, expectCarouselAt, openLabDemo } from "./helpers";
 import {
+  expectLightboxContainment,
   expectLoadedMediaFixture,
   mediaFixtureIds,
   observeMediaAssets,
@@ -39,6 +40,56 @@ function contrastRatio(first: string, second: string): number {
 }
 
 test.describe("media lightbox", () => {
+  test("contains the full lightbox across desktop, mobile, landscape, and zoom-equivalent viewports", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+
+    const cases = [
+      { height: 960, label: "1625 × 960 desktop", width: 1_625 },
+      { height: 768, label: "1366 × 768 short desktop", width: 1_366 },
+      { height: 900, label: "1440 × 900 desktop", width: 1_440 },
+      { height: 844, label: "390 × 844 mobile portrait", width: 390 },
+      {
+        expectTestRailScroll: true,
+        height: 390,
+        label: "844 × 390 mobile landscape",
+        width: 844,
+      },
+      {
+        expectTestRailScroll: true,
+        height: 480,
+        label: "200% zoom-equivalent viewport",
+        width: 720,
+      },
+      {
+        expectTestRailScroll: true,
+        height: 240,
+        label: "400% zoom-equivalent viewport",
+        width: 360,
+      },
+    ] as const;
+
+    for (const viewportCase of cases) {
+      await page.setViewportSize({ height: viewportCase.height, width: viewportCase.width });
+      await openLabDemo(page, "media");
+      const initialDocumentScrollHeight = await page
+        .locator("html")
+        .evaluate((element) => element.scrollHeight);
+      await page.getByTestId("open-lightbox").click();
+      await expect(page.getByTestId("media-frame-regular")).toHaveAttribute(
+        "data-media-state",
+        "loaded",
+      );
+      await expectLightboxContainment(page, {
+        expectTestRailScroll:
+          "expectTestRailScroll" in viewportCase && viewportCase.expectTestRailScroll,
+        initialDocumentScrollHeight,
+        label: viewportCase.label,
+      });
+    }
+  });
+
   test("loads every Vite-owned fixture without native fallback and keeps one semantic stage", async ({
     page,
   }) => {
@@ -300,6 +351,11 @@ test.describe("media lightbox", () => {
       expect(Math.abs(geometry.trackWidth - geometry.viewportWidth * 5)).toBeLessThanOrEqual(2);
       if (fixture !== "transformed") {
         expect(geometry.imageContained).toBe(true);
+      } else {
+        await expect(page.locator('[data-fixture="transformed"] .media-layer')).toHaveClass(
+          /media-layer--transformed/,
+        );
+        await expect(page.locator(".is-transformed")).toHaveCount(0);
       }
     }
   });
