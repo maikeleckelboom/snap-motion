@@ -6,11 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:preview": "vite build --base /snap-motion/ --outDir ../../.artifacts/lab-preview --emptyOutDir",
+    "preview:test": "vite preview --base /snap-motion/ --outDir ../../.artifacts/lab-preview",
     "typecheck": "vue-tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@snap-motion/core": "workspace:*",
     "@snap-motion/vue": "workspace:*",
+    "@vueuse/core": "catalog:",
     "vue": "catalog:"
   },
   "devDependencies": {

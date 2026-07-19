@@ -14,6 +14,7 @@
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "test:preview": "pnpm --filter @snap-motion/lab build:preview && playwright test --config playwright.preview.config.ts",
     "test:fixtures": "playwright test --config playwright.fixtures.config.ts",
     "api:check": "pnpm build:packages && node scripts/run-api-extractor.mjs --mode=check",
     "api:update": "pnpm build:packages && node scripts/run-api-extractor.mjs --mode=update",
@@ -26,7 +27,7 @@
     "version-packages": "changeset version",
     "release:check": "pnpm api:check && pnpm performance:check && pnpm verify:packages && pnpm size:check",
     "release:candidate": "node scripts/release-candidate.mjs",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm performance:check && pnpm build && pnpm api:check && pnpm size:check && pnpm verify:packages && pnpm test:e2e && pnpm test:fixtures",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm performance:check && pnpm build && pnpm api:check && pnpm size:check && pnpm verify:packages && pnpm test:e2e && pnpm test:preview && pnpm test:fixtures",
     "clean": "node scripts/clean.mjs"
   },
   "devDependencies": {

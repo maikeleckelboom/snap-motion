@@ -4,6 +4,9 @@ import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  build: {
+    assetsInlineLimit: 0,
+  },
   plugins: [vue()],
   resolve: {
     alias: {

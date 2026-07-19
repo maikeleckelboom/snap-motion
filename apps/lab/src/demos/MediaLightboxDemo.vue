@@ -7,6 +7,7 @@ import {
   maintainModalTabOrder,
   restoreFocus,
 } from "@snap-motion/vue/dialog";
+import { useTimeoutFn } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
@@ -16,7 +17,9 @@ import {
   symmetricElasticityFromSettings,
 } from "@/fixtures/lab-settings";
 import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
-import { mediaFixtures } from "@/fixtures/media";
+import { mediaFixtures, type MediaFixture, type MediaFixtureId } from "@/fixtures/media";
+
+type MediaLoadState = "pending" | "loaded" | "failed";
 
 const props = defineProps<{
   reducedMotionOverride: boolean | undefined;
@@ -31,7 +34,9 @@ const nextFocused = ref(false);
 const opener = ref<HTMLButtonElement>();
 const viewport = ref<HTMLElement>();
 const track = ref<HTMLElement>();
-const delayedReady = ref(false);
+const delayedSourceReady = ref(false);
+const mediaLoadGeneration = ref(0);
+const mediaLoadStates = ref<Record<MediaFixtureId, MediaLoadState>>(createMediaLoadStates());
 const fixtureMode = ref<"all" | "one">("all");
 const directionMode = ref<"ltr" | "rtl">("ltr");
 const liveMessage = ref("");
@@ -40,8 +45,22 @@ const isOpen = ref(false);
 const reducedOverride = computed(() => props.reducedMotionOverride);
 const direction = computed(() => directionMode.value);
 let storedOpener: HTMLElement | undefined;
-let decodeTimer: ReturnType<typeof setTimeout> | undefined;
 let focusRestoreFrame: number | undefined;
+
+const { start: startDelayedSourceTimer, stop: stopDelayedSourceTimer } = useTimeoutFn(
+  () => {
+    delayedSourceReady.value = true;
+  },
+  450,
+  { immediate: false },
+);
+
+function createMediaLoadStates(): Record<MediaFixtureId, MediaLoadState> {
+  return Object.fromEntries(mediaFixtures.map((fixture) => [fixture.id, "pending"])) as Record<
+    MediaFixtureId,
+    MediaLoadState
+  >;
+}
 
 const visibleFixtures = computed(() =>
   fixtureMode.value === "one" ? mediaFixtures.slice(0, 1) : mediaFixtures,
@@ -78,7 +97,8 @@ const semanticId = computed(
   () => motion.targetId.value ?? motion.activeId.value ?? fixtureIds.value[0],
 );
 const activeIndex = computed(() => {
-  const index = fixtureIds.value.indexOf(semanticId.value ?? "");
+  const currentId = semanticId.value;
+  const index = currentId === undefined ? -1 : fixtureIds.value.indexOf(currentId);
   return index < 0 ? 0 : index;
 });
 const activeFixture = computed(
@@ -112,6 +132,65 @@ function announceCurrent() {
   }
 }
 
+function resetMediaLoading() {
+  mediaLoadGeneration.value += 1;
+  mediaLoadStates.value = createMediaLoadStates();
+  delayedSourceReady.value = false;
+}
+
+function fixtureLoadState(fixture: MediaFixture): MediaLoadState {
+  return mediaLoadStates.value[fixture.id];
+}
+
+function fixtureSourceReady(fixture: MediaFixture): boolean {
+  return fixture.mode !== "delayed" || delayedSourceReady.value;
+}
+
+function setMediaLoadState(fixture: MediaFixture, state: MediaLoadState) {
+  mediaLoadStates.value[fixture.id] = state;
+}
+
+function isCurrentMediaLoad(image: HTMLImageElement): boolean {
+  return isOpen.value && Number(image.dataset.loadGeneration) === mediaLoadGeneration.value;
+}
+
+async function onMediaLoad(fixture: MediaFixture, event: Event) {
+  const image = event.currentTarget;
+  if (!(image instanceof HTMLImageElement)) {
+    setMediaLoadState(fixture, "failed");
+    return;
+  }
+
+  try {
+    await image.decode();
+  } catch {
+    if (isCurrentMediaLoad(image)) {
+      setMediaLoadState(fixture, "failed");
+    }
+    return;
+  }
+
+  if (!isCurrentMediaLoad(image)) {
+    return;
+  }
+
+  if (!image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+    setMediaLoadState(fixture, "failed");
+    return;
+  }
+
+  setMediaLoadState(fixture, "loaded");
+  await nextTick();
+  motion.remeasure();
+}
+
+function onMediaError(fixture: MediaFixture, event: Event) {
+  const image = event.currentTarget;
+  if (image instanceof HTMLImageElement && isCurrentMediaLoad(image)) {
+    setMediaLoadState(fixture, "failed");
+  }
+}
+
 function previous() {
   motion.previous();
 }
@@ -136,13 +215,10 @@ async function openLightbox() {
   }
 
   storedOpener = opener.value ?? captureFocusOpener(document);
+  resetMediaLoading();
   target.showModal();
   isOpen.value = true;
-  delayedReady.value = false;
-  decodeTimer = setTimeout(() => {
-    delayedReady.value = true;
-    void nextTick(motion.remeasure);
-  }, 450);
+  startDelayedSourceTimer();
 
   await nextTick();
   motion.remeasure();
@@ -164,10 +240,8 @@ function onCancel(event: Event) {
 
 function onDialogClose() {
   isOpen.value = false;
-  if (decodeTimer !== undefined) {
-    clearTimeout(decodeTimer);
-    decodeTimer = undefined;
-  }
+  mediaLoadGeneration.value += 1;
+  stopDelayedSourceTimer();
   const openerToRestore = storedOpener;
   storedOpener = undefined;
   focusRestoreFrame = window.requestAnimationFrame(() => {
@@ -195,9 +269,7 @@ watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
 });
 
 onBeforeUnmount(() => {
-  if (decodeTimer !== undefined) {
-    clearTimeout(decodeTimer);
-  }
+  stopDelayedSourceTimer();
   if (dialog.value?.open) {
     dialog.value.close();
   }
@@ -270,13 +342,22 @@ onBeforeUnmount(() => {
     >
       <div class="lightbox-shell" :style="stageStyle">
         <header class="lightbox-header">
-          <div>
-            <p>Media inspection</p>
+          <div class="lightbox-title">
+            <p class="lightbox-eyebrow">Media inspection</p>
             <h2 :id="titleId" data-testid="media-title">{{ activeFixture?.title }}</h2>
           </div>
-          <p class="media-position tabular" data-testid="media-count">
-            {{ activeIndex + 1 }} / {{ visibleFixtures.length }}
-          </p>
+          <dl class="header-diagnostics">
+            <div>
+              <dt>Fixture</dt>
+              <dd class="tabular" data-testid="media-count">
+                {{ activeIndex + 1 }} / {{ visibleFixtures.length }}
+              </dd>
+            </div>
+            <div>
+              <dt>Stage target</dt>
+              <dd class="tabular">{{ props.stageWidth }} px</dd>
+            </div>
+          </dl>
           <button
             ref="closeButton"
             aria-label="Close media lightbox"
@@ -297,138 +378,210 @@ onBeforeUnmount(() => {
           </button>
         </header>
 
-        <section
-          aria-label="Media"
-          aria-roledescription="carousel"
-          class="carousel-frame"
-          role="group"
-        >
-          <button
-            aria-label="Previous media"
-            :aria-disabled="!motion.canPrevious.value"
-            class="carousel-control previous-control"
-            data-testid="media-previous"
-            :disabled="!motion.canPrevious.value && !previousFocused"
-            type="button"
-            @blur="previousFocused = false"
-            @click="motion.canPrevious.value && previous()"
-            @focus="previousFocused = true"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
-              <path
-                d="m15 5-7 7 7 7"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="square"
-                stroke-linejoin="miter"
-                stroke-width="2"
-              />
-            </svg>
-          </button>
-
-          <section
-            ref="viewport"
-            aria-describedby="media-keyboard-help"
-            class="carousel-viewport"
-            data-testid="media-carousel"
-            :data-active-id="semanticId"
-            :data-phase="motion.phase.value"
-            :style="motion.surfaceStyle"
-            tabindex="0"
-            @keydown="onViewportKeyDown"
-            @pointerdown="motion.onPointerDown"
-            @wheel="motion.onWheel"
-          >
-            <div ref="track" class="media-track" dir="ltr" :style="motion.trackStyle.value">
-              <div
-                v-for="(fixture, index) in visibleFixtures"
-                :key="fixture.id"
-                :aria-label="`${fixture.title}, ${index + 1} of ${visibleFixtures.length}`"
-                aria-roledescription="slide"
-                class="media-slide"
-                :data-slide-id="fixture.id"
-                :data-fixture="fixture.mode"
-                :dir="directionMode"
-                :inert="semanticId !== fixture.id"
-                role="group"
+        <section class="stage-workspace" aria-label="Media stage workspace">
+          <div class="stage-instrument" data-testid="media-stage-instrument">
+            <div class="stage-readout">
+              <span>Fixed-stage geometry</span>
+              <span class="tabular">{{ props.stageWidth }} px target</span>
+            </div>
+            <section
+              aria-label="Media"
+              aria-roledescription="carousel"
+              class="carousel-frame"
+              role="group"
+            >
+              <button
+                aria-label="Previous media"
+                :aria-disabled="!motion.canPrevious.value"
+                class="carousel-control previous-control"
+                data-testid="media-previous"
+                :disabled="!motion.canPrevious.value && !previousFocused"
+                type="button"
+                @blur="previousFocused = false"
+                @click="motion.canPrevious.value && previous()"
+                @focus="previousFocused = true"
               >
-                <div class="media-frame">
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
+                  <path
+                    d="m15 5-7 7 7 7"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-linecap="square"
+                    stroke-linejoin="miter"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+
+              <section
+                ref="viewport"
+                aria-describedby="media-keyboard-help"
+                class="carousel-viewport"
+                data-testid="media-carousel"
+                :data-active-id="semanticId"
+                :data-phase="motion.phase.value"
+                :style="motion.surfaceStyle"
+                tabindex="0"
+                @keydown="onViewportKeyDown"
+                @pointerdown="motion.onPointerDown"
+                @wheel="motion.onWheel"
+              >
+                <div ref="track" class="media-track" dir="ltr" :style="motion.trackStyle.value">
                   <div
-                    :class="['media-layer', { 'is-transformed': fixture.mode === 'transformed' }]"
+                    v-for="(fixture, index) in visibleFixtures"
+                    :key="fixture.id"
+                    :aria-label="`${fixture.title}, ${index + 1} of ${visibleFixtures.length}`"
+                    aria-roledescription="slide"
+                    class="media-slide"
+                    :data-slide-id="fixture.id"
+                    :data-fixture="fixture.mode"
+                    :dir="directionMode"
+                    :inert="semanticId !== fixture.id"
+                    role="group"
                   >
-                    <img
-                      v-if="fixture.mode !== 'delayed' || delayedReady"
-                      :alt="fixture.description"
-                      class="media-image"
-                      draggable="false"
-                      :src="fixture.src"
-                      @dragstart="motion.onNativeDragStart"
-                      @load="motion.remeasure"
-                    />
                     <div
-                      v-else
-                      class="decode-placeholder"
-                      aria-label="Waiting for delayed media decode"
+                      class="media-frame"
+                      :data-media-state="fixtureLoadState(fixture)"
+                      :data-testid="`media-frame-${fixture.id}`"
                     >
-                      <span>Waiting for source</span>
+                      <div
+                        :class="[
+                          'media-layer',
+                          { 'is-transformed': fixture.mode === 'transformed' },
+                        ]"
+                      >
+                        <img
+                          v-if="isOpen && fixtureSourceReady(fixture)"
+                          :alt="fixtureLoadState(fixture) === 'loaded' ? fixture.description : ''"
+                          :aria-hidden="fixtureLoadState(fixture) !== 'loaded'"
+                          class="media-image"
+                          :data-load-generation="mediaLoadGeneration"
+                          :data-media-state="fixtureLoadState(fixture)"
+                          :data-testid="`media-image-${fixture.id}`"
+                          decoding="async"
+                          draggable="false"
+                          :src="fixture.src"
+                          @dragstart="motion.onNativeDragStart"
+                          @error="onMediaError(fixture, $event)"
+                          @load="onMediaLoad(fixture, $event)"
+                        />
+                        <div
+                          v-if="fixtureLoadState(fixture) === 'pending'"
+                          class="media-status"
+                          :data-testid="`media-pending-${fixture.id}`"
+                          role="status"
+                        >
+                          <span>
+                            {{
+                              fixture.mode === "delayed" && !delayedSourceReady
+                                ? "Waiting for delayed source"
+                                : "Decoding media"
+                            }}
+                          </span>
+                        </div>
+                        <div
+                          v-else-if="fixtureLoadState(fixture) === 'failed'"
+                          class="media-error"
+                          :data-testid="`media-error-${fixture.id}`"
+                          role="alert"
+                        >
+                          <strong>{{ fixture.title }}</strong>
+                          <span>Media could not be loaded.</span>
+                        </div>
+                      </div>
+                      <button
+                        class="slide-action"
+                        :data-testid="`slide-action-${fixture.id}`"
+                        type="button"
+                      >
+                        Inspect details
+                      </button>
                     </div>
                   </div>
-                  <button
-                    class="slide-action"
-                    :data-testid="`slide-action-${fixture.id}`"
-                    type="button"
-                  >
-                    Inspect details
-                  </button>
                 </div>
-              </div>
-            </div>
-          </section>
+              </section>
 
-          <button
-            aria-label="Next media"
-            :aria-disabled="!motion.canNext.value"
-            class="carousel-control next-control"
-            data-testid="media-next"
-            :disabled="!motion.canNext.value && !nextFocused"
-            type="button"
-            @blur="nextFocused = false"
-            @click="motion.canNext.value && next()"
-            @focus="nextFocused = true"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
-              <path
-                d="m9 5 7 7-7 7"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="square"
-                stroke-linejoin="miter"
-                stroke-width="2"
-              />
-            </svg>
-          </button>
-          <p id="media-keyboard-help" class="sr-only">
-            Use Left and Right Arrow to move between items. Use Home and End to jump.
-          </p>
-          <p class="sr-only" aria-atomic="true" role="status">{{ liveMessage }}</p>
+              <button
+                aria-label="Next media"
+                :aria-disabled="!motion.canNext.value"
+                class="carousel-control next-control"
+                data-testid="media-next"
+                :disabled="!motion.canNext.value && !nextFocused"
+                type="button"
+                @blur="nextFocused = false"
+                @click="motion.canNext.value && next()"
+                @focus="nextFocused = true"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
+                  <path
+                    d="m9 5 7 7-7 7"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-linecap="square"
+                    stroke-linejoin="miter"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+              <p id="media-keyboard-help" class="sr-only">
+                Use Left and Right Arrow to move between items. Use Home and End to jump.
+              </p>
+              <p class="sr-only" aria-atomic="true" role="status">{{ liveMessage }}</p>
+            </section>
+          </div>
         </section>
 
         <footer class="lightbox-footer">
-          <p>{{ activeFixture?.description }}</p>
-          <div aria-label="Keyboard ownership probes" class="ownership-probes" role="group">
-            <button data-testid="caption-action" type="button">Caption details</button>
-            <label>
-              Note
-              <input aria-label="Caption note" data-testid="caption-input" type="text" />
-            </label>
-            <label>
-              <input data-testid="caption-radio" name="caption-mode" type="radio" value="pinned" />
-              Pin
-            </label>
-            <video aria-label="Media controls" controls data-testid="media-controls" muted />
-            <button data-testid="ownership-end" type="button">Done</button>
-          </div>
-          <p class="tabular">x {{ motion.position.value.toFixed(2) }} px</p>
+          <section class="caption-rail" aria-labelledby="caption-rail-title">
+            <div>
+              <p id="caption-rail-title" class="rail-label">Caption</p>
+              <p class="caption-copy">{{ activeFixture?.description }}</p>
+            </div>
+            <button class="caption-action" data-testid="caption-action" type="button">
+              Caption details
+            </button>
+          </section>
+
+          <section class="test-rail" aria-labelledby="ownership-rail-title">
+            <div class="test-rail-intro">
+              <p id="ownership-rail-title" class="rail-label">Keyboard ownership test rail</p>
+              <p>Interactive descendants retain their directional keys.</p>
+            </div>
+            <div aria-labelledby="ownership-rail-title" class="ownership-probes" role="group">
+              <label class="text-probe">
+                <span>Note</span>
+                <input aria-label="Caption note" data-testid="caption-input" type="text" />
+              </label>
+              <label class="radio-probe">
+                <input
+                  data-testid="caption-radio"
+                  name="caption-mode"
+                  type="radio"
+                  value="pinned"
+                />
+                <span>Pin</span>
+              </label>
+              <div class="media-control-probe">
+                <span>Media</span>
+                <video aria-label="Media controls" controls data-testid="media-controls" muted />
+              </div>
+              <button class="done-action" data-testid="ownership-end" type="button">Done</button>
+            </div>
+            <dl class="lightbox-diagnostics" aria-label="Carousel diagnostics">
+              <div>
+                <dt>Semantic ID</dt>
+                <dd data-testid="media-semantic-id">{{ semanticId }}</dd>
+              </div>
+              <div>
+                <dt>Phase</dt>
+                <dd>{{ motion.phase.value }}</dd>
+              </div>
+              <div>
+                <dt>Position</dt>
+                <dd class="tabular">x {{ motion.position.value.toFixed(2) }} px</dd>
+              </div>
+            </dl>
+          </section>
         </footer>
       </div>
     </dialog>
@@ -450,8 +603,7 @@ onBeforeUnmount(() => {
   border-block: 1px solid var(--strong);
 }
 
-.fixture-label,
-.lightbox-header p {
+.fixture-label {
   margin: 0 0 0.35rem;
   color: var(--muted);
   font-size: 0.7rem;
@@ -529,6 +681,19 @@ onBeforeUnmount(() => {
 }
 
 .lightbox-dialog {
+  --lightbox-canvas: #080b0e;
+  --lightbox-surface: #111820;
+  --lightbox-surface-raised: #1a2530;
+  --lightbox-control-hover: #263746;
+  --lightbox-text: #f4f7fa;
+  --lightbox-text-secondary: #b7c2cc;
+  --lightbox-control-border: #718496;
+  --lightbox-separator: #556878;
+  --lightbox-focus: #66b8ff;
+  --lightbox-disabled: #8e9ba6;
+  --lightbox-error-text: #ffd8d8;
+  --lightbox-error-border: #ff8a8a;
+
   inline-size: 100vw;
   max-inline-size: none;
   block-size: 100dvh;
@@ -536,75 +701,169 @@ onBeforeUnmount(() => {
   padding: 0;
   border: 0;
   margin: 0;
-  background: #090909;
-  color: #fff;
+  background: var(--lightbox-canvas);
+  color: var(--lightbox-text);
+  color-scheme: dark;
   overflow: auto;
 }
 
 .lightbox-dialog::backdrop {
-  background: rgb(0 0 0 / 0.78);
+  background: var(--lightbox-canvas);
 }
 
 .lightbox-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-block-size: 100dvh;
+  background: var(--lightbox-canvas);
+  color: var(--lightbox-text);
 }
 
-.lightbox-header,
-.lightbox-footer {
+.lightbox-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 1rem;
-  padding: 0.8rem clamp(0.8rem, 2vw, 1.5rem);
-  border-block-end: 1px solid #444;
+  gap: clamp(0.75rem, 2vw, 1.5rem);
+  min-block-size: 4.5rem;
+  padding: 0.75rem clamp(0.75rem, 2vw, 1.5rem);
+  border-block-end: 1px solid var(--lightbox-separator);
+  background: var(--lightbox-surface);
 }
 
 .lightbox-header h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: clamp(1.05rem, 2vw, 1.4rem);
+  line-height: 1.15;
 }
 
-.lightbox-header p {
-  color: #aaa;
+.lightbox-eyebrow,
+.rail-label {
+  margin: 0 0 0.25rem;
+  color: var(--lightbox-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.media-position {
+.header-diagnostics,
+.header-diagnostics div,
+.lightbox-diagnostics,
+.lightbox-diagnostics div {
   margin: 0;
-  color: #bbb;
-  font-size: 0.78rem;
+}
+
+.header-diagnostics {
+  display: flex;
+  align-items: center;
+  gap: clamp(1rem, 2vw, 2rem);
+}
+
+.header-diagnostics div,
+.lightbox-diagnostics div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.header-diagnostics dt,
+.lightbox-diagnostics dt {
+  color: var(--lightbox-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.header-diagnostics dd,
+.lightbox-diagnostics dd {
+  margin: 0;
+  color: var(--lightbox-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.lightbox-dialog button,
+.lightbox-dialog input[type="text"] {
+  min-block-size: 2.5rem;
+  border: 1px solid var(--lightbox-control-border);
+  border-radius: 0;
+  background: var(--lightbox-surface-raised);
+  color: var(--lightbox-text);
+}
+
+.lightbox-dialog button:not(:disabled):hover {
+  background: var(--lightbox-control-hover);
+}
+
+.lightbox-dialog button:disabled {
+  border-color: var(--lightbox-control-border);
+  background: var(--lightbox-canvas);
+  color: var(--lightbox-disabled);
+  opacity: 1;
+}
+
+.lightbox-dialog :focus-visible {
+  outline: 3px solid var(--lightbox-focus);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 8px var(--lightbox-canvas);
 }
 
 .icon-button,
 .carousel-control {
   display: grid;
   place-items: center;
-  inline-size: 2.7rem;
-  block-size: 2.7rem;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
   padding: 0;
-  border-color: #666;
-  background: #111;
-  color: #fff;
+}
+
+.stage-workspace {
+  display: grid;
+  place-items: center;
+  min-inline-size: 0;
+  min-block-size: 25rem;
+  padding: clamp(0.75rem, 2vw, 1.5rem);
+  background: var(--lightbox-canvas);
+  overflow: hidden;
+}
+
+.stage-instrument {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  inline-size: min(calc(var(--lab-stage-width) + 10rem), 100%);
+  min-inline-size: 0;
+  border: 1px solid var(--lightbox-control-border);
+  background: var(--lightbox-surface);
+}
+
+.stage-readout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-block-size: 2.25rem;
+  padding: 0.45rem 0.75rem;
+  border-block-end: 1px solid var(--lightbox-separator);
+  color: var(--lightbox-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 650;
 }
 
 .carousel-frame {
-  position: relative;
   display: grid;
-  place-items: center;
-  min-block-size: 25rem;
-  padding: clamp(0.75rem, 2vw, 1.5rem) clamp(3.75rem, 7vw, 6rem);
-  overflow: hidden;
+  grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
+  align-items: center;
+  gap: clamp(0.5rem, 1.5vw, 1rem);
+  min-inline-size: 0;
+  padding: clamp(0.5rem, 1.5vw, 1rem);
 }
 
 .carousel-viewport {
   position: relative;
-  inline-size: min(var(--lab-stage-width), calc(100vw - clamp(7.5rem, 14vw, 12rem)));
+  inline-size: min(var(--lab-stage-width), 100%);
   min-inline-size: 0;
   max-inline-size: 100%;
   aspect-ratio: 16 / 10;
-  border: 1px solid #555;
-  background: #181818;
+  border: 1px solid var(--lightbox-control-border);
+  background: var(--lightbox-surface-raised);
   overflow: hidden;
   cursor: grab;
 }
@@ -646,7 +905,9 @@ onBeforeUnmount(() => {
   z-index: 1;
   inset-block-end: 0.75rem;
   inset-inline-start: 0.75rem;
-  min-block-size: 2.25rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
 }
 
 .media-layer {
@@ -670,69 +931,167 @@ onBeforeUnmount(() => {
   -webkit-user-drag: none;
 }
 
-.decode-placeholder {
+.media-image:not([data-media-state="loaded"]) {
+  visibility: hidden;
+}
+
+.media-status,
+.media-error {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  inline-size: 100%;
-  block-size: 100%;
-  border: 1px dashed #777;
-  color: #aaa;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
+  align-content: center;
+  gap: 0.4rem;
+  padding: 1rem;
+  background: var(--lightbox-surface-raised);
+  text-align: center;
+}
+
+.media-status {
+  border: 1px dashed var(--lightbox-control-border);
+  color: var(--lightbox-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
+.media-error {
+  border: 2px solid var(--lightbox-error-border);
+  color: var(--lightbox-error-text);
+  font-size: 0.875rem;
+}
+
+.media-error strong {
+  font-size: 1rem;
+}
+
 .carousel-control {
-  position: absolute;
+  position: relative;
   z-index: 2;
-  inset-block-start: 50%;
-  transform: translateY(-50%);
-}
-
-.carousel-control:disabled {
-  color: #555;
-  border-color: #333;
-  background: #0b0b0b;
-}
-
-.previous-control {
-  inset-inline-start: clamp(0.75rem, 2vw, 1.5rem);
-}
-
-.next-control {
-  inset-inline-end: clamp(0.75rem, 2vw, 1.5rem);
 }
 
 .lightbox-footer {
-  grid-template-columns: minmax(12rem, 1fr) auto auto;
-  border-block: 1px solid #444;
+  display: grid;
+  border-block-start: 1px solid var(--lightbox-separator);
+  background: var(--lightbox-surface);
+}
+
+.caption-rail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  min-inline-size: 0;
+  padding: 0.75rem clamp(0.75rem, 2vw, 1.5rem);
+}
+
+.caption-copy,
+.test-rail-intro p:last-child {
+  margin: 0;
+  color: var(--lightbox-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.caption-copy {
+  max-inline-size: 65ch;
+  color: var(--lightbox-text);
+  font-size: 0.9375rem;
+}
+
+.caption-action,
+.done-action {
+  padding: 0.55rem 0.8rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.test-rail {
+  display: grid;
+  grid-template-columns: minmax(13rem, 0.75fr) minmax(24rem, 1.6fr) auto;
+  align-items: center;
+  gap: clamp(0.75rem, 2vw, 1.5rem);
+  min-inline-size: 0;
+  padding: 0.75rem clamp(0.75rem, 2vw, 1.5rem);
+  border-block-start: 1px solid var(--lightbox-separator);
+  background: var(--lightbox-canvas);
 }
 
 .ownership-probes {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) auto minmax(9rem, auto) auto;
+  align-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+}
+
+.text-probe,
+.radio-probe,
+.media-control-probe {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-block-size: 2.5rem;
+  color: var(--lightbox-text);
+  font-size: 0.8125rem;
+  font-weight: 650;
 }
 
-.ownership-probes label {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+.text-probe {
+  min-inline-size: 0;
 }
 
-.ownership-probes input[type="text"] {
-  inline-size: 7rem;
+.text-probe input {
+  inline-size: 100%;
+  min-inline-size: 5rem;
+  padding-inline: 0.6rem;
+  caret-color: var(--lightbox-text);
 }
 
-.ownership-probes video {
-  inline-size: 7rem;
-  block-size: 2.25rem;
+.radio-probe,
+.media-control-probe {
+  padding: 0 0.65rem;
+  border: 1px solid var(--lightbox-control-border);
+  background: var(--lightbox-surface-raised);
 }
 
-.lightbox-footer p {
+.radio-probe input[type="radio"] {
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
   margin: 0;
-  color: #bbb;
-  font-size: 0.75rem;
+  accent-color: var(--lightbox-focus);
+  color: var(--lightbox-text);
+}
+
+.media-control-probe video {
+  inline-size: 8rem;
+  block-size: 2rem;
+  border: 1px solid var(--lightbox-control-border);
+  background: var(--lightbox-canvas);
+  color: var(--lightbox-text);
+}
+
+.lightbox-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  gap: 0.8rem;
+  padding-inline-start: 1rem;
+  border-inline-start: 1px solid var(--lightbox-separator);
+}
+
+@media (max-width: 70rem) {
+  .test-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lightbox-diagnostics {
+    padding-block-start: 0.75rem;
+    padding-inline-start: 0;
+    border-block-start: 1px solid var(--lightbox-separator);
+    border-inline-start: 0;
+  }
 }
 
 @media (max-width: 42rem) {
@@ -751,37 +1110,91 @@ onBeforeUnmount(() => {
     border-block-end: 1px solid var(--line);
   }
 
-  .carousel-frame {
-    padding-inline: 3.5rem;
-  }
-
-  .carousel-viewport {
-    inline-size: calc(100vw - 7rem);
-    aspect-ratio: 3 / 4;
-  }
-
-  .lightbox-footer {
+  .lightbox-header {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .ownership-probes {
+  .header-diagnostics {
     grid-column: 1 / -1;
-    flex-wrap: wrap;
+    grid-row: 2;
+    justify-content: space-between;
+  }
+
+  .icon-button {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .stage-workspace {
+    min-block-size: 20rem;
+    padding: 0.5rem;
+  }
+
+  .stage-instrument {
+    inline-size: 100%;
+  }
+
+  .carousel-frame {
+    grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
+    padding: 0.5rem;
+  }
+
+  .carousel-viewport {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    inline-size: 100%;
+    aspect-ratio: 3 / 4;
+  }
+
+  .previous-control,
+  .next-control {
+    grid-row: 2;
+  }
+
+  .previous-control {
+    grid-column: 1;
+  }
+
+  .next-control {
+    grid-column: 3;
+  }
+
+  .caption-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ownership-probes {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .text-probe,
+  .media-control-probe {
+    grid-column: 1 / -1;
+  }
+
+  .media-control-probe {
+    justify-content: space-between;
+  }
+
+  .lightbox-diagnostics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (forced-colors: active) {
-  .lightbox-dialog,
-  .icon-button,
-  .carousel-control {
-    background: Canvas;
-    color: CanvasText;
-  }
-
-  .lightbox-header p,
-  .media-position,
-  .lightbox-footer p {
-    color: CanvasText;
+  .lightbox-dialog {
+    --lightbox-canvas: Canvas;
+    --lightbox-surface: Canvas;
+    --lightbox-surface-raised: ButtonFace;
+    --lightbox-control-hover: Highlight;
+    --lightbox-text: CanvasText;
+    --lightbox-text-secondary: CanvasText;
+    --lightbox-control-border: ButtonText;
+    --lightbox-separator: GrayText;
+    --lightbox-focus: Highlight;
+    --lightbox-disabled: GrayText;
+    --lightbox-error-text: CanvasText;
+    --lightbox-error-border: LinkText;
   }
 }
 </style>

@@ -1,8 +1,186 @@
 import { expect, test } from "@playwright/test";
 
 import { dragMouseBy, dragTouchBy, expectCarouselAt, openLabDemo } from "./helpers";
+import {
+  expectLoadedMediaFixture,
+  mediaFixtureIds,
+  observeMediaAssets,
+} from "./mediaFixtureAssertions";
+
+function channelToLinear(value: number): number {
+  const channel = value / 255;
+  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+}
+
+function luminance(color: string): number {
+  const channels = color.startsWith("#")
+    ? color
+        .slice(1)
+        .match(/.{2}/g)
+        ?.map((channel) => Number.parseInt(channel, 16))
+    : color
+        .match(/[\d.]+/g)
+        ?.slice(0, 3)
+        .map(Number);
+  if (!channels || channels.length !== 3) {
+    throw new Error(`Cannot parse computed color: ${color}`);
+  }
+  return (
+    0.2126 * channelToLinear(channels[0]!) +
+    0.7152 * channelToLinear(channels[1]!) +
+    0.0722 * channelToLinear(channels[2]!)
+  );
+}
+
+function contrastRatio(first: string, second: string): number {
+  const lighter = Math.max(luminance(first), luminance(second));
+  const darker = Math.min(luminance(first), luminance(second));
+  return (lighter + 0.05) / (darker + 0.05);
+}
 
 test.describe("media lightbox", () => {
+  test("loads every Vite-owned fixture without native fallback and keeps one semantic stage", async ({
+    page,
+  }) => {
+    await openLabDemo(page, "media");
+    const probe = observeMediaAssets(page);
+    const opener = page.getByTestId("open-lightbox");
+    await opener.focus();
+    await opener.click();
+
+    const carousel = page.getByTestId("media-carousel");
+    const next = page.getByTestId("media-next");
+    const resolvedUrls: string[] = [];
+
+    for (const [index, fixtureId] of mediaFixtureIds.entries()) {
+      if (index > 0) {
+        await next.focus();
+        await page.keyboard.press("Enter");
+        await expect(next).toBeFocused();
+      } else {
+        await expect(page.getByTestId("close-lightbox")).toBeFocused();
+      }
+
+      resolvedUrls.push(await expectLoadedMediaFixture(page, carousel, fixtureId, probe));
+      await expect(page.getByTestId("media-semantic-id")).toHaveText(fixtureId);
+    }
+
+    expect(probe.failedRequests).toEqual([]);
+    expect(resolvedUrls).toHaveLength(5);
+    expect(resolvedUrls.every((url) => url.includes("/src/assets/media-fixtures/"))).toBe(true);
+    expect(resolvedUrls.some((url) => new URL(url).pathname.startsWith("/fixtures/"))).toBe(false);
+  });
+
+  test("renders an accessible media error instead of the browser broken-image fallback", async ({
+    page,
+  }) => {
+    await openLabDemo(page, "media");
+    await page.route("**/regular.svg*", async (route) => {
+      await route.fulfill({
+        body: "Fixture unavailable",
+        contentType: "text/plain",
+        status: 404,
+      });
+    });
+    await page.getByTestId("open-lightbox").click();
+
+    const frame = page.getByTestId("media-frame-regular");
+    await expect(frame).toHaveAttribute("data-media-state", "failed");
+    await expect(page.getByTestId("media-error-regular")).toContainText(
+      "Regular landscapeMedia could not be loaded.",
+    );
+    await expect(page.getByTestId("media-pending-regular")).toHaveCount(0);
+    await expectCarouselAt(page.getByTestId("media-carousel"), "regular");
+
+    const image = page.getByTestId("media-image-regular");
+    await expect(image).toBeHidden();
+    expect(
+      await image.evaluate((element) => {
+        const imageElement = element as HTMLImageElement;
+        return {
+          alt: imageElement.alt,
+          complete: imageElement.complete,
+          naturalHeight: imageElement.naturalHeight,
+          naturalWidth: imageElement.naturalWidth,
+          visibility: getComputedStyle(imageElement).visibility,
+        };
+      }),
+    ).toEqual({
+      alt: "",
+      complete: true,
+      naturalHeight: 0,
+      naturalWidth: 0,
+      visibility: "hidden",
+    });
+  });
+
+  test("supplies explicit text, boundary, icon, and focus contrast to every lightbox control", async ({
+    page,
+  }) => {
+    await openLabDemo(page, "media");
+    await page.getByTestId("open-lightbox").click();
+    await expect(page.getByTestId("media-frame-regular")).toHaveAttribute(
+      "data-media-state",
+      "loaded",
+    );
+
+    const controls = [
+      { locator: page.getByTestId("close-lightbox"), minimumTextContrast: 3 },
+      { locator: page.getByTestId("media-previous"), minimumTextContrast: 3 },
+      { locator: page.getByTestId("media-next"), minimumTextContrast: 3 },
+      { locator: page.getByTestId("slide-action-regular"), minimumTextContrast: 4.5 },
+      { locator: page.getByTestId("caption-action"), minimumTextContrast: 4.5 },
+      { locator: page.getByTestId("caption-input"), minimumTextContrast: 4.5 },
+      { locator: page.locator(".radio-probe"), minimumTextContrast: 4.5 },
+      { locator: page.locator(".media-control-probe"), minimumTextContrast: 4.5 },
+      { locator: page.getByTestId("media-controls"), minimumTextContrast: 3 },
+      { locator: page.getByTestId("ownership-end"), minimumTextContrast: 4.5 },
+    ];
+
+    for (const { locator, minimumTextContrast } of controls) {
+      const style = await locator.evaluate((element) => {
+        const computed = getComputedStyle(element);
+        return {
+          backgroundColor: computed.backgroundColor,
+          borderColor: computed.borderTopColor,
+          color: computed.color,
+        };
+      });
+      expect(contrastRatio(style.color, style.backgroundColor)).toBeGreaterThanOrEqual(
+        minimumTextContrast,
+      );
+      expect(contrastRatio(style.borderColor, style.backgroundColor)).toBeGreaterThanOrEqual(3);
+    }
+
+    const dialog = page.getByTestId("media-lightbox");
+    const palette = await dialog.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        canvas: computed.getPropertyValue("--lightbox-canvas").trim(),
+        colorScheme: computed.colorScheme,
+        controlBorder: computed.getPropertyValue("--lightbox-control-border").trim(),
+        focus: computed.getPropertyValue("--lightbox-focus").trim(),
+        separator: computed.getPropertyValue("--lightbox-separator").trim(),
+        surface: computed.getPropertyValue("--lightbox-surface").trim(),
+        surfaceRaised: computed.getPropertyValue("--lightbox-surface-raised").trim(),
+        text: computed.getPropertyValue("--lightbox-text").trim(),
+        textSecondary: computed.getPropertyValue("--lightbox-text-secondary").trim(),
+      };
+    });
+    expect(palette.colorScheme).toContain("dark");
+    expect(contrastRatio(palette.text, palette.surface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(palette.textSecondary, palette.surface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(palette.controlBorder, palette.surfaceRaised)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(palette.separator, palette.surface)).toBeGreaterThanOrEqual(3);
+
+    const captionAction = page.getByTestId("caption-action");
+    await captionAction.focus();
+    const focusColor = await captionAction.evaluate(
+      (element) => getComputedStyle(element).outlineColor,
+    );
+    expect(contrastRatio(focusColor, palette.canvas)).toBeGreaterThanOrEqual(3);
+  });
+
   test("opens as a modal, preserves keyboard boundaries, and restores focus", async ({ page }) => {
     await openLabDemo(page, "media");
 
@@ -138,7 +316,21 @@ test.describe("media lightbox", () => {
     await page.keyboard.press("End");
     await expectCarouselAt(carousel, "delayed");
 
-    await expect(page.locator('[data-fixture="delayed"] img')).toBeVisible({ timeout: 2_000 });
+    const delayedFrame = page.getByTestId("media-frame-delayed");
+    await expect(delayedFrame).toHaveAttribute("data-media-state", "loaded", { timeout: 2_000 });
+    const delayedImage = page.getByTestId("media-image-delayed");
+    await expect(delayedImage).toBeVisible();
+    const delayedImageState = await delayedImage.evaluate((element) => {
+      const image = element as HTMLImageElement;
+      return {
+        complete: image.complete,
+        naturalHeight: image.naturalHeight,
+        naturalWidth: image.naturalWidth,
+      };
+    });
+    expect(delayedImageState.complete).toBe(true);
+    expect(delayedImageState.naturalWidth).toBeGreaterThan(0);
+    expect(delayedImageState.naturalHeight).toBeGreaterThan(0);
     await expectCarouselAt(carousel, "delayed");
 
     await page.setViewportSize({ width: 720, height: 1_000 });

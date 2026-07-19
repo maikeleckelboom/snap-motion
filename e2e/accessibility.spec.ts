@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 import { expectCarouselAt, expectSheetOpenAt, openLabDemo } from "./helpers";
+import { mediaFixtureIds } from "./mediaFixtureAssertions";
 
 async function expectNoAxeViolations(page: Page, context: string) {
   const results = await new AxeBuilder({ page }).analyze();
@@ -24,12 +25,21 @@ test.describe("automated accessibility certification", () => {
     await expectNoAxeViolations(page, "closed lightbox");
 
     await page.getByTestId("open-lightbox").click();
-    await expectNoAxeViolations(page, "open lightbox");
-
     const carousel = page.getByTestId("media-carousel");
-    for (const id of ["extremely-wide", "extremely-tall", "transformed", "delayed"] as const) {
-      await page.getByTestId("media-next").click();
+    await expect(page.getByTestId("caption-input")).toBeVisible();
+    await expect(page.getByTestId("caption-radio")).toBeVisible();
+    await expect(page.getByTestId("media-controls")).toBeVisible();
+    await expect(page.getByTestId("ownership-end")).toBeVisible();
+
+    for (const [index, id] of mediaFixtureIds.entries()) {
+      if (index > 0) {
+        await page.getByTestId("media-next").click();
+      }
       await expectCarouselAt(carousel, id);
+      await expect(page.getByTestId(`media-frame-${id}`)).toHaveAttribute(
+        "data-media-state",
+        "loaded",
+      );
       await expectNoAxeViolations(page, `lightbox slide ${id}`);
     }
 
@@ -55,6 +65,41 @@ test.describe("automated accessibility certification", () => {
         element.style.zoom = String(value);
       }, zoom);
       await expectNoAxeViolations(page, `paged grid ${zoom * 100}% zoom`);
+    }
+  });
+
+  test("lightbox reflows at browser-zoom-equivalent 200 and 400 percent viewports", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 720, height: 480 });
+    await openLabDemo(page, "media");
+    await page.getByTestId("open-lightbox").click();
+
+    for (const { height, label, width } of [
+      { height: 480, label: "200%", width: 720 },
+      { height: 240, label: "400%", width: 360 },
+    ]) {
+      await page.setViewportSize({ width, height });
+      const reflow = await page.getByTestId("media-lightbox").evaluate((dialog) => {
+        const stage = dialog.querySelector<HTMLElement>('[data-testid="media-stage-instrument"]');
+        const stageRect = stage?.getBoundingClientRect();
+        const dialogRect = dialog.getBoundingClientRect();
+        return {
+          dialogOverflow: dialog.scrollWidth - dialog.clientWidth,
+          stageInside:
+            stageRect !== undefined &&
+            stageRect.left >= dialogRect.left - 1 &&
+            stageRect.right <= dialogRect.right + 1,
+        };
+      });
+
+      expect(reflow.dialogOverflow, `${label} horizontal reflow`).toBeLessThanOrEqual(1);
+      expect(reflow.stageInside, `${label} stage containment`).toBe(true);
+      await expect(page.getByTestId("caption-input")).toBeVisible();
+      await expect(page.getByTestId("caption-radio")).toBeVisible();
+      await expect(page.getByTestId("media-controls")).toBeVisible();
+      await expect(page.getByTestId("ownership-end")).toBeVisible();
+      await expectNoAxeViolations(page, `lightbox ${label} reflow`);
     }
   });
 
