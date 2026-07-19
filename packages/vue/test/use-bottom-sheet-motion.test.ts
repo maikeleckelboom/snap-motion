@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
 
-import { useBottomSheetMotion } from "../src/use-bottom-sheet-motion";
+import { useBottomSheetMotion } from "../src/bottom-sheet/use-bottom-sheet-motion";
 import { ManualAnimationDriver } from "./manual-driver";
 
 describe("useBottomSheetMotion", () => {

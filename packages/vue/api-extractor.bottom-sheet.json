@@ -1,0 +1,6 @@
+{
+  "extends": "./api-extractor.json",
+  "mainEntryPointFilePath": "<projectFolder>/../../temp/declarations/vue/bottom-sheet/index.d.ts",
+  "apiReport": { "reportFileName": "vue-bottom-sheet.api.md" },
+  "dtsRollup": { "untrimmedFilePath": "<projectFolder>/dist/bottom-sheet.d.ts" }
+}

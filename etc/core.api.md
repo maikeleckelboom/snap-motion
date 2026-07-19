@@ -20,12 +20,6 @@ export interface AnimationPlaybackControls {
 export function applyElasticity(position: number, bounds: ScalarBounds, elasticity?: ElasticityOptions): number;
 
 // @public (undocumented)
-export function assertFiniteNumber(value: number, name: string): void;
-
-// @public (undocumented)
-export function assertNonNegative(value: number, name: string): void;
-
-// @public (undocumented)
 export const balancedPreset: {
     readonly name: "balanced";
     readonly spring: {
@@ -666,12 +660,6 @@ export const tightPreset: {
     };
     readonly programmaticImpulse: 320;
 };
-
-// @public (undocumented)
-export function validateElasticityOptions(elasticity: ElasticityOptions): void;
-
-// @public (undocumented)
-export function validateReleaseTargetPolicy(policy: ReleaseTargetPolicy): void;
 
 // @public (undocumented)
 export interface VariableWidthGeometryOptions<Id extends SemanticId = SemanticId> {

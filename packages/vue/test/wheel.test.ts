@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h } from "vue";
 
-import { useHorizontalWheel } from "../src/wheel";
+import { useHorizontalWheel } from "../src/carousel/carousel-wheel";
 
 afterEach(() => {
   vi.useRealTimers();

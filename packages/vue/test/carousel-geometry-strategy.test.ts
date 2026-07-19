@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createFixedStageCarouselGeometryStrategy,
   createVariableWidthCenteredCarouselGeometryStrategy,
-} from "../src/carousel-geometry";
+} from "../src/carousel/carousel-geometry";
 
 function setLayout(
   element: HTMLElement,

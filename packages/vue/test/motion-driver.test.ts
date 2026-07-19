@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createMotionDriverWithFactory,
   type NumericMotionValueAdapter,
-} from "../src/motion-driver";
+} from "../src/motion/motion-driver";
 
 function createHarness() {
   let changeListener: ((value: number) => void) | undefined;

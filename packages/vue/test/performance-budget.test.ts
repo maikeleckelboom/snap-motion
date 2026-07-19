@@ -3,10 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { effectScope, h, nextTick, ref } from "vue";
 
 import budgets from "../../../config/performance-budgets.json";
-import { useCarouselWindow } from "../src/carousel-window";
-import CarouselRoot from "../src/components/CarouselRoot.vue";
-import { useSnapMotion } from "../src/use-snap-motion";
-import { useHorizontalWheel } from "../src/wheel";
+import { useHorizontalWheel } from "../src/carousel/carousel-wheel";
+import { useCarouselWindow } from "../src/carousel/carousel-window";
+import CarouselRoot from "../src/carousel/components/CarouselRoot.vue";
+import { useSnapMotion } from "../src/motion/use-snap-motion";
 import { ManualAnimationDriver } from "./manual-driver";
 
 afterEach(() => {

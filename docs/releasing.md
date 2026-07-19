@@ -3,6 +3,9 @@
 No workflow publishes packages. `pnpm release:candidate` runs the full gate and writes private
 tarballs, SHA-256 checksums, and a release manifest under `.artifacts`.
 
+Public API changes first run `pnpm api:update` to regenerate the root and capability reports. CI
+uses `pnpm api:check`; package builds create declaration rollups without modifying tracked reports.
+
 ## Hard blockers
 
 1. Verify ownership of both intended npm names.

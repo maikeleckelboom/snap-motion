@@ -1,0 +1,6 @@
+{
+  "extends": "./api-extractor.json",
+  "mainEntryPointFilePath": "<projectFolder>/../../temp/declarations/vue/carousel/index.d.ts",
+  "apiReport": { "reportFileName": "vue-carousel.api.md" },
+  "dtsRollup": { "untrimmedFilePath": "<projectFolder>/dist/carousel.d.ts" }
+}

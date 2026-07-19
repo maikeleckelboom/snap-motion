@@ -6,12 +6,15 @@ animations, interruption bursts, simultaneous instances, and resize/mutation sto
 
 Current packed build graph measurements are enforced by `pnpm size:check`:
 
-| Entry           |  Bytes | Gzip bytes | Budget bytes / gzip |
-| --------------- | -----: | ---------: | ------------------: |
-| Core            | 19,230 |      5,715 |      24,000 / 7,500 |
-| Vue composables | 24,021 |      7,441 |     32,000 / 10,000 |
-| Vue components  | 50,264 |     14,086 |     52,000 / 15,000 |
-| Base CSS        |  3,156 |        929 |       5,000 / 1,600 |
+| Entry            |  Bytes | Gzip bytes | Budget bytes / gzip |
+| ---------------- | -----: | ---------: | ------------------: |
+| Core             | 19,115 |      5,668 |      24,000 / 7,500 |
+| Vue root         | 54,111 |     15,300 |     60,000 / 17,500 |
+| Vue carousel     | 31,848 |      9,381 |     52,000 / 15,000 |
+| Vue bottom sheet | 27,122 |      8,714 |     40,000 / 12,500 |
+| Vue dialog       |  5,968 |      2,441 |      10,000 / 3,500 |
+| Vue motion       |  7,262 |      2,640 |      16,000 / 5,500 |
+| Base CSS         |  3,695 |        971 |       5,000 / 1,600 |
 
 `pnpm performance:check` covers 60/120-sample drag streams, repeated interruption, 1/20/100/1,000
 items, bounded render windows, simultaneous instances, resize/mutation storms, wheel coalescing,

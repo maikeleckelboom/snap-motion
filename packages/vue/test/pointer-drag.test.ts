@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick } from "vue";
 
-import { usePointerDrag, type PointerDragOptions } from "../src/pointer-drag";
+import { usePointerDrag, type PointerDragOptions } from "../src/internal/input/pointer-drag";
 
 const pointerCallback = () => vi.fn<PointerDragOptions["onMove"]>();
 

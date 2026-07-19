@@ -2,12 +2,12 @@ import { mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
 
-import CarouselNext from "../src/components/CarouselNext.vue";
-import CarouselPaginationItem from "../src/components/CarouselPaginationItem.vue";
-import CarouselRoot from "../src/components/CarouselRoot.vue";
-import CarouselSlide from "../src/components/CarouselSlide.vue";
-import CarouselTrack from "../src/components/CarouselTrack.vue";
-import CarouselViewport from "../src/components/CarouselViewport.vue";
+import CarouselNext from "../src/carousel/components/CarouselNext.vue";
+import CarouselPaginationItem from "../src/carousel/components/CarouselPaginationItem.vue";
+import CarouselRoot from "../src/carousel/components/CarouselRoot.vue";
+import CarouselSlide from "../src/carousel/components/CarouselSlide.vue";
+import CarouselTrack from "../src/carousel/components/CarouselTrack.vue";
+import CarouselViewport from "../src/carousel/components/CarouselViewport.vue";
 
 function carouselChildren(extra: unknown[] = []) {
   return [

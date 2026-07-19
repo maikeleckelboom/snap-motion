@@ -5,7 +5,7 @@ import {
   CarouselSlide,
   CarouselTrack,
   CarouselViewport,
-} from "@snap-motion/vue/components";
+} from "@snap-motion/vue/carousel";
 import { ref } from "vue";
 
 const ids = ["one", "two"] as const;

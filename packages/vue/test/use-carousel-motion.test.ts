@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
 
-import { useCarouselMotion } from "../src/use-carousel-motion";
+import { useCarouselMotion } from "../src/carousel/use-carousel-motion";
 import { ManualAnimationDriver } from "./manual-driver";
 
 type Id = "a" | "b" | "c";

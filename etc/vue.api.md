@@ -30,10 +30,10 @@ import { SnapDirection } from '@snap-motion/core';
 import type { SpringConfiguration } from '@snap-motion/core';
 import { VNode } from 'vue';
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_export_12" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const BottomSheet: typeof __VLS_export;
+export const BottomSheet: typeof __VLS_export_12;
 
 // @public (undocumented)
 export interface BottomSheetMeasureContext {
@@ -55,23 +55,13 @@ export interface BottomSheetMeasureContext {
     readonly visualViewportHeight: number;
 }
 
-// @public (undocumented)
+// @public
 export type BottomSheetOpenSnapId = "compact" | "comfortable" | "full";
 
-// @public (undocumented)
-export interface BottomSheetReleasePolicy {
-    // (undocumented)
-    closeVelocity: number;
-    // (undocumented)
-    expandVelocity: number;
-    // (undocumented)
-    projectionSeconds: number;
-}
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_2" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_export_13" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const BottomSheetSnapPicker: typeof __VLS_export_2;
+export const BottomSheetSnapPicker: typeof __VLS_export_13;
 
 // @public
 export interface BottomSheetSnapPoint<Id extends string> {
@@ -115,13 +105,10 @@ export interface BottomSheetViewportPolicy {
     topGap: number;
 }
 
-// @public (undocumented)
-export function captureFocusOpener(documentTarget?: Document): HTMLElement | undefined;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_3" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselActivePosition: typeof __VLS_export_3;
+export const CarouselActivePosition: typeof __VLS_export;
 
 // @public (undocumented)
 export interface CarouselGeometryMeasureContext<Id extends string> {
@@ -141,61 +128,58 @@ export interface CarouselGeometryStrategy<Id extends string> {
     measure(context: CarouselGeometryMeasureContext<Id>): ControllerMeasurement<Id>;
 }
 
-// @public (undocumented)
-export function carouselKeyAction(event: Pick<KeyboardEvent, "key" | "target"> & Partial<Pick<KeyboardEvent, "altKey" | "ctrlKey" | "defaultPrevented" | "metaKey">>): "end" | "home" | "next" | "previous" | undefined;
-
 // @public
 export type CarouselKeyboardScope = "auto" | "carousel" | "dialog" | "off";
+
+// Warning: (ae-forgotten-export) The symbol "__VLS_export_2" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const CarouselNext: typeof __VLS_export_2;
+
+// Warning: (ae-forgotten-export) The symbol "__VLS_export_3" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const CarouselPagination: typeof __VLS_export_3;
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export_4" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselNext: typeof __VLS_export_4;
+export const CarouselPaginationItem: typeof __VLS_export_4;
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export_5" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselPagination: typeof __VLS_export_5;
+export const CarouselPrevious: typeof __VLS_export_5;
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export_6" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselPaginationItem: typeof __VLS_export_6;
+export const CarouselProgress: typeof __VLS_export_6;
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export_7" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselPrevious: typeof __VLS_export_7;
+export const CarouselRoot: typeof __VLS_export_7;
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export_8" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselProgress: typeof __VLS_export_8;
+export const CarouselSlide: typeof __VLS_export_8;
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export_9" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselRoot: typeof __VLS_export_9;
+export const CarouselStatus: typeof __VLS_export_9;
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export_10" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselSlide: typeof __VLS_export_10;
+export const CarouselTrack: typeof __VLS_export_10;
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export_11" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselStatus: typeof __VLS_export_11;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_12" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselTrack: typeof __VLS_export_12;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_13" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselViewport: typeof __VLS_export_13;
+export const CarouselViewport: typeof __VLS_export_11;
 
 // @public (undocumented)
 export interface CarouselWindowOptions {
@@ -244,38 +228,10 @@ export function createVariableWidthCenteredCarouselGeometryStrategy<Id extends s
 export function createViewportBottomSheetSnapPoints(overrides?: Partial<BottomSheetViewportPolicy>): readonly BottomSheetSnapPoint<BottomSheetOpenSnapId>[];
 
 // @public (undocumented)
-export const defaultBottomSheetReleasePolicy: Readonly<BottomSheetReleasePolicy>;
-
-// @public (undocumented)
-export const defaultBottomSheetViewportPolicy: Readonly<BottomSheetViewportPolicy>;
-
-// @public (undocumented)
-export function elementOwnsCarouselKeyboard(target: EventTarget | null): boolean;
-
-// @public
-export function elementOwnsSnapMotionDrag(target: EventTarget | null): boolean;
-
-// @public
-export function elementOwnsSnapMotionWheel(target: EventTarget | null): boolean;
-
-// @public (undocumented)
-export function firstInteractive(container: HTMLElement | undefined): HTMLElement | undefined;
-
-// @public (undocumented)
 export interface FixedStageCarouselGeometryOptions {
     // (undocumented)
     readonly gap?: number;
 }
-
-// @public (undocumented)
-export function focusInitial(policy: InitialFocus, targets: {
-    close?: HTMLElement | undefined;
-    container?: HTMLElement | undefined;
-    title?: HTMLElement | undefined;
-}): boolean;
-
-// @public @deprecated (undocumented)
-export function focusInside(container: HTMLElement | undefined): boolean;
 
 // @public (undocumented)
 export interface FocusReturnOptions {
@@ -285,17 +241,8 @@ export interface FocusReturnOptions {
     opener?: HTMLElement | undefined;
 }
 
-// @public (undocumented)
-export function horizontalWheelDelta(event: Pick<WheelEvent, "deltaMode" | "deltaX" | "deltaY" | "shiftKey">, pageSize: number, lineSize?: number): number | undefined;
-
-// @public (undocumented)
+// @public
 export type InitialFocus = "close" | "title" | "first-interactive" | HTMLElement | (() => HTMLElement | undefined);
-
-// @public (undocumented)
-export function interactiveElements(container: HTMLElement | undefined): HTMLElement[];
-
-// @public (undocumented)
-export function maintainModalTabOrder(event: KeyboardEvent, container: HTMLElement | undefined): boolean;
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export_14" needs to be exported by the entry point index.d.ts
 //
@@ -306,26 +253,7 @@ export const ModalDialog: typeof __VLS_export_14;
 export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "route";
 
 // @public (undocumented)
-export interface NormalizedWheelDelta {
-    // (undocumented)
-    x: number;
-    // (undocumented)
-    y: number;
-}
-
-// @public (undocumented)
-export function normalizeWheelDelta(event: Pick<WheelEvent, "deltaMode" | "deltaX" | "deltaY">, pageSize: number, lineSize?: number): NormalizedWheelDelta;
-
-// @public (undocumented)
 export type PointerIntent = "horizontal" | "pending" | "vertical";
-
-// @public (undocumented)
-export interface PointerIntentOptions {
-    // (undocumented)
-    dominanceRatio?: number;
-    // (undocumented)
-    threshold?: number;
-}
 
 // @public (undocumented)
 export interface PublicCarouselContext<Id extends string = string> {
@@ -351,12 +279,6 @@ export interface PublicCarouselContext<Id extends string = string> {
     readonly previous: (reason?: NavigationReason) => void;
 }
 
-// @public (undocumented)
-export interface ReducedMotionOptions {
-    // (undocumented)
-    override?: Readonly<Ref<boolean | undefined>>;
-}
-
 // @public
 export function resolveBottomSheetSnapPoints<Id extends string>(points: readonly BottomSheetSnapPoint<Id>[], context: BottomSheetMeasureContext): ResolvedBottomSheetSnapPoint<Id>[];
 
@@ -374,23 +296,10 @@ export interface ResolvedBottomSheetSnapPoint<Id extends string> {
     readonly position: number;
 }
 
-// @public (undocumented)
-export function resolveInitialFocus(policy: InitialFocus, targets: {
-    close?: HTMLElement | undefined;
-    container?: HTMLElement | undefined;
-    title?: HTMLElement | undefined;
-}): HTMLElement | undefined;
-
-// @public (undocumented)
-export function resolvePointerIntent(deltaX: number, deltaY: number, options?: PointerIntentOptions): PointerIntent;
-
-// @public (undocumented)
-export function restoreFocus(options: FocusReturnOptions | HTMLElement | undefined): boolean;
-
 // @public
 export type SnapMotionDirection = "auto" | "ltr" | "rtl";
 
-// @public (undocumented)
+// @public
 export interface SnapMotionMessages {
     // (undocumented)
     carouselInstructions: string;
@@ -592,9 +501,6 @@ export function useCarouselWindow<Id extends string>(idsSource: MaybeRefOrGetter
     preloadIds: ComputedRef<ReadonlySet<Id>>;
     previousIds: ComputedRef<readonly Id[]>;
 };
-
-// @public (undocumented)
-export function useReducedMotionPreference(options?: ReducedMotionOptions): ComputedRef<boolean>;
 
 // @public (undocumented)
 export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<Id>): {

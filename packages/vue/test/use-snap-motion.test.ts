@@ -3,7 +3,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
 
-import { useSnapMotion, type UseSnapMotionOptions } from "../src/use-snap-motion";
+import { useSnapMotion, type UseSnapMotionOptions } from "../src/motion/use-snap-motion";
 import { ManualAnimationDriver } from "./manual-driver";
 
 type Id = "a" | "b" | "c";

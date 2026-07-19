@@ -34,18 +34,30 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./components": {
-      "types": "./dist/components.d.ts",
-      "import": "./dist/components.js"
+    "./bottom-sheet": {
+      "types": "./dist/bottom-sheet.d.ts",
+      "import": "./dist/bottom-sheet.js"
     },
-    "./composables": {
-      "types": "./dist/composables.d.ts",
-      "import": "./dist/composables.js"
+    "./carousel": {
+      "types": "./dist/carousel.d.ts",
+      "import": "./dist/carousel.js"
+    },
+    "./dialog": {
+      "types": "./dist/dialog.d.ts",
+      "import": "./dist/dialog.js"
+    },
+    "./localization": {
+      "types": "./dist/localization.d.ts",
+      "import": "./dist/localization.js"
+    },
+    "./motion": {
+      "types": "./dist/motion.d.ts",
+      "import": "./dist/motion.js"
     },
     "./style.css": "./dist/style.css"
   },
   "scripts": {
-    "build": "node ../../scripts/clean-package-dist.mjs && vue-tsc -p tsconfig.build.json --declaration --emitDeclarationOnly && node ../../scripts/prepare-vue-declarations.mjs && vite build",
+    "build": "node ../../scripts/clean-package-dist.mjs && vue-tsc -p tsconfig.build.json --declaration --emitDeclarationOnly && node ../../scripts/prepare-vue-declarations.mjs && vite build && node ../../scripts/run-api-extractor.mjs --mode=rollup --package=vue",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },

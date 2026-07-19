@@ -31,6 +31,56 @@ function capture(command, args, cwd = repoRoot) {
   return result.stdout;
 }
 
+function exportTargets(value) {
+  if (typeof value === "string") return [value];
+  if (!value || typeof value !== "object") return [];
+  return Object.values(value).flatMap(exportTargets);
+}
+
+function inspectPackedFiles(tarball, manifest, entries) {
+  const name = basename(tarball);
+  for (const target of exportTargets(manifest.exports)) {
+    const packedTarget = `package/${target.replace(/^\.\//, "")}`;
+    if (!entries.has(packedTarget)) {
+      throw new Error(`${name} export target does not exist: ${target}`);
+    }
+  }
+
+  const distFiles = [...entries].filter((entry) => entry.startsWith("package/dist/"));
+  if (manifest.name === "@snap-motion/core") {
+    const intended = new Set(["package/dist/index.d.ts", "package/dist/index.js"]);
+    const unexpected = distFiles.filter((entry) => !intended.has(entry));
+    if (unexpected.length > 0) {
+      throw new Error(`${name} contains unintended core artifacts:\n${unexpected.join("\n")}`);
+    }
+  } else {
+    const publicDeclarations = new Set(
+      exportTargets(manifest.exports)
+        .filter((target) => target.endsWith(".d.ts"))
+        .map((target) => `package/${target.replace(/^\.\//, "")}`),
+    );
+    const unexpected = distFiles.filter((entry) => {
+      if (/^package\/dist\/[^/]+\.js$/.test(entry)) return false;
+      if (entry === "package/dist/style.css") return false;
+      if (entry.endsWith(".d.ts")) return !publicDeclarations.has(entry);
+      return true;
+    });
+    if (unexpected.length > 0) {
+      throw new Error(`${name} contains unintended Vue artifacts:\n${unexpected.join("\n")}`);
+    }
+  }
+
+  for (const declaration of distFiles.filter((entry) => entry.endsWith(".d.ts"))) {
+    const source = capture("tar", ["-xOf", tarball, declaration]);
+    if (/(?:from\s*|import\s*\(?\s*)["']\./.test(source)) {
+      throw new Error(`${name} declaration contains a relative module edge: ${declaration}`);
+    }
+    if (/packages[\\/]\w+[\\/]src|@snap-motion\/(?:core|vue)\/src/.test(source)) {
+      throw new Error(`${name} declaration contains a source-only alias: ${declaration}`);
+    }
+  }
+}
+
 async function availablePort() {
   return new Promise((resolvePort, reject) => {
     const server = createServer();
@@ -176,12 +226,15 @@ const vueTarball = resolve(artifactsDirectory, vueArtifact);
 
 for (const tarball of [coreTarball, vueTarball]) {
   process.stdout.write(`\nPacked contents: ${basename(tarball)}\n`);
-  process.stdout.write(`${capture("tar", ["-tf", tarball])}\n`);
+  const packedContents = capture("tar", ["-tf", tarball]);
+  process.stdout.write(`${packedContents}\n`);
+  const entries = new Set(packedContents.split(/\r?\n/).filter(Boolean));
   const manifestSource = capture("tar", ["-xOf", tarball, "package/package.json"]);
   if (manifestSource.includes("workspace:")) {
     throw new Error(`${basename(tarball)} contains a workspace protocol.`);
   }
-  JSON.parse(manifestSource);
+  const manifest = JSON.parse(manifestSource);
+  inspectPackedFiles(tarball, manifest, entries);
   run(pnpmCommand, ["exec", "publint", "run", tarball, "--strict"]);
   const attwArguments = ["exec", "attw", tarball, "--profile", "esm-only", "--format", "table"];
   if (tarball === vueTarball) attwArguments.push("--exclude-entrypoints", "./style.css");

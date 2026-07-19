@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useCarouselWindow } from "@snap-motion/vue";
+import { useCarouselWindow } from "@snap-motion/vue/carousel";
 import { computed, ref } from "vue";
 
 const ids = Array.from({ length: 100 }, (_, index) => `media-${index + 1}`);

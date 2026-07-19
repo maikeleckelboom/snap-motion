@@ -7,7 +7,7 @@ import {
   resolveBottomSheetScrimOpacity,
   resolveBottomSheetSnapAnchors,
   resolveBottomSheetSnapPoints,
-} from "../src/bottom-sheet-policy";
+} from "../src/bottom-sheet/bottom-sheet-policy";
 
 describe("bottom-sheet viewport policy", () => {
   it("resolves full, comfortable, compact, and hidden anchors", () => {

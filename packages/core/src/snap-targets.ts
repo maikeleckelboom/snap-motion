@@ -1,12 +1,12 @@
-import { assertFiniteNumber, assertNonNegative, clampToBounds, createBounds } from "./bounds.js";
-import { projectPosition } from "./projection.js";
+import { assertFiniteNumber, assertNonNegative, clampToBounds, createBounds } from "./bounds";
+import { projectPosition } from "./projection";
 import type {
   ReleaseTargetPolicy,
   ScalarBounds,
   SemanticId,
   SnapAnchor,
   SnapDirection,
-} from "./types.js";
+} from "./types";
 
 const DISTANCE_EPSILON = 1e-9;
 

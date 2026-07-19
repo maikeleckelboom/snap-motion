@@ -6,7 +6,7 @@
     "declarationMap": true,
     "emitDeclarationOnly": true,
     "noEmit": false,
-    "outDir": "dist",
+    "outDir": "../../temp/declarations/vue",
     "paths": {},
     "rootDir": "src",
     "types": []

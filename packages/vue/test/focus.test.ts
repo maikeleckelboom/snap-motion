@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { captureFocusOpener, focusInside, restoreFocus } from "../src/focus";
+import { captureFocusOpener, focusInside, restoreFocus } from "../src/internal/accessibility/focus";
 
 describe("focus helpers", () => {
   it("captures and restores a connected opener", () => {

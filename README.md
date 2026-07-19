@@ -59,7 +59,8 @@ const activeId = ref<(typeof ids)[number]>("overview");
 ## Workspace
 
 - `packages/core` — zero-dependency geometry, target policy, velocity, elasticity, and controller
-- `packages/vue` — Vue components, composables, accessibility, input ownership, and Motion adapter
+- `packages/vue` — feature-owned Vue APIs with package-internal accessibility, input, and layout
+  capabilities
 - `apps/lab` — media, paged-grid, variable-rail, render-window, and bottom-sheet fixtures
 - `apps/router-fixture` and `apps/nuxt-fixture` — routing, SSR, hydration, and fallback proof
 - `e2e` and `fixture-e2e` — Chromium, Firefox, WebKit, Router, and Nuxt certification
@@ -69,6 +70,7 @@ Run the authoritative gate with `pnpm verify`. It includes source tests, builds,
 package size, actual packed tarball consumers, and browser suites.
 
 Start with [getting started](docs/getting-started.md), then see the [component API](docs/components.md),
-[keyboard contract](docs/keyboard.md), and [package contract](docs/package-contract.md). Automated
+[keyboard contract](docs/keyboard.md), [package architecture](docs/package-architecture.md), and
+[package contract](docs/package-contract.md). Automated
 checks do not establish full accessibility; the unresolved physical test matrix is recorded in
 [production certification](docs/production-certification.md).

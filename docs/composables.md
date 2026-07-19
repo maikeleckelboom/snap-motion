@@ -1,5 +1,9 @@
 # Composables
 
+Import carousel composables from `@snap-motion/vue/carousel`, bottom-sheet composables from
+`@snap-motion/vue/bottom-sheet`, and the lower-level scalar adapter from `@snap-motion/vue/motion`.
+The root entrypoint also re-exports these stable composables.
+
 ## `useCarouselMotion`
 
 This is the DOM-aware headless carousel layer. Supply semantic anchors and bounds, viewport and

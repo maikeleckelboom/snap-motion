@@ -1,67 +1,61 @@
 /**
- * Accessible, interruptible Vue carousel and bottom-sheet primitives.
+ * Accessible, interruptible Vue carousel, dialog, and bottom-sheet primitives.
  *
  * @packageDocumentation
  */
 
-export * from "./components.js";
-export * from "./composables.js";
-
 export {
-  bottomSheetSnapPosition,
-  createViewportBottomSheetSnapPoints,
-  defaultBottomSheetReleasePolicy,
-  defaultBottomSheetViewportPolicy,
-  resolveBottomSheetSnapPoints,
-} from "./bottom-sheet-policy.js";
-export type {
-  BottomSheetMeasureContext,
-  BottomSheetOpenSnapId,
-  BottomSheetReleasePolicy,
-  BottomSheetSnapResolver,
-  BottomSheetSnapPoint,
-  BottomSheetViewportPolicy,
-  ResolvedBottomSheetSnapPoint,
-} from "./bottom-sheet-policy.js";
-export {
+  CarouselActivePosition,
+  CarouselNext,
+  CarouselPagination,
+  CarouselPaginationItem,
+  CarouselPrevious,
+  CarouselProgress,
+  CarouselRoot,
+  CarouselSlide,
+  CarouselStatus,
+  CarouselTrack,
+  CarouselViewport,
   createFixedStageCarouselGeometryStrategy,
   createVariableWidthCenteredCarouselGeometryStrategy,
-} from "./carousel-geometry.js";
+  useCarouselContext,
+  useCarouselMotion,
+  useCarouselWindow,
+} from "./carousel";
 export type {
   CarouselGeometryMeasureContext,
   CarouselGeometryStrategy,
-  FixedStageCarouselGeometryOptions,
-  VariableWidthCenteredCarouselGeometryOptions,
-} from "./carousel-geometry.js";
-export type {
   CarouselKeyboardScope,
-  CloseReason,
-  NavigationReason,
+  CarouselWindowOptions,
+  CarouselWindowState,
+  FixedStageCarouselGeometryOptions,
+  PublicCarouselContext,
   SnapMotionDirection,
-} from "./components/contracts.js";
+  UseCarouselMotionOptions,
+  VariableWidthCenteredCarouselGeometryOptions,
+} from "./carousel";
 export {
-  carouselKeyAction,
-  elementOwnsCarouselKeyboard,
-  elementOwnsSnapMotionDrag,
-  elementOwnsSnapMotionWheel,
-  horizontalWheelDelta,
-  normalizeWheelDelta,
-  resolvePointerIntent,
-} from "./input-policy.js";
-export type { NormalizedWheelDelta, PointerIntent, PointerIntentOptions } from "./input-policy.js";
-export {
-  captureFocusOpener,
-  firstInteractive,
-  focusInitial,
-  focusInside,
-  interactiveElements,
-  maintainModalTabOrder,
-  resolveInitialFocus,
-  restoreFocus,
-} from "./focus.js";
-export type { FocusReturnOptions, InitialFocus } from "./focus.js";
-export { createEnglishSnapMotionMessages } from "./messages.js";
-export type { SnapMotionMessages } from "./messages.js";
-export { createMotionDriver } from "./motion-driver.js";
-export { useReducedMotionPreference } from "./reduced-motion.js";
-export type { ReducedMotionOptions } from "./reduced-motion.js";
+  BottomSheet,
+  BottomSheetSnapPicker,
+  bottomSheetSnapPosition,
+  createViewportBottomSheetSnapPoints,
+  resolveBottomSheetSnapPoints,
+  useBottomSheetMotion,
+} from "./bottom-sheet";
+export type {
+  BottomSheetMeasureContext,
+  BottomSheetOpenSnapId,
+  BottomSheetSnapResolver,
+  BottomSheetSnapPoint,
+  BottomSheetState,
+  BottomSheetViewportPolicy,
+  ResolvedBottomSheetSnapPoint,
+  UseBottomSheetMotionOptions,
+  UseBottomSheetMotionReturn,
+} from "./bottom-sheet";
+export { ModalDialog } from "./dialog";
+export type { CloseReason, FocusReturnOptions, InitialFocus } from "./dialog";
+export { createEnglishSnapMotionMessages } from "./localization";
+export type { SnapMotionMessages } from "./localization";
+export { createMotionDriver, useSnapMotion } from "./motion";
+export type { NavigationReason, PointerIntent, UseSnapMotionOptions } from "./motion";

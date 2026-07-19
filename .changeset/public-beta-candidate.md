@@ -5,4 +5,6 @@
 
 Prepare the framework-neutral controller and Vue interaction components for a private public-beta
 release candidate with explicit keyboard, geometry, direction, localization, pagination, semantic
-window, packaging, and certification contracts.
+window, packaging, and certification contracts. Establish capability-oriented Vue entrypoints,
+curate accidental implementation exports, and ship self-contained declaration rollups for every
+public package path.

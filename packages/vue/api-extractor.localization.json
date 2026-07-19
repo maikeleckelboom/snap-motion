@@ -1,0 +1,6 @@
+{
+  "extends": "./api-extractor.json",
+  "mainEntryPointFilePath": "<projectFolder>/../../temp/declarations/vue/localization/index.d.ts",
+  "apiReport": { "reportFileName": "vue-localization.api.md" },
+  "dtsRollup": { "untrimmedFilePath": "<projectFolder>/dist/localization.d.ts" }
+}

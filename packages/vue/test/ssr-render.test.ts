@@ -2,15 +2,15 @@ import { renderToString } from "@vue/server-renderer";
 import { describe, expect, it } from "vitest";
 import { createSSRApp, h } from "vue";
 
-import BottomSheet from "../src/components/BottomSheet.vue";
-import CarouselNext from "../src/components/CarouselNext.vue";
-import CarouselPrevious from "../src/components/CarouselPrevious.vue";
-import CarouselRoot from "../src/components/CarouselRoot.vue";
-import CarouselSlide from "../src/components/CarouselSlide.vue";
-import CarouselStatus from "../src/components/CarouselStatus.vue";
-import CarouselTrack from "../src/components/CarouselTrack.vue";
-import CarouselViewport from "../src/components/CarouselViewport.vue";
-import ModalDialog from "../src/components/ModalDialog.vue";
+import BottomSheet from "../src/bottom-sheet/components/BottomSheet.vue";
+import CarouselNext from "../src/carousel/components/CarouselNext.vue";
+import CarouselPrevious from "../src/carousel/components/CarouselPrevious.vue";
+import CarouselRoot from "../src/carousel/components/CarouselRoot.vue";
+import CarouselSlide from "../src/carousel/components/CarouselSlide.vue";
+import CarouselStatus from "../src/carousel/components/CarouselStatus.vue";
+import CarouselTrack from "../src/carousel/components/CarouselTrack.vue";
+import CarouselViewport from "../src/carousel/components/CarouselViewport.vue";
+import ModalDialog from "../src/dialog/components/ModalDialog.vue";
 
 function carousel(activeId: string, label: string) {
   return h(

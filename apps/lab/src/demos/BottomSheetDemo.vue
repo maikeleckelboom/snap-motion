@@ -1,12 +1,11 @@
 <script setup lang="ts">
+import { useBottomSheetMotion, type BottomSheetOpenSnapId } from "@snap-motion/vue/bottom-sheet";
 import {
   captureFocusOpener,
   focusInitial,
   maintainModalTabOrder,
   restoreFocus,
-  useBottomSheetMotion,
-  type BottomSheetOpenSnapId,
-} from "@snap-motion/vue";
+} from "@snap-motion/vue/dialog";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";

@@ -1,17 +1,33 @@
+import { readFile } from "node:fs/promises";
+
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    {
+      name: "snap-motion-structural-style",
+      async generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "style.css",
+          source: await readFile(new URL("./src/style.css", import.meta.url), "utf8"),
+        });
+      },
+    },
+  ],
   build: {
     emptyOutDir: false,
     lib: {
       cssFileName: "style",
       entry: {
-        components: "src/components.ts",
-        composables: "src/composables.ts",
+        "bottom-sheet": "src/bottom-sheet/index.ts",
+        carousel: "src/carousel/index.ts",
+        dialog: "src/dialog/index.ts",
         index: "src/index.ts",
-        styleEntry: "src/style-entry.ts",
+        localization: "src/localization/index.ts",
+        motion: "src/motion/index.ts",
       },
       formats: ["es"],
     },

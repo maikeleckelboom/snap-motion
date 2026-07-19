@@ -8,22 +8,20 @@ export type {
   AnimationDriver,
   AnimationPlaybackControls,
   ScalarAnimationRequest,
-} from "./animation-driver.js";
+} from "./animation-driver";
 export {
-  assertFiniteNumber,
-  assertNonNegative,
   clampToBounds,
   createBounds,
   getTrackBounds,
   isWithinBounds,
   normalizeBounds,
-} from "./bounds.js";
+} from "./bounds";
 export {
   calculateFixedCellSize,
   createFixedStageGeometry,
   createPagedGridGeometry,
   createVariableWidthGeometry,
-} from "./carousel-geometry.js";
+} from "./carousel-geometry";
 export type {
   CarouselGeometry,
   FixedStageGeometry,
@@ -32,15 +30,10 @@ export type {
   PagedGridGeometryOptions,
   PagedGridPageContext,
   VariableWidthGeometryOptions,
-} from "./carousel-geometry.js";
-export { SnapController } from "./controller.js";
-export type { ControllerListener, SnapControllerOptions } from "./controller.js";
-export {
-  applyElasticity,
-  createSymmetricElasticity,
-  nonlinearElasticDistance,
-  validateElasticityOptions,
-} from "./elastic.js";
+} from "./carousel-geometry";
+export { SnapController } from "./controller";
+export type { ControllerListener, SnapControllerOptions } from "./controller";
+export { applyElasticity, createSymmetricElasticity, nonlinearElasticDistance } from "./elastic";
 export {
   balancedPreset,
   DEFAULT_MOTION_PRESET,
@@ -48,8 +41,8 @@ export {
   loosePreset,
   MOTION_PRESETS,
   tightPreset,
-} from "./presets.js";
-export { projectPosition } from "./projection.js";
+} from "./presets";
+export { projectPosition } from "./projection";
 export {
   clampAnchorsToBounds,
   directionalAnchor,
@@ -58,13 +51,12 @@ export {
   resolveProgrammaticTarget,
   resolveReleaseTarget,
   sortAnchors,
-  validateReleaseTargetPolicy,
-} from "./snap-targets.js";
+} from "./snap-targets";
 export type {
   NearestAnchorOptions,
   ProgrammaticTargetInput,
   ReleaseTargetInput,
-} from "./snap-targets.js";
+} from "./snap-targets";
 export type {
   ControllerConfiguration,
   ControllerConfigurationUpdate,
@@ -83,6 +75,6 @@ export type {
   SnapAnchor,
   SnapDirection,
   SpringConfiguration,
-} from "./types.js";
-export { VelocityTracker } from "./velocity.js";
-export type { VelocitySample, VelocityTrackerOptions } from "./velocity.js";
+} from "./types";
+export { VelocityTracker } from "./velocity";
+export type { VelocitySample, VelocityTrackerOptions } from "./velocity";

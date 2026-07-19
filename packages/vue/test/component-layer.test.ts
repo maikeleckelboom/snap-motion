@@ -2,13 +2,13 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import { h, nextTick } from "vue";
 
-import CarouselNext from "../src/components/CarouselNext.vue";
-import CarouselPrevious from "../src/components/CarouselPrevious.vue";
-import CarouselRoot from "../src/components/CarouselRoot.vue";
-import CarouselSlide from "../src/components/CarouselSlide.vue";
-import CarouselStatus from "../src/components/CarouselStatus.vue";
-import CarouselTrack from "../src/components/CarouselTrack.vue";
-import CarouselViewport from "../src/components/CarouselViewport.vue";
+import CarouselNext from "../src/carousel/components/CarouselNext.vue";
+import CarouselPrevious from "../src/carousel/components/CarouselPrevious.vue";
+import CarouselRoot from "../src/carousel/components/CarouselRoot.vue";
+import CarouselSlide from "../src/carousel/components/CarouselSlide.vue";
+import CarouselStatus from "../src/carousel/components/CarouselStatus.vue";
+import CarouselTrack from "../src/carousel/components/CarouselTrack.vue";
+import CarouselViewport from "../src/carousel/components/CarouselViewport.vue";
 
 describe("production carousel components", () => {
   it("owns the APG boundary, native controls, slide groups, inertness, and settled status", async () => {

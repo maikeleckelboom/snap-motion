@@ -34,7 +34,7 @@
     }
   },
   "scripts": {
-    "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json --declaration --emitDeclarationOnly && vite build",
+    "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json --declaration --emitDeclarationOnly && vite build && node ../../scripts/run-api-extractor.mjs --mode=rollup --package=core",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },

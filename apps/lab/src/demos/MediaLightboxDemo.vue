@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { createFixedStageGeometry } from "@snap-motion/core";
+import { useCarouselMotion } from "@snap-motion/vue/carousel";
 import {
   captureFocusOpener,
   focusInitial,
   maintainModalTabOrder,
   restoreFocus,
-  useCarouselMotion,
-} from "@snap-motion/vue";
+} from "@snap-motion/vue/dialog";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";

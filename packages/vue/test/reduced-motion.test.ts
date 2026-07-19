@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
 
-import { useReducedMotionPreference } from "../src/reduced-motion";
+import { useReducedMotionPreference } from "../src/motion/reduced-motion";
 
 describe("reduced-motion preference", () => {
   it("reacts to media-query changes and supports a deterministic override", async () => {

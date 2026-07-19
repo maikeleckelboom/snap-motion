@@ -1,4 +1,4 @@
-import type { ScalarBounds } from "./types.js";
+import type { ScalarBounds } from "./types";
 
 export function assertFiniteNumber(value: number, name: string): void {
   if (!Number.isFinite(value)) {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ref } from "vue";
 
-import { useCarouselWindow } from "../src/carousel-window";
+import { useCarouselWindow } from "../src/carousel/carousel-window";
 
 describe("useCarouselWindow", () => {
   it("keeps route-provided active IDs mounted with deterministic semantic windows", () => {

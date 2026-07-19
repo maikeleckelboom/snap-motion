@@ -1,15 +1,19 @@
 import { SnapController, createFixedStageGeometry, type AnimationDriver } from "@snap-motion/core";
+import { bottomSheetSnapPosition, type BottomSheetSnapPoint } from "@snap-motion/vue/bottom-sheet";
 import {
+  CarouselPaginationItem,
   CarouselRoot,
-  bottomSheetSnapPosition,
-  createEnglishSnapMotionMessages,
   createFixedStageCarouselGeometryStrategy,
   useCarouselWindow,
-  type BottomSheetSnapPoint,
+  useCarouselContext,
+  useCarouselMotion,
+} from "@snap-motion/vue/carousel";
+import { ModalDialog, type CloseReason } from "@snap-motion/vue/dialog";
+import {
+  createEnglishSnapMotionMessages,
   type SnapMotionMessages,
-} from "@snap-motion/vue";
-import { CarouselPaginationItem } from "@snap-motion/vue/components";
-import { useCarouselContext, useCarouselMotion } from "@snap-motion/vue/composables";
+} from "@snap-motion/vue/localization";
+import { createMotionDriver, useSnapMotion } from "@snap-motion/vue/motion";
 import { h, ref } from "vue";
 
 type MediaId = "overview" | "system" | "outcome";
@@ -42,6 +46,7 @@ void messages;
 void createFixedStageCarouselGeometryStrategy<MediaId>();
 void h(CarouselRoot<MediaId>, { activeId: "overview", ids });
 void h(CarouselPaginationItem<MediaId>, { id: "system" });
+void h(ModalDialog, { open: false });
 void useCarouselWindow(ids, ref<MediaId>("overview"), {
   mountBefore: 1,
   mountAfter: 1,
@@ -50,6 +55,10 @@ void useCarouselWindow(ids, ref<MediaId>("overview"), {
 });
 void useCarouselContext<MediaId>;
 void useCarouselMotion<MediaId>;
+void useSnapMotion<MediaId>;
+void createMotionDriver;
+const closeReason: CloseReason = "programmatic";
+void closeReason;
 
 // @ts-expect-error Semantic IDs are strings.
 createFixedStageGeometry({ itemIds: [1, 2], viewportSize: 800 });

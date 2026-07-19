@@ -22,7 +22,7 @@ import {
   CarouselSlide,
   CarouselTrack,
   CarouselViewport,
-} from "@snap-motion/vue";
+} from "@snap-motion/vue/carousel";
 import { ref } from "vue";
 
 const ids = ["a", "b", "c"] as const;

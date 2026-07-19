@@ -1,29 +1,35 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const componentsDirectory = resolve(process.cwd(), "dist/components");
+const declarationsRoot = resolve(process.cwd(), "../../temp/declarations/vue");
 
-for (const file of await readdir(componentsDirectory)) {
-  if (!file.endsWith(".vue.d.ts")) continue;
-
-  const nodeDeclaration = file.replace(/\.vue\.d\.ts$/, ".d.vue.ts");
-  const declarationPath = resolve(componentsDirectory, file);
-  const source = await readFile(declarationPath, "utf8");
-  const compatibleSource = source.replace(
-    /(import\("vue"\)\.DefineComponent<[^\r\n]+), any>;/g,
-    "$1>;",
-  );
-  await writeFile(declarationPath, compatibleSource);
-  await writeFile(resolve(componentsDirectory, nodeDeclaration), compatibleSource);
+async function declarationFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  return (
+    await Promise.all(
+      entries.map((entry) => {
+        const path = resolve(directory, entry.name);
+        return entry.isDirectory() ? declarationFiles(path) : [path];
+      }),
+    )
+  ).flat();
 }
 
-for (const file of await readdir(resolve(process.cwd(), "dist"))) {
-  if (!file.endsWith(".d.ts")) continue;
-  const declarationPath = resolve(process.cwd(), "dist", file);
+for (const declarationPath of await declarationFiles(declarationsRoot)) {
+  if (!declarationPath.endsWith(".d.ts")) continue;
+
   const source = await readFile(declarationPath, "utf8");
-  const compatibleSource = source.replace(
-    /import\("vue"\)\.ShallowRef<ControllerSnapshot<Id>, ControllerSnapshot<Id>>/g,
-    'import("vue").ShallowRef<ControllerSnapshot<Id>>',
-  );
+  const compatibleSource = source
+    .replace(/(import\("vue"\)\.DefineComponent<[^\r\n]+), any>;/g, "$1>;")
+    .replace(
+      /import\("vue"\)\.ShallowRef<ControllerSnapshot<Id>, ControllerSnapshot<Id>>/g,
+      'import("vue").ShallowRef<ControllerSnapshot<Id>>',
+    );
+
   if (compatibleSource !== source) await writeFile(declarationPath, compatibleSource);
+
+  if (declarationPath.endsWith(".vue.d.ts")) {
+    const nodeDeclarationPath = declarationPath.replace(/\.vue\.d\.ts$/, ".d.vue.ts");
+    await writeFile(nodeDeclarationPath, compatibleSource);
+  }
 }

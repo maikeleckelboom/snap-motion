@@ -1,7 +1,8 @@
 # Components
 
-All components are available from `@snap-motion/vue` and `@snap-motion/vue/components`. Components
-are semantic and style-light; application markup inside slides remains consumer-owned.
+All components are available from `@snap-motion/vue`. Capability imports use
+`@snap-motion/vue/carousel`, `@snap-motion/vue/bottom-sheet`, or `@snap-motion/vue/dialog`.
+Components are semantic and style-light; application markup inside slides remains consumer-owned.
 
 ## Modal lightbox
 

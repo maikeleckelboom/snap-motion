@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import { carouselKeyAction, elementOwnsCarouselKeyboard } from "../src/carousel/carousel-keyboard";
 import {
-  carouselKeyAction,
-  elementOwnsCarouselKeyboard,
-  elementOwnsSnapMotionDrag,
   elementOwnsSnapMotionWheel,
   horizontalWheelDelta,
-  isSupportedPrimaryPointerStart,
   normalizeWheelDelta,
+} from "../src/carousel/carousel-wheel-policy";
+import {
+  elementOwnsSnapMotionDrag,
+  isSupportedPrimaryPointerStart,
   resolvePointerIntent,
-} from "../src/input-policy";
+} from "../src/internal/input/pointer-policy";
 
 describe("browser input policy", () => {
   it("accepts only primary pointers and the left mouse button", () => {

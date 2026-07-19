@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
 
-import { useRemeasurement } from "../src/remeasurement";
+import { useRemeasurement } from "../src/internal/layout/remeasurement";
 
 describe("remeasurement lifecycle", () => {
   it("observes element, window, and visual viewport resize and cleans up", async () => {

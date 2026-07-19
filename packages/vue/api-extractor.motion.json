@@ -1,0 +1,6 @@
+{
+  "extends": "./api-extractor.json",
+  "mainEntryPointFilePath": "<projectFolder>/../../temp/declarations/vue/motion/index.d.ts",
+  "apiReport": { "reportFileName": "vue-motion.api.md" },
+  "dtsRollup": { "untrimmedFilePath": "<projectFolder>/dist/motion.d.ts" }
+}

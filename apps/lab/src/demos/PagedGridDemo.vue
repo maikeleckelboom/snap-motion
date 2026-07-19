@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { createPagedGridGeometry } from "@snap-motion/core";
-import { useCarouselMotion } from "@snap-motion/vue";
+import { useCarouselMotion } from "@snap-motion/vue/carousel";
 import { computed, nextTick, ref, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";

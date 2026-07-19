@@ -45,6 +45,31 @@ physical spring parameters. It reports every scalar update and can be stopped im
 Motion does not measure layout, choose targets, own semantic active IDs, clamp carousel bounds, or
 replace the Pointer Event policy.
 
+## Vue feature ownership
+
+`packages/vue/src` is organized by supported capability rather than implementation form:
+
+- `carousel` owns carousel components, context, contracts, geometry, keyboard and wheel policy,
+  render windows, and carousel composables.
+- `bottom-sheet` owns sheet components, context, semantic snap policy, state contracts, and the
+  sheet composable.
+- `dialog` owns the native modal component, close contract, and the deliberately public headless
+  focus-policy facade.
+- `motion` owns the Vue adapter over `SnapController`, the Motion driver, semantic navigation
+  reasons, and reduced-motion integration.
+- `localization` owns the shared message contract and English defaults.
+- `internal/accessibility`, `internal/input`, and `internal/layout` own non-public focus traversal,
+  pointer capture/intent, and remeasurement mechanics.
+
+Components may depend on their feature, `motion`, `localization`, and precise internal capabilities.
+The bottom sheet may use the dialog close contract. Internal capabilities never depend on finished
+features; feature internals do not cross-import one another. Application and fixture code consumes
+package entrypoints, never source paths. `pnpm architecture:check` enforces these directions, rejects
+cycles and wildcard entrypoint exports, and enforces extensionless TypeScript-relative imports.
+
+Feature `index.ts` files are public boundaries. Internal modules use concrete imports rather than
+feature barrels so dependency direction stays visible.
+
 ## One source of rendered truth
 
 Each interaction surface has exactly one authoritative scalar position. The track or sheet transform
@@ -76,3 +101,9 @@ could not load TypeScript 7's removed `./lib/tsc` package subpath. TypeScript 6.
 newest mutually compatible stable combination. Current type-aware Oxlint requires TypeScript 7,
 so ordinary Oxlint is enabled and type checking remains an explicit vue-tsc/tsc gate. Type-aware
 linting should be reconsidered when a stable vue-tsc release supports TypeScript 7.
+
+JavaScript remains bundled ESM. TypeScript and Vue declarations are first emitted to a temporary
+graph and then rolled up by API Extractor for every export-map entrypoint. This permits extensionless
+source imports without publishing extensionless Node-resolution edges. A temporary Vue declaration
+normalization step remains before rollup for minimum-Vue SFC generic compatibility; only the
+self-contained rollups ship.

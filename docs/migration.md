@@ -1,5 +1,11 @@
 # Migration to the beta contract
 
+- Replace `@snap-motion/vue/components` and `@snap-motion/vue/composables` with the root or the
+  capability subpaths `carousel`, `bottom-sheet`, `dialog`, `motion`, and `localization`.
+- Import custom native-dialog focus policy from `@snap-motion/vue/dialog`; DOM inspection, input
+  ownership, wheel normalization, reduced-motion wrappers, and default policy constants are no
+  longer public implementation API.
+
 - Import structural CSS once from `@snap-motion/vue/style.css`.
 - Replace numeric indices with stable string IDs.
 - Treat `requestActiveId` as the controlled-state request and `settled` as physical completion.

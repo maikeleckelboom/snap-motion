@@ -1,4 +1,4 @@
-import type { SpringConfiguration } from "./types.js";
+import type { SpringConfiguration } from "./types";
 
 export interface ScalarAnimationRequest {
   readonly from: number;

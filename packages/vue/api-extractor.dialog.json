@@ -1,0 +1,6 @@
+{
+  "extends": "./api-extractor.json",
+  "mainEntryPointFilePath": "<projectFolder>/../../temp/declarations/vue/dialog/index.d.ts",
+  "apiReport": { "reportFileName": "vue-dialog.api.md" },
+  "dtsRollup": { "untrimmedFilePath": "<projectFolder>/dist/dialog.d.ts" }
+}
