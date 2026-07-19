@@ -55,6 +55,41 @@ describe("SnapController", () => {
     expect(controller.position).toBeLessThan(40);
   });
 
+  it("bounds rendered dragging to the configured semantic release window", () => {
+    const { controller } = createController({
+      initialTargetId: "b",
+      releasePolicy: { maxAnchorSkip: 1 },
+    });
+
+    controller.beginDrag();
+    controller.dragTo(-10_000);
+    expect(controller.position).toBe(-200);
+    controller.dragTo(10_000);
+    expect(controller.position).toBeGreaterThan(0);
+    expect(controller.position).toBeLessThan(10_000);
+
+    const { controller: lockedController } = createController({
+      initialTargetId: "b",
+      releasePolicy: { maxAnchorSkip: 0 },
+    });
+    lockedController.beginDrag();
+    lockedController.dragTo(-10_000);
+    expect(lockedController.position).toBe(-100);
+    lockedController.dragTo(10_000);
+    expect(lockedController.position).toBe(-100);
+  });
+
+  it("retains elasticity only at the physical gallery boundary", () => {
+    const { controller } = createController({ releasePolicy: { maxAnchorSkip: 1 } });
+
+    controller.beginDrag();
+    controller.dragTo(10_000);
+    expect(controller.position).toBeGreaterThan(0);
+    expect(controller.position).toBeLessThan(10_000);
+    controller.dragTo(-10_000);
+    expect(controller.position).toBe(-100);
+  });
+
   it("selects a release target and passes measured px/s velocity to the driver", () => {
     const onComplete = vi.fn<NonNullable<SnapControllerOptions<TestId>["onComplete"]>>();
     const { controller, driver } = createController({ onComplete });
