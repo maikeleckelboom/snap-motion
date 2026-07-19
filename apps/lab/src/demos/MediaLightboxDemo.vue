@@ -7,7 +7,7 @@ import {
   maintainModalTabOrder,
   restoreFocus,
 } from "@snap-motion/vue/dialog";
-import { useElementSize, useTimeoutFn } from "@vueuse/core";
+import { until, useElementSize, useImage, useTimeoutFn } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
@@ -18,6 +18,10 @@ import {
 } from "@/fixtures/lab-settings";
 import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 import { mediaFixtures, type MediaFixture, type MediaFixtureId } from "@/fixtures/media";
+import type { MediaSize } from "@/media-inspection/media-transform-contracts";
+import { runMediaTransition, supportsMediaTransition } from "@/media-inspection/media-transition";
+import MediaZoomControls from "@/media-inspection/MediaZoomControls.vue";
+import { useMediaTransform } from "@/media-inspection/use-media-transform";
 
 type MediaLoadState = "pending" | "loaded" | "failed";
 
@@ -37,16 +41,30 @@ const track = ref<HTMLElement>();
 const delayedSourceReady = ref(false);
 const mediaLoadGeneration = ref(0);
 const mediaLoadStates = ref<Record<MediaFixtureId, MediaLoadState>>(createMediaLoadStates());
+const mediaIntrinsicSizes = ref<Partial<Record<MediaFixtureId, MediaSize>>>({});
 const fixtureMode = ref<"all" | "one">("all");
 const directionMode = ref<"ltr" | "rtl">("ltr");
+const transitionMotionEnabled = ref(true);
+const isTransitioning = ref(false);
 const liveMessage = ref("");
 const titleId = `media-lightbox-title-${useId()}`;
 const isOpen = ref(false);
 const reducedOverride = computed(() => props.reducedMotionOverride);
 const direction = computed(() => directionMode.value);
 const { height: renderedStageHeight, width: renderedStageWidth } = useElementSize(viewport);
+const thumbnailElements = new Map<MediaFixtureId, HTMLElement>();
+const mediaTransformElements = new Map<MediaFixtureId, HTMLElement>();
+const mediaPreloads = new Map(
+  mediaFixtures.map((fixture) => [
+    fixture.id,
+    useImage({ decoding: "async", src: fixture.src }, { immediate: false, resetOnExecute: false }),
+  ]),
+);
+const transitionSupported = supportsMediaTransition(globalThis.document);
 let storedOpener: HTMLElement | undefined;
+let openedFromThumbnailId: MediaFixtureId | undefined;
 let focusRestoreFrame: number | undefined;
+let closeRequestedDuringTransition = false;
 
 const { start: startDelayedSourceTimer, stop: stopDelayedSourceTimer } = useTimeoutFn(
   () => {
@@ -74,7 +92,10 @@ const initialGeometry = createFixedStageGeometry({
 
 function measureGeometry() {
   return createFixedStageGeometry({
-    viewportSize: Math.max(1, viewport.value?.clientWidth ?? props.stageWidth),
+    viewportSize: Math.max(
+      1,
+      track.value?.getBoundingClientRect().width ?? viewport.value?.clientWidth ?? props.stageWidth,
+    ),
     itemIds: fixtureIds.value,
   });
 }
@@ -105,6 +126,16 @@ const activeIndex = computed(() => {
 const activeFixture = computed(
   () => visibleFixtures.value[activeIndex.value] ?? visibleFixtures.value[0],
 );
+const activeIntrinsicSize = computed<MediaSize>(() => {
+  const fixture = activeFixture.value;
+  return fixture
+    ? (mediaIntrinsicSizes.value[fixture.id] ?? { height: 0, width: 0 })
+    : { height: 0, width: 0 };
+});
+const activeMediaReady = computed(() => {
+  const fixture = activeFixture.value;
+  return fixture !== undefined && fixtureLoadState(fixture) === "loaded";
+});
 const stageStyle = computed(() => ({
   "--lab-stage-width": `${props.stageWidth}px`,
 }));
@@ -126,6 +157,13 @@ const diagnostics = computed<LabDiagnostics>(() => {
   };
 });
 
+const mediaTransform = useMediaTransform({
+  enabled: activeMediaReady,
+  intrinsicSize: activeIntrinsicSize,
+  reducedMotion: computed(() => motion.reducedMotion.value),
+  surface: viewport,
+});
+
 function announceCurrent() {
   const fixture = activeFixture.value;
   if (fixture) {
@@ -136,6 +174,7 @@ function announceCurrent() {
 function resetMediaLoading() {
   mediaLoadGeneration.value += 1;
   mediaLoadStates.value = createMediaLoadStates();
+  mediaIntrinsicSizes.value = {};
   delayedSourceReady.value = false;
 }
 
@@ -180,6 +219,10 @@ async function onMediaLoad(fixture: MediaFixture, event: Event) {
     return;
   }
 
+  mediaIntrinsicSizes.value = {
+    ...mediaIntrinsicSizes.value,
+    [fixture.id]: { height: image.naturalHeight, width: image.naturalWidth },
+  };
   setMediaLoadState(fixture, "loaded");
   await nextTick();
   motion.remeasure();
@@ -201,47 +244,166 @@ function next() {
 }
 
 function onViewportKeyDown(event: KeyboardEvent) {
+  if (mediaTransform.onKeyDown(event)) return;
   motion.onKeyDown(event);
+}
+
+function onViewportPointerDown(event: PointerEvent) {
+  if (mediaTransform.onPointerDown(event)) return;
+  motion.onPointerDown(event);
+}
+
+function onViewportWheel(event: WheelEvent) {
+  if (mediaTransform.onWheel(event)) return;
+  motion.onWheel(event);
 }
 
 function onDialogKeyDown(event: KeyboardEvent) {
   maintainModalTabOrder(event, dialog.value);
+  if (event.defaultPrevented) return;
   if (event.key === "ArrowLeft" || event.key === "ArrowRight") motion.onKeyDown(event);
 }
 
-async function openLightbox() {
+function setThumbnailElement(fixtureId: MediaFixtureId, element: HTMLElement | null) {
+  if (element) thumbnailElements.set(fixtureId, element);
+  else thumbnailElements.delete(fixtureId);
+}
+
+function setMediaTransformElement(fixtureId: MediaFixtureId, element: HTMLElement | null) {
+  if (element) mediaTransformElements.set(fixtureId, element);
+  else mediaTransformElements.delete(fixtureId);
+}
+
+async function preloadMediaForTransition(fixture: MediaFixture): Promise<boolean> {
+  const preload = mediaPreloads.get(fixture.id);
+  if (!preload) return false;
+
+  const image = await preload.execute();
+  if (!image) return false;
+
+  try {
+    await image.decode();
+  } catch {
+    return false;
+  }
+
+  return image.complete && image.naturalWidth > 0 && image.naturalHeight > 0;
+}
+
+function selectFixtureImmediately(fixtureId: MediaFixtureId) {
+  const anchor = motion.snapshot.value.anchors.find(({ id }) => id === fixtureId);
+  if (!anchor || semanticId.value === fixtureId) return;
+  motion.interrupt();
+  motion.controller.beginDrag();
+  motion.controller.dragTo(anchor.position);
+  motion.controller.release(0);
+}
+
+async function openLightbox(fixtureId?: MediaFixtureId) {
   const target = dialog.value;
-  if (!target || target.open) {
+  if (!target || target.open || isTransitioning.value) {
     return;
   }
 
-  storedOpener = opener.value ?? captureFocusOpener(document);
-  resetMediaLoading();
-  target.showModal();
-  isOpen.value = true;
-  startDelayedSourceTimer();
+  const thumbnailOpener = fixtureId ? thumbnailElements.get(fixtureId) : undefined;
+  const transitionSource =
+    thumbnailOpener?.querySelector<HTMLElement>(".media-thumbnail-visual") ?? undefined;
+  const fixture = fixtureId ? mediaFixtures.find(({ id }) => id === fixtureId) : undefined;
+  storedOpener = thumbnailOpener ?? opener.value ?? captureFocusOpener(document);
+  openedFromThumbnailId = fixtureId;
+  if (fixtureId) selectFixtureImmediately(fixtureId);
+  isTransitioning.value = true;
 
-  await nextTick();
-  motion.remeasure();
-  focusInitial("close", { close: closeButton.value, container: target });
-  announceCurrent();
+  try {
+    const openingMotionReady =
+      transitionMotionEnabled.value &&
+      transitionSupported &&
+      !motion.reducedMotion.value &&
+      fixture !== undefined &&
+      fixture.mode !== "delayed" &&
+      (await preloadMediaForTransition(fixture));
+    let destinationReady = false;
+
+    resetMediaLoading();
+    mediaTransform.reset({ animated: false });
+    await runMediaTransition({
+      destination: () =>
+        destinationReady
+          ? mediaTransformElements.get(fixtureId ?? semanticId.value ?? "regular")
+          : undefined,
+      document: target.ownerDocument,
+      enabled: openingMotionReady,
+      reducedMotion: motion.reducedMotion.value,
+      source: transitionSource,
+      update: async () => {
+        target.showModal();
+        isOpen.value = true;
+        startDelayedSourceTimer();
+        await nextTick();
+        if (fixtureId) selectFixtureImmediately(fixtureId);
+        if (openingMotionReady && fixture) {
+          await until(() => fixtureLoadState(fixture)).toMatch((state) => state !== "pending", {
+            timeout: 4_000,
+          });
+          destinationReady = fixtureLoadState(fixture) === "loaded";
+        }
+        motion.remeasure();
+        focusInitial("close", { close: closeButton.value, container: target });
+        announceCurrent();
+      },
+    });
+  } finally {
+    isTransitioning.value = false;
+    if (closeRequestedDuringTransition && target.open) {
+      closeRequestedDuringTransition = false;
+      await closeLightbox();
+    }
+  }
 }
 
-function closeLightbox() {
+async function closeLightbox() {
+  const target = dialog.value;
+  if (!target?.open) return;
+  if (isTransitioning.value) {
+    closeRequestedDuringTransition = true;
+    return;
+  }
   motion.interrupt();
-  if (dialog.value?.open) {
-    dialog.value.close();
+  mediaTransform.reset({ animated: false });
+  const activeId = semanticId.value;
+  const canReturnToThumbnail =
+    openedFromThumbnailId !== undefined && openedFromThumbnailId === activeId;
+  const source = canReturnToThumbnail ? mediaTransformElements.get(activeId) : undefined;
+  isTransitioning.value = true;
+
+  try {
+    await runMediaTransition({
+      destination: () =>
+        canReturnToThumbnail
+          ? (thumbnailElements
+              .get(activeId)
+              ?.querySelector<HTMLElement>(".media-thumbnail-visual") ?? undefined)
+          : undefined,
+      document: target.ownerDocument,
+      enabled: transitionMotionEnabled.value && canReturnToThumbnail,
+      reducedMotion: motion.reducedMotion.value,
+      source,
+      update: () => target.close(),
+    });
+  } finally {
+    isTransitioning.value = false;
   }
 }
 
 function onCancel(event: Event) {
   event.preventDefault();
-  closeLightbox();
+  void closeLightbox();
 }
 
 function onDialogClose() {
   isOpen.value = false;
   mediaLoadGeneration.value += 1;
+  mediaTransform.reset({ animated: false });
   stopDelayedSourceTimer();
   const openerToRestore = storedOpener;
   storedOpener = undefined;
@@ -258,10 +420,13 @@ function onDialogSurfaceClick(event: MouseEvent) {
 }
 
 watch(fixtureMode, async () => {
+  mediaTransform.reset({ animated: false });
   await nextTick();
   motion.remeasure();
   announceCurrent();
 });
+
+watch(semanticId, () => mediaTransform.reset({ animated: false }));
 
 watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
   if (phase === "idle" && activeId !== undefined && activeId !== previousId) {
@@ -298,7 +463,7 @@ onBeforeUnmount(() => {
         class="open-button"
         data-testid="open-lightbox"
         type="button"
-        @click="openLightbox"
+        @click="openLightbox()"
       >
         Open lightbox
       </button>
@@ -320,11 +485,38 @@ onBeforeUnmount(() => {
       </select>
     </label>
 
-    <div class="fixture-index" aria-label="Included media fixtures">
-      <span v-for="(fixture, index) in visibleFixtures" :key="fixture.id">
-        <strong class="tabular">{{ String(index + 1).padStart(2, "0") }}</strong>
-        {{ fixture.title }}
+    <label class="transition-option">
+      <input
+        v-model="transitionMotionEnabled"
+        data-testid="media-transition-toggle"
+        :disabled="!transitionSupported"
+        type="checkbox"
+      />
+      <span>
+        Thumbnail opening motion
+        <small>{{ transitionSupported ? "View Transition" : "Unavailable in this browser" }}</small>
       </span>
+    </label>
+
+    <div class="fixture-index" aria-label="Included media fixtures">
+      <button
+        v-for="(fixture, index) in visibleFixtures"
+        :key="fixture.id"
+        :ref="(element) => setThumbnailElement(fixture.id, element as HTMLElement | null)"
+        :aria-label="`Open ${fixture.title} in the media lightbox`"
+        class="fixture-thumbnail"
+        :data-testid="`media-thumbnail-${fixture.id}`"
+        type="button"
+        @click="openLightbox(fixture.id)"
+      >
+        <span class="media-thumbnail-visual">
+          <img :src="fixture.src" alt="" aria-hidden="true" draggable="false" />
+        </span>
+        <span class="fixture-thumbnail-copy">
+          <strong class="tabular">{{ String(index + 1).padStart(2, "0") }}</strong>
+          <span>{{ fixture.title }}</span>
+        </span>
+      </button>
     </div>
 
     <DiagnosticsPanel :diagnostics="diagnostics" />
@@ -387,6 +579,16 @@ onBeforeUnmount(() => {
           <div class="stage-instrument" data-testid="media-stage-instrument">
             <div class="stage-readout">
               <span>Fixed-stage geometry</span>
+              <MediaZoomControls
+                class="stage-zoom-controls"
+                :can-zoom-in="mediaTransform.canZoomIn.value"
+                :can-zoom-out="mediaTransform.canZoomOut.value"
+                :is-panning="mediaTransform.isPanning.value"
+                :scale-percentage="mediaTransform.scalePercentage.value"
+                @reset="mediaTransform.reset()"
+                @zoom-in="mediaTransform.zoomIn"
+                @zoom-out="mediaTransform.zoomOut"
+              />
               <span class="stage-dimensions">
                 <span class="tabular">Target {{ props.stageWidth }} px</span>
                 <span class="tabular" data-testid="media-rendered-size">
@@ -431,11 +633,19 @@ onBeforeUnmount(() => {
                 data-testid="media-carousel"
                 :data-active-id="semanticId"
                 :data-phase="motion.phase.value"
+                :data-transform-state="
+                  mediaTransform.isPanning.value
+                    ? 'panning'
+                    : mediaTransform.isZoomed.value
+                      ? 'zoomed'
+                      : 'fitted'
+                "
                 :style="motion.surfaceStyle"
                 tabindex="0"
+                @dblclick="mediaTransform.onDoubleClick"
                 @keydown="onViewportKeyDown"
-                @pointerdown="motion.onPointerDown"
-                @wheel="motion.onWheel"
+                @pointerdown="onViewportPointerDown"
+                @wheel="onViewportWheel"
               >
                 <div ref="track" class="media-track" dir="ltr" :style="motion.trackStyle.value">
                   <div
@@ -463,21 +673,35 @@ onBeforeUnmount(() => {
                           },
                         ]"
                       >
-                        <img
-                          v-if="isOpen && fixtureSourceReady(fixture)"
-                          :alt="fixtureLoadState(fixture) === 'loaded' ? fixture.description : ''"
-                          :aria-hidden="fixtureLoadState(fixture) !== 'loaded'"
-                          class="media-image"
-                          :data-load-generation="mediaLoadGeneration"
-                          :data-media-state="fixtureLoadState(fixture)"
-                          :data-testid="`media-image-${fixture.id}`"
-                          decoding="async"
-                          draggable="false"
-                          :src="fixture.src"
-                          @dragstart="motion.onNativeDragStart"
-                          @error="onMediaError(fixture, $event)"
-                          @load="onMediaLoad(fixture, $event)"
-                        />
+                        <div
+                          :ref="
+                            (element) =>
+                              setMediaTransformElement(fixture.id, element as HTMLElement | null)
+                          "
+                          class="media-transform-surface"
+                          :data-testid="`media-transform-${fixture.id}`"
+                          :style="
+                            semanticId === fixture.id
+                              ? mediaTransform.transformStyle.value
+                              : undefined
+                          "
+                        >
+                          <img
+                            v-if="isOpen && fixtureSourceReady(fixture)"
+                            :alt="fixtureLoadState(fixture) === 'loaded' ? fixture.description : ''"
+                            :aria-hidden="fixtureLoadState(fixture) !== 'loaded'"
+                            class="media-image"
+                            :data-load-generation="mediaLoadGeneration"
+                            :data-media-state="fixtureLoadState(fixture)"
+                            :data-testid="`media-image-${fixture.id}`"
+                            decoding="async"
+                            draggable="false"
+                            :src="fixture.src"
+                            @dragstart="motion.onNativeDragStart"
+                            @error="onMediaError(fixture, $event)"
+                            @load="onMediaLoad(fixture, $event)"
+                          />
+                        </div>
                         <div
                           v-if="fixtureLoadState(fixture) === 'pending'"
                           class="media-status"
@@ -503,11 +727,36 @@ onBeforeUnmount(() => {
                         </div>
                       </div>
                       <button
+                        aria-label="Inspect details"
                         class="slide-action"
                         :data-testid="`slide-action-${fixture.id}`"
                         type="button"
                       >
-                        Inspect details
+                        <span aria-hidden="true" class="slide-action-wide">Inspect details</span>
+                        <span aria-hidden="true" class="slide-action-compact">Inspect</span>
+                        <svg
+                          aria-hidden="true"
+                          class="slide-action-icon"
+                          viewBox="0 0 24 24"
+                          width="16"
+                          height="16"
+                        >
+                          <circle
+                            cx="12"
+                            cy="12"
+                            r="8"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                          />
+                          <path
+                            d="M12 11v5m0-8v.5"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-linecap="square"
+                            stroke-width="2"
+                          />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -537,7 +786,8 @@ onBeforeUnmount(() => {
                 </svg>
               </button>
               <p id="media-keyboard-help" class="sr-only">
-                Use Left and Right Arrow to move between items. Use Home and End to jump.
+                At fit, use Left and Right Arrow to move between items. When zoomed, Arrow keys pan
+                the media. Use Plus and Minus to zoom, or Zero to return to fit.
               </p>
               <p class="sr-only" aria-atomic="true" role="status">{{ liveMessage }}</p>
             </section>
@@ -658,6 +908,8 @@ onBeforeUnmount(() => {
 .fixture-index {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
   border-block-end: 1px solid var(--line);
 }
 
@@ -678,25 +930,91 @@ onBeforeUnmount(() => {
   background: var(--paper);
 }
 
-.fixture-index span {
+.transition-option {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  gap: 0.7rem;
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.transition-option input {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+.transition-option span {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.1rem;
+}
+
+.transition-option small {
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.fixture-thumbnail {
+  display: grid;
+  gap: 0.65rem;
+  inline-size: 100%;
   min-inline-size: 0;
-  padding: 0 0.8rem 0.8rem;
-  border-inline-end: 1px solid var(--line);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--paper);
   color: var(--muted);
   font-size: 0.7rem;
+  text-align: start;
 }
 
-.fixture-index span:first-child {
-  padding-inline-start: 0;
+.fixture-thumbnail:hover .media-thumbnail-visual {
+  border-color: var(--ink);
 }
 
-.fixture-index span:last-child {
-  border-inline-end: 0;
+.fixture-thumbnail:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
 }
 
-.fixture-index strong {
+.media-thumbnail-visual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  inline-size: 100%;
+  min-inline-size: 0;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 92%, var(--ink));
+  overflow: clip;
+}
+
+.media-thumbnail-visual img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.fixture-thumbnail-copy {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.35rem;
+  min-inline-size: 0;
+  padding: 0 0.65rem 0.8rem;
+}
+
+.fixture-thumbnail-copy strong {
   color: var(--ink);
   font-size: 0.78rem;
 }
@@ -872,9 +1190,9 @@ onBeforeUnmount(() => {
 }
 
 .stage-readout {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
   min-block-size: 2.25rem;
   padding: 0.45rem 0.75rem;
@@ -888,6 +1206,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+  justify-self: end;
   gap: 0.25rem 1rem;
 }
 
@@ -918,9 +1237,18 @@ onBeforeUnmount(() => {
   background: var(--lightbox-surface-raised);
   overflow: clip;
   cursor: grab;
+  container-type: size;
 }
 
 .carousel-viewport[data-phase="dragging"] {
+  cursor: grabbing;
+}
+
+.carousel-viewport[data-transform-state="zoomed"] {
+  cursor: grab;
+}
+
+.carousel-viewport[data-transform-state="panning"] {
   cursor: grabbing;
 }
 
@@ -952,6 +1280,16 @@ onBeforeUnmount(() => {
   overflow: clip;
 }
 
+.media-transform-surface {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  inline-size: 100%;
+  block-size: 100%;
+  pointer-events: none;
+}
+
 .slide-action {
   position: absolute;
   z-index: 1;
@@ -960,6 +1298,50 @@ onBeforeUnmount(() => {
   padding: 0.55rem 0.75rem;
   font-size: 0.8125rem;
   font-weight: 700;
+}
+
+.slide-action-compact {
+  display: none;
+}
+
+.slide-action-icon {
+  display: none;
+}
+
+@container (max-width: 10rem) {
+  .slide-action {
+    padding-inline: 0.55rem;
+  }
+
+  .slide-action-wide {
+    display: none;
+  }
+
+  .slide-action-compact {
+    display: inline;
+  }
+}
+
+@container (max-width: 4rem) or (max-height: 3rem) {
+  .lightbox-dialog .slide-action {
+    display: grid;
+    place-items: center;
+    inset: 0.2rem 0.2rem auto auto;
+    inline-size: 1.5rem;
+    min-inline-size: 1.5rem;
+    block-size: 1.5rem;
+    min-block-size: 1.5rem;
+    padding: 0;
+  }
+
+  .slide-action-wide,
+  .slide-action-compact {
+    display: none;
+  }
+
+  .slide-action-icon {
+    display: block;
+  }
 }
 
 .media-layer {
@@ -1166,11 +1548,17 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
   }
 
-  .fixture-index span {
-    grid-template-columns: 2.5rem 1fr;
-    padding: 0.5rem 0;
-    border-inline-end: 0;
-    border-block-end: 1px solid var(--line);
+  .fixture-thumbnail {
+    grid-template-columns: minmax(6rem, 0.4fr) minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .fixture-thumbnail-copy {
+    padding: 0.75rem;
+  }
+
+  .transition-option {
+    justify-content: start;
   }
 
   .lightbox-header {
@@ -1194,6 +1582,19 @@ onBeforeUnmount(() => {
 
   .stage-instrument {
     inline-size: 100%;
+  }
+
+  .stage-readout {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .stage-readout > span:first-child,
+  .stage-dimensions > span:first-child {
+    display: none;
+  }
+
+  .stage-zoom-controls {
+    justify-self: start;
   }
 
   .carousel-frame {
@@ -1278,6 +1679,33 @@ onBeforeUnmount(() => {
 :global(html:has(.lightbox-dialog[open])),
 :global(html:has(.lightbox-dialog[open]) body) {
   overflow: clip;
+}
+
+:global(::view-transition-group(media-inspection-media)) {
+  z-index: 2147483647;
+  animation-duration: 340ms;
+  animation-timing-function: cubic-bezier(0.22, 0.8, 0.2, 1);
+}
+
+:global(::view-transition-old(root)),
+:global(::view-transition-new(root)) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+:global(::view-transition-old(media-inspection-media)),
+:global(::view-transition-new(media-inspection-media)) {
+  animation-duration: 340ms;
+  animation-timing-function: cubic-bezier(0.22, 0.8, 0.2, 1);
+  object-fit: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(::view-transition-group(media-inspection-media)),
+  :global(::view-transition-old(media-inspection-media)),
+  :global(::view-transition-new(media-inspection-media)) {
+    animation-duration: 0.01ms;
+  }
 }
 
 @media (forced-colors: active) {

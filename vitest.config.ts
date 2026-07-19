@@ -25,6 +25,14 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          name: "lab",
+          environment: "node",
+          include: ["apps/lab/test/**/*.{test,spec}.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
           name: "vue",
           environment: "happy-dom",
           include: ["packages/vue/test/**/*.{test,spec}.ts"],

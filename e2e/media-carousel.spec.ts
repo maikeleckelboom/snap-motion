@@ -76,6 +76,10 @@ test.describe("media lightbox", () => {
       const initialDocumentScrollHeight = await page
         .locator("html")
         .evaluate((element) => element.scrollHeight);
+      expect(
+        await page.locator("html").evaluate((element) => element.scrollWidth - element.clientWidth),
+        `${viewportCase.label}: thumbnail page inline overflow`,
+      ).toBeLessThanOrEqual(1);
       await page.getByTestId("open-lightbox").click();
       await expect(page.getByTestId("media-frame-regular")).toHaveAttribute(
         "data-media-state",
@@ -93,8 +97,8 @@ test.describe("media lightbox", () => {
   test("loads every Vite-owned fixture without native fallback and keeps one semantic stage", async ({
     page,
   }) => {
-    await openLabDemo(page, "media");
     const probe = observeMediaAssets(page);
+    await openLabDemo(page, "media");
     const opener = page.getByTestId("open-lightbox");
     await opener.focus();
     await opener.click();
@@ -125,14 +129,18 @@ test.describe("media lightbox", () => {
   test("renders an accessible media error instead of the browser broken-image fallback", async ({
     page,
   }) => {
-    await openLabDemo(page, "media");
     await page.route("**/regular.svg*", async (route) => {
+      if (new URL(route.request().url()).searchParams.has("import")) {
+        await route.continue();
+        return;
+      }
       await route.fulfill({
         body: "Fixture unavailable",
         contentType: "text/plain",
         status: 404,
       });
     });
+    await openLabDemo(page, "media");
     await page.getByTestId("open-lightbox").click();
 
     const frame = page.getByTestId("media-frame-regular");
@@ -179,6 +187,7 @@ test.describe("media lightbox", () => {
       { locator: page.getByTestId("close-lightbox"), minimumTextContrast: 3 },
       { locator: page.getByTestId("media-previous"), minimumTextContrast: 3 },
       { locator: page.getByTestId("media-next"), minimumTextContrast: 3 },
+      { locator: page.getByTestId("media-zoom-in"), minimumTextContrast: 4.5 },
       { locator: page.getByTestId("slide-action-regular"), minimumTextContrast: 4.5 },
       { locator: page.getByTestId("caption-action"), minimumTextContrast: 4.5 },
       { locator: page.getByTestId("caption-input"), minimumTextContrast: 4.5 },
@@ -337,8 +346,8 @@ test.describe("media lightbox", () => {
             (imageRect.width <= frameRect.width + 1 && imageRect.height <= frameRect.height + 1),
           slideWidths: slides.map((slide) => slide.offsetWidth),
           trackWidth: track.scrollWidth,
-          viewportLeft: viewportRect.left,
-          viewportRight: viewportRect.right,
+          viewportLeft: viewportRect.left + viewport.clientLeft,
+          viewportRight: viewportRect.left + viewport.clientLeft + viewport.clientWidth,
           viewportWidth: viewport.clientWidth,
         };
       }, fixture);
@@ -393,6 +402,148 @@ test.describe("media lightbox", () => {
     await expectCarouselAt(carousel, "delayed");
     await page.setViewportSize({ width: 1_000, height: 720 });
     await expectCarouselAt(carousel, "delayed");
+  });
+
+  test("zooms and bounds media pan without handing the gesture to slide navigation", async ({
+    page,
+  }) => {
+    await openLabDemo(page, "media", "no-preference");
+    await page.getByTestId("open-lightbox").click();
+    await expect(page.getByTestId("media-frame-regular")).toHaveAttribute(
+      "data-media-state",
+      "loaded",
+    );
+
+    const carousel = page.getByTestId("media-carousel");
+    await page.getByTestId("media-zoom-in").click();
+    await page.getByTestId("media-zoom-in").click();
+    await expect(page.getByTestId("media-zoom-value")).toHaveText("200%");
+    await expect(carousel).toHaveAttribute("data-transform-state", "zoomed");
+
+    await dragMouseBy(page, carousel, 500, -250, { steps: 8 });
+    await expectCarouselAt(carousel, "regular");
+
+    const transformSnapshot = await page
+      .getByTestId("media-transform-regular")
+      .evaluate((surface) => {
+        const viewport = surface.closest<HTMLElement>('[data-testid="media-carousel"]');
+        if (!viewport) throw new Error("Media transform is missing its carousel viewport.");
+        const matrix = new DOMMatrixReadOnly(getComputedStyle(surface).transform);
+        return {
+          scale: matrix.a,
+          viewportHeight: viewport.clientHeight,
+          viewportWidth: viewport.clientWidth,
+          x: matrix.e,
+          y: matrix.f,
+        };
+      });
+    expect(transformSnapshot.scale).toBeCloseTo(2, 2);
+    expect(Math.abs(transformSnapshot.x)).toBeLessThanOrEqual(
+      transformSnapshot.viewportWidth / 2 + 1,
+    );
+    expect(Math.abs(transformSnapshot.y)).toBeLessThanOrEqual(
+      transformSnapshot.viewportHeight / 2 + 1,
+    );
+
+    await page.getByTestId("media-next").click();
+    await expectCarouselAt(carousel, "extremely-wide");
+    await expect(page.getByTestId("media-zoom-value")).toHaveText("100%");
+    await expect(carousel).toHaveAttribute("data-transform-state", "fitted");
+
+    await carousel.focus();
+    await page.keyboard.press("+");
+    await expect(page.getByTestId("media-zoom-value")).toHaveText("150%");
+    await page.keyboard.press("ArrowRight");
+    await expectCarouselAt(carousel, "extremely-wide");
+    await page.keyboard.press("0");
+    await expect(page.getByTestId("media-zoom-value")).toHaveText("100%");
+    await expect(carousel).toHaveAttribute("data-transform-state", "fitted");
+    await page.keyboard.press("ArrowRight");
+    await expectCarouselAt(carousel, "extremely-tall");
+  });
+
+  test("optionally relates a selected thumbnail to the same media on open and close", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const browserWindow = window as Window & {
+        mediaTransitionCalls?: number;
+        mediaTransitionDestinationStates?: string[];
+      };
+      browserWindow.mediaTransitionCalls = 0;
+      browserWindow.mediaTransitionDestinationStates = [];
+      Object.defineProperty(document, "startViewTransition", {
+        configurable: true,
+        value(update: () => Promise<void> | void) {
+          browserWindow.mediaTransitionCalls = (browserWindow.mediaTransitionCalls ?? 0) + 1;
+          const finished = Promise.resolve()
+            .then(update)
+            .then(() => {
+              const dialog = document.querySelector<HTMLDialogElement>(
+                '[data-testid="media-lightbox"]',
+              );
+              const activeFrame = dialog?.open
+                ? dialog.querySelector<HTMLElement>(".media-slide:not([inert]) [data-media-state]")
+                : undefined;
+              browserWindow.mediaTransitionDestinationStates?.push(
+                activeFrame?.dataset.mediaState ?? "closed",
+              );
+              return undefined;
+            });
+          return { finished };
+        },
+      });
+    });
+    await openLabDemo(page, "media", "no-preference");
+
+    const thumbnail = page.getByTestId("media-thumbnail-extremely-tall");
+    await thumbnail.focus();
+    await thumbnail.click();
+    await expect(page.getByTestId("media-lightbox")).toBeVisible();
+    await expectCarouselAt(page.getByTestId("media-carousel"), "extremely-tall");
+    await expect(page.getByTestId("media-title")).toHaveText("Extremely tall");
+    await expect(page.getByTestId("media-frame-extremely-tall")).toHaveAttribute(
+      "data-media-state",
+      "loaded",
+    );
+    expect(
+      await page.evaluate(
+        () => (window as Window & { mediaTransitionCalls?: number }).mediaTransitionCalls,
+      ),
+    ).toBe(1);
+    expect(
+      await page.evaluate(
+        () =>
+          (window as Window & { mediaTransitionDestinationStates?: string[] })
+            .mediaTransitionDestinationStates,
+      ),
+    ).toEqual(["loaded"]);
+
+    await page.getByTestId("close-lightbox").click();
+    await expect(page.getByTestId("media-lightbox")).not.toBeVisible();
+    await expect(thumbnail).toBeFocused();
+    expect(
+      await page.evaluate(
+        () => (window as Window & { mediaTransitionCalls?: number }).mediaTransitionCalls,
+      ),
+    ).toBe(2);
+    expect(
+      await page.evaluate(
+        () =>
+          (window as Window & { mediaTransitionDestinationStates?: string[] })
+            .mediaTransitionDestinationStates,
+      ),
+    ).toEqual(["loaded", "closed"]);
+
+    await page.getByTestId("media-transition-toggle").uncheck();
+    await page.getByTestId("media-thumbnail-regular").click();
+    await expect(page.getByTestId("media-lightbox")).toBeVisible();
+    await expectCarouselAt(page.getByTestId("media-carousel"), "regular");
+    expect(
+      await page.evaluate(
+        () => (window as Window & { mediaTransitionCalls?: number }).mediaTransitionCalls,
+      ),
+    ).toBe(2);
   });
 
   test("keeps one-item boundaries stable and retargets an active settle through resize", async ({

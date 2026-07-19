@@ -14,6 +14,7 @@
     "@snap-motion/core": "workspace:*",
     "@snap-motion/vue": "workspace:*",
     "@vueuse/core": "catalog:",
+    "motion": "catalog:",
     "vue": "catalog:"
   },
   "devDependencies": {

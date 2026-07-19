@@ -146,6 +146,9 @@ importers:
       '@vueuse/core':
         specifier: 'catalog:'
         version: 14.3.0(vue@3.5.40(typescript@6.0.3))
+      motion:
+        specifier: 'catalog:'
+        version: 12.42.2
       vue:
         specifier: 'catalog:'
         version: 3.5.40(typescript@6.0.3)

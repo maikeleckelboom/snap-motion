@@ -133,10 +133,14 @@ export async function expectLightboxContainment(
       const caption = requireElement<HTMLElement>('[data-testid="media-caption-rail"]');
       const testRail = requireElement<HTMLElement>('[data-testid="media-test-rail"]');
       const track = requireElement<HTMLElement>(".media-track");
+      const slideAction = requireElement<HTMLElement>('[data-testid="slide-action-regular"]');
+      const zoomControls = requireElement<HTMLElement>('[data-testid="media-zoom-controls"]');
       const slides = Array.from(dialog.querySelectorAll<HTMLElement>(".media-slide"));
       const dialogRect = dialog.getBoundingClientRect();
       const workspaceRect = workspace.getBoundingClientRect();
       const viewportRect = viewport.getBoundingClientRect();
+      const slideActionRect = slideAction.getBoundingClientRect();
+      const zoomControlsRect = zoomControls.getBoundingClientRect();
 
       // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper must serialize with the browser evaluation callback.
       const isInside = (element: HTMLElement, containerRect: DOMRect, tolerance = 1) => {
@@ -168,6 +172,14 @@ export async function expectLightboxContainment(
       return {
         captionVisible: isInside(caption, dialogRect),
         closeVisible: isInside(close, dialogRect),
+        slideActionVisible: isInside(slideAction, viewportRect),
+        zoomControlsVisible: isInside(zoomControls, dialogRect),
+        controlOverlap: !(
+          slideActionRect.right <= zoomControlsRect.left ||
+          slideActionRect.left >= zoomControlsRect.right ||
+          slideActionRect.bottom <= zoomControlsRect.top ||
+          slideActionRect.top >= zoomControlsRect.bottom
+        ),
         dialogOverflow: verticalOverflow(dialog),
         dialogOverflowStyle: getComputedStyle(dialog).overflowY,
         documentGrowth: document.documentElement.scrollHeight - initialDocumentHeight,
@@ -208,6 +220,9 @@ export async function expectLightboxContainment(
     html: "clip",
   });
   expect(snapshot.closeVisible, `${label}: close control visibility`).toBe(true);
+  expect(snapshot.slideActionVisible, `${label}: slide action visibility`).toBe(true);
+  expect(snapshot.zoomControlsVisible, `${label}: zoom controls visibility`).toBe(true);
+  expect(snapshot.controlOverlap, `${label}: media controls remain distinct`).toBe(false);
   expect(snapshot.stageVisible, `${label}: stage visibility`).toBe(true);
   expect(snapshot.captionVisible, `${label}: caption visibility`).toBe(true);
   expect(snapshot.stageInsideWorkspace, `${label}: stage workspace containment`).toBe(true);
