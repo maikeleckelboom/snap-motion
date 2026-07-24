@@ -28,7 +28,7 @@ catalog:
   nuxt: 4.4.8
   oxfmt: 0.59.0
   oxlint: 1.74.0
-  publint: 0.3.21
+  publint: 0.3.22
   typescript: 6.0.3
   vite: 8.1.5
   vitest: 4.1.10
