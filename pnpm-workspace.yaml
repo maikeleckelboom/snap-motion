@@ -25,7 +25,7 @@ catalog:
   "@vueuse/core": 14.3.0
   happy-dom: 20.10.6
   motion: 12.42.2
-  nuxt: 4.4.8
+  nuxt: 4.5.0
   oxfmt: 0.59.0
   oxlint: 1.74.0
   publint: 0.3.21
