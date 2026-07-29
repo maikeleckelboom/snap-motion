@@ -21,9 +21,9 @@ describe("coverflow geometry", () => {
 
 describe("coverflow presentation", () => {
   it("keeps progress linear with controller position", () => {
-    expect(
-      resolveCoverflowProgress({ position: -120, anchorPosition: 0, pitch: 240 }),
-    ).toBeCloseTo(-0.5);
+    expect(resolveCoverflowProgress({ position: -120, anchorPosition: 0, pitch: 240 })).toBeCloseTo(
+      -0.5,
+    );
     expect(
       resolveCoverflowProgress({ position: -120, anchorPosition: -240, pitch: 240 }),
     ).toBeCloseTo(0.5);

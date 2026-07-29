@@ -7,11 +7,11 @@
     "@snap-motion/vue": "file:__VUE_TARBALL__",
     "@vitejs/plugin-vue": "6.0.8",
     "@vue/server-renderer": "3.5.40",
-    "nuxt": "4.4.8",
+    "nuxt": "4.5.0",
     "typescript": "6.0.3",
     "vite": "8.1.5",
     "vue": "3.5.40",
     "vue-router": "5.2.0",
-    "vue-tsc": "3.3.7"
+    "vue-tsc": "3.3.8"
   }
 }

@@ -158,7 +158,7 @@ export interface CoverflowGeometryOptions<Id extends SemanticId = SemanticId> {
     readonly viewportSize: number;
 }
 
-// @public (undocumented)
+// @public @deprecated (undocumented)
 export interface CoverflowModularProgressOptions {
     // (undocumented)
     readonly count: number;
@@ -189,18 +189,23 @@ export interface CoverflowPresentation {
     // (undocumented)
     readonly translateZ: number;
     // (undocumented)
+    readonly visible: boolean;
+    // (undocumented)
     readonly zIndex: number;
 }
 
 // @public (undocumented)
 export interface CoverflowPresentationOptions {
-    readonly depth?: number;
+    readonly hideAfter?: number;
     readonly maxRotateY?: number;
-    readonly minScale?: number;
     readonly progress: number;
     readonly reducedMotion?: boolean;
+    readonly sideDepth?: number;
     readonly sideOpacity?: number;
-    readonly spacing?: number;
+    readonly sidePeakX?: number;
+    readonly sideScale?: number;
+    readonly stackGapX?: number;
+    readonly stackGapZ?: number;
 }
 
 // @public (undocumented)
@@ -561,7 +566,7 @@ export interface ReleaseTargetPolicy {
     readonly projectionSeconds: number;
 }
 
-// @public
+// @public @deprecated (undocumented)
 export function resolveCoverflowModularProgress(options: CoverflowModularProgressOptions): number;
 
 // @public

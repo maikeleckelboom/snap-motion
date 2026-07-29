@@ -9,7 +9,9 @@ export interface CoverflowGeometryOptions<Id extends SemanticId = SemanticId> {
   readonly viewportSize: number;
 }
 
-export interface CoverflowGeometry<Id extends SemanticId = SemanticId> extends CarouselGeometry<Id> {
+export interface CoverflowGeometry<
+  Id extends SemanticId = SemanticId,
+> extends CarouselGeometry<Id> {
   readonly pitch: number;
 }
 
