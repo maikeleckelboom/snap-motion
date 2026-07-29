@@ -27,7 +27,8 @@ export async function openLabDemo(
   demo: DemoId,
   reducedMotion: ReducedMotionMode = "reduce",
 ) {
-  await page.goto("/");
+  // Base-relative, so this also resolves under the preview build's non-root base.
+  await page.goto("./");
   await page.getByTestId("reduced-motion-mode").selectOption(reducedMotion);
 
   const tab = page.locator(`#tab-${demo}`);
