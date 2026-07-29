@@ -172,6 +172,9 @@ export interface CoverflowModularProgressOptions {
 
 // @public (undocumented)
 export interface CoverflowPresentation {
+    readonly depth: number;
+    readonly edgeSide: -1 | 0 | 1;
+    readonly edgeStrength: number;
     // (undocumented)
     readonly isCenter: boolean;
     // (undocumented)
@@ -190,20 +193,28 @@ export interface CoverflowPresentation {
     readonly translateZ: number;
     // (undocumented)
     readonly visible: boolean;
+    readonly yaw: number;
     // (undocumented)
     readonly zIndex: number;
 }
 
 // @public (undocumented)
 export interface CoverflowPresentationOptions {
+    readonly crossoverBias?: number;
+    readonly crossoverYawBias?: number;
+    readonly flatZone?: number;
     readonly hideAfter?: number;
     readonly maxRotateY?: number;
+    readonly perspective?: number;
     readonly progress: number;
     readonly reducedMotion?: boolean;
     readonly sideDepth?: number;
     readonly sideOpacity?: number;
     readonly sidePeakX?: number;
     readonly sideScale?: number;
+    readonly stackGap?: number;
+    readonly stackGapRotateY?: number;
+    readonly stackGapScale?: number;
     readonly stackGapX?: number;
     readonly stackGapZ?: number;
 }

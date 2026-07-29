@@ -42,23 +42,73 @@ export interface CoverflowPresentationOptions {
   readonly progress: number;
   /**
    * Absolute X of the first side slot (the parked left/right rail).
-   * Typically ~0.42–0.55 × card width so the center face stays clear.
+   * Set this equal to the geometry pitch for literal 1:1 pointer tracking.
    */
   readonly sidePeakX?: number;
   /** Extra X added per full step once a card is already in the side rail. */
   readonly stackGapX?: number;
-  /** Peak |rotateY| in degrees for a parked side card. */
-  readonly maxRotateY?: number;
-  /** translateZ of a parked side card (negative recedes). */
-  readonly sideDepth?: number;
   /** Extra depth per stacked step beyond the first side slot. */
   readonly stackGapZ?: number;
+  /**
+   * Spacing between successive parked cards, measured along the rail plane's own normal —
+   * the way a stack of records in a crate is spaced.
+   *
+   * When set it replaces `stackGapX`/`stackGapZ`, which are independent knobs and so let the
+   * stack drift off the plane its own yaw describes: cards parked at 40° but arranged along a
+   * line that dives back four times steeper than they are tilted cannot read as parallel panels,
+   * however carefully each one is drawn. Deriving both offsets from the parked angle keeps every
+   * card in the rail genuinely parallel and genuinely evenly spaced, and the natural convergence
+   * of the projection is then the only thing narrowing the rail.
+   */
+  readonly stackGap?: number;
+  /**
+   * Camera distance in CSS pixels — the same number the stage uses for `perspective`.
+   *
+   * Without it, `sidePeakX` and `stackGapX` are pre-perspective model units, so every pixel of
+   * depth quietly eats into the rail: recede a card and the projection pulls it back toward the
+   * vanishing point faster than `stackGapX` pushes it outward, until the rail collapses into a
+   * pile of slivers behind the focused face and neighbouring panels butt edge-to-edge. Supplying
+   * the camera distance makes both options mean *projected* pixels — X is pre-divided by the
+   * foreshortening, so a rail keeps the spacing it was given however deep the stack runs.
+   */
+  readonly perspective?: number;
+  /** Peak |rotateY| in degrees for a parked side card. */
+  readonly maxRotateY?: number;
+  /** Extra |rotateY| in degrees per stacked step beyond the first side slot. */
+  readonly stackGapRotateY?: number;
+  /** translateZ of a parked side card (negative recedes). */
+  readonly sideDepth?: number;
   /** Scale of a parked side card. */
   readonly sideScale?: number;
+  /** Extra scale delta per stacked step beyond the first side slot. Usually negative. */
+  readonly stackGapScale?: number;
   /** Opacity of a parked side card. Center is always fully opaque. */
   readonly sideOpacity?: number;
   /** Hide slides past this absolute progress. */
   readonly hideAfter?: number;
+  /**
+   * Absolute progress kept visually frontal so the focused face reads as magnetically stable.
+   * Yaw stays at zero inside this band while X keeps tracking the pointer.
+   */
+  readonly flatZone?: number;
+  /**
+   * How much the two rails differ in how quickly they give up depth, as an exponent skew.
+   * Zero makes them exact mirrors, and two mirrored panels meeting mid-overlap intersect along
+   * their shared centre line — which is precisely the folded-sheet read.
+   *
+   * The skew is applied to the shaped depth as an exponent rather than as a multiplier, so each
+   * card's path stays **strictly monotonic**: an incoming card only ever approaches, and an
+   * outgoing one only ever recedes. A multiplier peaked mid-step separates the rails just as
+   * well but makes the incoming card back away before it comes forward, which is a visible
+   * hitch at the start of every transition. Because any exponent of `1` is `1`, the skew also
+   * vanishes on its own at every resting slot, leaving a settled fan symmetric.
+   */
+  readonly crossoverBias?: number;
+  /**
+   * Matching skew for yaw. Keep it well under `crossoverBias`; it exists to break mirrored
+   * foreshortening, not to reorder depth.
+   */
+  readonly crossoverYawBias?: number;
   /** When true, flatten to a 2D stacked rail. */
   readonly reducedMotion?: boolean;
 }
@@ -74,6 +124,14 @@ export interface CoverflowPresentation {
   readonly isCenter: boolean;
   readonly visible: boolean;
   readonly transform: string;
+  /** Shaped distance from the focused plane. `0` centered, `1` parked, higher when stacked. */
+  readonly depth: number;
+  /** `rotateY` normalised against `maxRotateY`, signed. Drives directional lighting. */
+  readonly yaw: number;
+  /** How much of a side surface the current yaw exposes, `0`–`1`. */
+  readonly edgeStrength: number;
+  /** Which side surface the yaw exposes: `-1` left, `1` right, `0` none. */
+  readonly edgeSide: -1 | 0 | 1;
 }
 
 function assertUniqueIds(ids: readonly SemanticId[], name: string): void {
@@ -99,6 +157,10 @@ function finiteOrZero(value: number): number {
 
 function lerp(from: number, to: number, t: number): number {
   return from + (to - from) * t;
+}
+
+function smoothstep(t: number): number {
+  return t * t * (3 - 2 * t);
 }
 
 /**
@@ -175,9 +237,18 @@ export function resolveCoverflowModularProgress(options: CoverflowModularProgres
 }
 
 /**
- * Classic coverflow placement:
+ * Classic coverflow placement of one rigid panel:
  * - `|progress| ≤ 1`: card travels between center face and the side rail
  * - `|progress| > 1`: card stays angled in that rail and stacks deeper
+ *
+ * Every card keeps a whole, undeformed silhouette at all times — nothing is revealed by
+ * clipping, so a half-way frame reads as two solid panels trading the foreground rather than
+ * one sheet folding down the middle. X tracks the pointer directly; yaw, depth, and scale are
+ * shaped, and the two rails skew apart so their silhouettes never mirror mid-overlap.
+ *
+ * Every channel is monotonic in `|progress|`. A card that is approaching only approaches and a
+ * card that is leaving only leaves — no channel doubles back mid-step, which is what separates
+ * motion that reads as an object moving from motion that reads as values being animated.
  *
  * The center face (`progress ≈ 0`) is always fully opaque so neighbors never bleed through it.
  */
@@ -187,27 +258,51 @@ export function resolveCoverflowPresentation(
   assertFiniteNumber(options.progress, "progress");
   const sidePeakX = options.sidePeakX ?? 220;
   const stackGapX = options.stackGapX ?? 28;
+  const stackGap = options.stackGap;
+  const perspective = options.perspective;
   const maxRotateY = options.maxRotateY ?? 54;
+  const stackGapRotateY = options.stackGapRotateY ?? 0;
   const sideDepth = options.sideDepth ?? -140;
   const stackGapZ = options.stackGapZ ?? -36;
   const sideScale = options.sideScale ?? 0.9;
+  const stackGapScale = options.stackGapScale ?? 0;
   const sideOpacity = options.sideOpacity ?? 0.92;
   const hideAfter = options.hideAfter ?? 3.5;
+  const flatZone = options.flatZone ?? 0.1;
+  const crossoverBias = options.crossoverBias ?? 0.45;
+  const crossoverYawBias = options.crossoverYawBias ?? 0.15;
   const reducedMotion = options.reducedMotion ?? false;
 
   assertFiniteNumber(sidePeakX, "sidePeakX");
   assertFiniteNumber(stackGapX, "stackGapX");
   assertFiniteNumber(maxRotateY, "maxRotateY");
+  assertFiniteNumber(stackGapRotateY, "stackGapRotateY");
   assertFiniteNumber(sideDepth, "sideDepth");
   assertFiniteNumber(stackGapZ, "stackGapZ");
   assertFiniteNumber(sideScale, "sideScale");
+  assertFiniteNumber(stackGapScale, "stackGapScale");
   assertFiniteNumber(sideOpacity, "sideOpacity");
   assertFiniteNumber(hideAfter, "hideAfter");
+  assertFiniteNumber(flatZone, "flatZone");
+  assertFiniteNumber(crossoverBias, "crossoverBias");
+  assertFiniteNumber(crossoverYawBias, "crossoverYawBias");
   if (sidePeakX < 0) {
     throw new RangeError("sidePeakX must be greater than or equal to zero");
   }
   if (stackGapX < 0) {
     throw new RangeError("stackGapX must be greater than or equal to zero");
+  }
+  if (stackGap !== undefined) {
+    assertFiniteNumber(stackGap, "stackGap");
+    if (stackGap < 0) {
+      throw new RangeError("stackGap must be greater than or equal to zero");
+    }
+  }
+  if (perspective !== undefined) {
+    assertFiniteNumber(perspective, "perspective");
+    if (perspective <= 0) {
+      throw new RangeError("perspective must be greater than zero");
+    }
   }
   if (sideScale <= 0 || sideScale > 1) {
     throw new RangeError("sideScale must be in (0, 1]");
@@ -218,6 +313,15 @@ export function resolveCoverflowPresentation(
   if (hideAfter <= 0) {
     throw new RangeError("hideAfter must be greater than zero");
   }
+  if (flatZone < 0 || flatZone >= 1) {
+    throw new RangeError("flatZone must be in [0, 1)");
+  }
+  if (crossoverBias < 0 || crossoverBias >= 1) {
+    throw new RangeError("crossoverBias must be in [0, 1)");
+  }
+  if (crossoverYawBias < 0 || crossoverYawBias > crossoverBias) {
+    throw new RangeError("crossoverYawBias must be in [0, crossoverBias]");
+  }
 
   const progress = finiteOrZero(options.progress);
   const magnitude = Math.abs(progress);
@@ -225,21 +329,52 @@ export function resolveCoverflowPresentation(
   const isCenter = magnitude < 0.001;
   const visible = magnitude <= hideAfter;
 
-  // Smoothstep the first pitch so the center face clears before neighbors park.
   const railT = clamp(magnitude, 0, 1);
-  const ease = railT * railT * (3 - 2 * railT);
   const stackT = Math.max(0, magnitude - 1);
+  // Depth and scale ease so the card settles into its rail instead of arriving at constant rate.
+  const depthEase = smoothstep(railT);
+  // Yaw holds a flat band around center: the focused panel stays frontal without ever
+  // decoupling from the gesture.
+  const yawEase = smoothstep(clamp((railT - flatZone) / (1 - flatZone), 0, 1));
+  // Skew the two rails apart as an exponent, never as a peaked multiplier: `x ** k` is monotonic
+  // in x, so an incoming card only ever approaches and an outgoing one only ever recedes, while
+  // `1 ** k === 1` still returns both rails to the same place at every resting slot.
+  const depthShape = depthEase ** (1 + direction * crossoverBias);
+  const yawShape = yawEase ** (1 + direction * crossoverYawBias);
 
-  const translateX = finiteOrZero(direction * (lerp(0, sidePeakX, ease) + stackT * stackGapX));
+  // A parked rail is a plane. Spacing the stack along that plane's own normal keeps every card
+  // in it parallel and evenly spaced, instead of drifting off the surface its yaw describes.
+  const parkedYaw = (maxRotateY * Math.PI) / 180;
+  const stackStepX = stackGap === undefined ? stackGapX : stackGap * Math.sin(parkedYaw);
+  const stackStepZ = stackGap === undefined ? stackGapZ : -stackGap * Math.cos(parkedYaw);
+
   const rotateY =
-    reducedMotion || direction === 0 ? 0 : finiteOrZero(-direction * maxRotateY * ease);
-  const translateZ = reducedMotion
-    ? 0
-    : finiteOrZero(lerp(0, sideDepth, ease) + stackT * stackGapZ);
-  const scale = lerp(1, sideScale, ease);
+    reducedMotion || direction === 0
+      ? 0
+      : finiteOrZero(-direction * (maxRotateY * yawShape + stackT * stackGapRotateY));
+  const railDepth = reducedMotion ? 0 : sideDepth * depthShape;
+  const translateZ = reducedMotion ? 0 : finiteOrZero(railDepth + stackT * stackStepZ);
+
+  // Travel stays literal so the focused face lives under the pointer. When the camera distance
+  // is known, undo the perspective divide the card is about to go through — but only for the
+  // travel, so the stack behind it keeps converging the way real depth does.
+  const projectionRelief = perspective === undefined ? 1 : (perspective - railDepth) / perspective;
+  const travelX = direction * railT * sidePeakX * projectionRelief;
+  const translateX = finiteOrZero(travelX + direction * stackT * stackStepX);
+  const scale = Math.max(0.01, lerp(1, sideScale, depthEase) + stackT * stackGapScale);
   // Center stays solid. Only settled side cards dip slightly — never enough to read through.
-  const opacity = !visible ? 0 : magnitude < 0.08 ? 1 : lerp(1, sideOpacity, ease);
-  const zIndex = Math.round(1_000 - magnitude * 100);
+  const opacity = !visible ? 0 : magnitude <= flatZone ? 1 : lerp(1, sideOpacity, depthEase);
+
+  const depth = depthEase + stackT;
+  // Paint order reads off the same skewed depth the transform describes, so a flattened consumer
+  // and a `preserve-3d` renderer agree on which panel is in front, and the crossing pair hands
+  // the foreground over exactly once without ever tying.
+  const orderKey = reducedMotion ? magnitude : depthShape + stackT;
+  const zIndex = Math.round(1_000 - orderKey * 100) * 2 + (direction > 0 ? 0 : 1);
+
+  const yaw = maxRotateY === 0 ? 0 : finiteOrZero(rotateY / maxRotateY);
+  const edgeStrength = Math.abs(Math.sin((rotateY * Math.PI) / 180));
+  const edgeSide: -1 | 0 | 1 = rotateY < 0 ? 1 : rotateY > 0 ? -1 : 0;
 
   if (reducedMotion) {
     return {
@@ -253,6 +388,10 @@ export function resolveCoverflowPresentation(
       isCenter,
       visible,
       transform: `translate3d(${translateX.toFixed(3)}px, 0, 0) scale(${scale.toFixed(4)})`,
+      depth,
+      yaw: 0,
+      edgeStrength: 0,
+      edgeSide: 0,
     };
   }
 
@@ -267,5 +406,9 @@ export function resolveCoverflowPresentation(
     isCenter,
     visible,
     transform: `translate3d(${translateX.toFixed(3)}px, 0, ${translateZ.toFixed(3)}px) rotateY(${rotateY.toFixed(3)}deg) scale(${scale.toFixed(4)})`,
+    depth,
+    yaw,
+    edgeStrength,
+    edgeSide,
   };
 }

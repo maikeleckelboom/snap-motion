@@ -18,12 +18,20 @@ import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 
 type ScreenId = "templates" | "project" | "map" | "team" | "settings";
 
+/**
+ * Each screen gets a different skeleton. Identical wireframes at identical heights fuse across
+ * an overlap however correct the geometry is: the rows line up, and the eye reads one continuous
+ * surface instead of two panels.
+ */
+type ScreenLayout = "gallery" | "detail" | "canvas" | "roster" | "console";
+
 interface ShowcaseScreen {
   readonly id: ScreenId;
   readonly title: string;
   readonly eyebrow: string;
   readonly accent: string;
   readonly tone: "light" | "mist" | "ink";
+  readonly layout: ScreenLayout;
 }
 
 const props = defineProps<{
@@ -39,6 +47,7 @@ const screens: readonly ShowcaseScreen[] = [
     eyebrow: "Yoot Portaal",
     accent: "#2f6fed",
     tone: "light",
+    layout: "gallery",
   },
   {
     id: "project",
@@ -46,6 +55,7 @@ const screens: readonly ShowcaseScreen[] = [
     eyebrow: "Projectdetail",
     accent: "#1f9d7a",
     tone: "mist",
+    layout: "detail",
   },
   {
     id: "map",
@@ -53,6 +63,7 @@ const screens: readonly ShowcaseScreen[] = [
     eyebrow: "Kaartweergave",
     accent: "#d9480f",
     tone: "light",
+    layout: "canvas",
   },
   {
     id: "team",
@@ -60,6 +71,7 @@ const screens: readonly ShowcaseScreen[] = [
     eyebrow: "Organisatie",
     accent: "#7048e8",
     tone: "mist",
+    layout: "roster",
   },
   {
     id: "settings",
@@ -67,6 +79,7 @@ const screens: readonly ShowcaseScreen[] = [
     eyebrow: "Beheer",
     accent: "#0b7285",
     tone: "ink",
+    layout: "console",
   },
 ];
 
@@ -80,18 +93,25 @@ const stageWidthPx = computed(() =>
   Math.max(320, viewportWidth.value || Math.min(props.stageWidth, 1_280)),
 );
 
-/** Drag distance between snaps — feel lives here, not in the visual fan. */
-const pitch = computed(() => Math.round(clamp(stageWidthPx.value * 0.34, 200, 320)));
-
-const cardWidth = computed(() => Math.round(clamp(stageWidthPx.value * 0.48, 300, 480)));
+const cardWidth = computed(() => Math.round(clamp(stageWidthPx.value * 0.4, 280, 420)));
 const cardHeight = computed(() => Math.round(cardWidth.value * 0.7));
 
 /**
- * First side-rail X must clear most of the center face.
- * Too small → translucent pile. Too large → empty stage.
+ * X of the first side slot, and so the gap between the crossing pair for the whole step.
+ *
+ * This has to clear a *foreshortened* card, not a flat one. Set below that and the panels tile
+ * the stage edge to edge — each one ending exactly where the next begins, with no background
+ * between them — which reads as a concertina no matter how the individual panels are shaded.
+ * Above it the focused face sits in a clearing and the two crossing panels never touch at all,
+ * so there is no seam to misread.
  */
-const sidePeakX = computed(() => Math.round(cardWidth.value * 0.5));
-const stackGapX = computed(() => Math.round(cardWidth.value * 0.06));
+const sidePeakX = computed(() => Math.round(cardWidth.value * 0.8));
+
+/** Gap between parked cards, measured the way a stack of records is: along their shared normal. */
+const stackGap = computed(() => Math.round(cardWidth.value * 0.34));
+
+/** Pitch equals the rail travel, so a drag of N px moves the focused card exactly N px. */
+const pitch = computed(() => sidePeakX.value);
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -154,54 +174,78 @@ const anchorsById = computed(() => {
   return map;
 });
 
+/** Side-surface depth of a panel, in CSS pixels, at full broadside yaw. */
+const MAX_EDGE_THICKNESS = 5;
+
+/** Camera distance. Must match the stage's `perspective`, or the rails project wrong. */
+const STAGE_PERSPECTIVE = 900;
+
+interface SlideStyle {
+  opacity: number;
+  transform: string;
+  zIndex: number;
+  visibility: "visible" | "hidden";
+  pointerEvents: "auto" | "none";
+  [customProperty: `--${string}`]: string;
+}
+
 const slideStyles = computed(() => {
   const reduced = motion.reducedMotion.value;
   const position = motion.position.value;
   const currentPitch = pitch.value;
-  return Object.fromEntries(
-    screens.map((screen) => {
-      const anchorPosition = anchorsById.value.get(screen.id) ?? 0;
-      const progress = resolveCoverflowProgress({
-        anchorPosition,
-        pitch: currentPitch,
-        position,
-      });
-      const presentation = resolveCoverflowPresentation({
-        progress,
-        reducedMotion: reduced,
-        sidePeakX: sidePeakX.value,
-        stackGapX: stackGapX.value,
-        maxRotateY: 52,
-        sideDepth: -160,
-        stackGapZ: -44,
-        sideScale: 0.9,
-        sideOpacity: 1,
-        hideAfter: 3.25,
-      });
-      return [
-        screen.id,
-        {
-          opacity: presentation.opacity,
-          transform: `translate3d(-50%, -50%, 0) ${presentation.transform}`,
-          zIndex: presentation.zIndex,
-          visibility: presentation.visible ? ("visible" as const) : ("hidden" as const),
-          pointerEvents:
-            presentation.visible && Math.abs(progress) < 1.2
-              ? ("auto" as const)
-              : ("none" as const),
-        },
-      ];
-    }),
-  ) as Record<
-    ScreenId,
-    {
-      opacity: number;
-      transform: string;
-      zIndex: number;
-      visibility: "visible" | "hidden";
-      pointerEvents: "auto" | "none";
-    }
-  >;
+  const styles = {} as Record<ScreenId, SlideStyle>;
+
+  for (const screen of screens) {
+    const anchorPosition = anchorsById.value.get(screen.id) ?? 0;
+    const progress = resolveCoverflowProgress({
+      anchorPosition,
+      pitch: currentPitch,
+      position,
+    });
+    const presentation = resolveCoverflowPresentation({
+      progress,
+      reducedMotion: reduced,
+      sidePeakX: sidePeakX.value,
+      perspective: STAGE_PERSPECTIVE,
+      // Steep enough that a parked card foreshortens to a narrow sliver. A shallow wall keeps
+      // every panel nearly full width, which is what lets them tile edge to edge.
+      maxRotateY: 62,
+      // Parked cards are a stack of parallel panels, so they share one angle and one spacing.
+      stackGapRotateY: 0,
+      stackGap: stackGap.value,
+      sideDepth: -300,
+      sideScale: 1,
+      stackGapScale: 0,
+      sideOpacity: 1,
+      hideAfter: 3.05,
+    });
+
+    // Material cues are read off the panel's orientation, not off raw gesture progress.
+    const depth = clamp(presentation.depth, 0, 1);
+    const sheen = clamp(Math.abs(presentation.yaw), 0, 1);
+    const facesLeft = presentation.edgeSide < 0;
+
+    styles[screen.id] = {
+      opacity: presentation.opacity,
+      transform: `translate3d(-50%, -50%, 0) ${presentation.transform}`,
+      zIndex: presentation.zIndex,
+      visibility: presentation.visible ? "visible" : "hidden",
+      pointerEvents: presentation.visible && Math.abs(progress) < 1.2 ? "auto" : "none",
+      "--screen-accent": screen.accent,
+      "--depth": depth.toFixed(4),
+      // Signed yaw throws the cast shadow off the panel's near edge, onto whatever is behind it.
+      "--yaw": presentation.yaw.toFixed(4),
+      "--sheen": sheen.toFixed(4),
+      // The gradient reverses with yaw so it reads as incident light, not gloss.
+      "--sheen-angle": facesLeft ? "100deg" : "260deg",
+      // Darken the edge that the neighbouring panel passes in front of.
+      "--occlusion-angle": presentation.progress > 0 ? "90deg" : "270deg",
+      "--occlusion": (sheen * 0.85).toFixed(4),
+      "--edge-thickness": `${(presentation.edgeStrength * MAX_EDGE_THICKNESS).toFixed(3)}px`,
+    };
+  }
+
+  return styles;
 });
 
 const stageStyle = computed(() => ({
@@ -311,18 +355,18 @@ watch(
           :aria-label="`${screen.title}, ${index + 1} of ${screens.length}`"
           aria-roledescription="slide"
           class="coverflow-card"
-          :class="[`tone-${screen.tone}`, { active: screen.id === activeId }]"
+          :class="[
+            `tone-${screen.tone}`,
+            `layout-${screen.layout}`,
+            { active: screen.id === activeId },
+          ]"
           :data-screen-id="screen.id"
-          :style="{
-            opacity: slideStyles[screen.id]?.opacity,
-            transform: slideStyles[screen.id]?.transform,
-            zIndex: slideStyles[screen.id]?.zIndex,
-            visibility: slideStyles[screen.id]?.visibility,
-            pointerEvents: slideStyles[screen.id]?.pointerEvents,
-            '--screen-accent': screen.accent,
-          }"
+          :style="slideStyles[screen.id]"
           @click="selectScreen(screen.id)"
         >
+          <span class="card-edge card-edge-left" aria-hidden="true" />
+          <span class="card-edge card-edge-right" aria-hidden="true" />
+
           <div class="screen-chrome">
             <header class="screen-top">
               <div class="brand-row">
@@ -367,7 +411,7 @@ watch(
                 </div>
 
                 <div class="card-grid" aria-hidden="true">
-                  <span v-for="slot in 4" :key="slot" class="mini-card">
+                  <span v-for="slot in 6" :key="slot" class="mini-card">
                     <i />
                     <b />
                     <em />
@@ -474,8 +518,9 @@ watch(
   border-radius: 1.5rem;
   background: linear-gradient(180deg, #eef2f7 0%, #e5ebf3 100%);
   overflow: hidden;
-  perspective: 1200px;
-  perspective-origin: 50% 50%;
+  /* One camera for the whole stage. Every panel receives only its own rigid transform. */
+  perspective: 900px;
+  perspective-origin: 50% 46%;
   touch-action: pan-y;
   user-select: none;
   cursor: grab;
@@ -493,6 +538,15 @@ watch(
 }
 
 .coverflow-card {
+  --depth: 0;
+  --yaw: 0;
+  --sheen: 0;
+  --sheen-angle: 100deg;
+  --occlusion: 0;
+  --occlusion-angle: 90deg;
+  --edge-thickness: 0px;
+  --edge-face: #cbd5e1;
+
   position: absolute;
   inset-block-start: 50%;
   inset-inline-start: 50%;
@@ -504,22 +558,92 @@ watch(
   background: transparent;
   transform-style: preserve-3d;
   transform-origin: center center;
-  backface-visibility: hidden;
   will-change: transform;
   cursor: pointer;
 }
 
+.tone-ink {
+  --edge-face: #334155;
+}
+
+/*
+ * Real side surfaces: a thin slab hinged at each vertical edge and swung back into depth.
+ * `backface-visibility` picks the correct one for the current yaw, so a rotated panel reads
+ * as a manufactured object with thickness rather than a printed rectangle.
+ */
+.card-edge {
+  position: absolute;
+  inset-block: 1rem;
+  inline-size: var(--edge-thickness);
+  backface-visibility: hidden;
+  pointer-events: none;
+}
+
+.card-edge-right {
+  inset-inline-end: 0;
+  transform-origin: 100% 50%;
+  transform: translateZ(calc(-1 * var(--edge-thickness))) rotateY(90deg);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--edge-face) 70%, #fff),
+    var(--edge-face)
+  );
+}
+
+.card-edge-left {
+  inset-inline-start: 0;
+  transform-origin: 0% 50%;
+  transform: translateZ(calc(-1 * var(--edge-thickness))) rotateY(-90deg);
+  background: linear-gradient(
+    180deg,
+    var(--edge-face),
+    color-mix(in srgb, var(--edge-face) 65%, #000)
+  );
+}
+
 .screen-chrome {
+  position: relative;
   inline-size: 100%;
   block-size: 100%;
-  border: 1px solid rgb(15 23 42 / 0.1);
+  border: 1px solid rgb(15 23 42 / 0.14);
   border-radius: 1.15rem;
   overflow: hidden;
   background: #fff;
+  /*
+   * Two layers, both driven by depth: a tight contact shadow that fades and drifts as the
+   * panel recedes, and a broad ambient one that blurs out. Yaw throws both toward the panel's
+   * near edge, so a foreground card lays a legible band across whatever sits behind it —
+   * that band is what separates two overlapping surfaces from one folded sheet.
+   */
   box-shadow:
-    0 18px 40px rgb(15 23 42 / 0.14),
-    0 4px 12px rgb(15 23 42 / 0.08);
+    calc(var(--yaw) * -12px) calc(5px + 7px * var(--depth)) calc(12px + 14px * var(--depth))
+      rgb(15 23 42 / calc(0.28 - 0.16 * var(--depth))),
+    calc(var(--yaw) * -26px) calc(26px - 12px * var(--depth)) calc(46px + 34px * var(--depth))
+      rgb(15 23 42 / calc(0.18 - 0.11 * var(--depth)));
   color: #0f172a;
+}
+
+/*
+ * Incident light plus the occlusion falloff on the edge that the neighbouring panel passes in
+ * front of. Both are orientation-driven, so they vanish on the frontal center face.
+ */
+.screen-chrome::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(
+      var(--occlusion-angle),
+      rgb(2 6 23 / calc(0.3 * var(--occlusion))),
+      rgb(2 6 23 / 0) 45%
+    ),
+    linear-gradient(
+      var(--sheen-angle),
+      rgb(255 255 255 / calc(0.14 * var(--sheen))),
+      rgb(255 255 255 / 0) 28%,
+      rgb(2 6 23 / calc(0.1 * var(--sheen)))
+    );
 }
 
 .tone-mist .screen-chrome {
@@ -530,12 +654,6 @@ watch(
   background: #0f172a;
   color: #e2e8f0;
   border-color: rgb(255 255 255 / 0.08);
-}
-
-.coverflow-card.active .screen-chrome {
-  box-shadow:
-    0 28px 56px rgb(15 23 42 / 0.18),
-    0 8px 18px rgb(15 23 42 / 0.1);
 }
 
 .screen-top,
@@ -788,6 +906,8 @@ watch(
 .card-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Rows must be free to shrink, or the tiles overflow the screen and get clipped mid-card. */
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 0.45rem;
   min-block-size: 0;
 }
@@ -797,6 +917,7 @@ watch(
   gap: 0.28rem;
   align-content: start;
   min-block-size: 0;
+  overflow: hidden;
   padding: 0.45rem;
   border: 1px solid rgb(15 23 42 / 0.08);
   border-radius: 0.55rem;
@@ -841,6 +962,79 @@ watch(
 
 .tone-ink .mini-card em {
   background: #475569;
+}
+
+/*
+ * Per-screen skeletons. Two panels showing the same wireframe at the same height fuse across an
+ * overlap no matter how the geometry behaves, so no two adjacent screens share a silhouette.
+ */
+.layout-gallery .screen-nav {
+  inline-size: 12%;
+}
+
+.layout-gallery .feature-card {
+  display: none;
+}
+
+.layout-gallery .card-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.layout-detail .screen-nav {
+  inline-size: 30%;
+}
+
+.layout-detail .card-grid {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+}
+
+.layout-detail .mini-card:nth-child(n + 4) {
+  display: none;
+}
+
+.layout-canvas .screen-nav {
+  display: none;
+}
+
+.layout-canvas .card-grid {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.layout-canvas .mini-card:nth-child(n + 3) {
+  display: none;
+}
+
+.layout-canvas .mini-card:first-child {
+  background: color-mix(in srgb, var(--screen-accent) 12%, #fff);
+}
+
+.layout-roster .toolbar {
+  display: none;
+}
+
+.layout-roster .card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+}
+
+.layout-console .screen-nav {
+  inline-size: 26%;
+}
+
+.layout-console .feature-card {
+  display: none;
+}
+
+.layout-console .card-grid {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+}
+
+.layout-console .mini-card:nth-child(n + 5) {
+  display: none;
 }
 
 .coverflow-meta {
