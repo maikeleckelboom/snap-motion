@@ -26,9 +26,12 @@ and mixed ownership rather than a source cycle.
 - Bounds: `clampToBounds`, `createBounds`, `getTrackBounds`, `isWithinBounds`, `normalizeBounds`,
   `ScalarBounds`.
 - Geometry: `calculateFixedCellSize`, `createFixedStageGeometry`, `createPagedGridGeometry`,
-  `createVariableWidthGeometry`, `CarouselGeometry`, `FixedStageGeometry`, `MeasuredItemBox`,
-  `PagedGridGeometry`, `PagedGridGeometryOptions`, `PagedGridPageContext`,
-  `VariableWidthGeometryOptions`.
+  `createVariableWidthGeometry`, `createCoverflowGeometry`, `resolveCoverflowProgress`,
+  `resolveCoverflowModularProgress`, `resolveCoverflowPresentation`, `CarouselGeometry`,
+  `CoverflowGeometry`, `CoverflowGeometryOptions`, `CoverflowModularProgressOptions`,
+  `CoverflowPresentation`, `CoverflowPresentationOptions`, `CoverflowProgressOptions`,
+  `FixedStageGeometry`, `MeasuredItemBox`, `PagedGridGeometry`, `PagedGridGeometryOptions`,
+  `PagedGridPageContext`, `VariableWidthGeometryOptions`.
 - Controller: `SnapController`, `SnapControllerOptions`, `ControllerListener`,
   `ControllerConfiguration`, `ControllerConfigurationUpdate`, `ControllerMeasurement`,
   `ControllerMoveByOptions`, `ControllerMoveOptions`, `ControllerPhase`, `ControllerSnapshot`.

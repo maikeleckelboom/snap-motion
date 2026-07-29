@@ -59,6 +59,17 @@ The raw anchor is clamped into legal bounds before entering the controller. Seve
 may therefore share one physical position while retaining distinct IDs and logical order. Optional
 visual gutters are explicit geometry inputs rather than gap corrections inferred later.
 
+## Coverflow
+
+Coverflow keeps the same scalar controller contract. `createCoverflowGeometry` builds equal-pitch
+anchors at `-i * pitch`. Presentation maps live progress into a classic two-phase fan:
+
+1. `|progress| ≤ 1` — card leaves the solid center face and parks in a side rail (`sidePeakX`,
+   `maxRotateY`)
+2. `|progress| > 1` — card stays angled and stacks deeper (`stackGapX`, `stackGapZ`)
+
+The center face stays fully opaque. Visual depth never feeds layout geometry.
+
 ## Responsive remeasurement
 
 ResizeObserver, viewport resize, visual-viewport resize, orientation-style size changes, item-set

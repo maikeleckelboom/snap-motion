@@ -31,6 +31,20 @@ export type {
   PagedGridPageContext,
   VariableWidthGeometryOptions,
 } from "./carousel-geometry";
+export {
+  createCoverflowGeometry,
+  resolveCoverflowModularProgress,
+  resolveCoverflowPresentation,
+  resolveCoverflowProgress,
+} from "./coverflow";
+export type {
+  CoverflowGeometry,
+  CoverflowGeometryOptions,
+  CoverflowModularProgressOptions,
+  CoverflowPresentation,
+  CoverflowPresentationOptions,
+  CoverflowProgressOptions,
+} from "./coverflow";
 export { SnapController } from "./controller";
 export type { ControllerListener, SnapControllerOptions } from "./controller";
 export { applyElasticity, createSymmetricElasticity, nonlinearElasticDistance } from "./elastic";

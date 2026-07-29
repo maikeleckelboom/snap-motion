@@ -4,14 +4,22 @@ import { computed, ref, shallowRef } from "vue";
 import PhysicsControls from "@/components/PhysicsControls.vue";
 import StageControls from "@/components/StageControls.vue";
 import BottomSheetDemo from "@/demos/BottomSheetDemo.vue";
+import CoverflowDemo from "@/demos/CoverflowDemo.vue";
 import MediaLightboxDemo from "@/demos/MediaLightboxDemo.vue";
 import PagedGridDemo from "@/demos/PagedGridDemo.vue";
 import { settingsFromPreset } from "@/fixtures/lab-settings";
 import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fixtures/lab-types";
 
-type DemoId = "media" | "grid" | "sheet";
+type DemoId = "coverflow" | "media" | "grid" | "sheet";
 
 const demos = [
+  {
+    id: "coverflow" as const,
+    label: "Coverflow stack",
+    shortLabel: "Coverflow",
+    description: "Physical 2.5D stack: 1:1 drag, spring settle, elastic ends.",
+    component: CoverflowDemo,
+  },
   {
     id: "media" as const,
     label: "Media lightbox",
@@ -35,7 +43,7 @@ const demos = [
   },
 ];
 
-const activeDemoId = ref<DemoId>("media");
+const activeDemoId = ref<DemoId>("coverflow");
 const activeDemo = computed(
   () => demos.find((demo) => demo.id === activeDemoId.value) ?? demos[0]!,
 );
@@ -205,8 +213,8 @@ function resetPreset() {
 }
 
 .demo-tabs button {
-  min-inline-size: 8.5rem;
-  padding: 0.75rem 1rem;
+  min-inline-size: 7.25rem;
+  padding: 0.75rem 0.85rem;
   border: 0;
   border-inline-end: 1px solid var(--line);
   font-size: 0.78rem;

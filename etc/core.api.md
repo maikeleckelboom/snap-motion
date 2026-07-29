@@ -144,7 +144,77 @@ export interface ControllerSnapshot<Id extends SemanticId = SemanticId> {
 }
 
 // @public (undocumented)
+export interface CoverflowGeometry<Id extends SemanticId = SemanticId> extends CarouselGeometry<Id> {
+    // (undocumented)
+    readonly pitch: number;
+}
+
+// @public (undocumented)
+export interface CoverflowGeometryOptions<Id extends SemanticId = SemanticId> {
+    // (undocumented)
+    readonly itemIds: readonly Id[];
+    readonly pitch: number;
+    // (undocumented)
+    readonly viewportSize: number;
+}
+
+// @public (undocumented)
+export interface CoverflowModularProgressOptions {
+    // (undocumented)
+    readonly count: number;
+    // (undocumented)
+    readonly index: number;
+    // (undocumented)
+    readonly pitch: number;
+    // (undocumented)
+    readonly position: number;
+}
+
+// @public (undocumented)
+export interface CoverflowPresentation {
+    // (undocumented)
+    readonly isCenter: boolean;
+    // (undocumented)
+    readonly opacity: number;
+    // (undocumented)
+    readonly progress: number;
+    // (undocumented)
+    readonly rotateY: number;
+    // (undocumented)
+    readonly scale: number;
+    // (undocumented)
+    readonly transform: string;
+    // (undocumented)
+    readonly translateX: number;
+    // (undocumented)
+    readonly translateZ: number;
+    // (undocumented)
+    readonly zIndex: number;
+}
+
+// @public (undocumented)
+export interface CoverflowPresentationOptions {
+    readonly depth?: number;
+    readonly maxRotateY?: number;
+    readonly minScale?: number;
+    readonly progress: number;
+    readonly reducedMotion?: boolean;
+    readonly sideOpacity?: number;
+    readonly spacing?: number;
+}
+
+// @public (undocumented)
+export interface CoverflowProgressOptions {
+    readonly anchorPosition: number;
+    readonly pitch: number;
+    readonly position: number;
+}
+
+// @public (undocumented)
 export function createBounds(min: number, max: number): ScalarBounds;
+
+// @public
+export function createCoverflowGeometry<Id extends SemanticId>(options: CoverflowGeometryOptions<Id>): CoverflowGeometry<Id>;
 
 // @public (undocumented)
 export function createFixedStageGeometry<Id extends SemanticId>(options: {
@@ -490,6 +560,15 @@ export interface ReleaseTargetPolicy {
     readonly maxAnchorSkip: number;
     readonly projectionSeconds: number;
 }
+
+// @public
+export function resolveCoverflowModularProgress(options: CoverflowModularProgressOptions): number;
+
+// @public
+export function resolveCoverflowPresentation(options: CoverflowPresentationOptions): CoverflowPresentation;
+
+// @public
+export function resolveCoverflowProgress(options: CoverflowProgressOptions): number;
 
 // @public (undocumented)
 export function resolveProgrammaticTarget<Id extends SemanticId>(input: ProgrammaticTargetInput<Id>): SnapAnchor<Id> | null;
