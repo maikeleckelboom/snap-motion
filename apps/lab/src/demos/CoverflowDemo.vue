@@ -174,8 +174,14 @@ const anchorsById = computed(() => {
   return map;
 });
 
-/** Side-surface depth of a panel, in CSS pixels, at full broadside yaw. */
-const MAX_EDGE_THICKNESS = 5;
+/** How thick a panel is, in CSS pixels. Read as a side surface once the panel turns. */
+const EDGE_THICKNESS = 2.5;
+
+/**
+ * Ceiling on the in-plane offset. `tan` runs away as a panel approaches broadside, and past
+ * this point the side surface is wider than anything a screen this thin should show.
+ */
+const MAX_EDGE_OFFSET = 8;
 
 /** Camera distance. Must match the stage's `perspective`, or the rails project wrong. */
 const STAGE_PERSPECTIVE = 900;
@@ -224,6 +230,12 @@ const slideStyles = computed(() => {
     const depth = clamp(presentation.depth, 0, 1);
     const sheen = clamp(Math.abs(presentation.yaw), 0, 1);
     const facesLeft = presentation.edgeSide < 0;
+    // Signed so the side surface lands on whichever edge the yaw has turned toward the camera.
+    const edgeOffset = clamp(
+      -Math.tan((presentation.rotateY * Math.PI) / 180) * EDGE_THICKNESS,
+      -MAX_EDGE_OFFSET,
+      MAX_EDGE_OFFSET,
+    );
 
     styles[screen.id] = {
       opacity: presentation.opacity,
@@ -241,7 +253,9 @@ const slideStyles = computed(() => {
       // Darken the edge that the neighbouring panel passes in front of.
       "--occlusion-angle": presentation.progress > 0 ? "90deg" : "270deg",
       "--occlusion": (sheen * 0.85).toFixed(4),
-      "--edge-thickness": `${(presentation.edgeStrength * MAX_EDGE_THICKNESS).toFixed(3)}px`,
+      "--edge-offset": `${edgeOffset.toFixed(3)}px`,
+      // A side surface catches less light the more obliquely it is seen.
+      "--edge-face": presentation.edgeStrength > 0.5 ? "var(--edge-deep)" : "var(--edge-near)",
     };
   }
 
@@ -364,9 +378,6 @@ watch(
           :style="slideStyles[screen.id]"
           @click="selectScreen(screen.id)"
         >
-          <span class="card-edge card-edge-left" aria-hidden="true" />
-          <span class="card-edge card-edge-right" aria-hidden="true" />
-
           <div class="screen-chrome">
             <header class="screen-top">
               <div class="brand-row">
@@ -544,8 +555,10 @@ watch(
   --sheen-angle: 100deg;
   --occlusion: 0;
   --occlusion-angle: 90deg;
-  --edge-thickness: 0px;
-  --edge-face: #cbd5e1;
+  --edge-offset: 0px;
+  --edge-near: #d4dbe4;
+  --edge-deep: #b9c2ce;
+  --edge-face: var(--edge-near);
 
   position: absolute;
   inset-block-start: 50%;
@@ -563,42 +576,8 @@ watch(
 }
 
 .tone-ink {
-  --edge-face: #334155;
-}
-
-/*
- * Real side surfaces: a thin slab hinged at each vertical edge and swung back into depth.
- * `backface-visibility` picks the correct one for the current yaw, so a rotated panel reads
- * as a manufactured object with thickness rather than a printed rectangle.
- */
-.card-edge {
-  position: absolute;
-  inset-block: 1rem;
-  inline-size: var(--edge-thickness);
-  backface-visibility: hidden;
-  pointer-events: none;
-}
-
-.card-edge-right {
-  inset-inline-end: 0;
-  transform-origin: 100% 50%;
-  transform: translateZ(calc(-1 * var(--edge-thickness))) rotateY(90deg);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--edge-face) 70%, #fff),
-    var(--edge-face)
-  );
-}
-
-.card-edge-left {
-  inset-inline-start: 0;
-  transform-origin: 0% 50%;
-  transform: translateZ(calc(-1 * var(--edge-thickness))) rotateY(-90deg);
-  background: linear-gradient(
-    180deg,
-    var(--edge-face),
-    color-mix(in srgb, var(--edge-face) 65%, #000)
-  );
+  --edge-near: #3d4a5e;
+  --edge-deep: #2a3441;
 }
 
 .screen-chrome {
@@ -610,12 +589,19 @@ watch(
   overflow: hidden;
   background: #fff;
   /*
-   * Two layers, both driven by depth: a tight contact shadow that fades and drifts as the
-   * panel recedes, and a broad ambient one that blurs out. Yaw throws both toward the panel's
-   * near edge, so a foreground card lays a legible band across whatever sits behind it —
-   * that band is what separates two overlapping surfaces from one folded sheet.
+   * The first layer is the panel's side surface — a hard, zero-blur offset of the chrome itself.
+   * Drawn this way it inherits `border-radius`, so the thickness wraps every corner instead of
+   * dying where the curve begins, which a flat quad hinged at the edge can never do. The offset
+   * is `thickness × tan(yaw)`: it lies in the panel's plane and is foreshortened by `cos(yaw)`
+   * on the way to the screen, which lands it at the `thickness × sin(yaw)` a real side face shows.
+   *
+   * The two behind it are cast shadows driven by depth: a tight contact shadow that fades and
+   * drifts as the panel recedes, and a broad ambient one that blurs out. Yaw throws both toward
+   * the panel's near edge, so a foreground card lays a legible band across whatever sits behind
+   * it — that band is what separates two overlapping surfaces from one folded sheet.
    */
   box-shadow:
+    var(--edge-offset) 0 0 0 var(--edge-face),
     calc(var(--yaw) * -12px) calc(5px + 7px * var(--depth)) calc(12px + 14px * var(--depth))
       rgb(15 23 42 / calc(0.28 - 0.16 * var(--depth))),
     calc(var(--yaw) * -26px) calc(26px - 12px * var(--depth)) calc(46px + 34px * var(--depth))
