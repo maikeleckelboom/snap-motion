@@ -8,6 +8,8 @@ import type { SnapMotionDirection } from "./carousel-contracts";
 import { carouselKeyAction } from "./carousel-keyboard";
 import { useHorizontalWheel } from "./carousel-wheel";
 
+const MIN_STEPPED_WHEEL_DELTA = 16;
+
 export interface UseCarouselMotionOptions<Id extends string> extends Omit<
   UseSnapMotionOptions<Id>,
   "axis" | "pointerIntent"
@@ -51,6 +53,7 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
   });
   let wheelActive = false;
   let wheelRawPosition = motion.position.value;
+  let wheelOriginId: Id | undefined;
 
   function remeasure() {
     const measurement = measure();
@@ -80,6 +83,7 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
     disabled: () => motion.isDragging.value,
     onDelta(delta) {
       if (!wheelActive) {
+        wheelOriginId = motion.snapshot.value.target?.id ?? motion.snapshot.value.active?.id;
         motion.controller.beginDrag();
         wheelActive = true;
         wheelRawPosition = motion.position.value;
@@ -87,12 +91,35 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
       wheelRawPosition -= delta * (resolvedDirection() === "rtl" ? -1 : 1);
       motion.controller.dragTo(wheelRawPosition);
     },
-    onSettle() {
+    onSettle(gesture) {
       if (!wheelActive) {
         return;
       }
       wheelActive = false;
-      const target = motion.controller.release(0);
+      const originId = wheelOriginId;
+      wheelOriginId = undefined;
+      let target;
+
+      // High-resolution trackpads emit a burst and retain direct manipulation. A physical wheel
+      // notch is commonly one isolated line-sized event. Resolve that notch semantically from the
+      // already-requested target so interrupting its spring cannot repeat, skip, or reverse based
+      // on how far the previous animation happened to render.
+      if (
+        gesture.eventCount === 1 &&
+        Math.abs(gesture.delta) >= MIN_STEPPED_WHEEL_DELTA &&
+        originId !== undefined
+      ) {
+        const anchors = sortAnchors(motion.snapshot.value.anchors);
+        const originIndex = anchors.findIndex((anchor) => anchor.id === originId);
+        const logicalDirection =
+          Math.sign(gesture.delta) * (resolvedDirection() === "rtl" ? -1 : 1);
+        const steppedTarget = originIndex < 0 ? undefined : anchors[originIndex + logicalDirection];
+        target = steppedTarget
+          ? motion.controller.moveTo(steppedTarget.id, { initialVelocity: 0 })
+          : motion.controller.release(0);
+      } else {
+        target = motion.controller.release(0);
+      }
       if (target) onTargetSelected?.(target.id, "wheel");
     },
   });
@@ -152,6 +179,7 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
     wheel.stopWheel();
     wheelActive = false;
     wheelRawPosition = motion.position.value;
+    wheelOriginId = undefined;
   }
 
   function onPointerDown(event: PointerEvent) {

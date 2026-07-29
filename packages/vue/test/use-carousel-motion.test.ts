@@ -146,6 +146,57 @@ describe("useCarouselMotion", () => {
     wrapper.unmount();
   });
 
+  it("advances isolated wheel steps from the pending target while preserving interruption", async () => {
+    vi.useFakeTimers();
+    const driver = new ManualAnimationDriver();
+    const viewport = ref<HTMLElement>();
+    let motion: ReturnType<typeof useCarouselMotion<Id>> | undefined;
+    const selected: Id[] = [];
+    const anchors = [
+      { id: "a" as const, order: 0, position: 0 },
+      { id: "b" as const, order: 1, position: -100 },
+      { id: "c" as const, order: 2, position: -200 },
+    ];
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          motion = useCarouselMotion<Id>({
+            anchors,
+            bounds: { min: -200, max: 0 },
+            driver,
+            initialTargetId: "a",
+            measure: () => ({ anchors, bounds: { min: -200, max: 0 } }),
+            onTargetSelected: (id) => selected.push(id),
+            viewport,
+            wheelSettleDelay: 90,
+          });
+          return () => h("div", { ref: viewport, onWheel: motion?.onWheel });
+        },
+      }),
+    );
+    await nextTick();
+
+    wrapper.element.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 40 }),
+    );
+    await vi.advanceTimersByTimeAsync(90);
+    expect(motion?.targetId.value).toBe("b");
+    expect(selected).toEqual(["b"]);
+
+    driver.latest?.update(-20, -120);
+    wrapper.element.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 40 }),
+    );
+    expect(motion?.position.value).toBe(-60);
+    await vi.advanceTimersByTimeAsync(90);
+
+    expect(driver.animations[0]?.stopped).toBe(true);
+    expect(driver.latest?.request.from).toBe(-60);
+    expect(motion?.targetId.value).toBe("c");
+    expect(selected).toEqual(["b", "c"]);
+    wrapper.unmount();
+  });
+
   it("maps RTL Arrow, drag, and wheel input onto logical semantic order", async () => {
     vi.useFakeTimers();
     const driver = new ManualAnimationDriver();

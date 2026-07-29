@@ -354,6 +354,7 @@ watch(
       class="coverflow-viewport"
       data-testid="coverflow-viewport"
       :data-active-id="activeId"
+      :data-phase="motion.phase.value"
       :style="[stageStyle, motion.surfaceStyle]"
       tabindex="0"
       @keydown="motion.onKeyDown"

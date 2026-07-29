@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export type DemoId = "grid" | "media" | "sheet";
+export type DemoId = "coverflow" | "grid" | "media" | "sheet";
 export type ReducedMotionMode = "no-preference" | "reduce" | "system";
 
 interface DragOptions {
