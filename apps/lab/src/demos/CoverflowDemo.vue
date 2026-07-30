@@ -554,7 +554,9 @@ watch(
             '--dot-weight': dot.selected ? '1' : '0',
           }"
           @click="selectScreen(dot.id)"
-        />
+        >
+          <span aria-hidden="true" class="dot-indicator" />
+        </button>
       </div>
     </div>
 
@@ -1162,19 +1164,35 @@ watch(
 
 .dots {
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.125rem;
 }
 
 .dot {
   --dot-weight: 0;
+
+  display: grid;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+}
+
+.dot:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.dot-indicator {
   inline-size: calc(0.55rem + var(--dot-weight) * 0.85rem);
   min-inline-size: 0.55rem;
   block-size: 0.55rem;
   min-block-size: 0.55rem;
-  padding: 0;
-  border: 0;
   border-radius: 999px;
   background: color-mix(in srgb, var(--ink) calc(var(--dot-weight) * 100%), #c9d2de);
+  pointer-events: none;
 }
 
 @media (max-width: 48rem) {
