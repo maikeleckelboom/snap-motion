@@ -7,8 +7,10 @@ import type {
   SnapAnchor,
   SpringConfiguration,
 } from "@snap-motion/core";
+import { useEventListener } from "@vueuse/core";
 import {
   computed,
+  onScopeDispose,
   ref,
   shallowRef,
   watch,
@@ -21,6 +23,7 @@ import type { PointerIntent } from "../internal/input/pointer-policy";
 import { useRemeasurement } from "../internal/layout/remeasurement";
 import { useSnapMotion } from "../motion/use-snap-motion";
 import type { BottomSheetState } from "./bottom-sheet-contracts";
+import { resolveBottomSheetGeometry, type BottomSheetGeometry } from "./bottom-sheet-geometry";
 import {
   createViewportBottomSheetSnapPoints,
   defaultBottomSheetReleasePolicy,
@@ -37,6 +40,8 @@ const HIDDEN_SNAP_ID = "__snap_motion_hidden__" as const;
 type InternalBottomSheetSnapId<Id extends string> = Id | typeof HIDDEN_SNAP_ID;
 
 export interface UseBottomSheetMotionOptions<Id extends string = BottomSheetOpenSnapId> {
+  body?: Readonly<Ref<HTMLElement | undefined>>;
+  chrome?: Readonly<Ref<HTMLElement | undefined>>;
   defaultOpenSnapId?: Id;
   driver?: AnimationDriver;
   elasticity?: ElasticityOptions;
@@ -44,6 +49,7 @@ export interface UseBottomSheetMotionOptions<Id extends string = BottomSheetOpen
   getViewportHeight?: () => number;
   initialSnapId?: Id | "hidden";
   initialViewportHeight?: number;
+  intrinsicBodyContent?: Readonly<Ref<HTMLElement | undefined>>;
   maximumScrimOpacity?: number;
   onHidden?: () => void;
   onSnap?: (id: Id) => void;
@@ -60,16 +66,27 @@ export interface UseBottomSheetMotionOptions<Id extends string = BottomSheetOpen
 export interface UseBottomSheetMotionReturn<Id extends string = BottomSheetOpenSnapId> {
   readonly activeId: ComputedRef<Id | undefined>;
   readonly activeSnapId: ComputedRef<Id | undefined>;
+  readonly bodyClientHeight: Ref<number>;
+  readonly bodyScrollHeight: Ref<number>;
+  readonly bodyScrollTop: Ref<number>;
   readonly close: () => void;
   readonly configure: (update: ControllerConfigurationUpdate) => void;
+  readonly fullPosition: ComputedRef<number>;
+  readonly geometry: ComputedRef<BottomSheetGeometry>;
   readonly interrupt: () => void;
+  readonly intrinsicBodyContentHeight: Ref<number>;
+  readonly intrinsicSheetHeight: ComputedRef<number>;
   readonly isAnimating: ComputedRef<boolean>;
   readonly isDragging: Ref<boolean>;
+  readonly maximumBodyScrollTop: ComputedRef<number>;
+  readonly measuredChromeHeight: Ref<number>;
   readonly onNativeDragStart: (event: DragEvent) => void;
   readonly onPointerDown: (event: PointerEvent) => void;
   readonly open: (id?: Id) => SnapAnchor<Id> | null;
+  readonly panelIntrinsicSize: Ref<number>;
   readonly panelStyle: ComputedRef<CSSProperties>;
   readonly phase: ComputedRef<ControllerSnapshot<Id>["phase"]>;
+  readonly physicalPosition: ComputedRef<number>;
   readonly pointerIntent: Ref<PointerIntent>;
   readonly pointerOwned: Ref<boolean>;
   readonly position: ComputedRef<number>;
@@ -85,27 +102,48 @@ export interface UseBottomSheetMotionReturn<Id extends string = BottomSheetOpenS
   readonly targetId: ComputedRef<Id | undefined>;
   readonly transform: ComputedRef<string>;
   readonly velocity: ComputedRef<number>;
+  readonly visibleBodyHeight: ComputedRef<number>;
+  readonly visibleSheetHeight: ComputedRef<number>;
   readonly viewportHeight: Ref<number>;
+}
+
+interface BrowserBottomSheetMeasurements {
+  context: BottomSheetMeasureContext;
+  intrinsicBodyContentHeight: number;
+  measuredChromeHeight: number;
+}
+
+function measuredBlockSize(element: HTMLElement | undefined) {
+  const height = element?.getBoundingClientRect().height;
+  return height !== undefined && Number.isFinite(height) ? Math.max(0, height) : 0;
 }
 
 function browserMeasureContext(
   fallbackHeight: number,
-  panel: HTMLElement | undefined,
+  chrome: HTMLElement | undefined,
+  intrinsicBodyContent: HTMLElement | undefined,
   overrides: Partial<BottomSheetMeasureContext> = {},
-): BottomSheetMeasureContext {
+): BrowserBottomSheetMeasurements {
   const browser = typeof window === "undefined" ? undefined : window;
   const viewportHeight = overrides.viewportHeight ?? browser?.innerHeight ?? fallbackHeight;
   const visualViewportHeight =
     overrides.visualViewportHeight ?? browser?.visualViewport?.height ?? viewportHeight;
+  const measuredChromeHeight = measuredBlockSize(chrome);
+  const intrinsicBodyContentHeight = measuredBlockSize(intrinsicBodyContent);
   return {
-    viewportWidth: overrides.viewportWidth ?? browser?.innerWidth ?? 0,
-    viewportHeight,
-    visualViewportHeight,
-    panelIntrinsicSize: overrides.panelIntrinsicSize ?? panel?.scrollHeight ?? 0,
-    safeAreaTop: overrides.safeAreaTop ?? 0,
-    safeAreaBottom: overrides.safeAreaBottom ?? 0,
-    topGap: overrides.topGap ?? defaultBottomSheetViewportPolicy.topGap,
-    closedOffset: overrides.closedOffset ?? defaultBottomSheetViewportPolicy.hiddenOvershoot,
+    intrinsicBodyContentHeight,
+    measuredChromeHeight,
+    context: {
+      viewportWidth: overrides.viewportWidth ?? browser?.innerWidth ?? 0,
+      viewportHeight,
+      visualViewportHeight,
+      panelIntrinsicSize:
+        overrides.panelIntrinsicSize ?? measuredChromeHeight + intrinsicBodyContentHeight,
+      safeAreaTop: overrides.safeAreaTop ?? 0,
+      safeAreaBottom: overrides.safeAreaBottom ?? 0,
+      topGap: overrides.topGap ?? defaultBottomSheetViewportPolicy.topGap,
+      closedOffset: overrides.closedOffset ?? defaultBottomSheetViewportPolicy.hiddenOvershoot,
+    },
   };
 }
 
@@ -133,27 +171,65 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
   const initialViewportHeight = options.initialViewportHeight ?? 800;
   const maximumScrimOpacity = options.maximumScrimOpacity ?? 0.56;
   const viewportHeight = ref(initialViewportHeight);
+  const measuredChromeHeight = ref(0);
+  const intrinsicBodyContentHeight = ref(0);
+  const panelIntrinsicSize = ref(0);
+  const bodyClientHeight = ref(0);
+  const bodyScrollHeight = ref(0);
+  const bodyScrollTop = ref(0);
   const resolvedSnapPoints = shallowRef<readonly ResolvedBottomSheetSnapPoint<Id>[]>([]);
+  let bodyGeometryFrame: number | undefined;
+
+  function readBodyScrollGeometry() {
+    const body = options.body?.value;
+    if (!body) {
+      bodyClientHeight.value = 0;
+      bodyScrollHeight.value = 0;
+      bodyScrollTop.value = 0;
+      return;
+    }
+    bodyClientHeight.value = body.clientHeight;
+    bodyScrollHeight.value = body.scrollHeight;
+    bodyScrollTop.value = body.scrollTop;
+  }
+
+  function scheduleBodyScrollGeometryRead() {
+    if (typeof window === "undefined" || bodyGeometryFrame !== undefined) return;
+    bodyGeometryFrame = window.requestAnimationFrame(() => {
+      bodyGeometryFrame = undefined;
+      readBodyScrollGeometry();
+    });
+  }
 
   function readContext() {
     const explicitViewportHeight = options.getViewportHeight?.();
     const overrides = options.getMeasureContext?.() ?? {};
-    const context = browserMeasureContext(initialViewportHeight, options.panel.value, {
-      ...overrides,
-      ...(explicitViewportHeight === undefined
-        ? {}
-        : {
-            viewportHeight: explicitViewportHeight,
-            visualViewportHeight: explicitViewportHeight,
-          }),
-      ...(options.viewportPolicy?.topGap === undefined
-        ? {}
-        : { topGap: options.viewportPolicy.topGap }),
-      ...(options.viewportPolicy?.hiddenOvershoot === undefined
-        ? {}
-        : { closedOffset: options.viewportPolicy.hiddenOvershoot }),
-    });
+    const measurements = browserMeasureContext(
+      initialViewportHeight,
+      options.chrome?.value,
+      options.intrinsicBodyContent?.value,
+      {
+        ...overrides,
+        ...(explicitViewportHeight === undefined
+          ? {}
+          : {
+              viewportHeight: explicitViewportHeight,
+              visualViewportHeight: explicitViewportHeight,
+            }),
+        ...(options.viewportPolicy?.topGap === undefined
+          ? {}
+          : { topGap: options.viewportPolicy.topGap }),
+        ...(options.viewportPolicy?.hiddenOvershoot === undefined
+          ? {}
+          : { closedOffset: options.viewportPolicy.hiddenOvershoot }),
+      },
+    );
+    const { context } = measurements;
     viewportHeight.value = context.visualViewportHeight;
+    measuredChromeHeight.value = measurements.measuredChromeHeight;
+    intrinsicBodyContentHeight.value = measurements.intrinsicBodyContentHeight;
+    panelIntrinsicSize.value = context.panelIntrinsicSize;
+    readBodyScrollGeometry();
     return context;
   }
 
@@ -172,7 +248,7 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
     return [...openAnchors, { id: HIDDEN_SNAP_ID, order: lastOrder + 1, position: hiddenPosition }];
   }
 
-  const initialContext = browserMeasureContext(initialViewportHeight, undefined, {
+  const initialContext = browserMeasureContext(initialViewportHeight, undefined, undefined, {
     viewportHeight: initialViewportHeight,
     visualViewportHeight: initialViewportHeight,
     ...(options.viewportPolicy?.topGap === undefined
@@ -181,7 +257,7 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
     ...(options.viewportPolicy?.hiddenOvershoot === undefined
       ? {}
       : { closedOffset: options.viewportPolicy.hiddenOvershoot }),
-  });
+  }).context;
   const initialAnchors = createAnchors(initialContext);
   const internalInitialId =
     initialSnapId === "hidden" ? HIDDEN_SNAP_ID : (initialSnapId as InternalBottomSheetSnapId<Id>);
@@ -246,6 +322,7 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
       }
     },
     onComplete(target) {
+      scheduleBodyScrollGeometryRead();
       if (target.id === HIDDEN_SNAP_ID) {
         sheetState.value = "closed";
         options.onHidden?.();
@@ -275,7 +352,7 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
     const semanticId = motion.snapshot.value.target?.id ?? motion.snapshot.value.active?.id;
     const preservesSemanticId =
       semanticId !== undefined && anchors.some((anchor) => anchor.id === semanticId);
-    return motion.remeasure({
+    const target = motion.remeasure({
       anchors,
       bounds: {
         min: Math.min(...anchors.map((anchor) => anchor.position)),
@@ -283,9 +360,21 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
       },
       ...(preservesSemanticId ? { activeId: semanticId } : {}),
     });
+    scheduleBodyScrollGeometryRead();
+    return target;
   }
 
-  useRemeasurement({ target: options.panel, measure: remeasure });
+  const primaryMeasurementTarget = options.chrome ?? options.intrinsicBodyContent ?? options.panel;
+  useRemeasurement({
+    deferResizeObserver: true,
+    target: primaryMeasurementTarget,
+    measure: remeasure,
+    ...(options.chrome && options.intrinsicBodyContent
+      ? { additionalTargets: [options.intrinsicBodyContent] }
+      : {}),
+  });
+  if (options.body)
+    useEventListener(options.body, "scroll", readBodyScrollGeometry, { passive: true });
 
   function open(id: Id = defaultOpenSnapId) {
     remeasure();
@@ -355,10 +444,27 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
       1 - Math.min(1, Math.max(0, (motion.position.value - fullPosition.value) / range));
     return Number((progress * Math.max(0, maximumScrimOpacity)).toFixed(3));
   });
-  const transform = computed(
-    () => `translate3d(0, ${motion.position.value - fullPosition.value}px, 0)`,
+  const geometry = computed(() =>
+    resolveBottomSheetGeometry({
+      bodyClientHeight: bodyClientHeight.value,
+      bodyScrollHeight: bodyScrollHeight.value,
+      bodyScrollTop: bodyScrollTop.value,
+      intrinsicBodyContentHeight: intrinsicBodyContentHeight.value,
+      measuredChromeHeight: measuredChromeHeight.value,
+      physicalSheetY: motion.position.value,
+      visualViewportHeight: viewportHeight.value,
+    }),
   );
+  const intrinsicSheetHeight = computed(() => geometry.value.intrinsicSheetHeight);
+  const maximumBodyScrollTop = computed(() => geometry.value.maximumBodyScrollTop);
+  const visibleBodyHeight = computed(() => geometry.value.visibleBodyHeight);
+  const visibleSheetHeight = computed(() => geometry.value.visibleSheetHeight);
+  const transform = computed(() => `translate3d(0, ${motion.position.value}px, 0)`);
   const panelStyle = computed(() => ({
+    "--snap-motion-sheet-full-y": `${fullPosition.value}px`,
+    "--snap-motion-sheet-physical-y": `${motion.position.value}px`,
+    "--snap-motion-sheet-viewport-height": `${viewportHeight.value}px`,
+    "--snap-motion-sheet-visible-height": `${visibleSheetHeight.value}px`,
     "--snap-motion-sheet-y": `${motion.position.value}px`,
     transform: transform.value,
     willChange: motion.isAnimating.value || motion.isDragging.value ? "transform" : "auto",
@@ -366,6 +472,11 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
 
   watch(motion.phase, (phase) => {
     if (phase === "dragging") sheetState.value = "dragging";
+  });
+  onScopeDispose(() => {
+    if (bodyGeometryFrame !== undefined && typeof window !== "undefined") {
+      window.cancelAnimationFrame(bodyGeometryFrame);
+    }
   });
 
   return {
@@ -375,16 +486,24 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
       close();
     },
     configure: motion.configure,
+    fullPosition,
+    geometry,
     interrupt: motion.interrupt,
+    intrinsicBodyContentHeight,
+    intrinsicSheetHeight,
     isAnimating: motion.isAnimating,
     isDragging: motion.isDragging,
+    maximumBodyScrollTop,
+    measuredChromeHeight,
     onNativeDragStart: motion.onNativeDragStart,
     onPointerDown: motion.onPointerDown,
     open(id) {
       return open(id) as SnapAnchor<Id> | null;
     },
+    panelIntrinsicSize,
     panelStyle,
     phase: motion.phase,
+    physicalPosition: motion.position,
     pointerIntent: motion.pointerIntent,
     pointerOwned: motion.pointerOwned,
     position: motion.position,
@@ -400,6 +519,11 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
     targetId: computed(() => publicSnapshot.value.target?.id),
     transform,
     velocity: motion.velocity,
+    visibleBodyHeight,
+    visibleSheetHeight,
     viewportHeight,
+    bodyClientHeight,
+    bodyScrollHeight,
+    bodyScrollTop,
   };
 }

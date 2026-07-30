@@ -1,5 +1,7 @@
 export { default as BottomSheet } from "./components/BottomSheet.vue";
 export { default as BottomSheetSnapPicker } from "./components/BottomSheetSnapPicker.vue";
+export { resolveBottomSheetGeometry } from "./bottom-sheet-geometry";
+export type { BottomSheetGeometry, BottomSheetGeometryInput } from "./bottom-sheet-geometry";
 export {
   bottomSheetSnapPosition,
   createViewportBottomSheetSnapPoints,

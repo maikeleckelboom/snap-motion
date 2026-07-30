@@ -101,6 +101,52 @@ function scalar(value: number) {
         <dt>Viewport</dt>
         <dd>{{ scalar(diagnostics.viewportSize) }} px</dd>
       </div>
+      <div v-if="diagnostics.visualViewportHeight !== undefined">
+        <dt>Visual viewport</dt>
+        <dd data-testid="visual-viewport-height">
+          {{ scalar(diagnostics.visualViewportHeight) }} px
+        </dd>
+      </div>
+      <div v-if="diagnostics.physicalSheetY !== undefined">
+        <dt>Physical sheet Y</dt>
+        <dd data-testid="physical-sheet-y">{{ scalar(diagnostics.physicalSheetY) }} px</dd>
+      </div>
+      <div v-if="diagnostics.visibleSheetHeight !== undefined">
+        <dt>Visible sheet</dt>
+        <dd data-testid="visible-sheet-height">{{ scalar(diagnostics.visibleSheetHeight) }} px</dd>
+      </div>
+      <div v-if="diagnostics.chromeHeight !== undefined">
+        <dt>Chrome</dt>
+        <dd data-testid="sheet-chrome-height">{{ scalar(diagnostics.chromeHeight) }} px</dd>
+      </div>
+      <div v-if="diagnostics.bodyClientHeight !== undefined">
+        <dt>Body client</dt>
+        <dd data-testid="sheet-body-client-height">
+          {{ scalar(diagnostics.bodyClientHeight) }} px
+        </dd>
+      </div>
+      <div v-if="diagnostics.bodyScrollHeight !== undefined">
+        <dt>Body scroll height</dt>
+        <dd data-testid="sheet-body-scroll-height">
+          {{ scalar(diagnostics.bodyScrollHeight) }} px
+        </dd>
+      </div>
+      <div v-if="diagnostics.bodyScrollTop !== undefined">
+        <dt>Body scroll top</dt>
+        <dd data-testid="sheet-body-scroll-top">{{ scalar(diagnostics.bodyScrollTop) }} px</dd>
+      </div>
+      <div v-if="diagnostics.maximumScrollTop !== undefined">
+        <dt>Maximum scroll</dt>
+        <dd data-testid="sheet-maximum-scroll-top">
+          {{ scalar(diagnostics.maximumScrollTop) }} px
+        </dd>
+      </div>
+      <div v-if="diagnostics.intrinsicSheetHeight !== undefined">
+        <dt>Intrinsic sheet</dt>
+        <dd data-testid="intrinsic-sheet-height">
+          {{ scalar(diagnostics.intrinsicSheetHeight) }} px
+        </dd>
+      </div>
       <div>
         <dt>Track extent</dt>
         <dd>{{ scalar(diagnostics.trackExtent) }} px</dd>

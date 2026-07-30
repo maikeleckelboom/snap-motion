@@ -69,13 +69,29 @@
 
 .snap-motion-sheet-panel {
   position: absolute;
-  inset: 24px 0 auto;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  block-size: calc(100dvh - 24px);
+  inset: 0 0 auto;
+  block-size: calc(
+    var(--snap-motion-sheet-viewport-height, 100dvh) +
+      var(--snap-motion-sheet-viewport-height, 100dvh)
+  );
   background: Canvas;
   color: CanvasText;
   pointer-events: auto;
+}
+
+.snap-motion-sheet-viewport {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-inline-size: 0;
+  block-size: var(--snap-motion-sheet-visible-height, 0px);
+  background: Canvas;
+  color: CanvasText;
+  container-type: inline-size;
+  overflow: clip;
+}
+
+.snap-motion-sheet-chrome {
+  min-inline-size: 0;
 }
 
 .snap-motion-sheet-header {
@@ -146,6 +162,12 @@
   min-block-size: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.snap-motion-sheet-body-content {
+  min-inline-size: 0;
+  padding-block-end: env(safe-area-inset-bottom);
 }
 
 @media (forced-colors: active) {

@@ -39,10 +39,13 @@ export {
   BottomSheetSnapPicker,
   bottomSheetSnapPosition,
   createViewportBottomSheetSnapPoints,
+  resolveBottomSheetGeometry,
   resolveBottomSheetSnapPoints,
   useBottomSheetMotion,
 } from "./bottom-sheet";
 export type {
+  BottomSheetGeometry,
+  BottomSheetGeometryInput,
   BottomSheetMeasureContext,
   BottomSheetOpenSnapId,
   BottomSheetSnapResolver,

@@ -1,16 +1,28 @@
 <script setup lang="ts">
-import { useBottomSheetMotion, type BottomSheetOpenSnapId } from "@snap-motion/vue/bottom-sheet";
 import {
-  captureFocusOpener,
-  focusInitial,
-  maintainModalTabOrder,
-  restoreFocus,
-} from "@snap-motion/vue/dialog";
-import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
+  BottomSheet,
+  BottomSheetSnapPicker,
+  bottomSheetSnapPosition,
+  createViewportBottomSheetSnapPoints,
+  type BottomSheetOpenSnapId,
+  type BottomSheetSnapPoint,
+  type NavigationReason,
+  type UseBottomSheetMotionReturn,
+} from "@snap-motion/vue/bottom-sheet";
+import { computed, ref } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
 import { springFromSettings } from "@/fixtures/lab-settings";
 import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
+
+type ContentMode = "short" | "tall";
+type PickerMode = "custom" | "hidden" | "standard";
+type SnapMode = "custom-top" | "default";
+
+interface BottomSheetInstance {
+  motion: UseBottomSheetMotionReturn<BottomSheetOpenSnapId>;
+  requestSnap: (id: BottomSheetOpenSnapId, reason: NavigationReason) => void;
+}
 
 const props = defineProps<{
   reducedMotionOverride: boolean | undefined;
@@ -18,160 +30,96 @@ const props = defineProps<{
   stageWidth: number;
 }>();
 
-const dialog = ref<HTMLDialogElement>();
-const closeButton = ref<HTMLButtonElement>();
-const panel = ref<HTMLElement>();
+const sheet = ref<BottomSheetInstance>();
 const opener = ref<HTMLButtonElement>();
-const sheetBody = ref<HTMLElement>();
-const reducedOverride = computed(() => props.reducedMotionOverride);
-const liveMessage = ref("");
-const titleId = `bottom-sheet-title-${useId()}`;
-const snapPickerName = `bottom-sheet-snap-${useId()}`;
-let storedOpener: HTMLElement | undefined;
-let closingFromMotion = false;
-let focusRestoreFrame: number | undefined;
+const sheetOpen = ref(false);
+const activeId = ref<BottomSheetOpenSnapId>("comfortable");
+const contentMode = ref<ContentMode>("tall");
+const pickerMode = ref<PickerMode>("custom");
+const snapMode = ref<SnapMode>("default");
+const noteCount = ref(8);
 
-function sheetElasticity(settings: LabPhysicsSettings) {
-  return {
-    min: {
-      resistance: settings.elasticResistance,
-      maxDistance: settings.maxElasticDistance,
-    },
-    max: false as const,
-  };
-}
-
-function sheetRelease(settings: LabPhysicsSettings) {
-  return {
-    projectionSeconds: settings.projectionSeconds,
-    flingVelocity: settings.flingVelocity,
-    maxAnchorSkip: Math.max(1, Math.round(settings.maxAnchorSkip)),
-    forwardSign: 1 as const,
-  };
-}
-
-const motion = useBottomSheetMotion({
-  elasticity: sheetElasticity(props.settings),
-  onHidden: completeClose,
-  onSnap(id) {
-    liveMessage.value = `Bottom sheet settled at ${id}`;
+const elasticity = computed(() => ({
+  min: {
+    resistance: props.settings.elasticResistance,
+    maxDistance: props.settings.maxElasticDistance,
   },
-  panel,
-  programmaticImpulse: props.settings.programmaticImpulse,
-  reducedMotionOverride: reducedOverride,
-  releasePolicy: sheetRelease(props.settings),
-  spring: springFromSettings(props.settings),
-});
-
+  max: false as const,
+}));
+const releasePolicy = computed(() => ({
+  projectionSeconds: props.settings.projectionSeconds,
+  flingVelocity: props.settings.flingVelocity,
+  maxAnchorSkip: Math.max(1, Math.round(props.settings.maxAnchorSkip)),
+  forwardSign: 1 as const,
+}));
+const spring = computed(() => springFromSettings(props.settings));
+const focusReturn = computed(() => (opener.value ? { opener: opener.value } : {}));
 const dialogStyle = computed(() => ({
   "--sheet-max-inline": `${Math.min(props.stageWidth, 1_120)}px`,
 }));
-const scrimStyle = computed(() => ({ opacity: motion.scrimOpacity.value }));
-const diagnostics = computed<LabDiagnostics>(() => ({
-  ...(motion.activeId.value ? { activeId: motion.activeId.value } : {}),
-  anchors: motion.snapshot.value.anchors,
-  bounds: motion.snapshot.value.bounds,
-  isAnimating: motion.isAnimating.value,
-  phase: motion.sheetState.value,
-  pointerOwned: motion.pointerOwned.value,
-  position: motion.position.value,
-  reducedMotion: motion.reducedMotion.value,
-  ...(motion.targetId.value ? { targetId: motion.targetId.value } : {}),
-  trackExtent: motion.viewportHeight.value,
-  velocity: motion.velocity.value,
-  viewportSize: motion.viewportHeight.value,
-}));
-
-async function openSheet() {
-  const target = dialog.value;
-  if (!target || target.open) {
-    return;
+const snapPoints = computed<readonly BottomSheetSnapPoint<BottomSheetOpenSnapId>[]>(() => {
+  const points = createViewportBottomSheetSnapPoints();
+  if (snapMode.value === "default") return points;
+  return points.map((point) =>
+    point.id === "full" ? { ...point, resolve: bottomSheetSnapPosition.pixels(80) } : point,
+  );
+});
+const sheetKey = computed(() => snapMode.value);
+const diagnostics = computed<LabDiagnostics>(() => {
+  const motion = sheet.value?.motion;
+  if (!motion) {
+    return {
+      anchors: [],
+      bounds: { min: 0, max: 0 },
+      isAnimating: false,
+      phase: "closed",
+      pointerOwned: false,
+      position: 0,
+      reducedMotion: Boolean(props.reducedMotionOverride),
+      trackExtent: 0,
+      velocity: 0,
+      viewportSize: 0,
+    };
   }
 
-  storedOpener = opener.value ?? captureFocusOpener(document);
-  document.documentElement.dataset.snapMotionSheetOpen = "true";
-  sheetBody.value?.scrollTo(0, 0);
-  target.showModal();
-  target.scrollTop = 0;
-  await nextTick();
-  motion.remeasure();
-  motion.open();
-  focusInitial("close", { close: closeButton.value, container: panel.value });
-  target.scrollTop = 0;
-}
+  const geometry = motion.geometry.value;
+  return {
+    ...(motion.activeId.value ? { activeId: motion.activeId.value } : {}),
+    anchors: motion.snapshot.value.anchors,
+    bodyClientHeight: geometry.bodyClientHeight,
+    bodyScrollHeight: geometry.bodyScrollHeight,
+    bodyScrollTop: geometry.bodyScrollTop,
+    bounds: motion.snapshot.value.bounds,
+    chromeHeight: geometry.measuredChromeHeight,
+    intrinsicSheetHeight: motion.panelIntrinsicSize.value,
+    isAnimating: motion.isAnimating.value,
+    maximumScrollTop: geometry.maximumBodyScrollTop,
+    phase: motion.sheetState.value,
+    physicalSheetY: geometry.physicalSheetY,
+    pointerOwned: motion.pointerOwned.value,
+    position: motion.position.value,
+    reducedMotion: motion.reducedMotion.value,
+    ...(motion.targetId.value ? { targetId: motion.targetId.value } : {}),
+    trackExtent: motion.viewportHeight.value,
+    velocity: motion.velocity.value,
+    viewportSize: motion.viewportHeight.value,
+    visibleSheetHeight: geometry.visibleSheetHeight,
+    visualViewportHeight: geometry.visualViewportHeight,
+  };
+});
 
-function requestClose() {
-  if (!dialog.value?.open) {
-    cleanupModalState();
-    return;
-  }
-  motion.close();
-}
-
-function completeClose() {
-  closingFromMotion = true;
-  if (dialog.value?.open) {
-    dialog.value.close();
-  } else {
-    cleanupModalState();
-  }
-}
-
-function cleanupModalState() {
-  delete document.documentElement.dataset.snapMotionSheetOpen;
-  sheetBody.value?.scrollTo(0, 0);
-  const openerToRestore = storedOpener;
-  storedOpener = undefined;
-  focusRestoreFrame = window.requestAnimationFrame(() => {
-    focusRestoreFrame = undefined;
-    restoreFocus(openerToRestore);
-  });
-}
-
-function onNativeClose() {
-  if (!closingFromMotion) {
-    motion.interrupt();
-  }
-  closingFromMotion = false;
-  cleanupModalState();
-}
-
-function onCancel(event: Event) {
-  event.preventDefault();
-  requestClose();
+function openSheet() {
+  activeId.value = "comfortable";
+  sheetOpen.value = true;
 }
 
 function snapTo(id: BottomSheetOpenSnapId) {
-  motion.snapTo(id);
+  sheet.value?.requestSnap(id, "picker");
 }
 
-watch(
-  () => props.settings,
-  (settings) => {
-    motion.configure({
-      elasticity: sheetElasticity(settings),
-      programmaticImpulse: settings.programmaticImpulse,
-      releasePolicy: sheetRelease(settings),
-      spring: springFromSettings(settings),
-    });
-  },
-  { deep: true },
-);
-
-onBeforeUnmount(() => {
-  motion.interrupt();
-  if (dialog.value?.open) {
-    dialog.value.close();
-  }
-  if (typeof document !== "undefined") {
-    delete document.documentElement.dataset.snapMotionSheetOpen;
-  }
-  if (focusRestoreFrame !== undefined) {
-    window.cancelAnimationFrame(focusRestoreFrame);
-    focusRestoreFrame = undefined;
-  }
-  restoreFocus(storedOpener);
-});
+function addNote() {
+  noteCount.value += 1;
+}
 </script>
 
 <template>
@@ -179,7 +127,7 @@ onBeforeUnmount(() => {
     <section class="sheet-launch">
       <div>
         <p>Reference modal</p>
-        <h3>One scalar drives sheet and scrim</h3>
+        <h3>One physical coordinate drives sheet and scrollport</h3>
         <span>
           Open at comfortable, drag the dedicated handle, interrupt a settle, or choose a semantic
           snap directly.
@@ -197,132 +145,127 @@ onBeforeUnmount(() => {
     </section>
 
     <div class="snap-reference" aria-label="Bottom sheet snap points">
-      <div><strong>Full</strong><span>24 px top gap</span></div>
-      <div><strong>Comfortable</strong><span>620 px height cap</span></div>
-      <div><strong>Compact</strong><span>360 px height cap</span></div>
+      <div><strong>Full</strong><span>Configured top gap</span></div>
+      <div><strong>Comfortable</strong><span>620 px visible cap</span></div>
+      <div><strong>Compact</strong><span>360 px visible cap</span></div>
       <div><strong>Hidden</strong><span>Viewport + 160 px</span></div>
+    </div>
+
+    <div class="sheet-fixture-controls" aria-label="Bottom sheet fixture">
+      <label>
+        <span>Picker</span>
+        <select v-model="pickerMode" data-testid="sheet-picker-mode">
+          <option value="custom">Custom</option>
+          <option value="standard">Standard</option>
+          <option value="hidden">Hidden</option>
+        </select>
+      </label>
+      <label>
+        <span>Content</span>
+        <select v-model="contentMode" data-testid="sheet-content-mode">
+          <option value="tall">Tall</option>
+          <option value="short">Short</option>
+        </select>
+      </label>
+      <label>
+        <span>Snap policy</span>
+        <select v-model="snapMode" data-testid="sheet-snap-mode">
+          <option value="default">Default</option>
+          <option value="custom-top">80 px top</option>
+        </select>
+      </label>
     </div>
 
     <DiagnosticsPanel :diagnostics="diagnostics" />
 
-    <dialog
-      ref="dialog"
-      :aria-labelledby="titleId"
-      class="sheet-dialog"
+    <BottomSheet
+      :key="sheetKey"
+      ref="sheet"
+      :active-id="activeId"
+      close-label="Close bottom sheet"
       data-testid="bottom-sheet"
-      :data-sheet-snap="motion.activeSnapId.value"
-      :data-sheet-state="motion.sheetState.value"
+      :elasticity="elasticity"
+      :focus-return="focusReturn"
+      initial-focus="close"
+      :open="sheetOpen"
+      :programmatic-impulse="settings.programmaticImpulse"
+      :reduced-motion-override="reducedMotionOverride"
+      :release-policy="releasePolicy"
+      :show-snap-picker="pickerMode !== 'hidden'"
+      :snap-points="snapPoints"
+      :spring="spring"
       :style="dialogStyle"
-      @cancel="onCancel"
-      @close="onNativeClose"
-      @keydown="maintainModalTabOrder($event, dialog)"
+      @update:active-id="activeId = $event"
+      @update:open="sheetOpen = $event"
     >
-      <div
-        aria-hidden="true"
-        class="sheet-scrim"
-        data-testid="sheet-scrim"
-        :style="scrimStyle"
-        @click="requestClose"
-      />
-
-      <section
-        ref="panel"
-        class="sheet-panel"
-        data-testid="sheet-panel"
-        :data-pointer-owned="motion.pointerOwned.value"
-        :data-sheet-state="motion.sheetState.value"
-        :style="motion.panelStyle.value"
-        tabindex="-1"
-      >
-        <header class="sheet-header">
-          <div
-            class="sheet-drag-region"
-            data-testid="sheet-handle"
-            :style="motion.surfaceStyle"
-            @pointerdown="motion.onPointerDown"
-          >
-            <span class="sheet-handle" aria-hidden="true" />
-            <div>
-              <p>Viewport-defined sheet</p>
-              <h2 :id="titleId">Motion tuning notes</h2>
-            </div>
-          </div>
-          <button
-            ref="closeButton"
-            aria-label="Close bottom sheet"
-            class="close-button"
-            data-testid="close-sheet"
-            type="button"
-            @click="requestClose"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
-              <path d="M5 5l14 14M19 5 5 19" fill="none" stroke="currentColor" stroke-width="2" />
-            </svg>
-          </button>
-        </header>
-
-        <fieldset class="snap-actions">
-          <legend class="sr-only">Sheet height</legend>
-          <label>
-            <input
-              data-testid="snap-full"
-              :name="snapPickerName"
-              type="radio"
-              value="full"
-              :checked="motion.activeSnapId.value === 'full'"
-              @change="snapTo('full')"
-            />
-            <span>Full</span>
-          </label>
-          <label>
-            <input
-              data-testid="snap-comfortable"
-              :name="snapPickerName"
-              type="radio"
-              value="comfortable"
-              :checked="motion.activeSnapId.value === 'comfortable'"
-              @change="snapTo('comfortable')"
-            />
-            <span>Comfortable</span>
-          </label>
-          <label>
-            <input
-              data-testid="snap-compact"
-              :name="snapPickerName"
-              type="radio"
-              value="compact"
-              :checked="motion.activeSnapId.value === 'compact'"
-              @change="snapTo('compact')"
-            />
-            <span>Compact</span>
-          </label>
-        </fieldset>
-
-        <div ref="sheetBody" class="sheet-body" data-testid="sheet-body" tabindex="0">
-          <p class="sheet-lede">
-            The handle owns vertical drag. This body owns its scroll. Settling always uses the same
-            physical spring and carries release velocity into Motion.
-          </p>
-          <section v-for="index in 8" :key="index" class="note-row">
-            <span class="tabular">{{ String(index).padStart(2, "0") }}</span>
-            <div>
-              <h3>
-                {{
-                  ["Release projection", "Top elasticity", "Semantic resize", "Focus restoration"][
-                    index % 4
-                  ]
-                }}
-              </h3>
-              <p>
-                This deliberately tall content proves that normal body scrolling remains usable
-                while the dedicated header region owns sheet dragging.
-              </p>
-            </div>
-          </section>
+      <template #title>
+        <div class="sheet-title">
+          <p>Viewport-defined sheet</p>
+          <h2>Motion tuning notes</h2>
         </div>
-      </section>
-      <p class="sr-only" aria-atomic="true" role="status">{{ liveMessage }}</p>
-    </dialog>
+      </template>
+
+      <template #close>
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+          <path d="M5 5l14 14M19 5 5 19" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg>
+      </template>
+
+      <template #picker>
+        <BottomSheetSnapPicker v-if="pickerMode === 'standard'" />
+        <div v-else class="custom-picker">
+          <p>Custom slot · measured chrome</p>
+          <fieldset class="snap-actions">
+            <legend class="sr-only">Sheet height</legend>
+            <label v-for="id in ['full', 'comfortable', 'compact'] as const" :key="id">
+              <input
+                :checked="activeId === id"
+                :data-testid="`snap-${id}`"
+                name="bottom-sheet-lab-snap"
+                type="radio"
+                :value="id"
+                @change="snapTo(id)"
+              />
+              <span>{{ id[0]?.toUpperCase() }}{{ id.slice(1) }}</span>
+            </label>
+          </fieldset>
+        </div>
+      </template>
+
+      <div class="sheet-content">
+        <p class="sheet-lede">
+          The handle owns vertical drag. This body owns its native scroll. Its client height is the
+          actual visible space below the measured chrome.
+        </p>
+        <button
+          v-if="contentMode === 'tall'"
+          class="add-note"
+          data-testid="add-sheet-note"
+          type="button"
+          @click="addNote"
+        >
+          Add note
+        </button>
+        <section
+          v-for="index in contentMode === 'tall' ? noteCount : 0"
+          :key="index"
+          class="note-row"
+          :data-testid="index === noteCount ? 'final-note-row' : undefined"
+        >
+          <span class="tabular">{{ String(index).padStart(2, "0") }}</span>
+          <div>
+            <h3>
+              {{
+                ["Release projection", "Top elasticity", "Semantic resize", "Focus restoration"][
+                  index % 4
+                ]
+              }}
+            </h3>
+            <p>Native body scrolling remains independent while the handle owns sheet dragging.</p>
+          </div>
+        </section>
+      </div>
+    </BottomSheet>
   </div>
 </template>
 
@@ -403,99 +346,73 @@ onBeforeUnmount(() => {
   color: var(--muted);
 }
 
-.sheet-dialog {
-  position: fixed;
-  inset: 0;
-  inline-size: 100%;
-  max-inline-size: none;
-  block-size: 100%;
-  max-block-size: none;
-  padding: 0;
-  border: 0;
-  margin: 0;
-  background: transparent;
-  color: var(--ink);
-  overflow: clip;
-  pointer-events: none;
+.sheet-fixture-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-block-end: 0.75rem;
+  border-block-end: 1px solid var(--line);
 }
 
-.sheet-dialog::backdrop {
-  background: transparent;
+.sheet-fixture-controls label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
-.sheet-scrim {
-  position: absolute;
-  inset: 0;
-  inline-size: 100%;
-  block-size: 100%;
-  padding: 0;
-  border: 0;
+.sheet-fixture-controls select {
+  min-block-size: 2rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+:deep(.snap-motion-sheet-scrim) {
   background: #000;
-  pointer-events: auto;
   touch-action: none;
   will-change: opacity;
 }
 
-.sheet-panel {
-  position: absolute;
+:deep(.snap-motion-sheet-panel) {
   inset-inline: max(0px, calc((100vw - var(--sheet-max-inline)) / 2));
-  inset-block-start: 24px;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
   min-inline-size: 0;
-  block-size: calc(100dvh - 24px);
   border: 1px solid var(--strong);
   border-block-end: 0;
   background: var(--paper);
+  color: var(--ink);
   outline: none;
-  overflow: visible;
-  pointer-events: auto;
 }
 
-.sheet-panel::after {
-  position: absolute;
-  inset-block-start: 100%;
-  inset-inline: -1px;
-  block-size: 100dvh;
-  border-inline: 1px solid var(--strong);
+:deep(.snap-motion-sheet-viewport) {
   background: var(--paper);
-  content: "";
-  pointer-events: none;
 }
 
-.sheet-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+:deep(.snap-motion-sheet-header) {
   align-items: start;
   border-block-end: 1px solid var(--strong);
 }
 
-.sheet-drag-region {
+:deep(.snap-motion-sheet-drag-region) {
   display: grid;
-  min-inline-size: 0;
   gap: 0.65rem;
   padding: 0.65rem clamp(1rem, 3vw, 1.5rem) 0.9rem;
-  cursor: grab;
-  user-select: none;
 }
 
-.sheet-panel[data-sheet-state="dragging"] .sheet-drag-region {
+:deep(.snap-motion-sheet[data-sheet-state="dragging"] .snap-motion-sheet-drag-region) {
   cursor: grabbing;
 }
 
-.sheet-handle {
-  justify-self: center;
-  inline-size: 3rem;
-  block-size: 0.28rem;
+:deep(.snap-motion-sheet-handle) {
   background: var(--ink);
 }
 
-.sheet-drag-region p,
-.sheet-drag-region h2 {
+.sheet-title p,
+.sheet-title h2 {
   margin: 0;
 }
 
-.sheet-drag-region p {
+.sheet-title p {
   margin-block-end: 0.2rem;
   color: var(--muted);
   font-size: 0.67rem;
@@ -504,26 +421,36 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
 }
 
-.sheet-drag-region h2 {
+.sheet-title h2 {
   font-size: 1rem;
 }
 
-.close-button {
+:deep(.snap-motion-sheet-close) {
   display: grid;
   place-items: center;
-  inline-size: 2.75rem;
-  block-size: 2.75rem;
   padding: 0;
-  margin: 0.75rem clamp(1rem, 3vw, 1.5rem) 0 0;
+}
+
+.custom-picker {
+  border-block-end: 1px solid var(--line);
+}
+
+.custom-picker > p {
+  padding: 0.5rem clamp(1rem, 3vw, 1.5rem) 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .snap-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  padding: 0.65rem clamp(1rem, 3vw, 1.5rem);
-  border-block-end: 1px solid var(--line);
-  border-inline: 0;
-  border-block-start: 0;
+  padding: 0.45rem clamp(1rem, 3vw, 1.5rem) 0.65rem;
+  border: 0;
   margin: 0;
 }
 
@@ -542,10 +469,9 @@ onBeforeUnmount(() => {
 
 .snap-actions span {
   display: grid;
-  min-block-size: 2.75rem;
-  place-items: center;
   min-block-size: 2rem;
   padding-inline: 0.65rem;
+  place-items: center;
   border: 1px solid var(--strong);
   font-size: 0.72rem;
 }
@@ -560,20 +486,27 @@ onBeforeUnmount(() => {
   outline-offset: 2px;
 }
 
-.sheet-body {
-  min-block-size: 0;
-  padding: clamp(1rem, 3vw, 1.5rem) clamp(1rem, 3vw, 1.5rem)
-    calc(2rem + env(safe-area-inset-bottom));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+:deep(.snap-motion-sheet-picker) {
+  flex-wrap: wrap;
+  border-block-end: 1px solid var(--line);
+}
+
+:deep(.snap-motion-sheet-body-content) {
+  padding: clamp(1rem, 3vw, 1.5rem);
+  padding-block-end: env(safe-area-inset-bottom);
 }
 
 .sheet-lede {
   max-inline-size: 46rem;
-  margin: 0 0 2rem;
+  margin: 0 0 1rem;
   font-size: clamp(1rem, 2vw, 1.35rem);
   line-height: 1.35;
+}
+
+.add-note {
+  min-block-size: 2.5rem;
+  padding-inline: 0.8rem;
+  margin-block-end: 1rem;
 }
 
 .note-row {
@@ -606,8 +539,8 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
-:global(html[data-snap-motion-sheet-open="true"]),
-:global(html[data-snap-motion-sheet-open="true"] body) {
+:global(html:has(.snap-motion-sheet[open])),
+:global(html:has(.snap-motion-sheet[open]) body) {
   overflow: hidden;
 }
 
@@ -625,7 +558,7 @@ onBeforeUnmount(() => {
     border-block-end: 1px solid var(--line);
   }
 
-  .sheet-panel {
+  :deep(.snap-motion-sheet-panel) {
     inset-inline: 0;
   }
 }

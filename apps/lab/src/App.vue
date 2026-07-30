@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUrlSearchParams } from "@vueuse/core";
 import { computed, ref, shallowRef } from "vue";
 
 import PhysicsControls from "@/components/PhysicsControls.vue";
@@ -11,6 +12,10 @@ import { settingsFromPreset } from "@/fixtures/lab-settings";
 import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fixtures/lab-types";
 
 type DemoId = "coverflow" | "media" | "grid" | "sheet";
+
+function isDemoId(value: unknown): value is DemoId {
+  return value === "coverflow" || value === "media" || value === "grid" || value === "sheet";
+}
 
 const demos = [
   {
@@ -43,7 +48,8 @@ const demos = [
   },
 ];
 
-const activeDemoId = ref<DemoId>("coverflow");
+const labParams = useUrlSearchParams<{ demo?: string }>("history", { write: false });
+const activeDemoId = ref<DemoId>(isDemoId(labParams.demo) ? labParams.demo : "coverflow");
 const activeDemo = computed(
   () => demos.find((demo) => demo.id === activeDemoId.value) ?? demos[0]!,
 );

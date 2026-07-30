@@ -73,6 +73,10 @@ const emit = defineEmits<{
 
 const dialog = ref<HTMLDialogElement>();
 const panel = ref<HTMLElement>();
+const viewport = ref<HTMLElement>();
+const chrome = ref<HTMLElement>();
+const body = ref<HTMLElement>();
+const intrinsicBodyContent = ref<HTMLElement>();
 const closeButton = ref<HTMLButtonElement>();
 const title = ref<HTMLElement>();
 const generatedTitleId = `snap-motion-sheet-title-${useId()}`;
@@ -94,6 +98,7 @@ let capturedOpener: HTMLElement | undefined;
 let closeReason: CloseReason = "programmatic";
 let targetGeneration = 0;
 let settledGeneration = 0;
+let focusRestoreFrame: number | undefined;
 
 function acceptTarget(id: Id, reason: NavigationReason, userOriginated: boolean) {
   if (id === intendedId.value) return false;
@@ -127,6 +132,9 @@ const motion = useBottomSheetMotion<Id>({
   onTargetSelected(id) {
     acceptTarget(id, "drag", true);
   },
+  body,
+  chrome,
+  intrinsicBodyContent,
   panel,
   reducedMotionOverride,
   snapPoints: configuredPoints.value,
@@ -149,9 +157,14 @@ const resolvedPoints = computed(() =>
 async function show() {
   const target = dialog.value;
   if (!mounted || !target || target.open) return;
+  if (focusRestoreFrame !== undefined) {
+    window.cancelAnimationFrame(focusRestoreFrame);
+    focusRestoreFrame = undefined;
+  }
   capturedOpener = props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
   target.showModal();
   await nextTick();
+  body.value?.scrollTo(0, 0);
   motion.remeasure();
   motion.open(props.activeId);
   focusInitial(props.initialFocus, {
@@ -184,11 +197,16 @@ function onCancel(event: Event) {
 
 function onClose() {
   motion.interrupt();
-  restoreFocus({
-    fallback: props.focusReturn?.fallback,
-    opener: capturedOpener ?? props.focusReturn?.opener,
-  });
+  body.value?.scrollTo(0, 0);
+  const opener = capturedOpener ?? props.focusReturn?.opener;
   capturedOpener = undefined;
+  focusRestoreFrame = window.requestAnimationFrame(() => {
+    focusRestoreFrame = undefined;
+    restoreFocus({
+      fallback: props.focusReturn?.fallback,
+      opener,
+    });
+  });
   emit("closed");
   if (props.open) {
     emit("requestClose", closeReason);
@@ -248,13 +266,28 @@ onBeforeUnmount(() => {
   mounted = false;
   motion.interrupt();
   if (dialog.value?.open) dialog.value.close();
+  if (focusRestoreFrame !== undefined) {
+    window.cancelAnimationFrame(focusRestoreFrame);
+    focusRestoreFrame = undefined;
+  }
   restoreFocus({
     fallback: props.focusReturn?.fallback,
     opener: capturedOpener ?? props.focusReturn?.opener,
   });
 });
 
-defineExpose({ dialog, motion, panel, requestClose, requestSnap, titleId: resolvedTitleId });
+defineExpose({
+  body,
+  chrome,
+  dialog,
+  intrinsicBodyContent,
+  motion,
+  panel,
+  requestClose,
+  requestSnap,
+  titleId: resolvedTitleId,
+  viewport,
+});
 </script>
 
 <template>
@@ -276,32 +309,38 @@ defineExpose({ dialog, motion, panel, requestClose, requestSnap, titleId: resolv
       @click="requestClose('scrim')"
     />
     <section ref="panel" class="snap-motion-sheet-panel" :style="motion.panelStyle.value">
-      <header class="snap-motion-sheet-header">
-        <div
-          class="snap-motion-sheet-drag-region"
-          :style="motion.surfaceStyle"
-          @pointerdown="motion.onPointerDown"
-        >
-          <span aria-hidden="true" class="snap-motion-sheet-handle" />
-          <div ref="title" :id="resolvedTitleId" class="snap-motion-sheet-title" tabindex="-1">
-            <slot name="title" />
+      <div ref="viewport" class="snap-motion-sheet-viewport">
+        <div ref="chrome" class="snap-motion-sheet-chrome">
+          <header class="snap-motion-sheet-header">
+            <div
+              class="snap-motion-sheet-drag-region"
+              :style="motion.surfaceStyle"
+              @pointerdown="motion.onPointerDown"
+            >
+              <span aria-hidden="true" class="snap-motion-sheet-handle" />
+              <div ref="title" :id="resolvedTitleId" class="snap-motion-sheet-title" tabindex="-1">
+                <slot name="title" />
+              </div>
+            </div>
+            <button
+              ref="closeButton"
+              :aria-label="closeLabel ?? messages.closeBottomSheet"
+              class="snap-motion-sheet-close"
+              type="button"
+              @click="requestClose('close-button')"
+            >
+              <slot name="close">{{ messages.closeBottomSheet }}</slot>
+            </button>
+          </header>
+          <slot v-if="showSnapPicker" name="picker">
+            <BottomSheetSnapPicker />
+          </slot>
+        </div>
+        <div ref="body" class="snap-motion-sheet-body" tabindex="0">
+          <div ref="intrinsicBodyContent" class="snap-motion-sheet-body-content">
+            <slot />
           </div>
         </div>
-        <button
-          ref="closeButton"
-          :aria-label="closeLabel ?? messages.closeBottomSheet"
-          class="snap-motion-sheet-close"
-          type="button"
-          @click="requestClose('close-button')"
-        >
-          <slot name="close">{{ messages.closeBottomSheet }}</slot>
-        </button>
-      </header>
-      <slot name="picker">
-        <BottomSheetSnapPicker v-if="showSnapPicker" />
-      </slot>
-      <div class="snap-motion-sheet-body">
-        <slot />
       </div>
     </section>
     <p aria-atomic="true" class="snap-motion-visually-hidden" role="status">{{ statusText }}</p>

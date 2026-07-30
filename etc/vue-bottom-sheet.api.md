@@ -27,6 +27,50 @@ import { VNode } from 'vue';
 export const BottomSheet: typeof __VLS_export;
 
 // @public (undocumented)
+export interface BottomSheetGeometry {
+    // (undocumented)
+    readonly bodyClientHeight: number;
+    // (undocumented)
+    readonly bodyScrollHeight: number;
+    // (undocumented)
+    readonly bodyScrollTop: number;
+    // (undocumented)
+    readonly intrinsicBodyContentHeight: number;
+    // (undocumented)
+    readonly intrinsicSheetHeight: number;
+    // (undocumented)
+    readonly maximumBodyScrollTop: number;
+    // (undocumented)
+    readonly measuredChromeHeight: number;
+    // (undocumented)
+    readonly physicalSheetY: number;
+    // (undocumented)
+    readonly visibleBodyHeight: number;
+    // (undocumented)
+    readonly visibleSheetHeight: number;
+    // (undocumented)
+    readonly visualViewportHeight: number;
+}
+
+// @public (undocumented)
+export interface BottomSheetGeometryInput {
+    // (undocumented)
+    readonly bodyClientHeight?: number;
+    // (undocumented)
+    readonly bodyScrollHeight?: number;
+    // (undocumented)
+    readonly bodyScrollTop?: number;
+    // (undocumented)
+    readonly intrinsicBodyContentHeight?: number;
+    // (undocumented)
+    readonly measuredChromeHeight?: number;
+    // (undocumented)
+    readonly physicalSheetY: number;
+    // (undocumented)
+    readonly visualViewportHeight: number;
+}
+
+// @public (undocumented)
 export interface BottomSheetMeasureContext {
     // (undocumented)
     readonly closedOffset: number;
@@ -106,6 +150,9 @@ export function createViewportBottomSheetSnapPoints(overrides?: Partial<BottomSh
 export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "route";
 
 // @public
+export function resolveBottomSheetGeometry(input: BottomSheetGeometryInput): BottomSheetGeometry;
+
+// @public
 export function resolveBottomSheetSnapPoints<Id extends string>(points: readonly BottomSheetSnapPoint<Id>[], context: BottomSheetMeasureContext): ResolvedBottomSheetSnapPoint<Id>[];
 
 // @public (undocumented)
@@ -128,6 +175,10 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
 // @public (undocumented)
 export interface UseBottomSheetMotionOptions<Id extends string = BottomSheetOpenSnapId> {
     // (undocumented)
+    body?: Readonly<Ref<HTMLElement | undefined>>;
+    // (undocumented)
+    chrome?: Readonly<Ref<HTMLElement | undefined>>;
+    // (undocumented)
     defaultOpenSnapId?: Id;
     // (undocumented)
     driver?: AnimationDriver;
@@ -141,6 +192,8 @@ export interface UseBottomSheetMotionOptions<Id extends string = BottomSheetOpen
     initialSnapId?: Id | "hidden";
     // (undocumented)
     initialViewportHeight?: number;
+    // (undocumented)
+    intrinsicBodyContent?: Readonly<Ref<HTMLElement | undefined>>;
     // (undocumented)
     maximumScrimOpacity?: number;
     // (undocumented)
@@ -172,15 +225,33 @@ export interface UseBottomSheetMotionReturn<Id extends string = BottomSheetOpenS
     // (undocumented)
     readonly activeSnapId: ComputedRef<Id | undefined>;
     // (undocumented)
+    readonly bodyClientHeight: Ref<number>;
+    // (undocumented)
+    readonly bodyScrollHeight: Ref<number>;
+    // (undocumented)
+    readonly bodyScrollTop: Ref<number>;
+    // (undocumented)
     readonly close: () => void;
     // (undocumented)
     readonly configure: (update: ControllerConfigurationUpdate) => void;
     // (undocumented)
+    readonly fullPosition: ComputedRef<number>;
+    // (undocumented)
+    readonly geometry: ComputedRef<BottomSheetGeometry>;
+    // (undocumented)
     readonly interrupt: () => void;
+    // (undocumented)
+    readonly intrinsicBodyContentHeight: Ref<number>;
+    // (undocumented)
+    readonly intrinsicSheetHeight: ComputedRef<number>;
     // (undocumented)
     readonly isAnimating: ComputedRef<boolean>;
     // (undocumented)
     readonly isDragging: Ref<boolean>;
+    // (undocumented)
+    readonly maximumBodyScrollTop: ComputedRef<number>;
+    // (undocumented)
+    readonly measuredChromeHeight: Ref<number>;
     // (undocumented)
     readonly onNativeDragStart: (event: DragEvent) => void;
     // (undocumented)
@@ -188,9 +259,13 @@ export interface UseBottomSheetMotionReturn<Id extends string = BottomSheetOpenS
     // (undocumented)
     readonly open: (id?: Id) => SnapAnchor<Id> | null;
     // (undocumented)
+    readonly panelIntrinsicSize: Ref<number>;
+    // (undocumented)
     readonly panelStyle: ComputedRef<CSSProperties>;
     // (undocumented)
     readonly phase: ComputedRef<ControllerSnapshot<Id>["phase"]>;
+    // (undocumented)
+    readonly physicalPosition: ComputedRef<number>;
     // Warning: (ae-forgotten-export) The symbol "PointerIntent" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -227,6 +302,10 @@ export interface UseBottomSheetMotionReturn<Id extends string = BottomSheetOpenS
     readonly velocity: ComputedRef<number>;
     // (undocumented)
     readonly viewportHeight: Ref<number>;
+    // (undocumented)
+    readonly visibleBodyHeight: ComputedRef<number>;
+    // (undocumented)
+    readonly visibleSheetHeight: ComputedRef<number>;
 }
 
 // (No @packageDocumentation comment for this package)
