@@ -158,8 +158,8 @@ const trackSlots = computed(() =>
 const canGoPrevious = computed(() => galleryIndex.value > 0);
 const canGoNext = computed(() => galleryIndex.value < items.value.length - 1);
 const galleryBusy = computed(() => trackNavigationState.value !== "idle");
-const canNavigatePrevious = computed(() => canGoPrevious.value && !galleryBusy.value);
-const canNavigateNext = computed(() => canGoNext.value && !galleryBusy.value);
+const canNavigatePrevious = canGoPrevious;
+const canNavigateNext = canGoNext;
 const isZoomed = computed(() => transform.value.scale > 1.001);
 const canZoomIn = computed(() => transform.value.scale < 4 - 0.001);
 const canZoomOut = computed(() => isZoomed.value);

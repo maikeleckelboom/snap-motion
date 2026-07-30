@@ -166,6 +166,22 @@ async function expectDialogFocus(page: Page) {
   ).toBe(true);
 }
 
+async function pauseGalleryTrackTransition(page: Page) {
+  const track = page.getByTestId("snap-motion-media-gallery-track");
+  await expect
+    .poll(() =>
+      track.evaluate((element) => {
+        const transition = element.getAnimations()[0];
+        if (!transition) return false;
+        transition.pause();
+        transition.currentTime = 100;
+        return true;
+      }),
+    )
+    .toBe(true);
+  await expect(gallery(page)).toHaveAttribute("data-track-state", "settling");
+}
+
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
   collectedPageErrors.set(page, errors);
@@ -569,6 +585,41 @@ test("buttons, keys, announcements, and item changes own bounded gallery navigat
   await page.keyboard.press("End");
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("5 / 5");
   await expect(page.getByTestId("snap-motion-media-gallery-next")).toBeDisabled();
+});
+
+test("navigation controls stay boundary-driven during button and swipe settlement", async ({
+  page,
+}) => {
+  await openGallery(page);
+  const previous = page.getByTestId("snap-motion-media-gallery-previous");
+  const next = page.getByTestId("snap-motion-media-gallery-next");
+
+  await next.evaluate((button: HTMLButtonElement) => button.click());
+  await pauseGalleryTrackTransition(page);
+  await expect(previous).toBeEnabled();
+  await expect(previous).toHaveAttribute("aria-disabled", "false");
+  await expect(next).toBeEnabled();
+  await expect(next).toHaveAttribute("aria-disabled", "false");
+  await page.getByTestId("snap-motion-media-gallery-close").click();
+  await expect(gallery(page)).not.toBeVisible();
+
+  await openGallery(page);
+  await page.keyboard.press("Home");
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("1 / 5");
+  await expect(gallery(page)).toHaveAttribute("data-track-state", "idle");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 5");
+  await expect(gallery(page)).toHaveAttribute("data-track-state", "idle");
+  await pointerGesture(page, page.getByTestId("snap-motion-media-gallery-viewport"), {
+    deltaX: -180,
+    elapsedMs: 480,
+    pointerId: 590,
+  });
+  await pauseGalleryTrackTransition(page);
+  await expect(previous).toBeEnabled();
+  await expect(previous).toHaveAttribute("aria-disabled", "false");
+  await expect(next).toBeEnabled();
+  await expect(next).toHaveAttribute("aria-disabled", "false");
 });
 
 test("discrete, focal, touch, and wheel zoom preserve the canonical fit state", async ({

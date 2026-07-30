@@ -561,6 +561,38 @@ describe("MediaGalleryDialog navigation", () => {
       "Two, 2 of 3",
     );
   });
+
+  it("keeps navigation availability boundary-driven throughout settlement", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountGallery({ initialIndex: 1, reducedMotionOverride: false });
+    await flushReactiveTasks();
+    await frames.flushNext();
+
+    const previous = wrapper.get('[data-testid="snap-motion-media-gallery-previous"]');
+    const next = wrapper.get('[data-testid="snap-motion-media-gallery-next"]');
+    expect(previous.attributes("disabled")).toBeUndefined();
+    expect(next.attributes("disabled")).toBeUndefined();
+
+    await next.trigger("click");
+    await flushReactiveTasks();
+    await frames.flushNext();
+
+    expect(wrapper.get("dialog").attributes("data-track-state")).toBe("settling");
+    expect(previous.attributes("aria-disabled")).toBe("false");
+    expect(previous.attributes("disabled")).toBeUndefined();
+    expect(next.attributes("aria-disabled")).toBe("false");
+    expect(next.attributes("disabled")).toBeUndefined();
+
+    await wrapper.get('[data-testid="snap-motion-media-gallery-track"]').trigger("transitionend", {
+      propertyName: "transform",
+    });
+    await flushReactiveTasks();
+
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("2");
+    expect(previous.attributes("disabled")).toBeUndefined();
+    expect(next.attributes("aria-disabled")).toBe("true");
+    expect(next.attributes()).toHaveProperty("disabled");
+  });
 });
 
 describe("MediaGalleryDialog media lifecycle", () => {
