@@ -5,8 +5,10 @@ execution and SSR are independent of a bundler CSS loader. The package marks CSS
 and packed Vite/Nuxt fixtures prove the public CSS subpath.
 
 The base stylesheet supplies visually hidden content, dialog and sheet structure, control target
-sizes, focus fallbacks, forced-colors behavior, and small-container safety. It deliberately supplies
-no product palette, typography, elevation system, or carousel layout theme.
+sizes, focus fallbacks, forced-colors behavior, small-container safety, and the media gallery's
+responsive structural composition. It deliberately supplies no product palette, typography, or
+carousel layout theme. The media gallery's stable theme variables are documented in
+[Media gallery](./media-gallery.md).
 
 Stable customization variables:
 

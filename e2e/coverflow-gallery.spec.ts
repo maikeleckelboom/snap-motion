@@ -1,4 +1,4 @@
-import AxeBuilder from "@axe-core/playwright";
+﻿import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { dragSyntheticPointerBy, expectCarouselAt, openLabDemo } from "./helpers";
@@ -10,7 +10,7 @@ function carousel(page: Page) {
 }
 
 function gallery(page: Page) {
-  return page.getByTestId("coverflow-gallery");
+  return page.getByTestId("snap-motion-media-gallery");
 }
 
 function card(page: Page, id: string) {
@@ -173,9 +173,9 @@ test("settled card, side card, touch tap, cancellation, and stage focus resolve 
   const viewport = carousel(page);
   await card(page, CENTER_ID).click();
   await expect(gallery(page)).toBeVisible();
-  await expect(page.getByTestId("coverflow-gallery-close")).toBeFocused();
+  await expect(page.getByTestId("snap-motion-media-gallery-close")).toBeFocused();
   await expect(viewport).not.toBeFocused();
-  await page.getByTestId("coverflow-gallery-close").click();
+  await page.getByTestId("snap-motion-media-gallery-close").click();
   await expect(gallery(page)).not.toBeVisible();
 
   await clickVisibleCard(page, card(page, "team"));
@@ -184,12 +184,12 @@ test("settled card, side card, touch tap, cancellation, and stage focus resolve 
   await expect(viewport).not.toBeFocused();
   await clickVisibleCard(page, card(page, "team"));
   await expect(gallery(page)).toBeVisible();
-  await page.getByTestId("coverflow-gallery-close").click();
+  await page.getByTestId("snap-motion-media-gallery-close").click();
   await expect(gallery(page)).not.toBeVisible();
 
   await pointerGesture(page, card(page, "team"));
   await expect(gallery(page)).toBeVisible();
-  await page.getByTestId("coverflow-gallery-close").click();
+  await page.getByTestId("snap-motion-media-gallery-close").click();
   await expect(gallery(page)).not.toBeVisible();
 
   await pointerGesture(page, card(page, "team"), {
@@ -244,8 +244,12 @@ test("dialog entrance and directional track expose rendered intermediate states"
     button.click();
     await Promise.resolve();
     await Promise.resolve();
-    const dialog = document.querySelector<HTMLDialogElement>('[data-testid="coverflow-gallery"]');
-    const shell = dialog?.querySelector<HTMLElement>('[data-testid="coverflow-gallery-shell"]');
+    const dialog = document.querySelector<HTMLDialogElement>(
+      '[data-testid="snap-motion-media-gallery"]',
+    );
+    const shell = dialog?.querySelector<HTMLElement>(
+      '[data-testid="snap-motion-media-gallery-shell"]',
+    );
     const initial = {
       dialogOpen: dialog?.open,
       opacity: shell ? Number(getComputedStyle(shell).opacity) : -1,
@@ -272,12 +276,12 @@ test("dialog entrance and directional track expose rendered intermediate states"
   expect(entrance.midpoint.opacity).toBeGreaterThan(0);
   expect(entrance.midpoint.opacity).toBeLessThan(1);
   expect(entrance.midpoint.transform).not.toBe("none");
-  await page.getByTestId("coverflow-gallery-shell").evaluate((element) => {
+  await page.getByTestId("snap-motion-media-gallery-shell").evaluate((element) => {
     for (const animation of element.getAnimations()) animation.finish();
   });
   await expect(dialog).toHaveAttribute("data-dialog-state", "open");
 
-  const galleryTrack = page.getByTestId("coverflow-gallery-track");
+  const galleryTrack = page.getByTestId("snap-motion-media-gallery-track");
   const continuity = await galleryTrack.evaluate(async (element) => {
     const viewportElement = element.parentElement;
     if (!viewportElement) throw new Error("Gallery viewport is unavailable.");
@@ -310,7 +314,9 @@ test("dialog entrance and directional track expose rendered intermediate states"
       }),
     );
     await Promise.resolve();
-    const visibleSlots = [...element.querySelectorAll<HTMLElement>(".coverflow-gallery-slot")]
+    const visibleSlots = [
+      ...element.querySelectorAll<HTMLElement>(".snap-motion-media-gallery-slot"),
+    ]
       .map((slot) => {
         const rect = slot.getBoundingClientRect();
         const visibleWidth = viewport
@@ -321,7 +327,7 @@ test("dialog entrance and directional track expose rendered intermediate states"
           left: rect.left,
           position: slot.dataset.slotPosition,
           previewVisible:
-            getComputedStyle(slot.querySelector<HTMLElement>(".gallery-image-placeholder")!)
+            getComputedStyle(slot.querySelector<HTMLElement>(".snap-motion-media-gallery-preview")!)
               .display !== "none",
           visibleWidth,
           right: rect.right,
@@ -336,7 +342,7 @@ test("dialog entrance and directional track expose rendered intermediate states"
   const nextSlot = continuity.find((slot) => slot.id === "team");
   expect(Math.abs((currentSlot?.right ?? 0) - (nextSlot?.left ?? 0))).toBeLessThan(1);
   expect(
-    await page.getByTestId("coverflow-gallery-viewport").evaluate((element) => {
+    await page.getByTestId("snap-motion-media-gallery-viewport").evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return rect.width / rect.height;
     }),
@@ -353,8 +359,8 @@ test("dialog entrance and directional track expose rendered intermediate states"
     );
   });
   await expect(dialog).toHaveAttribute("data-track-state", "idle");
-  await page.getByTestId("coverflow-gallery-next").click();
-  await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("4 / 5");
+  await page.getByTestId("snap-motion-media-gallery-next").click();
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("4 / 5");
   await expect(dialog).toHaveAttribute("data-track-state", "idle");
   await expect(page.locator('[data-slot-position="0"]')).toHaveAttribute("data-item-id", "team");
 });
@@ -419,7 +425,7 @@ test("backdrop closes only a true backdrop sequence and not an image gesture", a
   await expect(dialog).not.toBeVisible();
 
   await openGallery(page);
-  await pointerGesture(page, page.getByTestId("coverflow-gallery-viewport"), {
+  await pointerGesture(page, page.getByTestId("snap-motion-media-gallery-viewport"), {
     deltaX: -110,
     elapsedMs: 500,
     pointerId: 402,
@@ -451,9 +457,9 @@ test("close synchronizes every carousel owner and resumes navigation without cat
   });
 
   await page.keyboard.press("End");
-  await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("5 / 5");
-  await expect(page.getByTestId("coverflow-gallery-next")).toBeDisabled();
-  await page.getByTestId("coverflow-gallery-close").click();
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("5 / 5");
+  await expect(page.getByTestId("snap-motion-media-gallery-next")).toBeDisabled();
+  await page.getByTestId("snap-motion-media-gallery-close").click();
   await expect(gallery(page)).not.toBeVisible();
 
   await expect(viewport).toHaveAttribute("data-active-id", "settings");
@@ -491,24 +497,24 @@ test("buttons, keys, announcements, and item changes own bounded gallery navigat
   page,
 }) => {
   await openGallery(page);
-  const status = page.getByTestId("coverflow-gallery-status");
-  await page.getByTestId("coverflow-gallery-zoom-in").click();
+  const status = page.getByTestId("snap-motion-media-gallery-status");
+  await page.getByTestId("snap-motion-media-gallery-zoom-in").click();
   await expect(gallery(page)).toHaveAttribute("data-scale", "1.5000");
-  await page.getByTestId("coverflow-gallery-next").click();
-  await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("4 / 5");
+  await page.getByTestId("snap-motion-media-gallery-next").click();
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("4 / 5");
   await expect(gallery(page)).toHaveAttribute("data-scale", "1.0000");
   await expect(gallery(page)).toHaveAttribute("data-pan-x", "0.000");
   await expect(gallery(page)).toHaveAttribute("data-pan-y", "0.000");
   await expect(status).toHaveText("Team & rollen, 4 of 5");
 
   await page.keyboard.press("ArrowLeft");
-  await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("3 / 5");
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("3 / 5");
   await page.keyboard.press("Home");
-  await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("1 / 5");
-  await expect(page.getByTestId("coverflow-gallery-previous")).toBeDisabled();
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("1 / 5");
+  await expect(page.getByTestId("snap-motion-media-gallery-previous")).toBeDisabled();
   await page.keyboard.press("End");
-  await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("5 / 5");
-  await expect(page.getByTestId("coverflow-gallery-next")).toBeDisabled();
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("5 / 5");
+  await expect(page.getByTestId("snap-motion-media-gallery-next")).toBeDisabled();
 });
 
 test("discrete, focal, touch, and wheel zoom preserve the canonical fit state", async ({
@@ -516,10 +522,10 @@ test("discrete, focal, touch, and wheel zoom preserve the canonical fit state", 
 }) => {
   await openGallery(page);
   const dialog = gallery(page);
-  const viewport = page.getByTestId("coverflow-gallery-viewport");
-  const zoomIn = page.getByTestId("coverflow-gallery-zoom-in");
-  const zoomOut = page.getByTestId("coverflow-gallery-zoom-out");
-  const reset = page.getByTestId("coverflow-gallery-reset");
+  const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
+  const zoomIn = page.getByTestId("snap-motion-media-gallery-zoom-in");
+  const zoomOut = page.getByTestId("snap-motion-media-gallery-zoom-out");
+  const reset = page.getByTestId("snap-motion-media-gallery-reset");
   await expect(zoomOut).toBeDisabled();
   await expect(reset).toBeDisabled();
 
@@ -545,7 +551,7 @@ test("discrete, focal, touch, and wheel zoom preserve the canonical fit state", 
   await expect(dialog).toHaveAttribute("data-scale", "1.0000");
   await expect(dialog).toHaveAttribute("data-pan-x", "0.000");
   await page
-    .locator('[data-slot-position="0"] .coverflow-gallery-transform')
+    .locator('[data-slot-position="0"] .snap-motion-media-gallery-transform')
     .evaluate(async (element) => {
       await Promise.all(element.getAnimations().map((animation) => animation.finished));
     });
@@ -626,7 +632,7 @@ test("fit swipe, zoomed pan, pinch, cancellation, and resize keep exclusive owne
 }) => {
   await openGallery(page);
   const dialog = gallery(page);
-  const viewport = page.getByTestId("coverflow-gallery-viewport");
+  const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
 
   await pointerGesture(page, viewport, {
     deltaX: -180,
@@ -634,19 +640,19 @@ test("fit swipe, zoomed pan, pinch, cancellation, and resize keep exclusive owne
     elapsedMs: 480,
     pointerId: 601,
   });
-  await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("4 / 5");
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("4 / 5");
   await pointerGesture(page, viewport, {
     deltaX: 20,
     deltaY: 150,
     elapsedMs: 480,
     pointerId: 602,
   });
-  await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("4 / 5");
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("4 / 5");
   await expect(dialog).toBeVisible();
 
-  await page.getByTestId("coverflow-gallery-zoom-in").click();
+  await page.getByTestId("snap-motion-media-gallery-zoom-in").click();
   await page
-    .locator('[data-slot-position="0"] .coverflow-gallery-transform')
+    .locator('[data-slot-position="0"] .snap-motion-media-gallery-transform')
     .evaluate((element) => {
       const animation = element.getAnimations()[0];
       if (!animation) throw new Error("Discrete zoom transition did not start.");
@@ -659,11 +665,11 @@ test("fit swipe, zoomed pan, pinch, cancellation, and resize keep exclusive owne
     elapsedMs: 500,
     pointerId: 603,
   });
-  await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("4 / 5");
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("4 / 5");
   expect(Math.abs(Number(await dialog.getAttribute("data-pan-x")))).toBeGreaterThan(0);
   const clamped = await dialog.evaluate((element) => {
     const imageViewport = element.querySelector<HTMLElement>(
-      '[data-testid="coverflow-gallery-viewport"]',
+      '[data-testid="snap-motion-media-gallery-viewport"]',
     );
     const scale = Number(element.dataset.scale);
     const panX = Math.abs(Number(element.dataset.panX));
@@ -679,7 +685,7 @@ test("fit swipe, zoomed pan, pinch, cancellation, and resize keep exclusive owne
   expect(clamped.panX).toBeLessThanOrEqual(clamped.maxX + 1);
   expect(clamped.panY).toBeLessThanOrEqual(clamped.maxY + 1);
 
-  await page.getByTestId("coverflow-gallery-reset").click();
+  await page.getByTestId("snap-motion-media-gallery-reset").click();
   await viewport.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const dispatch = (
@@ -760,10 +766,13 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
   await page.getByTestId("coverflow-inspect").click();
   await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
 
-  const viewport = page.getByTestId("coverflow-gallery-viewport");
+  const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
   const before = await viewport.boundingBox();
-  await page.locator(".gallery-media-status").getByRole("button", { name: "Retry" }).click();
-  await expect(page.getByTestId("coverflow-gallery-loading")).toBeVisible();
+  await page
+    .locator(".snap-motion-media-gallery-status")
+    .getByRole("button", { name: "Retry" })
+    .click();
+  await expect(page.getByTestId("snap-motion-media-gallery-loading")).toBeVisible();
   if (!releaseRetry) throw new Error("Retry request hold was not initialized.");
   releaseRetry();
   await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded", {
@@ -773,9 +782,9 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
   expect(Math.abs((after?.width ?? 0) - (before?.width ?? 0))).toBeLessThan(1);
   expect(Math.abs((after?.height ?? 0) - (before?.height ?? 0))).toBeLessThan(1);
   expect(fullRequests).toEqual(new Set(["project.svg", "map.svg", "team.svg"]));
-  await expect(page.locator('[data-slot-position="0"] .gallery-image-full.revealed')).toHaveCount(
-    1,
-  );
+  await expect(
+    page.locator('[data-slot-position="0"] .snap-motion-media-gallery-full.revealed'),
+  ).toHaveCount(1);
 });
 
 test("a failed full image retains its preview and leaves navigation and close usable", async ({
@@ -787,17 +796,18 @@ test("a failed full image retains its preview and leaves navigation and close us
   await openLabDemo(page, "coverflow", "no-preference");
   await openGallery(page);
   await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
-  await expect(page.getByTestId("coverflow-gallery-error")).toContainText("Full image unavailable");
-  await expect(page.locator('[data-slot-position="0"] .gallery-image-placeholder')).toHaveAttribute(
-    "alt",
-    /Location and planning screen/,
+  await expect(page.getByTestId("snap-motion-media-gallery-error")).toContainText(
+    "Full image unavailable",
   );
-  const failureBox = await page.getByTestId("coverflow-gallery-error").boundingBox();
-  const mediaBox = await page.getByTestId("coverflow-gallery-viewport").boundingBox();
+  await expect(
+    page.locator('[data-slot-position="0"] .snap-motion-media-gallery-preview'),
+  ).toHaveAttribute("alt", /Location and planning screen/);
+  const failureBox = await page.getByTestId("snap-motion-media-gallery-error").boundingBox();
+  const mediaBox = await page.getByTestId("snap-motion-media-gallery-viewport").boundingBox();
   expect(failureBox?.y).toBeGreaterThanOrEqual((mediaBox?.y ?? 0) + (mediaBox?.height ?? 0));
-  await page.getByTestId("coverflow-gallery-next").click();
-  await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("4 / 5");
-  await page.getByTestId("coverflow-gallery-close").click();
+  await page.getByTestId("snap-motion-media-gallery-next").click();
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("4 / 5");
+  await page.getByTestId("snap-motion-media-gallery-close").click();
   await expect(gallery(page)).not.toBeVisible();
 });
 
@@ -816,29 +826,29 @@ test("semantics, focus visibility, coarse discovery, reduced motion, and reflow 
   const dialog = gallery(page);
   await expect(dialog).toHaveAccessibleName("Screen gallery");
   await expect(dialog).toHaveAttribute("data-reduced-motion", "true");
-  await page.getByTestId("coverflow-gallery-zoom-in").click();
+  await page.getByTestId("snap-motion-media-gallery-zoom-in").click();
   await expect(dialog).toHaveAttribute("data-scale", "1.5000");
   expect(
     await page
-      .locator('[data-slot-position="0"] .coverflow-gallery-transform')
+      .locator('[data-slot-position="0"] .snap-motion-media-gallery-transform')
       .evaluate((element) => Number.parseFloat(getComputedStyle(element).transitionDuration)),
   ).toBeLessThan(0.001);
-  await page.getByTestId("coverflow-gallery-reset").click();
+  await page.getByTestId("snap-motion-media-gallery-reset").click();
   await expect(page.locator('[data-slot-position="0"]').getByRole("img")).toHaveAccessibleName(
     "Location and planning screen with a map, route lines, and a selected location.",
   );
   for (const testId of [
-    "coverflow-gallery-close",
-    "coverflow-gallery-previous",
-    "coverflow-gallery-next",
-    "coverflow-gallery-zoom-in",
+    "snap-motion-media-gallery-close",
+    "snap-motion-media-gallery-previous",
+    "snap-motion-media-gallery-next",
+    "snap-motion-media-gallery-zoom-in",
   ]) {
     const control = page.getByTestId(testId);
     const box = await control.boundingBox();
     expect(box?.width).toBeGreaterThanOrEqual(44);
     expect(box?.height).toBeGreaterThanOrEqual(44);
   }
-  const close = page.getByTestId("coverflow-gallery-close");
+  const close = page.getByTestId("snap-motion-media-gallery-close");
   await close.focus();
   await page.keyboard.press("Tab");
   await page.keyboard.press("Shift+Tab");
@@ -848,10 +858,11 @@ test("semantics, focus visibility, coarse discovery, reduced motion, and reflow 
   );
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByTestId("coverflow-gallery-viewport")).toBeVisible();
+  await expect(page.getByTestId("snap-motion-media-gallery-viewport")).toBeVisible();
   const reflow = await dialog.evaluate((element) => ({
     horizontalOverflow: element.scrollWidth - element.clientWidth,
-    shellHeight: element.querySelector<HTMLElement>(".coverflow-gallery-shell")?.offsetHeight,
+    shellHeight: element.querySelector<HTMLElement>(".snap-motion-media-gallery-shell")
+      ?.offsetHeight,
   }));
   expect(reflow.horizontalOverflow).toBeLessThanOrEqual(1);
   expect(reflow.shellHeight).toBeLessThanOrEqual(844);
@@ -862,7 +873,9 @@ test("semantics, focus visibility, coarse discovery, reduced motion, and reflow 
       .then((content) => /maximum-scale|user-scalable\s*=\s*no/i.test(content ?? "")),
   ).toBe(false);
 
-  const axe = await new AxeBuilder({ page }).include('[data-testid="coverflow-gallery"]').analyze();
+  const axe = await new AxeBuilder({ page })
+    .include('[data-testid="snap-motion-media-gallery"]')
+    .analyze();
   expect(axe.violations.map((violation) => violation.id)).toEqual([]);
   await close.click();
   await expect(dialog).not.toBeVisible();
@@ -873,7 +886,7 @@ test("focus restoration falls back to the stage when the logical control is unav
 }) => {
   await openGallery(page);
   await page.getByTestId("coverflow-inspect").evaluate((control) => control.remove());
-  await page.getByTestId("coverflow-gallery-close").click();
+  await page.getByTestId("snap-motion-media-gallery-close").click();
   await expect(gallery(page)).not.toBeVisible();
   await expect(page.getByTestId("coverflow-inspect")).toHaveCount(0);
   await expect(carousel(page)).toBeFocused();

@@ -50,6 +50,10 @@
       "types": "./dist/localization.d.ts",
       "import": "./dist/localization.js"
     },
+    "./media-gallery": {
+      "types": "./dist/media-gallery.d.ts",
+      "import": "./dist/media-gallery.js"
+    },
     "./motion": {
       "types": "./dist/motion.d.ts",
       "import": "./dist/motion.js"

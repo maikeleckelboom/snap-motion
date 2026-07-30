@@ -5,6 +5,11 @@ import {
   resolveCoverflowProgress,
 } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
+import {
+  MediaGalleryDialog,
+  type FocusReturnOptions,
+  type MediaGalleryItem,
+} from "@snap-motion/vue/media-gallery";
 import { useElementSize, useEventListener } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 
@@ -25,9 +30,7 @@ import {
   COVERFLOW_GALLERY_TUNING,
   isCoverflowGalleryEligible,
   resolveCoverflowGesture,
-  type CoverflowGalleryItem,
 } from "./coverflowGallery";
-import CoverflowGalleryDialog from "./CoverflowGalleryDialog.vue";
 import {
   COVERFLOW_MOTION_TUNING,
   COVERFLOW_PAGINATION_TUNING,
@@ -52,7 +55,7 @@ type ScreenId = "templates" | "project" | "map" | "team" | "settings";
  */
 type ScreenLayout = "gallery" | "detail" | "canvas" | "roster" | "console";
 
-interface ShowcaseScreen extends CoverflowGalleryItem {
+interface ShowcaseScreen extends MediaGalleryItem {
   readonly id: ScreenId;
   readonly accent: string;
   readonly eyebrow: string;
@@ -75,7 +78,7 @@ const screens: readonly ShowcaseScreen[] = [
     tone: "light",
     layout: "gallery",
     alt: "Projects template gallery with a featured project structure and six template cards.",
-    thumbnailSrc: `${templatesGalleryUrl}?thumbnail`,
+    previewSrc: `${templatesGalleryUrl}?thumbnail`,
     fullSrc: `${templatesGalleryUrl}?full`,
     width: 1_600,
     height: 1_000,
@@ -88,7 +91,7 @@ const screens: readonly ShowcaseScreen[] = [
     tone: "mist",
     layout: "detail",
     alt: "Project Horizon detail screen with project settings, status rows, and progress.",
-    thumbnailSrc: `${projectGalleryUrl}?thumbnail`,
+    previewSrc: `${projectGalleryUrl}?thumbnail`,
     fullSrc: `${projectGalleryUrl}?full`,
     width: 1_600,
     height: 1_000,
@@ -101,7 +104,7 @@ const screens: readonly ShowcaseScreen[] = [
     tone: "light",
     layout: "canvas",
     alt: "Location and planning screen with a map, route lines, and a selected location.",
-    thumbnailSrc: `${mapGalleryUrl}?thumbnail`,
+    previewSrc: `${mapGalleryUrl}?thumbnail`,
     fullSrc: `${mapGalleryUrl}?full`,
     width: 1_600,
     height: 1_000,
@@ -114,7 +117,7 @@ const screens: readonly ShowcaseScreen[] = [
     tone: "mist",
     layout: "roster",
     alt: "Team and roles screen with six member cards arranged in a roster.",
-    thumbnailSrc: `${teamGalleryUrl}?thumbnail`,
+    previewSrc: `${teamGalleryUrl}?thumbnail`,
     fullSrc: `${teamGalleryUrl}?full`,
     width: 1_600,
     height: 1_000,
@@ -127,7 +130,7 @@ const screens: readonly ShowcaseScreen[] = [
     tone: "ink",
     layout: "console",
     alt: "Dark workspace settings screen with four administrative setting rows.",
-    thumbnailSrc: `${settingsGalleryUrl}?thumbnail`,
+    previewSrc: `${settingsGalleryUrl}?thumbnail`,
     fullSrc: `${settingsGalleryUrl}?full`,
     width: 1_600,
     height: 1_000,
@@ -144,9 +147,12 @@ const galleryFinalIndex = ref(0);
 const reducedOverride = computed(() => props.reducedMotionOverride);
 const { width: viewportWidth } = useElementSize(viewport);
 const inspectControl = ref<HTMLButtonElement>();
+const galleryFocusReturn = computed<FocusReturnOptions>(() => ({
+  opener: inspectControl.value,
+  fallback: () => viewport.value,
+}));
 const activeCarouselPointers = new Set<number>();
 let suppressedCarouselAnnouncementIndex: number | undefined;
-let focusRestoreFrame: number | undefined;
 let selectionFrame: number | undefined;
 
 interface CarouselGesture {
@@ -750,22 +756,6 @@ function onGalleryRequestClose(finalIndex: number) {
   galleryOpen.value = false;
 }
 
-async function onGalleryClosed(finalIndex: number) {
-  const synchronizedIndex = clamp(finalIndex, 0, ids.length - 1);
-  galleryFinalIndex.value = synchronizedIndex;
-  await nextTick();
-  if (focusRestoreFrame !== undefined) cancelAnimationFrame(focusRestoreFrame);
-  focusRestoreFrame = requestAnimationFrame(() => {
-    focusRestoreFrame = undefined;
-    const target = inspectControl.value;
-    if (target?.isConnected) {
-      target.focus({ preventScroll: true });
-    } else {
-      viewport.value?.focus({ preventScroll: true });
-    }
-  });
-}
-
 function onPaginationFocus(index: number) {
   focusedPaginationIndex.value = index;
 }
@@ -799,7 +789,6 @@ useEventListener("pointerup", onCarouselPointerUp);
 useEventListener("pointercancel", onCarouselPointerCancel);
 
 onBeforeUnmount(() => {
-  if (focusRestoreFrame !== undefined) cancelAnimationFrame(focusRestoreFrame);
   if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
 });
 </script>
@@ -1008,12 +997,14 @@ onBeforeUnmount(() => {
       {{ liveMessage }}
     </p>
     <DiagnosticsPanel :diagnostics="diagnostics" />
-    <CoverflowGalleryDialog
+    <MediaGalleryDialog
+      v-model:open="galleryOpen"
+      eyebrow="Screen inspection"
+      :focus-return="galleryFocusReturn"
       :initial-index="galleryOpen ? galleryInitialIndex : settledIndex"
       :items="screens"
-      :open="galleryOpen"
-      :reduced-motion="motion.reducedMotion.value"
-      @closed="onGalleryClosed"
+      :reduced-motion-override="motion.reducedMotion.value"
+      title="Screen gallery"
       @request-close="onGalleryRequestClose"
     />
   </section>
@@ -1024,6 +1015,23 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 1rem;
   min-inline-size: 0;
+}
+
+.coverflow-demo :deep(.snap-motion-media-gallery) {
+  --snap-motion-gallery-surface: #11161f;
+  --snap-motion-gallery-canvas: #090d13;
+  --snap-motion-gallery-text: #eef2f7;
+  --snap-motion-gallery-muted: #aab4c2;
+  --snap-motion-gallery-line: rgb(255 255 255 / 0.14);
+  --snap-motion-gallery-control-surface: #202936;
+  --snap-motion-gallery-control-border: rgb(255 255 255 / 0.24);
+  --snap-motion-gallery-control-hover-surface: #2a3545;
+  --snap-motion-gallery-disabled-surface: #171e29;
+  --snap-motion-gallery-disabled-text: #667286;
+  --snap-motion-gallery-focus: #73b3ff;
+  --snap-motion-gallery-backdrop: rgb(3 7 18 / 0.92);
+  --snap-motion-gallery-chrome-surface: #151b25;
+  --snap-motion-gallery-radius: 1rem;
 }
 
 .coverflow-header {

@@ -1,6 +1,3 @@
-import { describe, expect, it } from "vitest";
-
-import type { MediaTransformContext } from "../src/media-inspection/media-transform-contracts";
 import {
   constrainMediaTransform,
   fitMediaWithinViewport,
@@ -8,7 +5,9 @@ import {
   panMediaTransform,
   resolveMediaTransformBounds,
   zoomMediaTransform,
-} from "../src/media-inspection/media-transform-math";
+  type MediaTransformContext,
+} from "@snap-motion/vue/media-gallery";
+import { describe, expect, it } from "vitest";
 
 const landscapeContext: MediaTransformContext = {
   intrinsicSize: { height: 600, width: 1_000 },

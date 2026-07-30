@@ -6,10 +6,22 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [vue()],
   resolve: {
-    alias: {
-      "@snap-motion/core": fileURLToPath(new URL("./packages/core/src/index.ts", import.meta.url)),
-      "@snap-motion/vue": fileURLToPath(new URL("./packages/vue/src/index.ts", import.meta.url)),
-    },
+    alias: [
+      {
+        find: "@snap-motion/vue/media-gallery",
+        replacement: fileURLToPath(
+          new URL("./packages/vue/src/media-gallery/index.ts", import.meta.url),
+        ),
+      },
+      {
+        find: "@snap-motion/core",
+        replacement: fileURLToPath(new URL("./packages/core/src/index.ts", import.meta.url)),
+      },
+      {
+        find: "@snap-motion/vue",
+        replacement: fileURLToPath(new URL("./packages/vue/src/index.ts", import.meta.url)),
+      },
+    ],
   },
   test: {
     mockReset: true,

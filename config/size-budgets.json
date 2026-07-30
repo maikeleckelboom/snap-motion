@@ -6,7 +6,7 @@
   },
   "vueRoot": {
     "entry": "packages/vue/dist/index.js",
-    "maxBytes": 60000,
+    "maxBytes": 65000,
     "maxGzipBytes": 17500
   },
   "vueCarousel": {
@@ -24,6 +24,11 @@
     "maxBytes": 10000,
     "maxGzipBytes": 3500
   },
+  "vueMediaGallery": {
+    "entry": "packages/vue/dist/media-gallery.js",
+    "maxBytes": 60000,
+    "maxGzipBytes": 16000
+  },
   "vueMotion": {
     "entry": "packages/vue/dist/motion.js",
     "maxBytes": 16000,
@@ -31,7 +36,7 @@
   },
   "baseCss": {
     "entry": "packages/vue/dist/style.css",
-    "maxBytes": 5000,
-    "maxGzipBytes": 1600
+    "maxBytes": 18000,
+    "maxGzipBytes": 4000
   }
 }

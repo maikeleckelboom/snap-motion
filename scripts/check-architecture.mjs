@@ -9,7 +9,14 @@ const sourceFiles = [];
 const importGraph = new Map();
 const semanticExtensions = new Set([".css", ".json", ".svg", ".vue"]);
 const codeExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
-const featureNames = new Set(["bottom-sheet", "carousel", "dialog", "localization", "motion"]);
+const featureNames = new Set([
+  "bottom-sheet",
+  "carousel",
+  "dialog",
+  "localization",
+  "media-gallery",
+  "motion",
+]);
 
 async function walk(directory, predicate = () => true) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -88,6 +95,12 @@ for (const file of sourceFiles) {
         errors.push(
           `${repoPath(file)} imports external runtime ${specifier}; core must stay independent.`,
         );
+      }
+      if (
+        vueArea(file) === "media-gallery" &&
+        ["@snap-motion/core", "motion", "vue-router"].includes(specifier)
+      ) {
+        errors.push(`${repoPath(file)} imports forbidden media-gallery runtime ${specifier}.`);
       }
       continue;
     }

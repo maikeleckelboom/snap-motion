@@ -1,8 +1,13 @@
 # Components
 
 All components are available from `@snap-motion/vue`. Capability imports use
-`@snap-motion/vue/carousel`, `@snap-motion/vue/bottom-sheet`, or `@snap-motion/vue/dialog`.
+`@snap-motion/vue/carousel`, `@snap-motion/vue/bottom-sheet`, `@snap-motion/vue/dialog`, or
+`@snap-motion/vue/media-gallery`.
 Components are semantic and style-light; application markup inside slides remains consumer-owned.
+
+The media gallery is a higher-level, interaction-complete composition. Its public item, lifecycle,
+loading, focus, responsive, message, and theme contracts are documented in
+[Media gallery](./media-gallery.md).
 
 ## Modal lightbox
 

@@ -20,6 +20,7 @@ const configurations = [
   { packageName: "vue", path: "packages/vue/api-extractor.bottom-sheet.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.dialog.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.localization.json" },
+  { packageName: "vue", path: "packages/vue/api-extractor.media-gallery.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.motion.json" },
 ].filter((configuration) => !packageFilter || configuration.packageName === packageFilter);
 

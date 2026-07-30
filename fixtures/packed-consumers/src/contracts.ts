@@ -13,6 +13,13 @@ import {
   createEnglishSnapMotionMessages,
   type SnapMotionMessages,
 } from "@snap-motion/vue/localization";
+import {
+  createEnglishMediaGalleryMessages,
+  MediaGalleryDialog,
+  type MediaGalleryCloseReason,
+  type MediaGalleryItem,
+  type MediaGalleryNavigationReason,
+} from "@snap-motion/vue/media-gallery";
 import { createMotionDriver, useSnapMotion } from "@snap-motion/vue/motion";
 import { h, ref } from "vue";
 
@@ -59,6 +66,22 @@ void useSnapMotion<MediaId>;
 void createMotionDriver;
 const closeReason: CloseReason = "programmatic";
 void closeReason;
+const galleryItems = [
+  {
+    id: "preview",
+    title: "Preview",
+    alt: "Preview media",
+    previewSrc: "/preview.jpg",
+    width: 1_600,
+    height: 1_000,
+  },
+] as const satisfies readonly MediaGalleryItem[];
+void h(MediaGalleryDialog, { items: galleryItems, open: false });
+void createEnglishMediaGalleryMessages({ closeGallery: "Sluit galerij" });
+const mediaCloseReason: MediaGalleryCloseReason = "backdrop";
+const mediaNavigationReason: MediaGalleryNavigationReason = "swipe";
+void mediaCloseReason;
+void mediaNavigationReason;
 
 // @ts-expect-error Semantic IDs are strings.
 createFixedStageGeometry({ itemIds: [1, 2], viewportSize: 800 });

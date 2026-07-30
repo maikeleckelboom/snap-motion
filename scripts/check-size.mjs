@@ -24,6 +24,25 @@ const measurements = {};
 for (const [name, budget] of Object.entries(budgets)) {
   const files = await collectStaticGraph(resolve(repoRoot, budget.entry));
   const source = Buffer.concat(files.map((file) => file.source));
+  if (name === "vueMediaGallery") {
+    const emittedGraph = source.toString("utf8");
+    const forbiddenEdges = [
+      ["Motion", /(?:from\s*|import\s*)["']motion["']/],
+      ["Snap Motion core", /(?:from\s*|import\s*)["']@snap-motion\/core["']/],
+      ["carousel", /carousel/i],
+      ["bottom sheet", /bottom-sheet/i],
+      ["lab", /apps[\\/]lab|@\/|coverflow/i],
+      ["Nuxt", /from\s*["'](?:#app|nuxt)/],
+      ["router", /from\s*["'](?:vue-router|#vue-router)/],
+    ].filter(([, pattern]) => pattern.test(emittedGraph));
+    if (forbiddenEdges.length > 0) {
+      throw new Error(
+        `vueMediaGallery contains forbidden emitted edges: ${forbiddenEdges
+          .map(([label]) => label)
+          .join(", ")}`,
+      );
+    }
+  }
   const result = {
     bytes: source.byteLength,
     files: files.map((file) => basename(file.path)),

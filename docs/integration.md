@@ -12,20 +12,21 @@ Snap Motion owns:
 - release projection and target policy
 - Vue motion, gesture, resize, and reduced-motion primitives
 - style-light semantic carousel, native dialog, and bottom-sheet components
+- the reusable media-gallery composition, including preview/full-image loading, zoom, pan, and
+  swipe behavior
 - stable IDs, focus policy, inertness, status completion, and native snap-picker semantics
 
 `maikel.site` owns:
 
-- `GalleryLightbox` composition and project-specific presentation around Snap Motion primitives
+- the media-gallery trigger, controlled selection, route mapping, project media, and theme
 - project-specific media and captions
 - portfolio visual treatment
 - routing and project data
-- any zoom/pan layer below the carousel track
 
 Integration should consume workspace or source modules without claiming a published npm package.
-The application should supply stable media IDs and presentation markup, then render the scalar
-position returned by Snap Motion. It must not add CSS transitions, smooth scrolling, native scroll
-snap, or another animation library to the same carousel transform.
+The application should supply stable media IDs and presentation data. It must not add CSS
+transitions, smooth scrolling, native scroll snap, or another animation library to the same
+carousel or media-gallery transform.
 
 Import the essential component CSS once:
 

@@ -11,6 +11,7 @@ import CarouselStatus from "../src/carousel/components/CarouselStatus.vue";
 import CarouselTrack from "../src/carousel/components/CarouselTrack.vue";
 import CarouselViewport from "../src/carousel/components/CarouselViewport.vue";
 import ModalDialog from "../src/dialog/components/ModalDialog.vue";
+import MediaGalleryDialog from "../src/media-gallery/components/MediaGalleryDialog.vue";
 
 function carousel(activeId: string, label: string) {
   return h(
@@ -51,6 +52,20 @@ function createCertificationApp() {
           { activeId: "comfortable", open: true },
           { title: () => "Sheet title", default: () => h("p", "Sheet content") },
         ),
+        h(MediaGalleryDialog, {
+          open: true,
+          items: [
+            {
+              id: "one",
+              title: "Media title",
+              alt: "Media description",
+              previewSrc: "/preview.jpg",
+              width: 1_600,
+              height: 1_000,
+            },
+          ],
+          initialIndex: 8,
+        }),
       ]);
     },
   });
@@ -65,6 +80,8 @@ describe("production component SSR contract", () => {
     expect(html).toContain('aria-roledescription="slide"');
     expect(html).toContain('role="group"');
     expect(html).toContain("<dialog");
+    expect(html).toContain("snap-motion-media-gallery");
+    expect(html).toContain("Media title");
     expect(html).not.toMatch(/<dialog[^>]*\sopen(?:=|\s|>)/);
     expect(html).not.toContain("teleport");
   });

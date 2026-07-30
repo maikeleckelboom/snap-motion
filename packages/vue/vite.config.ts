@@ -19,6 +19,9 @@ export default defineConfig({
   ],
   build: {
     emptyOutDir: false,
+    // Vite 8's Oxc minifier can emit single-letter bindings that collide when Nuxt rebundles
+    // capability entrypoints. Esbuild keeps the published ESM valid across that consumer boundary.
+    minify: "esbuild",
     lib: {
       cssFileName: "style",
       entry: {
@@ -27,6 +30,7 @@ export default defineConfig({
         dialog: "src/dialog/index.ts",
         index: "src/index.ts",
         localization: "src/localization/index.ts",
+        "media-gallery": "src/media-gallery/index.ts",
         motion: "src/motion/index.ts",
       },
       formats: ["es"],

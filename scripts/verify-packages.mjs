@@ -256,6 +256,7 @@ try {
   }
   run(pnpmCommand, ["exec", "vite", "build"], minimum);
   run(process.execPath, ["ssr.mjs"], minimum);
+  run(process.execPath, ["media-gallery-import.mjs"], minimum);
 
   const current = await createConsumer("current", "package.template.json", coreTarball, vueTarball);
   consumers.push(current);
@@ -265,13 +266,15 @@ try {
   }
   run(pnpmCommand, ["exec", "vite", "build"], current);
   run(process.execPath, ["ssr.mjs"], current);
+  run(process.execPath, ["media-gallery-import.mjs"], current);
   run(pnpmCommand, ["exec", "nuxt", "build", "nuxt"], current);
   await browserSmoke(current);
   await nuxtHydrationSmoke(current);
+  run(pnpmCommand, ["exec", "nuxt", "generate", "nuxt"], current);
 } finally {
   await Promise.all(consumers.map(removeConsumer));
 }
 
 process.stdout.write(
-  "Packed package certification passed for minimum/current Vue, ESM, Vite, Router, Nuxt, SSR, hydration, and browser smoke consumers.\n",
+  "Packed package certification passed for minimum/current Vue, ESM, gallery-only import, Vite, Router, Nuxt build/generate, SSR, hydration, and browser smoke consumers.\n",
 );

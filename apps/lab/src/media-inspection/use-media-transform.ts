@@ -1,3 +1,16 @@
+import {
+  constrainMediaTransform,
+  fittedMediaTransform,
+  interpolateMediaTransform,
+  isFittedMediaTransform,
+  mediaTransformLimits,
+  panMediaTransform,
+  zoomMediaTransform,
+  type MediaPoint,
+  type MediaSize,
+  type MediaTransform,
+  type MediaTransformContext,
+} from "@snap-motion/vue/media-gallery";
 import { useEventListener, useResizeObserver } from "@vueuse/core";
 import { animate } from "motion";
 import {
@@ -10,22 +23,6 @@ import {
   type MaybeRefOrGetter,
   type Ref,
 } from "vue";
-
-import {
-  fittedMediaTransform,
-  mediaTransformLimits,
-  type MediaPoint,
-  type MediaSize,
-  type MediaTransform,
-  type MediaTransformContext,
-} from "./media-transform-contracts";
-import {
-  constrainMediaTransform,
-  interpolateMediaTransform,
-  isFittedMediaTransform,
-  panMediaTransform,
-  zoomMediaTransform,
-} from "./media-transform-math";
 
 interface PlaybackControls {
   stop: () => void;

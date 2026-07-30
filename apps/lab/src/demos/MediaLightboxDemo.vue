@@ -7,6 +7,7 @@ import {
   maintainModalTabOrder,
   restoreFocus,
 } from "@snap-motion/vue/dialog";
+import type { MediaSize } from "@snap-motion/vue/media-gallery";
 import { until, useElementSize, useImage, useTimeoutFn } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 
@@ -18,7 +19,6 @@ import {
 } from "@/fixtures/lab-settings";
 import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 import { mediaFixtures, type MediaFixture, type MediaFixtureId } from "@/fixtures/media";
-import type { MediaSize } from "@/media-inspection/media-transform-contracts";
 import { runMediaTransition, supportsMediaTransition } from "@/media-inspection/media-transition";
 import MediaZoomControls from "@/media-inspection/MediaZoomControls.vue";
 import { useMediaTransform } from "@/media-inspection/use-media-transform";

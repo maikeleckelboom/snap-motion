@@ -1,0 +1,6 @@
+{
+  "extends": "./api-extractor.json",
+  "mainEntryPointFilePath": "<projectFolder>/../../temp/declarations/vue/media-gallery/index.d.ts",
+  "apiReport": { "reportFileName": "vue-media-gallery.api.md" },
+  "dtsRollup": { "untrimmedFilePath": "<projectFolder>/dist/media-gallery.d.ts" }
+}
