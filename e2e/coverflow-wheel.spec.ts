@@ -14,7 +14,9 @@ async function dispatchWheelStep(viewport: Locator, deltaX: number) {
   }, deltaX);
 }
 
-test("stepped wheel input advances monotonically through interrupted springs", async ({ page }) => {
+test("stepped wheel targets advance monotonically through interrupted springs", async ({
+  page,
+}) => {
   await openLabDemo(page, "coverflow", "no-preference");
   await page.locator(".preset-control select").selectOption("heavy");
 
@@ -23,20 +25,25 @@ test("stepped wheel input advances monotonically through interrupted springs", a
   await expect(viewport).toHaveAttribute("data-active-id", "templates");
 
   await dispatchWheelStep(viewport, 40);
-  await expect(viewport).toHaveAttribute("data-active-id", "project");
+  await expect(viewport).toHaveAttribute("data-target-id", "project");
+  await expect(viewport).toHaveAttribute("data-phase", "settling");
   await page.waitForTimeout(120);
   await expect(viewport).toHaveAttribute("data-phase", "settling");
 
   await dispatchWheelStep(viewport, 40);
-  await expect(viewport).toHaveAttribute("data-active-id", "map");
+  await expect(viewport).toHaveAttribute("data-target-id", "map");
+  await expect(viewport).toHaveAttribute("data-phase", "settling");
   await page.waitForTimeout(120);
   await expect(viewport).toHaveAttribute("data-phase", "settling");
 
   await dispatchWheelStep(viewport, 40);
-  await expect(viewport).toHaveAttribute("data-active-id", "team");
+  await expect(viewport).toHaveAttribute("data-target-id", "team");
+  await expect(viewport).toHaveAttribute("data-phase", "settling");
   await page.waitForTimeout(120);
   await expect(viewport).toHaveAttribute("data-phase", "settling");
 
   await dispatchWheelStep(viewport, -40);
+  await expect(viewport).toHaveAttribute("data-target-id", "map");
   await expect(viewport).toHaveAttribute("data-active-id", "map");
+  await expect(viewport).toHaveAttribute("data-phase", "idle");
 });

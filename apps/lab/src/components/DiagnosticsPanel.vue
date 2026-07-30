@@ -27,13 +27,47 @@ function scalar(value: number) {
         <dt>Velocity</dt>
         <dd>{{ scalar(diagnostics.velocity) }} px/s</dd>
       </div>
+      <div v-if="diagnostics.speedInCards !== undefined">
+        <dt>Card velocity</dt>
+        <dd data-testid="speed-in-cards">{{ scalar(diagnostics.speedInCards) }} cards/s</dd>
+      </div>
       <div>
         <dt>Target</dt>
         <dd data-testid="target-id">{{ diagnostics.targetId ?? "—" }}</dd>
       </div>
+      <div v-if="diagnostics.targetIndex !== undefined">
+        <dt>Target index</dt>
+        <dd data-testid="target-index">{{ diagnostics.targetIndex }}</dd>
+      </div>
       <div>
         <dt>Active</dt>
         <dd data-testid="active-id">{{ diagnostics.activeId ?? "—" }}</dd>
+      </div>
+      <div v-if="diagnostics.committedIndex !== undefined">
+        <dt>Committed index</dt>
+        <dd data-testid="committed-index">{{ diagnostics.committedIndex }}</dd>
+      </div>
+      <div v-if="diagnostics.centerInfluence !== undefined">
+        <dt>Center influence</dt>
+        <dd>{{ scalar(diagnostics.centerInfluence) }}</dd>
+      </div>
+      <div v-if="diagnostics.kineticFocus !== undefined">
+        <dt>Kinetic focus</dt>
+        <dd data-testid="kinetic-focus">{{ scalar(diagnostics.kineticFocus) }}</dd>
+      </div>
+      <div v-if="diagnostics.settledness !== undefined">
+        <dt>Settledness</dt>
+        <dd>{{ scalar(diagnostics.settledness) }}</dd>
+      </div>
+      <div v-if="diagnostics.releaseVelocityCapActive !== undefined">
+        <dt>Free velocity cap</dt>
+        <dd data-testid="release-cap">
+          {{ diagnostics.releaseVelocityCapActive ? "active" : "clear" }}
+        </dd>
+      </div>
+      <div v-if="diagnostics.maxAnchorSkip !== undefined">
+        <dt>Maximum skip</dt>
+        <dd>{{ diagnostics.maxAnchorSkip }}</dd>
       </div>
       <div>
         <dt>Bounds</dt>

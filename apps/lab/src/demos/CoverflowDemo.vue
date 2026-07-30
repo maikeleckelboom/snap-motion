@@ -16,6 +16,15 @@ import {
 } from "@/fixtures/lab-settings";
 import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 
+import {
+  COVERFLOW_MOTION_TUNING,
+  CoverflowSemanticCommitment,
+  resolveCoverflowKinetics,
+  resolveSpeedInCards,
+  useBoundedCoverflowDriver,
+  type CoverflowKineticState,
+} from "./coverflowMotion";
+
 type ScreenId = "templates" | "project" | "map" | "team" | "settings";
 
 /**
@@ -126,9 +135,11 @@ function measureGeometry() {
 }
 
 const initialGeometry = measureGeometry();
+const driver = useBoundedCoverflowDriver(() => pitch.value);
 const motion = useCarouselMotion({
   anchors: initialGeometry.anchors,
   bounds: initialGeometry.bounds,
+  driver,
   elasticity: symmetricElasticityFromSettings(props.settings),
   initialTargetId: ids[Math.floor(ids.length / 2)]!,
   measure: measureGeometry,
@@ -140,30 +151,63 @@ const motion = useCarouselMotion({
   viewport,
 });
 
-const activeId = computed(
-  () => motion.targetId.value ?? motion.activeId.value ?? ids[Math.floor(ids.length / 2)]!,
-);
-const activeIndex = computed(() => Math.max(0, ids.indexOf(activeId.value)));
+const initialIndex = Math.floor(ids.length / 2);
+const semanticCommitment = new CoverflowSemanticCommitment(initialIndex, ids.length);
+const committedIndex = ref(initialIndex);
+const pendingTargetIndex = ref<number | null>(null);
+const liveMessage = ref("");
+const activeIndex = computed(() => committedIndex.value);
+const activeId = computed(() => ids[activeIndex.value] ?? ids[initialIndex]!);
 const activeScreen = computed(() => screens[activeIndex.value] ?? screens[0]!);
 
-/** Continuous index glued to controller position — drives live pagination. */
-const floatIndex = computed(() => {
+/** Continuous physical index. It never owns semantic selection or horizontal card position. */
+const physicalIndex = computed(() => {
   const max = Math.max(0, ids.length - 1);
   const raw = pitch.value <= 0 ? 0 : -motion.position.value / pitch.value;
   return clamp(raw, 0, max);
 });
+const speedInCards = computed(() => resolveSpeedInCards(motion.velocity.value, pitch.value));
 
 const paginationDots = computed(() =>
-  screens.map((screen, index) => {
-    const distance = Math.abs(index - floatIndex.value);
-    const weight = clamp(1 - distance, 0, 1);
-    return {
-      id: screen.id,
-      title: screen.title,
-      weight,
-      selected: distance < 0.5,
-    };
-  }),
+  screens.map((screen, index) => ({
+    id: screen.id,
+    title: screen.title,
+    selected: index === committedIndex.value,
+  })),
+);
+
+watch(
+  motion.snapshot,
+  (snapshot) => {
+    const currentPitch = Math.max(1, pitch.value);
+    const targetIndex =
+      snapshot.target === null ? null : Math.max(0, ids.indexOf(snapshot.target.id));
+    const nearestIndex =
+      snapshot.active === null
+        ? committedIndex.value
+        : Math.max(0, ids.indexOf(snapshot.active.id));
+    const announcementIndex = semanticCommitment.update({
+      phase: snapshot.phase,
+      physicalIndex: clamp(-snapshot.position / currentPitch, 0, ids.length - 1),
+      targetIndex,
+      activeIndex: nearestIndex,
+      speedInCards: resolveSpeedInCards(snapshot.velocity, currentPitch),
+    });
+
+    if (committedIndex.value !== semanticCommitment.committedIndex) {
+      committedIndex.value = semanticCommitment.committedIndex;
+    }
+    if (pendingTargetIndex.value !== semanticCommitment.pendingTargetIndex) {
+      pendingTargetIndex.value = semanticCommitment.pendingTargetIndex;
+    }
+    if (announcementIndex !== null) {
+      const screen = screens[announcementIndex];
+      if (screen) {
+        liveMessage.value = `${screen.title}, ${announcementIndex + 1} of ${screens.length}`;
+      }
+    }
+  },
+  { immediate: true },
 );
 
 const anchorsById = computed(() => {
@@ -175,7 +219,7 @@ const anchorsById = computed(() => {
 });
 
 /** How thick a panel is, in CSS pixels. Read as a side surface once the panel turns. */
-const EDGE_THICKNESS = 2.5;
+const EDGE_THICKNESS = 1.5;
 
 /**
  * Ceiling on the in-plane offset. `tan` runs away as a panel approaches broadside, and past
@@ -195,9 +239,22 @@ interface SlideStyle {
   [customProperty: `--${string}`]: string;
 }
 
+const kineticState: CoverflowKineticState = {
+  speedInCards: 0,
+  centerInfluence: 1,
+  kinetic: 0,
+  kineticFocus: 0,
+  settledness: 1,
+  scaleLoss: 0,
+  recess: 0,
+  retainedYaw: 0,
+  contactShadowStrength: 1,
+};
+
 const slideStyles = computed(() => {
   const reduced = motion.reducedMotion.value;
   const position = motion.position.value;
+  const velocity = motion.velocity.value;
   const currentPitch = pitch.value;
   const styles = {} as Record<ScreenId, SlideStyle>;
 
@@ -226,36 +283,57 @@ const slideStyles = computed(() => {
       hideAfter: 3.05,
     });
 
+    resolveCoverflowKinetics(progress, velocity, currentPitch, kineticState);
+    const correctedRotateY = presentation.rotateY + kineticState.retainedYaw;
+    const correctedScale = presentation.scale - kineticState.scaleLoss;
+    const correctedTranslateZ = presentation.translateZ - kineticState.recess;
+    const correctedYaw = correctedRotateY / 62;
+    const correctedEdgeStrength = Math.abs(Math.sin((correctedRotateY * Math.PI) / 180));
+    const correctedEdgeSide = correctedRotateY < 0 ? 1 : correctedRotateY > 0 ? -1 : 0;
+
     // Material cues are read off the panel's orientation, not off raw gesture progress.
     const depth = clamp(presentation.depth, 0, 1);
-    const sheen = clamp(Math.abs(presentation.yaw), 0, 1);
-    const facesLeft = presentation.edgeSide < 0;
+    const deepRail = clamp((presentation.depth - 1) / 2.05, 0, 1);
+    const sheen = clamp(Math.abs(correctedYaw), 0, 1);
+    const facesLeft = correctedEdgeSide < 0;
     // Signed so the side surface lands on whichever edge the yaw has turned toward the camera.
     const edgeOffset = clamp(
-      -Math.tan((presentation.rotateY * Math.PI) / 180) * EDGE_THICKNESS,
+      -Math.tan((correctedRotateY * Math.PI) / 180) * EDGE_THICKNESS,
       -MAX_EDGE_OFFSET,
       MAX_EDGE_OFFSET,
     );
 
     styles[screen.id] = {
-      opacity: presentation.opacity,
-      transform: `translate3d(-50%, -50%, 0) ${presentation.transform}`,
+      opacity: 1,
+      transform: reduced
+        ? `translate3d(-50%, -50%, 0) translate3d(${presentation.translateX.toFixed(3)}px, 0, 0) scale(${correctedScale.toFixed(4)})`
+        : `translate3d(-50%, -50%, 0) translate3d(${presentation.translateX.toFixed(3)}px, 0, ${correctedTranslateZ.toFixed(3)}px) rotateY(${correctedRotateY.toFixed(3)}deg) scale(${correctedScale.toFixed(4)})`,
       zIndex: presentation.zIndex,
       visibility: presentation.visible ? "visible" : "hidden",
       pointerEvents: presentation.visible && Math.abs(progress) < 1.2 ? "auto" : "none",
       "--screen-accent": screen.accent,
       "--depth": depth.toFixed(4),
+      "--deep-rail": deepRail.toFixed(4),
+      "--center-influence": kineticState.centerInfluence.toFixed(4),
+      "--kinetic-focus": kineticState.kineticFocus.toFixed(4),
+      "--settledness": kineticState.settledness.toFixed(4),
+      "--contact-shadow": kineticState.contactShadowStrength.toFixed(4),
       // Signed yaw throws the cast shadow off the panel's near edge, onto whatever is behind it.
-      "--yaw": presentation.yaw.toFixed(4),
+      "--yaw": correctedYaw.toFixed(4),
       "--sheen": sheen.toFixed(4),
+      "--surface-shade": clamp(sheen * 0.72 + deepRail * 0.28, 0, 1).toFixed(4),
       // The gradient reverses with yaw so it reads as incident light, not gloss.
       "--sheen-angle": facesLeft ? "100deg" : "260deg",
       // Darken the edge that the neighbouring panel passes in front of.
       "--occlusion-angle": presentation.progress > 0 ? "90deg" : "270deg",
-      "--occlusion": (sheen * 0.85).toFixed(4),
+      "--occlusion": (
+        clamp(1 - Math.abs(progress), 0, 1) *
+        (0.32 + 0.68 * sheen) *
+        (1 - kineticState.kineticFocus * 0.25)
+      ).toFixed(4),
       "--edge-offset": `${edgeOffset.toFixed(3)}px`,
       // A side surface catches less light the more obliquely it is seen.
-      "--edge-face": presentation.edgeStrength > 0.5 ? "var(--edge-deep)" : "var(--edge-near)",
+      "--edge-face": correctedEdgeStrength > 0.5 ? "var(--edge-deep)" : "var(--edge-near)",
     };
   }
 
@@ -270,6 +348,10 @@ const stageStyle = computed(() => ({
 
 const diagnostics = computed<LabDiagnostics>(() => {
   const geometry = measureGeometry();
+  const currentPitch = Math.max(1, pitch.value);
+  const foregroundProgress = physicalIndex.value - Math.round(physicalIndex.value);
+  const targetIndex = motion.targetId.value === undefined ? -1 : ids.indexOf(motion.targetId.value);
+  resolveCoverflowKinetics(foregroundProgress, motion.velocity.value, currentPitch, kineticState);
   return {
     ...(motion.activeId.value ? { activeId: motion.activeId.value } : {}),
     anchors: motion.snapshot.value.anchors,
@@ -278,8 +360,18 @@ const diagnostics = computed<LabDiagnostics>(() => {
     phase: motion.phase.value,
     pointerOwned: motion.pointerOwned.value,
     position: motion.position.value,
+    committedIndex: committedIndex.value,
+    centerInfluence: kineticState.centerInfluence,
+    kineticFocus: kineticState.kineticFocus,
+    maxAnchorSkip: props.settings.maxAnchorSkip,
+    releaseVelocityCapActive:
+      motion.phase.value === "settling" &&
+      kineticState.speedInCards >= COVERFLOW_MOTION_TUNING.maximumFreeVelocity - 0.05,
     reducedMotion: motion.reducedMotion.value,
+    settledness: kineticState.settledness,
+    speedInCards: kineticState.speedInCards,
     ...(motion.targetId.value ? { targetId: motion.targetId.value } : {}),
+    ...(targetIndex < 0 ? {} : { targetIndex }),
     trackExtent: geometry.trackExtent,
     velocity: motion.velocity.value,
     viewportSize: geometry.viewportSize,
@@ -287,7 +379,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
 });
 
 function selectScreen(id: ScreenId) {
-  if (id === activeId.value || motion.isDragging.value || motion.pointerOwned.value) return;
+  if (id === motion.targetId.value || motion.isDragging.value || motion.pointerOwned.value) return;
   motion.moveTo(id);
 }
 
@@ -354,7 +446,13 @@ watch(
       class="coverflow-viewport"
       data-testid="coverflow-viewport"
       :data-active-id="activeId"
+      :data-committed-index="committedIndex"
+      :data-pending-index="pendingTargetIndex"
       :data-phase="motion.phase.value"
+      :data-physical-index="physicalIndex"
+      :data-position="motion.position.value"
+      :data-speed-in-cards="speedInCards"
+      :data-target-id="motion.targetId.value"
       :style="[stageStyle, motion.surfaceStyle]"
       tabindex="0"
       @keydown="motion.onKeyDown"
@@ -438,17 +536,12 @@ watch(
 
     <div class="coverflow-meta">
       <p>
-        <span class="tabular">{{ activeIndex + 1 }}</span>
+        <span class="tabular" data-testid="coverflow-counter">{{ activeIndex + 1 }}</span>
         /
         <span class="tabular">{{ screens.length }}</span>
-        <strong>{{ activeScreen.title }}</strong>
+        <strong data-testid="coverflow-caption">{{ activeScreen.title }}</strong>
       </p>
-      <div
-        class="dots"
-        role="tablist"
-        aria-label="Coverflow screens"
-        :style="{ '--dot-float': String(floatIndex) }"
-      >
+      <div class="dots" role="tablist" aria-label="Coverflow screens">
         <button
           v-for="dot in paginationDots"
           :key="dot.id"
@@ -458,13 +551,16 @@ watch(
           role="tab"
           type="button"
           :style="{
-            '--dot-weight': String(dot.weight),
+            '--dot-weight': dot.selected ? '1' : '0',
           }"
           @click="selectScreen(dot.id)"
         />
       </div>
     </div>
 
+    <p class="sr-only" aria-atomic="true" data-testid="coverflow-status" role="status">
+      {{ liveMessage }}
+    </p>
     <DiagnosticsPanel :diagnostics="diagnostics" />
   </section>
 </template>
@@ -542,8 +638,27 @@ watch(
   cursor: grabbing;
 }
 
+.coverflow-viewport::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 50%;
+  inset-block-end: 2.15rem;
+  inline-size: min(64%, 38rem);
+  block-size: 5.25rem;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgb(15 23 42 / 0.13) 0%,
+    rgb(15 23 42 / 0.055) 42%,
+    rgb(15 23 42 / 0) 74%
+  );
+  pointer-events: none;
+}
+
 .coverflow-stage {
   position: relative;
+  z-index: 1;
   inline-size: 100%;
   block-size: calc(var(--coverflow-card-height) + 7rem);
   transform-style: preserve-3d;
@@ -551,8 +666,14 @@ watch(
 
 .coverflow-card {
   --depth: 0;
+  --deep-rail: 0;
+  --center-influence: 1;
+  --kinetic-focus: 0;
+  --settledness: 1;
+  --contact-shadow: 1;
   --yaw: 0;
   --sheen: 0;
+  --surface-shade: 0;
   --sheen-angle: 100deg;
   --occlusion: 0;
   --occlusion-angle: 90deg;
@@ -560,6 +681,8 @@ watch(
   --edge-near: #d4dbe4;
   --edge-deep: #b9c2ce;
   --edge-face: var(--edge-near);
+  --surface-darken: 0.06;
+  --surface-highlight: 0.03;
 
   position: absolute;
   inset-block-start: 50%;
@@ -577,8 +700,10 @@ watch(
 }
 
 .tone-ink {
-  --edge-near: #3d4a5e;
-  --edge-deep: #2a3441;
+  --edge-near: #536174;
+  --edge-deep: #414d5e;
+  --surface-darken: 0.035;
+  --surface-highlight: 0.025;
 }
 
 .screen-chrome {
@@ -590,30 +715,18 @@ watch(
   overflow: hidden;
   background: #fff;
   /*
-   * The first layer is the panel's side surface — a hard, zero-blur offset of the chrome itself.
-   * Drawn this way it inherits `border-radius`, so the thickness wraps every corner instead of
-   * dying where the curve begins, which a flat quad hinged at the edge can never do. The offset
-   * is `thickness × tan(yaw)`: it lies in the panel's plane and is foreshortened by `cos(yaw)`
-   * on the way to the screen, which lands it at the `thickness × sin(yaw)` a real side face shows.
-   *
-   * The two behind it are cast shadows driven by depth: a tight contact shadow that fades and
-   * drifts as the panel recedes, and a broad ambient one that blurs out. Yaw throws both toward
-   * the panel's near edge, so a foreground card lays a legible band across whatever sits behind
-   * it — that band is what separates two overlapping surfaces from one folded sheet.
+   * The first layer is the rounded side surface. The second is a fixed-geometry contact shadow
+   * whose opacity is earned by center proximity and settledness. The final narrow, yaw-directed
+   * layer supplies local occlusion where the foreground panel overlaps the rail behind it.
    */
   box-shadow:
     var(--edge-offset) 0 0 0 var(--edge-face),
-    calc(var(--yaw) * -12px) calc(5px + 7px * var(--depth)) calc(12px + 14px * var(--depth))
-      rgb(15 23 42 / calc(0.28 - 0.16 * var(--depth))),
-    calc(var(--yaw) * -26px) calc(26px - 12px * var(--depth)) calc(46px + 34px * var(--depth))
-      rgb(15 23 42 / calc(0.18 - 0.11 * var(--depth)));
+    0 9px 20px -9px rgb(15 23 42 / calc(0.32 * var(--contact-shadow))),
+    calc(var(--yaw) * -8px) 1px 10px -5px rgb(15 23 42 / calc(0.22 * var(--occlusion)));
   color: #0f172a;
 }
 
-/*
- * Incident light plus the occlusion falloff on the edge that the neighbouring panel passes in
- * front of. Both are orientation-driven, so they vanish on the frontal center face.
- */
+/* Matte incident light, a ten-pixel overlap edge, and a weak neutral deep-rail tint. */
 .screen-chrome::after {
   content: "";
   position: absolute;
@@ -622,14 +735,18 @@ watch(
   background-image:
     linear-gradient(
       var(--occlusion-angle),
-      rgb(2 6 23 / calc(0.3 * var(--occlusion))),
-      rgb(2 6 23 / 0) 45%
+      rgb(2 6 23 / calc(0.16 * var(--occlusion))),
+      rgb(2 6 23 / 0) 10px
     ),
     linear-gradient(
       var(--sheen-angle),
-      rgb(255 255 255 / calc(0.14 * var(--sheen))),
+      rgb(255 255 255 / calc(var(--surface-highlight) * var(--sheen))),
       rgb(255 255 255 / 0) 28%,
-      rgb(2 6 23 / calc(0.1 * var(--sheen)))
+      rgb(2 6 23 / calc(var(--surface-darken) * var(--surface-shade)))
+    ),
+    linear-gradient(
+      rgb(100 116 139 / calc(0.025 * var(--deep-rail))),
+      rgb(100 116 139 / calc(0.025 * var(--deep-rail)))
     );
 }
 
