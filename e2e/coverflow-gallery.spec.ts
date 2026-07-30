@@ -706,8 +706,20 @@ test("focus restoration falls back to the stage when the logical control is unav
   page,
 }) => {
   await openGallery(page);
+  // The control only exists while the gallery is closed, and restoration reads
+  // it one animation frame after it remounts. Retire it from inside the page,
+  // the moment it reappears, so the window never depends on runner timing.
+  await page.evaluate((testId) => {
+    const observer = new MutationObserver(() => {
+      const control = document.querySelector(`[data-testid="${testId}"]`);
+      if (!control) return;
+      observer.disconnect();
+      control.remove();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }, `coverflow-expand-${CENTER_ID}`);
   await page.getByTestId("coverflow-gallery-close").click();
-  await page.getByTestId(`coverflow-expand-${CENTER_ID}`).evaluate((element) => element.remove());
   await expect(gallery(page)).not.toBeVisible();
+  await expect(page.getByTestId(`coverflow-expand-${CENTER_ID}`)).toHaveCount(0);
   await expect(carousel(page)).toBeFocused();
 });
