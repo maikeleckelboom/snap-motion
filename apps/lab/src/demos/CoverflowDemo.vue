@@ -5,9 +5,14 @@ import {
   resolveCoverflowProgress,
 } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
-import { useElementSize } from "@vueuse/core";
-import { computed, nextTick, ref, watch } from "vue";
+import { useElementSize, useEventListener } from "@vueuse/core";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 
+import mapGalleryUrl from "@/assets/coverflow-gallery/map.svg?url";
+import projectGalleryUrl from "@/assets/coverflow-gallery/project.svg?url";
+import settingsGalleryUrl from "@/assets/coverflow-gallery/settings.svg?url";
+import teamGalleryUrl from "@/assets/coverflow-gallery/team.svg?url";
+import templatesGalleryUrl from "@/assets/coverflow-gallery/templates.svg?url";
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
 import {
   carouselReleaseFromSettings,
@@ -16,6 +21,13 @@ import {
 } from "@/fixtures/lab-settings";
 import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 
+import {
+  COVERFLOW_GALLERY_TUNING,
+  isCoverflowGalleryEligible,
+  resolveCoverflowGesture,
+  type CoverflowGalleryItem,
+} from "./coverflowGallery";
+import CoverflowGalleryDialog from "./CoverflowGalleryDialog.vue";
 import {
   COVERFLOW_MOTION_TUNING,
   COVERFLOW_PAGINATION_TUNING,
@@ -40,13 +52,12 @@ type ScreenId = "templates" | "project" | "map" | "team" | "settings";
  */
 type ScreenLayout = "gallery" | "detail" | "canvas" | "roster" | "console";
 
-interface ShowcaseScreen {
+interface ShowcaseScreen extends CoverflowGalleryItem {
   readonly id: ScreenId;
-  readonly title: string;
-  readonly eyebrow: string;
   readonly accent: string;
-  readonly tone: "light" | "mist" | "ink";
+  readonly eyebrow: string;
   readonly layout: ScreenLayout;
+  readonly tone: "light" | "mist" | "ink";
 }
 
 const props = defineProps<{
@@ -63,6 +74,11 @@ const screens: readonly ShowcaseScreen[] = [
     accent: "#2f6fed",
     tone: "light",
     layout: "gallery",
+    alt: "Projects template gallery with a featured project structure and six template cards.",
+    thumbnailSrc: `${templatesGalleryUrl}?thumbnail`,
+    fullSrc: `${templatesGalleryUrl}?full`,
+    width: 1_600,
+    height: 1_000,
   },
   {
     id: "project",
@@ -71,6 +87,11 @@ const screens: readonly ShowcaseScreen[] = [
     accent: "#1f9d7a",
     tone: "mist",
     layout: "detail",
+    alt: "Project Horizon detail screen with project settings, status rows, and progress.",
+    thumbnailSrc: `${projectGalleryUrl}?thumbnail`,
+    fullSrc: `${projectGalleryUrl}?full`,
+    width: 1_600,
+    height: 1_000,
   },
   {
     id: "map",
@@ -79,6 +100,11 @@ const screens: readonly ShowcaseScreen[] = [
     accent: "#d9480f",
     tone: "light",
     layout: "canvas",
+    alt: "Location and planning screen with a map, route lines, and a selected location.",
+    thumbnailSrc: `${mapGalleryUrl}?thumbnail`,
+    fullSrc: `${mapGalleryUrl}?full`,
+    width: 1_600,
+    height: 1_000,
   },
   {
     id: "team",
@@ -87,6 +113,11 @@ const screens: readonly ShowcaseScreen[] = [
     accent: "#7048e8",
     tone: "mist",
     layout: "roster",
+    alt: "Team and roles screen with six member cards arranged in a roster.",
+    thumbnailSrc: `${teamGalleryUrl}?thumbnail`,
+    fullSrc: `${teamGalleryUrl}?full`,
+    width: 1_600,
+    height: 1_000,
   },
   {
     id: "settings",
@@ -95,6 +126,11 @@ const screens: readonly ShowcaseScreen[] = [
     accent: "#0b7285",
     tone: "ink",
     layout: "console",
+    alt: "Dark workspace settings screen with four administrative setting rows.",
+    thumbnailSrc: `${settingsGalleryUrl}?thumbnail`,
+    fullSrc: `${settingsGalleryUrl}?full`,
+    width: 1_600,
+    height: 1_000,
   },
 ];
 
@@ -102,8 +138,33 @@ const ids = screens.map((screen) => screen.id);
 const coverflowRoot = ref<HTMLElement>();
 const viewport = ref<HTMLElement>();
 const track = ref<HTMLElement>();
+const galleryOpen = ref(false);
+const galleryInitialIndex = ref(0);
+const galleryFinalIndex = ref(0);
 const reducedOverride = computed(() => props.reducedMotionOverride);
 const { width: viewportWidth } = useElementSize(viewport);
+const expandControls = new Map<ScreenId, HTMLButtonElement>();
+const activeCarouselPointers = new Set<number>();
+let suppressedCarouselAnnouncementIndex: number | undefined;
+let focusRestoreFrame: number | undefined;
+let selectionFrame: number | undefined;
+
+interface CarouselGesture {
+  readonly focusWasOutside: boolean;
+  readonly openEligibleAtStart: boolean;
+  readonly originElement: HTMLElement | undefined;
+  readonly originIndex: number | undefined;
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startY: number;
+  cancelled: boolean;
+  deltaX: number;
+  deltaY: number;
+  involvedMultiplePointers: boolean;
+  maximumDisplacement: number;
+}
+
+let carouselGesture: CarouselGesture | undefined;
 
 const stageWidthPx = computed(() =>
   Math.max(320, viewportWidth.value || Math.min(props.stageWidth, 1_280)),
@@ -159,6 +220,8 @@ const motion = useCarouselMotion({
 });
 
 const initialIndex = Math.floor(ids.length / 2);
+galleryInitialIndex.value = initialIndex;
+galleryFinalIndex.value = initialIndex;
 const settledSelection = new CoverflowSettledSelection(initialIndex, ids.length);
 const visualIndex = ref(initialIndex);
 const settledIndex = ref(initialIndex);
@@ -215,9 +278,13 @@ watch(
       pendingTargetIndex.value = settledSelection.pendingTargetIndex;
     }
     if (announcementIndex !== null) {
-      const screen = screens[announcementIndex];
-      if (screen) {
-        liveMessage.value = `${screen.title}, ${announcementIndex + 1} of ${screens.length}`;
+      const suppressAnnouncement = announcementIndex === suppressedCarouselAnnouncementIndex;
+      suppressedCarouselAnnouncementIndex = undefined;
+      if (!suppressAnnouncement) {
+        const screen = screens[announcementIndex];
+        if (screen) {
+          liveMessage.value = `${screen.title}, ${announcementIndex + 1} of ${screens.length}`;
+        }
       }
     }
   },
@@ -231,6 +298,27 @@ const anchorsById = computed(() => {
   }
   return map;
 });
+
+function isCardGalleryEligible(index: number): boolean {
+  const screen = screens[index];
+  if (!screen || galleryOpen.value || motion.isDragging.value || motion.pointerOwned.value) {
+    return false;
+  }
+  return isCoverflowGalleryEligible({
+    activeId: motion.activeId.value,
+    expectedId: screen.id,
+    index,
+    phase: motion.phase.value,
+    physicalIndex: physicalIndex.value,
+    position: motion.position.value,
+    settledIndex: settledIndex.value,
+    targetId: motion.targetId.value,
+    velocity: motion.velocity.value,
+    restDistance: props.settings.restDistance,
+    restSpeed: props.settings.restSpeed,
+    targetPosition: anchorsById.value.get(screen.id),
+  });
+}
 
 /** How thick a panel is, in CSS pixels. Read as a side surface once the panel turns. */
 const EDGE_THICKNESS = 1.5;
@@ -437,7 +525,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
 });
 
 function goToIndex(index: number): boolean {
-  if (motion.isDragging.value || motion.pointerOwned.value) return false;
+  if (galleryOpen.value || motion.isDragging.value || motion.pointerOwned.value) return false;
   const targetIndex = clamp(index, 0, ids.length - 1);
   const id = ids[targetIndex];
   if (!id || targetIndex === keyboardTargetIndex.value) return false;
@@ -454,6 +542,7 @@ function goToNext(): boolean {
 }
 
 function onCoverflowKeyDown(event: KeyboardEvent) {
+  if (galleryOpen.value) return;
   const action = resolveCoverflowKeyboardAction(event);
   if (!action) return;
 
@@ -467,13 +556,222 @@ function onCoverflowKeyDown(event: KeyboardEvent) {
   }
 }
 
-function onCoverflowPointerDown(event: PointerEvent) {
-  const root = coverflowRoot.value;
-  const activeElement = document.activeElement;
-  if (root && viewport.value && (!activeElement || !root.contains(activeElement))) {
-    viewport.value.focus({ preventScroll: true });
+function setExpandControl(screenId: ScreenId, element: Element | null) {
+  if (element instanceof HTMLButtonElement) {
+    expandControls.set(screenId, element);
+  } else {
+    expandControls.delete(screenId);
   }
+}
+
+function synchronizeCarouselExactly(index: number): boolean {
+  const targetIndex = clamp(index, 0, ids.length - 1);
+  const id = ids[targetIndex];
+  const anchorPosition = id ? anchorsById.value.get(id) : undefined;
+  if (!id || anchorPosition === undefined) return false;
+  const alreadySynchronized =
+    motion.phase.value === "idle" &&
+    motion.activeId.value === id &&
+    motion.targetId.value === id &&
+    Math.abs(motion.position.value - anchorPosition) <= Number.EPSILON * 16 &&
+    Math.abs(motion.velocity.value) <= Number.EPSILON * 16 &&
+    visualIndex.value === targetIndex &&
+    settledIndex.value === targetIndex;
+  if (alreadySynchronized) return true;
+
+  motion.interrupt();
+  suppressedCarouselAnnouncementIndex = targetIndex;
+  motion.controller.remeasure({
+    ...measureGeometry(),
+    activeId: id,
+  });
+  visualIndex.value = targetIndex;
+  settledIndex.value = targetIndex;
+  pendingTargetIndex.value = null;
+  return true;
+}
+
+function openGallery(index: number, capturedEligibility = false) {
+  if (
+    galleryOpen.value ||
+    (!capturedEligibility && !isCardGalleryEligible(index)) ||
+    !synchronizeCarouselExactly(index)
+  ) {
+    return;
+  }
+  galleryInitialIndex.value = index;
+  galleryFinalIndex.value = index;
+  galleryOpen.value = true;
+}
+
+function releaseMatchesOrigin(gesture: CarouselGesture, event: PointerEvent): boolean {
+  const origin = gesture.originElement;
+  if (!origin) return false;
+  const releaseCard =
+    event.target instanceof Element
+      ? (event.target.closest<HTMLElement>(".coverflow-card") ?? undefined)
+      : undefined;
+  if (releaseCard) return releaseCard === origin;
+  const documentTarget = origin.ownerDocument;
+  const hitCards = documentTarget
+    .elementsFromPoint(event.clientX, event.clientY)
+    .map((element) => element.closest<HTMLElement>(".coverflow-card"))
+    .filter((element): element is HTMLElement => element !== null);
+  if (hitCards.some((element) => element === origin)) return true;
+  if (hitCards.length > 0) return false;
+  const rect = origin.getBoundingClientRect();
+  return (
+    event.clientX >= rect.left &&
+    event.clientX <= rect.right &&
+    event.clientY >= rect.top &&
+    event.clientY <= rect.bottom
+  );
+}
+
+function resolveCompletedCarouselGesture(completed: CarouselGesture, releasedOnOrigin: boolean) {
+  const horizontalIntent =
+    Math.abs(completed.deltaX) >=
+    Math.abs(completed.deltaY) * COVERFLOW_GALLERY_TUNING.horizontalIntentRatio;
+  const resolution = resolveCoverflowGesture({
+    cancelled: completed.cancelled,
+    crossedDragThreshold:
+      completed.maximumDisplacement >= COVERFLOW_GALLERY_TUNING.carouselActivationThreshold,
+    horizontalIntent,
+    involvedMultiplePointers: completed.involvedMultiplePointers,
+    openEligibleAtStart: completed.openEligibleAtStart,
+    releasedOnOrigin,
+  });
+  if (resolution.action === "swipe") {
+    const root = coverflowRoot.value;
+    const activeElement = root?.ownerDocument.activeElement;
+    if (
+      resolution.shouldFocusStage &&
+      completed.focusWasOutside &&
+      root &&
+      (!activeElement || !root.contains(activeElement))
+    ) {
+      viewport.value?.focus({ preventScroll: true });
+    }
+  } else if (resolution.action === "open" && completed.originIndex !== undefined) {
+    openGallery(completed.originIndex, true);
+  } else if (resolution.action === "select" && completed.originIndex !== undefined) {
+    const originIndex = completed.originIndex;
+    if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+    selectionFrame = requestAnimationFrame(() => {
+      selectionFrame = undefined;
+      goToIndex(originIndex);
+    });
+  }
+}
+
+function onCoverflowPointerDown(event: PointerEvent) {
+  if (galleryOpen.value) return;
+  if (carouselGesture && !activeCarouselPointers.has(event.pointerId)) {
+    carouselGesture.involvedMultiplePointers = true;
+    activeCarouselPointers.add(event.pointerId);
+    motion.onPointerDown(event);
+    return;
+  }
+  if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) {
+    return;
+  }
+
+  const root = coverflowRoot.value;
+  const activeElement = root?.ownerDocument.activeElement;
+  const eventCard =
+    event.target instanceof Element
+      ? (event.target.closest<HTMLElement>(".coverflow-card") ?? undefined)
+      : undefined;
+  const originElement =
+    eventCard ??
+    root?.ownerDocument
+      .elementsFromPoint(event.clientX, event.clientY)
+      .map((element) => element.closest<HTMLElement>(".coverflow-card"))
+      .find((element): element is HTMLElement => element !== null);
+  const originIndex = originElement
+    ? screens.findIndex((screen) => screen.id === originElement.dataset.screenId)
+    : -1;
+  carouselGesture = {
+    focusWasOutside: Boolean(root && (!activeElement || !root.contains(activeElement))),
+    openEligibleAtStart: originIndex >= 0 && isCardGalleryEligible(originIndex),
+    originElement,
+    originIndex: originIndex >= 0 ? originIndex : undefined,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    cancelled: false,
+    deltaX: 0,
+    deltaY: 0,
+    involvedMultiplePointers: false,
+    maximumDisplacement: 0,
+  };
+  activeCarouselPointers.add(event.pointerId);
   motion.onPointerDown(event);
+}
+
+function onCarouselPointerMove(event: PointerEvent) {
+  const gesture = carouselGesture;
+  if (!gesture || event.pointerId !== gesture.pointerId) return;
+  gesture.deltaX = event.clientX - gesture.startX;
+  gesture.deltaY = event.clientY - gesture.startY;
+  gesture.maximumDisplacement = Math.max(
+    gesture.maximumDisplacement,
+    Math.hypot(gesture.deltaX, gesture.deltaY),
+  );
+}
+
+function onCarouselPointerUp(event: PointerEvent) {
+  activeCarouselPointers.delete(event.pointerId);
+  const gesture = carouselGesture;
+  if (!gesture || event.pointerId !== gesture.pointerId) return;
+  gesture.deltaX = event.clientX - gesture.startX;
+  gesture.deltaY = event.clientY - gesture.startY;
+  gesture.maximumDisplacement = Math.max(
+    gesture.maximumDisplacement,
+    Math.hypot(gesture.deltaX, gesture.deltaY),
+  );
+  const releasedOnOrigin = releaseMatchesOrigin(gesture, event);
+  carouselGesture = undefined;
+  queueMicrotask(() => resolveCompletedCarouselGesture(gesture, releasedOnOrigin));
+}
+
+function onCarouselPointerCancel(event: PointerEvent) {
+  activeCarouselPointers.delete(event.pointerId);
+  const gesture = carouselGesture;
+  if (!gesture || event.pointerId !== gesture.pointerId) return;
+  gesture.cancelled = true;
+  carouselGesture = undefined;
+  queueMicrotask(() => resolveCompletedCarouselGesture(gesture, false));
+}
+
+function onCoverflowWheel(event: WheelEvent) {
+  if (!galleryOpen.value) motion.onWheel(event);
+}
+
+function onGalleryRequestClose(finalIndex: number) {
+  const synchronizedIndex = clamp(finalIndex, 0, ids.length - 1);
+  galleryFinalIndex.value = synchronizedIndex;
+  if (synchronizedIndex !== galleryInitialIndex.value) {
+    synchronizeCarouselExactly(synchronizedIndex);
+  }
+  galleryOpen.value = false;
+}
+
+async function onGalleryClosed(finalIndex: number) {
+  const synchronizedIndex = clamp(finalIndex, 0, ids.length - 1);
+  galleryFinalIndex.value = synchronizedIndex;
+  await nextTick();
+  if (focusRestoreFrame !== undefined) cancelAnimationFrame(focusRestoreFrame);
+  focusRestoreFrame = requestAnimationFrame(() => {
+    focusRestoreFrame = undefined;
+    const id = ids[synchronizedIndex];
+    const target = id ? expandControls.get(id) : undefined;
+    if (target?.isConnected) {
+      target.focus({ preventScroll: true });
+    } else {
+      viewport.value?.focus({ preventScroll: true });
+    }
+  });
 }
 
 function onPaginationFocus(index: number) {
@@ -503,6 +801,15 @@ watch(
   () => [props.stageWidth, pitch.value, cardWidth.value] as const,
   () => void nextTick(motion.remeasure),
 );
+
+useEventListener("pointermove", onCarouselPointerMove, { passive: true });
+useEventListener("pointerup", onCarouselPointerUp);
+useEventListener("pointercancel", onCarouselPointerCancel);
+
+onBeforeUnmount(() => {
+  if (focusRestoreFrame !== undefined) cancelAnimationFrame(focusRestoreFrame);
+  if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+});
 </script>
 
 <template>
@@ -525,7 +832,7 @@ watch(
         <button
           aria-label="Previous screen"
           data-testid="coverflow-previous"
-          :disabled="!canGoPrevious"
+          :disabled="galleryOpen || !canGoPrevious"
           type="button"
           @click="goToPrevious"
         >
@@ -536,7 +843,7 @@ watch(
         <button
           aria-label="Next screen"
           data-testid="coverflow-next"
-          :disabled="!canGoNext"
+          :disabled="galleryOpen || !canGoNext"
           type="button"
           @click="goToNext"
         >
@@ -554,6 +861,7 @@ watch(
       class="coverflow-viewport"
       data-testid="coverflow-viewport"
       :data-active-id="settledId"
+      :data-gallery-open="galleryOpen ? 'true' : 'false'"
       :data-keyboard-target-index="keyboardTargetIndex"
       :data-pending-index="pendingTargetIndex"
       :data-phase="motion.phase.value"
@@ -567,7 +875,7 @@ watch(
       :style="[stageStyle, motion.surfaceStyle]"
       tabindex="0"
       @pointerdown="onCoverflowPointerDown"
-      @wheel="motion.onWheel"
+      @wheel="onCoverflowWheel"
     >
       <div ref="track" class="coverflow-stage">
         <article
@@ -581,11 +889,11 @@ watch(
           :class="[
             `tone-${screen.tone}`,
             `layout-${screen.layout}`,
-            { active: screen.id === visualId },
+            { active: screen.id === visualId, inspectable: isCardGalleryEligible(index) },
           ]"
           :data-screen-id="screen.id"
           :style="slideStyles[screen.id]"
-          @click="goToIndex(index)"
+          @click.prevent
         >
           <div class="screen-chrome">
             <header class="screen-top">
@@ -640,6 +948,26 @@ watch(
               </div>
             </div>
           </div>
+          <button
+            v-if="isCardGalleryEligible(index)"
+            :ref="(element) => setExpandControl(screen.id, element as Element | null)"
+            :aria-label="`Inspect ${screen.title} in screen gallery, ${index + 1} of ${screens.length}`"
+            class="coverflow-expand"
+            :data-testid="`coverflow-expand-${screen.id}`"
+            type="button"
+            @click.stop="openGallery(index)"
+            @pointerdown.stop
+          >
+            <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
+              <path
+                d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="square"
+                stroke-width="2"
+              />
+            </svg>
+          </button>
         </article>
       </div>
     </div>
@@ -673,6 +1001,7 @@ watch(
           :aria-current="dot.current ? 'true' : undefined"
           :aria-label="`${dot.title}, ${index + 1} of ${screens.length}`"
           class="dot"
+          :disabled="galleryOpen"
           type="button"
           @blur="onPaginationBlur(index)"
           @click="goToIndex(index)"
@@ -687,6 +1016,14 @@ watch(
       {{ liveMessage }}
     </p>
     <DiagnosticsPanel :diagnostics="diagnostics" />
+    <CoverflowGalleryDialog
+      :initial-index="galleryOpen ? galleryInitialIndex : settledIndex"
+      :items="screens"
+      :open="galleryOpen"
+      :reduced-motion="motion.reducedMotion.value"
+      @closed="onGalleryClosed"
+      @request-close="onGalleryRequestClose"
+    />
   </section>
 </template>
 
@@ -822,6 +1159,52 @@ watch(
   transform-origin: center center;
   will-change: transform;
   cursor: pointer;
+}
+
+.coverflow-expand {
+  position: absolute;
+  inset-block-start: 0.55rem;
+  inset-inline-end: 0.55rem;
+  z-index: 3;
+  display: grid;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgb(15 23 42 / 0.22);
+  border-radius: 999px;
+  background: rgb(248 250 252 / 0.9);
+  color: #0f172a;
+  opacity: 0.32;
+  transition:
+    opacity 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.tone-ink .coverflow-expand {
+  border-color: rgb(255 255 255 / 0.22);
+  background: rgb(15 23 42 / 0.88);
+  color: #f8fafc;
+}
+
+.coverflow-card:hover .coverflow-expand,
+.coverflow-expand:focus-visible {
+  border-color: rgb(15 23 42 / 0.42);
+  background: #fff;
+  opacity: 1;
+}
+
+.tone-ink:hover .coverflow-expand,
+.tone-ink .coverflow-expand:focus-visible {
+  border-color: rgb(255 255 255 / 0.46);
+  background: #1e293b;
+}
+
+@media (pointer: coarse) {
+  .coverflow-expand {
+    opacity: 0.72;
+  }
 }
 
 .tone-ink {

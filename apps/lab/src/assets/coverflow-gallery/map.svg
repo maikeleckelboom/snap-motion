@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000">
+  <rect width="1600" height="1000" fill="#f8fafc"/>
+  <rect width="1600" height="142" fill="#ffffff"/>
+  <path d="M0 142h1600" stroke="#dbe2ea" stroke-width="4"/>
+  <rect x="54" y="44" width="58" height="58" rx="16" fill="#d9480f"/>
+  <text x="83" y="84" fill="#fff" font-family="Arial,sans-serif" font-size="32" font-weight="700" text-anchor="middle">Y</text>
+  <text x="142" y="64" fill="#64748b" font-family="Arial,sans-serif" font-size="21" font-weight="700">KAARTWEERGAVE</text>
+  <text x="142" y="101" fill="#0f172a" font-family="Arial,sans-serif" font-size="34" font-weight="700">Locatie &amp; planning</text>
+  <rect x="0" y="142" width="250" height="858" fill="#eef2f7"/>
+  <rect x="42" y="220" width="166" height="38" rx="19" fill="#d9480f"/>
+  <rect x="298" y="196" width="1250" height="754" rx="30" fill="#e7eef1" stroke="#ccd7dd" stroke-width="4"/>
+  <g fill="none" stroke="#ffffff" stroke-width="18">
+    <path d="M310 370c240 22 330 220 520 184s278-238 498-164 136 278 220 336"/>
+    <path d="M430 196c34 210 186 252 154 438s-188 218-150 316"/>
+    <path d="M1010 196c-18 176 102 228 74 368s-154 212-138 386"/>
+  </g>
+  <g fill="none" stroke="#b6c7cf" stroke-width="8">
+    <path d="M298 692c220-72 318-18 458 90s326 112 792-6"/>
+    <path d="M700 196c-76 162-44 268 62 346s170 190 126 408"/>
+  </g>
+  <path d="M540 684c0-82 66-148 148-148s148 66 148 148c0 116-148 242-148 242S540 800 540 684Z" fill="#d9480f"/>
+  <circle cx="688" cy="684" r="58" fill="#fff"/>
+  <rect x="1116" y="244" width="354" height="212" rx="24" fill="#fff" stroke="#dbe2ea" stroke-width="4"/>
+  <rect x="1160" y="294" width="230" height="28" rx="14" fill="#1e293b"/>
+  <rect x="1160" y="348" width="262" height="20" rx="10" fill="#94a3b8"/>
+  <rect x="1160" y="394" width="172" height="20" rx="10" fill="#d9480f"/>
+</svg>
