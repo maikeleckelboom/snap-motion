@@ -79,6 +79,29 @@ export interface GalleryTap {
   readonly y: number;
 }
 
+export type GallerySlotPosition = -1 | 0 | 1;
+
+export interface GalleryTrackSlot {
+  readonly itemIndex: number;
+  readonly position: GallerySlotPosition;
+}
+
+export interface GalleryMediaVisibility {
+  readonly fullMounted: boolean;
+  readonly fullVisible: boolean;
+  readonly previewVisible: boolean;
+}
+
+export type GalleryMediaAction =
+  | "button"
+  | "double-click"
+  | "double-tap"
+  | "fit"
+  | "keyboard"
+  | "pan"
+  | "pinch"
+  | "swipe";
+
 export interface PinchTransformInput {
   readonly context: MediaTransformContext;
   readonly currentCenter: MediaPoint;
@@ -164,6 +187,80 @@ export function galleryPreloadIndices(index: number, itemCount: number): number[
     (candidate, position, candidates) =>
       candidate >= 0 && candidate < itemCount && candidates.indexOf(candidate) === position,
   );
+}
+
+export function resolveGalleryTrackSlots(
+  index: number,
+  itemCount: number,
+  destinationIndex?: number,
+): GalleryTrackSlot[] {
+  if (itemCount <= 0) return [];
+  const current = clamp(Math.round(index), 0, itemCount - 1);
+  const destination =
+    destinationIndex === undefined
+      ? current
+      : clamp(Math.round(destinationIndex), 0, itemCount - 1);
+  const direction = Math.sign(destination - current) as GallerySlotPosition;
+  const positions = new Map<number, GallerySlotPosition>();
+
+  if (direction !== 0 && Math.abs(destination - current) > 1) {
+    const opposite = current - direction;
+    if (opposite >= 0 && opposite < itemCount)
+      positions.set(opposite, -direction as GallerySlotPosition);
+    positions.set(current, 0);
+    positions.set(destination, direction);
+  } else {
+    for (const candidate of galleryPreloadIndices(current, itemCount)) {
+      positions.set(candidate, (candidate - current) as GallerySlotPosition);
+    }
+  }
+
+  const slots = [...positions].map(([itemIndex, position]) => ({ itemIndex, position }));
+  return ([-1, 0, 1] as const).flatMap((position) =>
+    slots.filter((slot) => slot.position === position),
+  );
+}
+
+export function resolveGalleryTrackOffset(
+  dragOffset: number,
+  viewportWidth: number,
+  index: number,
+  itemCount: number,
+): number {
+  if (viewportWidth <= 0 || itemCount <= 0) return 0;
+  const beyondStart = index <= 0 && dragOffset > 0;
+  const beyondEnd = index >= itemCount - 1 && dragOffset < 0;
+  const resolved = beyondStart || beyondEnd ? dragOffset * 0.08 : dragOffset;
+  const limit = beyondStart || beyondEnd ? Math.min(24, viewportWidth * 0.05) : viewportWidth;
+  return clamp(resolved, -limit, limit);
+}
+
+export function resolveGalleryCommitOffset(direction: -1 | 1, viewportWidth: number): number {
+  return -direction * Math.max(0, viewportWidth);
+}
+
+export function shouldTransitionGalleryMedia(
+  action: GalleryMediaAction,
+  reducedMotion: boolean,
+): boolean {
+  return (
+    !reducedMotion &&
+    (action === "button" ||
+      action === "double-click" ||
+      action === "double-tap" ||
+      action === "fit" ||
+      action === "keyboard")
+  );
+}
+
+export function resolveGalleryMediaVisibility(
+  state: "failed" | "loaded" | "pending",
+): GalleryMediaVisibility {
+  return {
+    fullMounted: state !== "failed",
+    fullVisible: state === "loaded",
+    previewVisible: state !== "loaded",
+  };
 }
 
 export function isRepeatedGalleryTap(

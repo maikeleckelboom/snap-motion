@@ -8,8 +8,13 @@ import {
   isRepeatedGalleryTap,
   resolveCoverflowGesture,
   resolveCoverflowSynchronization,
+  resolveGalleryCommitOffset,
+  resolveGalleryMediaVisibility,
   resolveGallerySwipe,
+  resolveGalleryTrackOffset,
+  resolveGalleryTrackSlots,
   resolvePinchTransform,
+  shouldTransitionGalleryMedia,
   type CoverflowOpenEligibilityInput,
   type GallerySwipeInput,
 } from "../src/demos/coverflowGallery";
@@ -51,6 +56,123 @@ const landscapeContext: MediaTransformContext = {
   intrinsicSize: { height: 1_000, width: 1_600 },
   viewportSize: { height: 625, width: 1_000 },
 };
+
+describe("gallery three-slot track", () => {
+  it("resolves previous, current, and next around a middle index", () => {
+    expect(resolveGalleryTrackSlots(2, 5)).toEqual([
+      { itemIndex: 1, position: -1 },
+      { itemIndex: 2, position: 0 },
+      { itemIndex: 3, position: 1 },
+    ]);
+  });
+
+  it("omits only the invalid previous slot at the first item", () => {
+    expect(resolveGalleryTrackSlots(0, 5)).toEqual([
+      { itemIndex: 0, position: 0 },
+      { itemIndex: 1, position: 1 },
+    ]);
+  });
+
+  it("omits only the invalid next slot at the last item", () => {
+    expect(resolveGalleryTrackSlots(4, 5)).toEqual([
+      { itemIndex: 3, position: -1 },
+      { itemIndex: 4, position: 0 },
+    ]);
+  });
+
+  it("keeps rest and half-viewport drag offsets exact and symmetric", () => {
+    expect(resolveGalleryTrackOffset(0, 800, 2, 5)).toBe(0);
+    expect(resolveGalleryTrackOffset(400, 800, 2, 5)).toBe(400);
+    expect(resolveGalleryTrackOffset(-400, 800, 2, 5)).toBe(-400);
+  });
+
+  it("settles next and previous commitments by exactly one viewport", () => {
+    expect(resolveGalleryCommitOffset(1, 800)).toBe(-800);
+    expect(resolveGalleryCommitOffset(-1, 800)).toBe(800);
+  });
+
+  it("recentered slots preserve the newly current item identity", () => {
+    const before = resolveGalleryTrackSlots(2, 5);
+    const after = resolveGalleryTrackSlots(3, 5);
+    expect(before.find((slot) => slot.position === 1)?.itemIndex).toBe(3);
+    expect(after.find((slot) => slot.position === 0)?.itemIndex).toBe(3);
+  });
+
+  it("restrains boundary movement without selecting an invalid slot", () => {
+    expect(resolveGalleryTrackOffset(800, 800, 0, 5)).toBe(24);
+    expect(resolveGalleryTrackOffset(-800, 800, 4, 5)).toBe(-24);
+    expect(resolveGalleryTrackSlots(-8, 5).every((slot) => slot.itemIndex >= 0)).toBe(true);
+    expect(resolveGalleryTrackSlots(12, 5).every((slot) => slot.itemIndex < 5)).toBe(true);
+  });
+
+  it("stages Home and End destinations in the directional incoming slot", () => {
+    expect(resolveGalleryTrackSlots(3, 5, 0)).toEqual([
+      { itemIndex: 0, position: -1 },
+      { itemIndex: 3, position: 0 },
+      { itemIndex: 4, position: 1 },
+    ]);
+    expect(resolveGalleryTrackSlots(1, 5, 4)).toEqual([
+      { itemIndex: 0, position: -1 },
+      { itemIndex: 1, position: 0 },
+      { itemIndex: 4, position: 1 },
+    ]);
+  });
+
+  it("keeps the preload candidate set bounded to current and adjacent", () => {
+    expect(galleryPreloadIndices(2, 100)).toEqual([1, 2, 3]);
+  });
+});
+
+describe("gallery media transition eligibility", () => {
+  it.each(["button", "keyboard", "fit", "double-click", "double-tap"] as const)(
+    "animates the discrete %s action",
+    (action) => {
+      expect(shouldTransitionGalleryMedia(action, false)).toBe(true);
+    },
+  );
+
+  it.each(["pan", "pinch", "swipe"] as const)("keeps %s direct", (action) => {
+    expect(shouldTransitionGalleryMedia(action, false)).toBe(false);
+  });
+
+  it("makes every action immediate under reduced motion", () => {
+    expect(shouldTransitionGalleryMedia("button", true)).toBe(false);
+    expect(shouldTransitionGalleryMedia("fit", true)).toBe(false);
+  });
+});
+
+describe("gallery preview lifecycle", () => {
+  it("keeps the preview visible while full media loads", () => {
+    expect(resolveGalleryMediaVisibility("pending")).toEqual({
+      fullMounted: true,
+      fullVisible: false,
+      previewVisible: true,
+    });
+  });
+
+  it("reveals decoded full media before concealing the preview", () => {
+    expect(resolveGalleryMediaVisibility("loaded")).toEqual({
+      fullMounted: true,
+      fullVisible: true,
+      previewVisible: false,
+    });
+  });
+
+  it("retains the preview and removes a failed full-media attempt", () => {
+    expect(resolveGalleryMediaVisibility("failed")).toEqual({
+      fullMounted: false,
+      fullVisible: false,
+      previewVisible: true,
+    });
+  });
+
+  it("always exposes a preview or decoded full layer, including a shared source", () => {
+    for (const state of ["pending", "loaded", "failed"] as const) {
+      const visibility = resolveGalleryMediaVisibility(state);
+      expect(visibility.previewVisible || visibility.fullVisible).toBe(true);
+    }
+  });
+});
 
 describe("coverflow pointer arbitration", () => {
   it("opens only a settled active card released on its origin", () => {

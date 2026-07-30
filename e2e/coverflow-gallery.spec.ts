@@ -17,8 +17,8 @@ function card(page: Page, id: string) {
   return page.locator(`.coverflow-card[data-screen-id="${id}"]`);
 }
 
-async function openGallery(page: Page, id = CENTER_ID) {
-  await page.getByTestId(`coverflow-expand-${id}`).click();
+async function openGallery(page: Page) {
+  await page.getByTestId("coverflow-inspect").click();
   await expect(gallery(page)).toBeVisible();
   await expect(gallery(page)).toHaveAttribute("data-dialog-state", "open");
 }
@@ -208,14 +208,14 @@ test("settled card, side card, touch tap, cancellation, and stage focus resolve 
   await expect(viewport).toBeFocused();
 });
 
-test("expand control opens directly without starting a carousel drag", async ({ page }) => {
+test("shared inspect control opens directly without starting a carousel drag", async ({ page }) => {
   const viewport = carousel(page);
-  const expand = page.getByTestId(`coverflow-expand-${CENTER_ID}`);
+  const inspect = page.getByTestId("coverflow-inspect");
   const before = {
     phase: await viewport.getAttribute("data-phase"),
     position: await viewport.getAttribute("data-position"),
   };
-  await expand.dispatchEvent("pointerdown", {
+  await inspect.dispatchEvent("pointerdown", {
     button: 0,
     buttons: 1,
     isPrimary: true,
@@ -224,16 +224,139 @@ test("expand control opens directly without starting a carousel drag", async ({ 
   });
   await expect(viewport).toHaveAttribute("data-phase", before.phase ?? "idle");
   await expect(viewport).toHaveAttribute("data-position", before.position ?? "0");
-  await expand.dispatchEvent("pointerup", {
+  await inspect.dispatchEvent("pointerup", {
     button: 0,
     buttons: 0,
     isPrimary: true,
     pointerId: 301,
     pointerType: "mouse",
   });
-  await expand.click();
+  await inspect.click();
   await expect(gallery(page)).toBeVisible();
   await expect(page.locator("dialog[open]")).toHaveCount(1);
+});
+
+test("dialog entrance and directional track expose rendered intermediate states", async ({
+  page,
+}) => {
+  const inspect = page.getByTestId("coverflow-inspect");
+  const entrance = await inspect.evaluate(async (button: HTMLButtonElement) => {
+    button.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const dialog = document.querySelector<HTMLDialogElement>('[data-testid="coverflow-gallery"]');
+    const shell = dialog?.querySelector<HTMLElement>('[data-testid="coverflow-gallery-shell"]');
+    const initial = {
+      dialogOpen: dialog?.open,
+      opacity: shell ? Number(getComputedStyle(shell).opacity) : -1,
+      state: dialog?.dataset.dialogState,
+    };
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const animations = shell?.getAnimations() ?? [];
+    if (animations.length === 0) throw new Error("Dialog opening transition did not start.");
+    for (const animation of animations) {
+      animation.pause();
+      animation.currentTime = 110;
+    }
+    const style = shell ? getComputedStyle(shell) : undefined;
+    return {
+      initial,
+      midpoint: {
+        opacity: style ? Number(style.opacity) : -1,
+        transform: style?.transform ?? "none",
+      },
+    };
+  });
+  expect(entrance.initial).toEqual({ dialogOpen: true, opacity: 0, state: "opening" });
+  const dialog = gallery(page);
+  expect(entrance.midpoint.opacity).toBeGreaterThan(0);
+  expect(entrance.midpoint.opacity).toBeLessThan(1);
+  expect(entrance.midpoint.transform).not.toBe("none");
+  await page.getByTestId("coverflow-gallery-shell").evaluate((element) => {
+    for (const animation of element.getAnimations()) animation.finish();
+  });
+  await expect(dialog).toHaveAttribute("data-dialog-state", "open");
+
+  const galleryTrack = page.getByTestId("coverflow-gallery-track");
+  const continuity = await galleryTrack.evaluate(async (element) => {
+    const viewportElement = element.parentElement;
+    if (!viewportElement) throw new Error("Gallery viewport is unavailable.");
+    const viewport = viewportElement.getBoundingClientRect();
+    const pointerId = 881;
+    viewportElement.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        button: 0,
+        buttons: 1,
+        cancelable: true,
+        clientX: viewport.left + viewport.width / 2,
+        clientY: viewport.top + viewport.height / 2,
+        isPrimary: true,
+        pointerId,
+        pointerType: "touch",
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointermove", {
+        bubbles: true,
+        button: 0,
+        buttons: 1,
+        cancelable: true,
+        clientX: viewport.left,
+        clientY: viewport.top + viewport.height / 2,
+        isPrimary: true,
+        pointerId,
+        pointerType: "touch",
+      }),
+    );
+    await Promise.resolve();
+    const visibleSlots = [...element.querySelectorAll<HTMLElement>(".coverflow-gallery-slot")]
+      .map((slot) => {
+        const rect = slot.getBoundingClientRect();
+        const visibleWidth = viewport
+          ? Math.max(0, Math.min(rect.right, viewport.right) - Math.max(rect.left, viewport.left))
+          : 0;
+        return {
+          id: slot.dataset.itemId,
+          left: rect.left,
+          position: slot.dataset.slotPosition,
+          previewVisible:
+            getComputedStyle(slot.querySelector<HTMLElement>(".gallery-image-placeholder")!)
+              .display !== "none",
+          visibleWidth,
+          right: rect.right,
+        };
+      })
+      .filter((slot) => slot.visibleWidth > 0);
+    return visibleSlots;
+  });
+  expect(continuity.map((slot) => slot.id)).toEqual(expect.arrayContaining(["map", "team"]));
+  expect(continuity.every((slot) => slot.previewVisible)).toBe(true);
+  const currentSlot = continuity.find((slot) => slot.id === "map");
+  const nextSlot = continuity.find((slot) => slot.id === "team");
+  expect(Math.abs((currentSlot?.right ?? 0) - (nextSlot?.left ?? 0))).toBeLessThan(1);
+  expect(
+    await page.getByTestId("coverflow-gallery-viewport").evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width / rect.height;
+    }),
+  ).toBeCloseTo(1.6, 2);
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new PointerEvent("pointercancel", {
+        bubbles: true,
+        cancelable: true,
+        isPrimary: true,
+        pointerId: 881,
+        pointerType: "touch",
+      }),
+    );
+  });
+  await expect(dialog).toHaveAttribute("data-track-state", "idle");
+  await page.getByTestId("coverflow-gallery-next").click();
+  await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("4 / 5");
+  await expect(dialog).toHaveAttribute("data-track-state", "idle");
+  await expect(page.locator('[data-slot-position="0"]')).toHaveAttribute("data-item-id", "team");
 });
 
 test("native modal contains focus, guards the background, and restores scroll styles", async ({
@@ -263,7 +386,7 @@ test("native modal contains focus, guards the background, and restores scroll st
 
   await page.keyboard.press("Escape");
   await expect(gallery(page)).not.toBeVisible();
-  await expect(page.getByTestId(`coverflow-expand-${CENTER_ID}`)).toBeFocused();
+  await expect(page.getByTestId("coverflow-inspect")).toBeFocused();
   expect(
     await page.locator("html").evaluate((element) => ({
       overflow: element.style.overflow,
@@ -312,7 +435,7 @@ test("close synchronizes every carousel owner and resumes navigation without cat
   const pagination = page.getByRole("group", { name: "Coverflow screens" }).getByRole("button");
   await pagination.nth(1).click();
   await expectCarouselAt(viewport, "project");
-  await openGallery(page, "project");
+  await openGallery(page);
 
   await page.getByTestId("coverflow-status").evaluate((element) => {
     const messages: string[] = [];
@@ -347,7 +470,7 @@ test("close synchronizes every carousel owner and resumes navigation without cat
   );
   await expect(page.getByTestId("coverflow-counter")).toHaveText("5");
   await expect(page.getByTestId("coverflow-caption")).toContainText("Werkruimte-instellingen");
-  await expect(page.getByTestId("coverflow-expand-settings")).toBeFocused();
+  await expect(page.getByTestId("coverflow-inspect")).toBeFocused();
   const trace = await page.evaluate(() => {
     const current = (
       window as typeof window & {
@@ -421,6 +544,11 @@ test("discrete, focal, touch, and wheel zoom preserve the canonical fit state", 
   });
   await expect(dialog).toHaveAttribute("data-scale", "1.0000");
   await expect(dialog).toHaveAttribute("data-pan-x", "0.000");
+  await page
+    .locator('[data-slot-position="0"] .coverflow-gallery-transform')
+    .evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    });
 
   await viewport.evaluate((element) => {
     const rect = element.getBoundingClientRect();
@@ -461,6 +589,18 @@ test("discrete, focal, touch, and wheel zoom preserve the canonical fit state", 
   await expect(dialog).toHaveAttribute("data-scale", "2.0000");
 
   await page.keyboard.press("0");
+  await expect(dialog).toHaveAttribute("data-scale", "1.0000");
+  const browserZoomPrevented = await dialog.evaluate((element) => {
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: "+",
+    });
+    element.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(browserZoomPrevented).toBe(false);
   await expect(dialog).toHaveAttribute("data-scale", "1.0000");
   const wheelPrevented = await viewport.evaluate((element) => {
     const event = new WheelEvent("wheel", {
@@ -505,6 +645,14 @@ test("fit swipe, zoomed pan, pinch, cancellation, and resize keep exclusive owne
   await expect(dialog).toBeVisible();
 
   await page.getByTestId("coverflow-gallery-zoom-in").click();
+  await page
+    .locator('[data-slot-position="0"] .coverflow-gallery-transform')
+    .evaluate((element) => {
+      const animation = element.getAnimations()[0];
+      if (!animation) throw new Error("Discrete zoom transition did not start.");
+      animation.pause();
+      animation.currentTime = 90;
+    });
   await pointerGesture(page, viewport, {
     deltaX: 260,
     deltaY: -180,
@@ -609,12 +757,12 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
     }
   });
   await openLabDemo(page, "coverflow", "no-preference");
-  await page.getByTestId(`coverflow-expand-${CENTER_ID}`).click();
+  await page.getByTestId("coverflow-inspect").click();
   await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
 
   const viewport = page.getByTestId("coverflow-gallery-viewport");
   const before = await viewport.boundingBox();
-  await page.getByTestId("coverflow-gallery-error").getByRole("button", { name: "Retry" }).click();
+  await page.locator(".gallery-media-status").getByRole("button", { name: "Retry" }).click();
   await expect(page.getByTestId("coverflow-gallery-loading")).toBeVisible();
   if (!releaseRetry) throw new Error("Retry request hold was not initialized.");
   releaseRetry();
@@ -625,7 +773,9 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
   expect(Math.abs((after?.width ?? 0) - (before?.width ?? 0))).toBeLessThan(1);
   expect(Math.abs((after?.height ?? 0) - (before?.height ?? 0))).toBeLessThan(1);
   expect(fullRequests).toEqual(new Set(["project.svg", "map.svg", "team.svg"]));
-  await expect(page.locator(".gallery-image-full.revealed")).toHaveCount(1);
+  await expect(page.locator('[data-slot-position="0"] .gallery-image-full.revealed')).toHaveCount(
+    1,
+  );
 });
 
 test("a failed full image retains its preview and leaves navigation and close usable", async ({
@@ -638,10 +788,13 @@ test("a failed full image retains its preview and leaves navigation and close us
   await openGallery(page);
   await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
   await expect(page.getByTestId("coverflow-gallery-error")).toContainText("Full image unavailable");
-  await expect(page.locator(".gallery-image-placeholder")).toHaveAttribute(
+  await expect(page.locator('[data-slot-position="0"] .gallery-image-placeholder')).toHaveAttribute(
     "alt",
     /Location and planning screen/,
   );
+  const failureBox = await page.getByTestId("coverflow-gallery-error").boundingBox();
+  const mediaBox = await page.getByTestId("coverflow-gallery-viewport").boundingBox();
+  expect(failureBox?.y).toBeGreaterThanOrEqual((mediaBox?.y ?? 0) + (mediaBox?.height ?? 0));
   await page.getByTestId("coverflow-gallery-next").click();
   await expect(page.getByTestId("coverflow-gallery-position")).toHaveText("4 / 5");
   await page.getByTestId("coverflow-gallery-close").click();
@@ -651,16 +804,27 @@ test("a failed full image retains its preview and leaves navigation and close us
 test("semantics, focus visibility, coarse discovery, reduced motion, and reflow remain usable", async ({
   page,
 }) => {
-  await expect(page.locator(".coverflow-expand")).toHaveCount(1);
-  await expect(page.getByTestId(`coverflow-expand-${CENTER_ID}`)).toHaveAccessibleName(
+  await expect(page.locator(".coverflow-expand")).toHaveCount(0);
+  await expect(page.getByTestId("coverflow-inspect")).toHaveAccessibleName(
     "Inspect Locatie & planning in screen gallery, 3 of 5",
   );
+  const inspectBox = await page.getByTestId("coverflow-inspect").boundingBox();
+  expect(inspectBox?.width).toBeGreaterThanOrEqual(44);
+  expect(inspectBox?.height).toBeGreaterThanOrEqual(44);
   await page.getByTestId("reduced-motion-mode").selectOption("reduce");
   await openGallery(page);
   const dialog = gallery(page);
   await expect(dialog).toHaveAccessibleName("Screen gallery");
   await expect(dialog).toHaveAttribute("data-reduced-motion", "true");
-  await expect(page.getByRole("img")).toHaveAccessibleName(
+  await page.getByTestId("coverflow-gallery-zoom-in").click();
+  await expect(dialog).toHaveAttribute("data-scale", "1.5000");
+  expect(
+    await page
+      .locator('[data-slot-position="0"] .coverflow-gallery-transform')
+      .evaluate((element) => Number.parseFloat(getComputedStyle(element).transitionDuration)),
+  ).toBeLessThan(0.001);
+  await page.getByTestId("coverflow-gallery-reset").click();
+  await expect(page.locator('[data-slot-position="0"]').getByRole("img")).toHaveAccessibleName(
     "Location and planning screen with a map, route lines, and a selected location.",
   );
   for (const testId of [
@@ -675,8 +839,10 @@ test("semantics, focus visibility, coarse discovery, reduced motion, and reflow 
     expect(box?.height).toBeGreaterThanOrEqual(44);
   }
   const close = page.getByTestId("coverflow-gallery-close");
+  await close.focus();
   await page.keyboard.press("Tab");
   await page.keyboard.press("Shift+Tab");
+  await expect(close).toBeFocused();
   expect(await close.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe(
     "none",
   );
@@ -706,20 +872,9 @@ test("focus restoration falls back to the stage when the logical control is unav
   page,
 }) => {
   await openGallery(page);
-  // The control only exists while the gallery is closed, and restoration reads
-  // it one animation frame after it remounts. Retire it from inside the page,
-  // the moment it reappears, so the window never depends on runner timing.
-  await page.evaluate((testId) => {
-    const observer = new MutationObserver(() => {
-      const control = document.querySelector(`[data-testid="${testId}"]`);
-      if (!control) return;
-      observer.disconnect();
-      control.remove();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-  }, `coverflow-expand-${CENTER_ID}`);
+  await page.getByTestId("coverflow-inspect").evaluate((control) => control.remove());
   await page.getByTestId("coverflow-gallery-close").click();
   await expect(gallery(page)).not.toBeVisible();
-  await expect(page.getByTestId(`coverflow-expand-${CENTER_ID}`)).toHaveCount(0);
+  await expect(page.getByTestId("coverflow-inspect")).toHaveCount(0);
   await expect(carousel(page)).toBeFocused();
 });

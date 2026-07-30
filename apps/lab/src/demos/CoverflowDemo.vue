@@ -143,7 +143,7 @@ const galleryInitialIndex = ref(0);
 const galleryFinalIndex = ref(0);
 const reducedOverride = computed(() => props.reducedMotionOverride);
 const { width: viewportWidth } = useElementSize(viewport);
-const expandControls = new Map<ScreenId, HTMLButtonElement>();
+const inspectControl = ref<HTMLButtonElement>();
 const activeCarouselPointers = new Set<number>();
 let suppressedCarouselAnnouncementIndex: number | undefined;
 let focusRestoreFrame: number | undefined;
@@ -231,6 +231,7 @@ const liveMessage = ref("");
 const visualId = computed(() => ids[visualIndex.value] ?? ids[initialIndex]!);
 const settledId = computed(() => ids[settledIndex.value] ?? ids[initialIndex]!);
 const visualScreen = computed(() => screens[visualIndex.value] ?? screens[0]!);
+const settledScreen = computed(() => screens[settledIndex.value] ?? screens[0]!);
 
 /** Continuous physical index. It projects motion but never controls the carousel mass. */
 const physicalIndex = computed(() => {
@@ -556,14 +557,6 @@ function onCoverflowKeyDown(event: KeyboardEvent) {
   }
 }
 
-function setExpandControl(screenId: ScreenId, element: Element | null) {
-  if (element instanceof HTMLButtonElement) {
-    expandControls.set(screenId, element);
-  } else {
-    expandControls.delete(screenId);
-  }
-}
-
 function synchronizeCarouselExactly(index: number): boolean {
   const targetIndex = clamp(index, 0, ids.length - 1);
   const id = ids[targetIndex];
@@ -764,8 +757,7 @@ async function onGalleryClosed(finalIndex: number) {
   if (focusRestoreFrame !== undefined) cancelAnimationFrame(focusRestoreFrame);
   focusRestoreFrame = requestAnimationFrame(() => {
     focusRestoreFrame = undefined;
-    const id = ids[synchronizedIndex];
-    const target = id ? expandControls.get(id) : undefined;
+    const target = inspectControl.value;
     if (target?.isConnected) {
       target.focus({ preventScroll: true });
     } else {
@@ -948,26 +940,6 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
-          <button
-            v-if="isCardGalleryEligible(index)"
-            :ref="(element) => setExpandControl(screen.id, element as Element | null)"
-            :aria-label="`Inspect ${screen.title} in screen gallery, ${index + 1} of ${screens.length}`"
-            class="coverflow-expand"
-            :data-testid="`coverflow-expand-${screen.id}`"
-            type="button"
-            @click.stop="openGallery(index)"
-            @pointerdown.stop
-          >
-            <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
-              <path
-                d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="square"
-                stroke-width="2"
-              />
-            </svg>
-          </button>
         </article>
       </div>
     </div>
@@ -979,6 +951,26 @@ onBeforeUnmount(() => {
         <span class="tabular">{{ screens.length }}</span>
         <strong data-testid="coverflow-caption">{{ visualScreen.title }}</strong>
       </p>
+      <button
+        ref="inspectControl"
+        :aria-label="`Inspect ${settledScreen.title} in screen gallery, ${settledIndex + 1} of ${screens.length}`"
+        class="coverflow-inspect"
+        data-testid="coverflow-inspect"
+        :disabled="!isCardGalleryEligible(settledIndex)"
+        type="button"
+        @click="openGallery(settledIndex)"
+      >
+        <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
+          <path
+            d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="square"
+            stroke-width="2"
+          />
+        </svg>
+        <span>Inspect screen</span>
+      </button>
       <div
         aria-label="Coverflow screens"
         class="dots"
@@ -1159,52 +1151,6 @@ onBeforeUnmount(() => {
   transform-origin: center center;
   will-change: transform;
   cursor: pointer;
-}
-
-.coverflow-expand {
-  position: absolute;
-  inset-block-start: 0.55rem;
-  inset-inline-end: 0.55rem;
-  z-index: 3;
-  display: grid;
-  inline-size: 2.75rem;
-  block-size: 2.75rem;
-  padding: 0;
-  place-items: center;
-  border: 1px solid rgb(15 23 42 / 0.22);
-  border-radius: 999px;
-  background: rgb(248 250 252 / 0.9);
-  color: #0f172a;
-  opacity: 0.32;
-  transition:
-    opacity 140ms ease,
-    background-color 140ms ease,
-    border-color 140ms ease;
-}
-
-.tone-ink .coverflow-expand {
-  border-color: rgb(255 255 255 / 0.22);
-  background: rgb(15 23 42 / 0.88);
-  color: #f8fafc;
-}
-
-.coverflow-card:hover .coverflow-expand,
-.coverflow-expand:focus-visible {
-  border-color: rgb(15 23 42 / 0.42);
-  background: #fff;
-  opacity: 1;
-}
-
-.tone-ink:hover .coverflow-expand,
-.tone-ink .coverflow-expand:focus-visible {
-  border-color: rgb(255 255 255 / 0.46);
-  background: #1e293b;
-}
-
-@media (pointer: coarse) {
-  .coverflow-expand {
-    opacity: 0.72;
-  }
 }
 
 .tone-ink {
@@ -1657,10 +1603,45 @@ onBeforeUnmount(() => {
 
 .coverflow-meta p {
   display: flex;
+  flex: 1 1 auto;
   align-items: baseline;
   gap: 0.35rem;
+  min-inline-size: 0;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.coverflow-inspect {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-inline-size: 2.75rem;
+  min-block-size: 2.75rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  border-radius: 0.65rem;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.coverflow-inspect:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ink) 42%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.coverflow-inspect:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.coverflow-inspect:disabled {
+  cursor: default;
+  opacity: 0.42;
 }
 
 .coverflow-meta strong {
@@ -1741,6 +1722,23 @@ onBeforeUnmount(() => {
   .feature-card p,
   .ghost-btn {
     display: none;
+  }
+
+  .coverflow-meta {
+    flex-wrap: wrap;
+  }
+
+  .coverflow-meta p {
+    flex-basis: calc(100% - 4.5rem);
+  }
+
+  .coverflow-inspect span {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 </style>

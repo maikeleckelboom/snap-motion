@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { focusInitial, maintainModalTabOrder } from "@snap-motion/vue/dialog";
-import {
-  useEventListener,
-  useImage,
-  useResizeObserver,
-  useScrollLock,
-  useTimeoutFn,
-} from "@vueuse/core";
+import { useEventListener, useResizeObserver, useScrollLock, useTimeoutFn } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from "vue";
 
 import {
@@ -20,18 +14,24 @@ import { panMediaTransform, zoomMediaTransform } from "@/media-inspection/media-
 import {
   COVERFLOW_GALLERY_TUNING,
   canonicalCoverflowGalleryTransform,
-  galleryPreloadIndices,
   isRepeatedGalleryTap,
+  resolveGalleryCommitOffset,
   resolveGallerySwipe,
+  resolveGalleryTrackOffset,
+  resolveGalleryTrackSlots,
   resolvePinchTransform,
+  shouldTransitionGalleryMedia,
   type CoverflowGalleryItem,
+  type GalleryMediaAction,
   type GalleryTap,
 } from "./coverflowGallery";
 
 type CloseReason = "backdrop" | "close-button" | "escape";
 type DialogState = "closed" | "closing" | "open" | "opening";
 type ImageLoadState = "failed" | "loaded" | "pending";
+type MediaTransitionMode = "direct" | "discrete";
 type PointerMode = "blocked" | "pan" | "pending" | "swipe";
+type TrackNavigationState = "idle" | "recentering" | "settling";
 
 interface PointerSample {
   readonly id: number;
@@ -78,15 +78,17 @@ const closeButton = ref<HTMLButtonElement>();
 const imageViewport = ref<HTMLElement>();
 const galleryIndex = ref(clampIndex(props.initialIndex));
 const dialogState = ref<DialogState>("closed");
-const imageLoadState = ref<ImageLoadState>("pending");
-const imageRetryGeneration = ref(0);
-const imageRetryAttempt = ref(0);
+const imageLoadStateByItem = ref<Record<string, ImageLoadState>>({});
+const imageRetryAttemptByItem = ref<Record<string, number>>({});
 const liveMessage = ref("");
 const pointerMode = ref<PointerMode | "idle">("idle");
 const pointerCount = ref(0);
 const transform = shallowRef<MediaTransform>({ ...fittedMediaTransform });
-const swipeOffsetX = ref(0);
-const swipeSettling = ref(false);
+const mediaTransitionMode = ref<MediaTransitionMode>("direct");
+const trackOffsetX = ref(0);
+const trackNavigationState = ref<TrackNavigationState>("idle");
+const trackTransitionEnabled = ref(false);
+const trackDestinationIndex = ref<number>();
 const previousFocused = ref(false);
 const nextFocused = ref(false);
 const zoomInFocused = ref(false);
@@ -96,31 +98,19 @@ const titleId = `coverflow-gallery-title-${useId()}`;
 const activePointers = new Map<number, PointerSample>();
 const documentElement = computed(() => dialog.value?.ownerDocument.documentElement);
 const scrollLocked = useScrollLock(documentElement);
-const preloaders = new Map(
-  props.items.map((item) => [
-    item.id,
-    useImage(
-      () => ({
-        alt: item.alt,
-        decoding: "async",
-        height: item.height,
-        src: item.fullSrc,
-        width: item.width,
-      }),
-      { immediate: false, resetOnExecute: false },
-    ),
-  ]),
-);
+const mediaTransformElements = new Map<string, HTMLElement>();
 
 let gesture: GestureSession | undefined;
 let pinch: PinchSession | undefined;
 let previousTap: GalleryTap | undefined;
 let backdropPointerId: number | undefined;
 let openingFrame: number | undefined;
-let swipeFrame: number | undefined;
+let trackFrame: number | undefined;
 let lockedRoot: HTMLElement | undefined;
 let previousPaddingInlineEnd = "";
 let closeRequested = false;
+let pendingTrackDestination: number | undefined;
+let pendingTrackAnnouncement = true;
 let geometry = {
   height: 0,
   left: 0,
@@ -129,8 +119,16 @@ let geometry = {
 };
 
 const activeItem = computed(() => props.items[galleryIndex.value] ?? props.items[0]);
+const trackSlots = computed(() =>
+  resolveGalleryTrackSlots(galleryIndex.value, props.items.length, trackDestinationIndex.value).map(
+    (slot) => ({ ...slot, item: props.items[slot.itemIndex] }),
+  ),
+);
 const canGoPrevious = computed(() => galleryIndex.value > 0);
 const canGoNext = computed(() => galleryIndex.value < props.items.length - 1);
+const galleryBusy = computed(() => trackNavigationState.value !== "idle");
+const canNavigatePrevious = computed(() => canGoPrevious.value && !galleryBusy.value);
+const canNavigateNext = computed(() => canGoNext.value && !galleryBusy.value);
 const isZoomed = computed(() => transform.value.scale > 1.001);
 const canZoomIn = computed(() => transform.value.scale < 4 - 0.001);
 const canZoomOut = computed(() => isZoomed.value);
@@ -139,11 +137,9 @@ const activeAspectRatio = computed(() => {
   const item = activeItem.value;
   return item && item.height > 0 ? item.width / item.height : 1;
 });
-const visibleFullSrc = computed(() => {
+const activeImageLoadState = computed<ImageLoadState>(() => {
   const item = activeItem.value;
-  if (!item || imageRetryAttempt.value === 0) return item?.fullSrc;
-  const separator = item.fullSrc.includes("?") ? "&" : "?";
-  return `${item.fullSrc}${separator}retry=${imageRetryAttempt.value}`;
+  return item ? (imageLoadStateByItem.value[item.id] ?? "pending") : "pending";
 });
 const viewportStyle = computed(() => ({
   "--_gallery-aspect-ratio": String(activeAspectRatio.value),
@@ -153,8 +149,8 @@ const transformStyle = computed(() => ({
   "--_gallery-pan-y": `${transform.value.y.toFixed(3)}px`,
   "--_gallery-scale": transform.value.scale.toFixed(4),
 }));
-const swipeStyle = computed(() => ({
-  "--_gallery-swipe-x": `${swipeOffsetX.value.toFixed(3)}px`,
+const trackStyle = computed(() => ({
+  "--_gallery-track-x": `${trackOffsetX.value.toFixed(3)}px`,
 }));
 const galleryPosition = computed(() => `${galleryIndex.value + 1} / ${props.items.length}`);
 const previousLabel = computed(() => {
@@ -171,11 +167,9 @@ const { start: startCloseFallback, stop: stopCloseFallback } = useTimeoutFn(
   COVERFLOW_GALLERY_TUNING.closeDuration + 80,
   { immediate: false },
 );
-const { start: startSwipeReset, stop: stopSwipeReset } = useTimeoutFn(
-  () => {
-    swipeSettling.value = false;
-  },
-  190,
+const { start: startTrackFallback, stop: stopTrackFallback } = useTimeoutFn(
+  completeTrackSettlement,
+  240,
   { immediate: false },
 );
 
@@ -223,21 +217,33 @@ function measureGeometry() {
   commitTransform(transform.value);
 }
 
-function zoomTo(scale: number, focalPoint: MediaPoint = { x: 0, y: 0 }) {
+function setMediaTransition(action: GalleryMediaAction) {
+  mediaTransitionMode.value = shouldTransitionGalleryMedia(action, props.reducedMotion)
+    ? "discrete"
+    : "direct";
+}
+
+function zoomTo(
+  scale: number,
+  focalPoint: MediaPoint = { x: 0, y: 0 },
+  action: GalleryMediaAction = "button",
+) {
+  setMediaTransition(action);
   commitTransform(zoomMediaTransform(transform.value, scale, focalPoint, activeContext()));
 }
 
-function zoomIn() {
+function zoomIn(action: GalleryMediaAction = "button") {
   if (!canZoomIn.value) return;
-  zoomTo(transform.value.scale + COVERFLOW_GALLERY_TUNING.zoomStep);
+  zoomTo(transform.value.scale + COVERFLOW_GALLERY_TUNING.zoomStep, { x: 0, y: 0 }, action);
 }
 
-function zoomOut() {
+function zoomOut(action: GalleryMediaAction = "button") {
   if (!canZoomOut.value) return;
-  zoomTo(transform.value.scale - COVERFLOW_GALLERY_TUNING.zoomStep);
+  zoomTo(transform.value.scale - COVERFLOW_GALLERY_TUNING.zoomStep, { x: 0, y: 0 }, action);
 }
 
-function resetToFit() {
+function resetToFit(action: GalleryMediaAction = "fit") {
+  setMediaTransition(action);
   resetTransform();
 }
 
@@ -248,96 +254,175 @@ function announceCurrent() {
   }
 }
 
-async function preloadIndex(index: number) {
-  const item = props.items[index];
-  const preloader = item ? preloaders.get(item.id) : undefined;
-  if (!preloader) return;
-  try {
-    const image = await preloader.execute();
-    await image?.decode();
-  } catch {
-    // The visible image owns the accessible failure state and retry path.
+function ensureImageState(item: CoverflowGalleryItem | undefined) {
+  if (!item || imageLoadStateByItem.value[item.id]) return;
+  imageLoadStateByItem.value = { ...imageLoadStateByItem.value, [item.id]: "pending" };
+}
+
+function ensureTrackImageStates() {
+  for (const slot of trackSlots.value) {
+    ensureImageState(slot.item);
   }
 }
 
-function preloadAround(index: number) {
-  for (const candidate of galleryPreloadIndices(index, props.items.length)) {
-    void preloadIndex(candidate);
-  }
+function imageLoadState(item: CoverflowGalleryItem): ImageLoadState {
+  return imageLoadStateByItem.value[item.id] ?? "pending";
 }
 
-function resetImageLoading(resetRetryAttempt = true) {
-  if (resetRetryAttempt) imageRetryAttempt.value = 0;
-  imageLoadState.value = "pending";
-  imageRetryGeneration.value += 1;
+function imageRetryAttempt(item: CoverflowGalleryItem): number {
+  return imageRetryAttemptByItem.value[item.id] ?? 0;
 }
 
-async function onFullImageLoad(event: Event) {
+function visibleFullSrc(item: CoverflowGalleryItem): string {
+  const attempt = imageRetryAttempt(item);
+  if (attempt === 0) return item.fullSrc;
+  const separator = item.fullSrc.includes("?") ? "&" : "?";
+  return `${item.fullSrc}${separator}retry=${attempt}`;
+}
+
+function setImageLoadState(item: CoverflowGalleryItem, state: ImageLoadState) {
+  imageLoadStateByItem.value = { ...imageLoadStateByItem.value, [item.id]: state };
+}
+
+async function onFullImageLoad(event: Event, item: CoverflowGalleryItem) {
   const image = event.currentTarget;
   if (!(image instanceof HTMLImageElement)) {
-    imageLoadState.value = "failed";
+    setImageLoadState(item, "failed");
     return;
   }
-  const generation = Number(image.dataset.loadGeneration);
+  const attempt = Number(image.dataset.retryAttempt);
   try {
     await image.decode();
   } catch {
-    if (generation === imageRetryGeneration.value) imageLoadState.value = "failed";
+    if (attempt === imageRetryAttempt(item)) setImageLoadState(item, "failed");
     return;
   }
   if (
-    generation !== imageRetryGeneration.value ||
+    attempt !== imageRetryAttempt(item) ||
     !image.complete ||
     image.naturalWidth <= 0 ||
     image.naturalHeight <= 0
   ) {
     return;
   }
-  imageLoadState.value = "loaded";
-  await nextTick();
-  measureGeometry();
+  setImageLoadState(item, "loaded");
+  if (item.id === activeItem.value?.id) {
+    await nextTick();
+    measureGeometry();
+  }
 }
 
-function onFullImageError(event: Event) {
+function onFullImageError(event: Event, item: CoverflowGalleryItem) {
   const image = event.currentTarget;
   if (
     image instanceof HTMLImageElement &&
-    Number(image.dataset.loadGeneration) === imageRetryGeneration.value
+    Number(image.dataset.retryAttempt) === imageRetryAttempt(item)
   ) {
-    imageLoadState.value = "failed";
+    setImageLoadState(item, "failed");
   }
 }
 
 function retryImage() {
-  imageRetryAttempt.value += 1;
-  resetImageLoading(false);
+  const item = activeItem.value;
+  if (!item) return;
+  imageRetryAttemptByItem.value = {
+    ...imageRetryAttemptByItem.value,
+    [item.id]: imageRetryAttempt(item) + 1,
+  };
+  setImageLoadState(item, "pending");
 }
 
-function beginSwipeReset(initialOffset = swipeOffsetX.value) {
-  stopSwipeReset();
-  swipeOffsetX.value = initialOffset;
-  swipeSettling.value = true;
-  if (swipeFrame !== undefined) cancelAnimationFrame(swipeFrame);
-  swipeFrame = requestAnimationFrame(() => {
-    swipeFrame = undefined;
-    swipeOffsetX.value = 0;
-    startSwipeReset();
+function setMediaTransformElement(itemId: string, element: Element | null) {
+  if (element instanceof HTMLElement) mediaTransformElements.set(itemId, element);
+  else mediaTransformElements.delete(itemId);
+}
+
+function interruptDiscreteTransform() {
+  if (mediaTransitionMode.value !== "discrete") return;
+  const item = activeItem.value;
+  const element = item ? mediaTransformElements.get(item.id) : undefined;
+  if (!element) {
+    mediaTransitionMode.value = "direct";
+    return;
+  }
+  const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform);
+  const rendered = canonicalTransform({
+    scale: Math.hypot(matrix.a, matrix.b),
+    x: matrix.e,
+    y: matrix.f,
   });
+  element.style.setProperty("--_gallery-pan-x", `${rendered.x.toFixed(3)}px`);
+  element.style.setProperty("--_gallery-pan-y", `${rendered.y.toFixed(3)}px`);
+  element.style.setProperty("--_gallery-scale", rendered.scale.toFixed(4));
+  mediaTransitionMode.value = "direct";
+  transform.value = rendered;
+}
+
+function beginTrackSettlement(destinationIndex?: number, announcement = true) {
+  stopTrackFallback();
+  pendingTrackDestination = destinationIndex;
+  pendingTrackAnnouncement = announcement;
+  trackTransitionEnabled.value = true;
+  trackNavigationState.value = "settling";
+  if (destinationIndex === undefined) {
+    trackOffsetX.value = 0;
+  } else {
+    const direction = Math.sign(destinationIndex - galleryIndex.value) as -1 | 1;
+    trackOffsetX.value = resolveGalleryCommitOffset(direction, geometry.width);
+  }
+  startTrackFallback();
+}
+
+async function completeTrackSettlement() {
+  if (trackNavigationState.value !== "settling") return;
+  stopTrackFallback();
+  const destination = pendingTrackDestination;
+  const announcement = pendingTrackAnnouncement;
+  pendingTrackDestination = undefined;
+  pendingTrackAnnouncement = true;
+
+  if (destination === undefined) {
+    trackTransitionEnabled.value = false;
+    trackNavigationState.value = "idle";
+    return;
+  }
+
+  trackTransitionEnabled.value = false;
+  trackNavigationState.value = "recentering";
+  galleryIndex.value = destination;
+  trackOffsetX.value = 0;
+  trackDestinationIndex.value = undefined;
+  mediaTransitionMode.value = "direct";
+  resetTransform();
+  ensureTrackImageStates();
+  await nextTick();
+  measureGeometry();
+  if (trackFrame !== undefined) cancelAnimationFrame(trackFrame);
+  trackFrame = requestAnimationFrame(() => {
+    trackFrame = undefined;
+    trackNavigationState.value = "idle";
+    if (announcement) announceCurrent();
+  });
+}
+
+function onTrackTransitionEnd(event: TransitionEvent) {
+  if (event.currentTarget === event.target && event.propertyName === "transform") {
+    void completeTrackSettlement();
+  }
 }
 
 async function changeIndex(index: number, announcement = true): Promise<boolean> {
   const nextIndex = clampIndex(index);
-  if (nextIndex === galleryIndex.value) return false;
-  const previousOffset = swipeOffsetX.value;
-  galleryIndex.value = nextIndex;
-  resetTransform();
-  resetImageLoading();
+  if (nextIndex === galleryIndex.value || galleryBusy.value) return false;
   clearPointerState();
-  preloadAround(nextIndex);
+  trackDestinationIndex.value = nextIndex;
+  ensureTrackImageStates();
   await nextTick();
-  measureGeometry();
-  beginSwipeReset(Math.max(-32, Math.min(32, previousOffset)));
-  if (announcement) announceCurrent();
+  if (trackFrame !== undefined) cancelAnimationFrame(trackFrame);
+  trackFrame = requestAnimationFrame(() => {
+    trackFrame = undefined;
+    beginTrackSettlement(nextIndex, announcement);
+  });
   return true;
 }
 
@@ -368,7 +453,8 @@ function startPinch() {
     initialTransform: { ...transform.value },
     pointerIds: [first.id, second.id],
   };
-  swipeOffsetX.value = 0;
+  setMediaTransition("pinch");
+  trackOffsetX.value = 0;
 }
 
 function updatePinch() {
@@ -408,18 +494,19 @@ function clearPointerState() {
   pinch = undefined;
   pointerCount.value = 0;
   pointerMode.value = "idle";
-  swipeOffsetX.value = 0;
   for (const pointerId of pointerIds) safeReleasePointer(pointerId);
 }
 
 function onImagePointerDown(event: PointerEvent) {
   if (
     dialogState.value !== "open" ||
+    galleryBusy.value ||
     (event.target instanceof Element && event.target.closest("button")) ||
     (event.pointerType === "mouse" && event.button !== 0)
   ) {
     return;
   }
+  interruptDiscreteTransform();
   measureGeometry();
   const sample: PointerSample = {
     id: event.pointerId,
@@ -481,6 +568,7 @@ function onWindowPointerMove(event: PointerEvent) {
   if (gesture.startScale > 1.001) {
     gesture.mode = "pan";
     pointerMode.value = "pan";
+    setMediaTransition("pan");
     commitTransform(
       panMediaTransform(
         {
@@ -508,12 +596,12 @@ function onWindowPointerMove(event: PointerEvent) {
       pointerMode.value = gesture.mode;
     }
     if (gesture.mode === "swipe") {
-      const beyondStart = galleryIndex.value === 0 && deltaX > 0;
-      const beyondEnd = galleryIndex.value === props.items.length - 1 && deltaX < 0;
-      const resisted = beyondStart || beyondEnd ? deltaX * 0.22 : deltaX;
-      swipeOffsetX.value = Math.max(
-        geometry.width * -0.45,
-        Math.min(geometry.width * 0.45, resisted),
+      setMediaTransition("swipe");
+      trackOffsetX.value = resolveGalleryTrackOffset(
+        deltaX,
+        geometry.width,
+        galleryIndex.value,
+        props.items.length,
       );
     }
   }
@@ -528,6 +616,7 @@ function handleTouchTap(event: PointerEvent) {
     zoomTo(
       isZoomed.value ? 1 : COVERFLOW_GALLERY_TUNING.doubleTapScale,
       localPoint(event.clientX, event.clientY),
+      "double-tap",
     );
   } else {
     previousTap = currentTap;
@@ -547,7 +636,7 @@ function onWindowPointerUp(event: PointerEvent) {
     if (activePointers.size === 0) {
       gesture = undefined;
       pointerMode.value = "idle";
-      swipeOffsetX.value = 0;
+      trackOffsetX.value = 0;
     }
     return;
   }
@@ -567,9 +656,12 @@ function onWindowPointerUp(event: PointerEvent) {
   });
   const wasTap = Math.hypot(deltaX, deltaY) < COVERFLOW_GALLERY_TUNING.gallerySwipeThreshold;
   if (direction !== 0) {
-    void changeIndex(galleryIndex.value + direction);
+    const destination = galleryIndex.value + direction;
+    trackDestinationIndex.value = destination;
+    ensureTrackImageStates();
+    beginTrackSettlement(destination);
   } else {
-    beginSwipeReset();
+    if (Math.abs(trackOffsetX.value) > 0.01) beginTrackSettlement();
     if (wasTap) handleTouchTap(event);
   }
   gesture = undefined;
@@ -582,7 +674,7 @@ function onWindowPointerCancel(event: PointerEvent) {
   safeReleasePointer(event.pointerId);
   if (gesture) gesture.cancelled = true;
   clearPointerState();
-  beginSwipeReset();
+  beginTrackSettlement();
 }
 
 function onLostPointerCapture(event: PointerEvent) {
@@ -596,6 +688,7 @@ function onDoubleClick(event: MouseEvent) {
   zoomTo(
     isZoomed.value ? 1 : COVERFLOW_GALLERY_TUNING.doubleTapScale,
     localPoint(event.clientX, event.clientY),
+    "double-click",
   );
 }
 
@@ -614,11 +707,11 @@ function onDialogKeyDown(event: KeyboardEvent) {
   } else if (event.key === "End") {
     void changeIndex(props.items.length - 1);
   } else if (event.key === "+" || event.key === "=") {
-    zoomIn();
+    zoomIn("keyboard");
   } else if (event.key === "-") {
-    zoomOut();
+    zoomOut("keyboard");
   } else if (event.key === "0") {
-    resetToFit();
+    resetToFit("keyboard");
   } else {
     handled = false;
   }
@@ -657,12 +750,16 @@ async function openDialog() {
   if (!target || target.open || props.items.length === 0) return;
   closeRequested = false;
   galleryIndex.value = clampIndex(props.initialIndex);
+  trackDestinationIndex.value = undefined;
+  trackOffsetX.value = 0;
+  trackTransitionEnabled.value = false;
+  trackNavigationState.value = "idle";
+  mediaTransitionMode.value = "direct";
   resetTransform();
-  resetImageLoading();
   dialogState.value = "opening";
   target.showModal();
   lockDocumentScroll();
-  preloadAround(galleryIndex.value);
+  ensureTrackImageStates();
   await nextTick();
   measureGeometry();
   focusInitial("close", { close: closeButton.value, container: shell.value });
@@ -672,6 +769,7 @@ async function openDialog() {
     dialogState.value = "open";
     return;
   }
+  target.getBoundingClientRect();
   if (openingFrame !== undefined) cancelAnimationFrame(openingFrame);
   openingFrame = requestAnimationFrame(() => {
     openingFrame = undefined;
@@ -694,6 +792,9 @@ function onCancel(event: Event) {
 function startClose() {
   if (!dialog.value?.open || dialogState.value === "closing") return;
   clearPointerState();
+  stopTrackFallback();
+  trackTransitionEnabled.value = false;
+  trackNavigationState.value = "idle";
   resetTransform();
   dialogState.value = "closing";
   if (props.reducedMotion) {
@@ -721,8 +822,13 @@ function onShellTransitionEnd(event: TransitionEvent) {
 function onClose() {
   dialogState.value = "closed";
   closeRequested = false;
+  stopTrackFallback();
+  trackDestinationIndex.value = undefined;
+  trackOffsetX.value = 0;
+  trackTransitionEnabled.value = false;
+  trackNavigationState.value = "idle";
+  mediaTransitionMode.value = "direct";
   resetTransform();
-  resetImageLoading();
   unlockDocumentScroll();
   emit("closed", galleryIndex.value);
 }
@@ -764,16 +870,16 @@ watch(
 watch(
   () => props.initialIndex,
   (index) => {
-    if (!props.open) void preloadIndex(clampIndex(index));
+    if (!props.open) ensureImageState(props.items[clampIndex(index)]);
   },
   { immediate: true },
 );
 
 onBeforeUnmount(() => {
   stopCloseFallback();
-  stopSwipeReset();
+  stopTrackFallback();
   if (openingFrame !== undefined) cancelAnimationFrame(openingFrame);
-  if (swipeFrame !== undefined) cancelAnimationFrame(swipeFrame);
+  if (trackFrame !== undefined) cancelAnimationFrame(trackFrame);
   clearPointerState();
   unlockDocumentScroll();
   if (dialog.value?.open) dialog.value.close();
@@ -788,11 +894,12 @@ onBeforeUnmount(() => {
     data-testid="coverflow-gallery"
     :data-dialog-state="dialogState"
     :data-gallery-index="galleryIndex"
-    :data-image-state="imageLoadState"
+    :data-image-state="activeImageLoadState"
     :data-pan-x="transform.x.toFixed(3)"
     :data-pan-y="transform.y.toFixed(3)"
     :data-reduced-motion="reducedMotion ? 'true' : 'false'"
     :data-scale="transform.scale.toFixed(4)"
+    :data-track-state="trackNavigationState"
     @cancel="onCancel"
     @close="onClose"
     @keydown="onDialogKeyDown"
@@ -838,11 +945,11 @@ onBeforeUnmount(() => {
 
       <div class="coverflow-gallery-workspace">
         <button
-          :aria-disabled="!canGoPrevious"
+          :aria-disabled="!canNavigatePrevious"
           :aria-label="previousLabel"
           class="gallery-icon-button gallery-previous"
           data-testid="coverflow-gallery-previous"
-          :disabled="!canGoPrevious && !previousFocused"
+          :disabled="!canNavigatePrevious && !previousFocused"
           type="button"
           @blur="previousFocused = false"
           @click="previous"
@@ -855,81 +962,83 @@ onBeforeUnmount(() => {
 
         <div
           ref="imageViewport"
-          :aria-busy="imageLoadState === 'pending'"
+          :aria-busy="activeImageLoadState === 'pending'"
           class="coverflow-gallery-viewport"
           data-testid="coverflow-gallery-viewport"
           :data-pointer-mode="pointerMode"
-          :data-swipe-settling="swipeSettling ? 'true' : 'false'"
+          :data-track-state="trackNavigationState"
           :style="viewportStyle"
           @dblclick="onDoubleClick"
           @pointerdown="onImagePointerDown"
         >
           <div
-            class="coverflow-gallery-swipe-surface"
-            :class="{ settling: swipeSettling }"
-            :style="swipeStyle"
+            class="coverflow-gallery-track"
+            :class="{ transitioning: trackTransitionEnabled }"
+            :style="trackStyle"
+            data-testid="coverflow-gallery-track"
+            @transitionend="onTrackTransitionEnd"
           >
             <div
-              class="coverflow-gallery-transform"
-              :class="{ manipulating: pointerCount > 0 }"
-              :style="transformStyle"
+              v-for="slot in trackSlots"
+              :key="slot.item?.id"
+              class="coverflow-gallery-slot"
+              :data-item-id="slot.item?.id"
+              :data-slot-position="slot.position"
+              :style="{ '--_gallery-slot-position': slot.position }"
             >
-              <img
-                v-if="activeItem && open"
-                class="gallery-image gallery-image-placeholder"
-                :class="{ concealed: imageLoadState === 'loaded' }"
-                :src="activeItem.thumbnailSrc"
-                :alt="imageLoadState === 'loaded' ? '' : activeItem.alt"
-                :aria-hidden="imageLoadState === 'loaded' ? 'true' : undefined"
-                decoding="async"
-                draggable="false"
-                :height="activeItem.height"
-                :width="activeItem.width"
-              />
-              <img
-                v-if="activeItem && open && imageLoadState !== 'failed'"
-                :key="`${activeItem.id}-${imageRetryGeneration}`"
-                class="gallery-image gallery-image-full"
-                :class="{ revealed: imageLoadState === 'loaded' }"
-                :data-load-generation="imageRetryGeneration"
-                :src="visibleFullSrc"
-                :alt="imageLoadState === 'loaded' ? activeItem.alt : ''"
-                :aria-hidden="imageLoadState === 'loaded' ? undefined : 'true'"
-                decoding="async"
-                draggable="false"
-                fetchpriority="high"
-                :height="activeItem.height"
-                :width="activeItem.width"
-                @error="onFullImageError"
-                @load="onFullImageLoad"
-              />
+              <div
+                v-if="slot.item"
+                :ref="
+                  (element) => setMediaTransformElement(slot.item!.id, element as Element | null)
+                "
+                class="coverflow-gallery-transform"
+                :class="{
+                  manipulating: pointerCount > 0 && slot.item.id === activeItem?.id,
+                  transitioning:
+                    mediaTransitionMode === 'discrete' && slot.item.id === activeItem?.id,
+                }"
+                :style="slot.item.id === activeItem?.id ? transformStyle : undefined"
+              >
+                <img
+                  v-if="open"
+                  class="gallery-image gallery-image-placeholder"
+                  :class="{ concealed: imageLoadState(slot.item) === 'loaded' }"
+                  :src="slot.item.thumbnailSrc"
+                  :alt="imageLoadState(slot.item) === 'loaded' ? '' : slot.item.alt"
+                  :aria-hidden="imageLoadState(slot.item) === 'loaded' ? 'true' : undefined"
+                  decoding="async"
+                  draggable="false"
+                  :height="slot.item.height"
+                  :width="slot.item.width"
+                />
+                <img
+                  v-if="open && imageLoadState(slot.item) !== 'failed'"
+                  :key="`${slot.item.id}-${imageRetryAttempt(slot.item)}`"
+                  class="gallery-image gallery-image-full"
+                  :class="{ revealed: imageLoadState(slot.item) === 'loaded' }"
+                  :data-retry-attempt="imageRetryAttempt(slot.item)"
+                  :src="visibleFullSrc(slot.item)"
+                  :alt="imageLoadState(slot.item) === 'loaded' ? slot.item.alt : ''"
+                  :aria-hidden="imageLoadState(slot.item) === 'loaded' ? undefined : 'true'"
+                  decoding="async"
+                  draggable="false"
+                  :fetchpriority="slot.item.id === activeItem?.id ? 'high' : 'low'"
+                  :height="slot.item.height"
+                  :width="slot.item.width"
+                  @error="onFullImageError($event, slot.item)"
+                  @load="onFullImageLoad($event, slot.item)"
+                />
+              </div>
             </div>
-          </div>
-
-          <p
-            v-if="imageLoadState === 'pending'"
-            class="gallery-load-state"
-            data-testid="coverflow-gallery-loading"
-          >
-            Loading full image…
-          </p>
-          <div
-            v-if="imageLoadState === 'failed'"
-            class="gallery-load-state gallery-load-error"
-            data-testid="coverflow-gallery-error"
-            role="status"
-          >
-            <span>Full image unavailable. Showing the preview.</span>
-            <button type="button" @click="retryImage">Retry</button>
           </div>
         </div>
 
         <button
-          :aria-disabled="!canGoNext"
+          :aria-disabled="!canNavigateNext"
           :aria-label="nextLabel"
           class="gallery-icon-button gallery-next"
           data-testid="coverflow-gallery-next"
-          :disabled="!canGoNext && !nextFocused"
+          :disabled="!canNavigateNext && !nextFocused"
           type="button"
           @blur="nextFocused = false"
           @click="next"
@@ -948,6 +1057,17 @@ onBeforeUnmount(() => {
             {{ scalePercentage }}%
           </strong>
         </div>
+        <div class="gallery-media-status" role="status">
+          <span v-if="activeImageLoadState === 'pending'" data-testid="coverflow-gallery-loading">
+            Loading full image…
+          </span>
+          <template v-else-if="activeImageLoadState === 'failed'">
+            <span data-testid="coverflow-gallery-error">
+              Full image unavailable. Showing the preview.
+            </span>
+            <button type="button" @click="retryImage">Retry</button>
+          </template>
+        </div>
         <div class="gallery-zoom-controls" aria-label="Image zoom controls" role="group">
           <button
             :aria-disabled="!canZoomOut"
@@ -956,7 +1076,7 @@ onBeforeUnmount(() => {
             :disabled="!canZoomOut && !zoomOutFocused"
             type="button"
             @blur="zoomOutFocused = false"
-            @click="zoomOut"
+            @click="zoomOut()"
             @focus="zoomOutFocused = true"
           >
             <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
@@ -970,7 +1090,7 @@ onBeforeUnmount(() => {
             :disabled="!canZoomIn && !zoomInFocused"
             type="button"
             @blur="zoomInFocused = false"
-            @click="zoomIn"
+            @click="zoomIn()"
             @focus="zoomInFocused = true"
           >
             <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
@@ -984,7 +1104,7 @@ onBeforeUnmount(() => {
             :disabled="!canZoomOut && !resetFocused"
             type="button"
             @blur="resetFocused = false"
-            @click="resetToFit"
+            @click="resetToFit()"
             @focus="resetFocused = true"
           >
             Fit
@@ -1025,6 +1145,10 @@ onBeforeUnmount(() => {
   background: rgb(3 7 18 / 0);
 }
 
+.coverflow-gallery-dialog[data-dialog-state="opening"]::backdrop {
+  transition: none;
+}
+
 .coverflow-gallery-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -1047,6 +1171,10 @@ onBeforeUnmount(() => {
 .coverflow-gallery-dialog[data-dialog-state="closing"] .coverflow-gallery-shell {
   opacity: 0;
   transform: scale(0.99);
+}
+
+.coverflow-gallery-dialog[data-dialog-state="opening"] .coverflow-gallery-shell {
+  transition: none;
 }
 
 .coverflow-gallery-header {
@@ -1101,7 +1229,7 @@ onBeforeUnmount(() => {
 
 .gallery-icon-button,
 .gallery-zoom-controls button,
-.gallery-load-error button {
+.gallery-media-status button {
   display: inline-grid;
   min-inline-size: 2.75rem;
   min-block-size: 2.75rem;
@@ -1115,14 +1243,14 @@ onBeforeUnmount(() => {
 
 .gallery-icon-button:hover:not(:disabled),
 .gallery-zoom-controls button:hover:not(:disabled),
-.gallery-load-error button:hover:not(:disabled) {
+.gallery-media-status button:hover:not(:disabled) {
   background: #2a3545;
   border-color: rgb(255 255 255 / 0.42);
 }
 
 .gallery-icon-button:focus-visible,
 .gallery-zoom-controls button:focus-visible,
-.gallery-load-error button:focus-visible {
+.gallery-media-status button:focus-visible {
   outline-color: #73b3ff;
 }
 
@@ -1139,6 +1267,7 @@ onBeforeUnmount(() => {
   min-block-size: 0;
   padding: clamp(0.75rem, 2vw, 1.5rem);
   background: #090d13;
+  container-type: size;
 }
 
 .gallery-previous,
@@ -1152,8 +1281,7 @@ onBeforeUnmount(() => {
   --_gallery-aspect-ratio: 1.6;
 
   position: relative;
-  inline-size: min(100%, calc((100dvh - 11rem) * var(--_gallery-aspect-ratio)));
-  max-block-size: 100%;
+  inline-size: min(100%, calc(100cqb * var(--_gallery-aspect-ratio)));
   aspect-ratio: var(--_gallery-aspect-ratio);
   justify-self: center;
   border: 1px solid rgb(255 255 255 / 0.14);
@@ -1170,7 +1298,8 @@ onBeforeUnmount(() => {
   cursor: grabbing;
 }
 
-.coverflow-gallery-swipe-surface,
+.coverflow-gallery-track,
+.coverflow-gallery-slot,
 .coverflow-gallery-transform,
 .gallery-image {
   position: absolute;
@@ -1179,12 +1308,17 @@ onBeforeUnmount(() => {
   block-size: 100%;
 }
 
-.coverflow-gallery-swipe-surface {
-  transform: translate3d(var(--_gallery-swipe-x), 0, 0);
+.coverflow-gallery-track {
+  transform: translate3d(var(--_gallery-track-x), 0, 0);
+  will-change: transform;
 }
 
-.coverflow-gallery-swipe-surface.settling {
+.coverflow-gallery-track.transitioning {
   transition: transform 180ms cubic-bezier(0.22, 0.8, 0.2, 1);
+}
+
+.coverflow-gallery-slot {
+  transform: translate3d(calc(var(--_gallery-slot-position) * 100%), 0, 0);
 }
 
 .coverflow-gallery-transform {
@@ -1192,6 +1326,10 @@ onBeforeUnmount(() => {
     scale(var(--_gallery-scale));
   transform-origin: center;
   will-change: auto;
+}
+
+.coverflow-gallery-transform.transitioning {
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .coverflow-gallery-transform.manipulating {
@@ -1221,44 +1359,35 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
-.gallery-load-state {
-  position: absolute;
-  inset-inline-start: 50%;
-  inset-block-end: 0.75rem;
-  z-index: 2;
-  max-inline-size: calc(100% - 1.5rem);
-  padding: 0.45rem 0.7rem;
-  margin: 0;
-  border-radius: 0.45rem;
-  background: rgb(5 7 10 / 0.86);
-  color: #d7dee8;
-  font-size: 0.8rem;
-  text-align: center;
-  transform: translateX(-50%);
-}
-
-.gallery-load-error {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.gallery-load-error button {
-  min-inline-size: auto;
-  min-block-size: 2.75rem;
-  padding-inline: 0.9rem;
-  border-radius: 0.55rem;
-}
-
 .coverflow-gallery-toolbar {
   display: grid;
-  grid-template-columns: minmax(8rem, 1fr) auto minmax(8rem, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(8rem, 1fr);
   align-items: center;
   gap: 1rem;
   padding: 0.75rem max(0.75rem, env(safe-area-inset-right))
     max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
   border-block-start: 1px solid rgb(255 255 255 / 0.1);
   background: #151b25;
+}
+
+.gallery-media-status {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-inline-size: 0;
+  min-block-size: 2.75rem;
+  color: #b8c2d0;
+  font-size: 0.8rem;
+}
+
+.gallery-media-status span {
+  min-inline-size: 0;
+}
+
+.gallery-media-status button {
+  min-block-size: 2.75rem;
+  padding-inline: 0.9rem;
+  border-radius: 0.55rem;
 }
 
 .gallery-zoom-readout {
@@ -1332,10 +1461,6 @@ onBeforeUnmount(() => {
     padding: 0.75rem;
   }
 
-  .coverflow-gallery-viewport {
-    inline-size: min(100%, calc((100dvh - 14.5rem) * var(--_gallery-aspect-ratio)));
-  }
-
   .gallery-previous,
   .gallery-next {
     position: absolute;
@@ -1351,15 +1476,22 @@ onBeforeUnmount(() => {
   }
 
   .coverflow-gallery-toolbar {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .gallery-media-status {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .gallery-zoom-controls {
+    grid-column: 3;
     justify-self: end;
   }
 
   .coverflow-gallery-toolbar p {
     grid-column: 1 / -1;
+    grid-row: 3;
     justify-self: start;
     text-align: start;
   }
@@ -1369,16 +1501,13 @@ onBeforeUnmount(() => {
   .coverflow-gallery-toolbar p {
     display: none;
   }
-
-  .coverflow-gallery-viewport {
-    inline-size: min(100%, calc((100dvh - 12rem) * var(--_gallery-aspect-ratio)));
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .coverflow-gallery-dialog::backdrop,
   .coverflow-gallery-shell,
-  .coverflow-gallery-swipe-surface,
+  .coverflow-gallery-track,
+  .coverflow-gallery-transform,
   .gallery-image-placeholder {
     transition-duration: 0.001ms;
   }
@@ -1391,7 +1520,8 @@ onBeforeUnmount(() => {
 
 .coverflow-gallery-dialog[data-reduced-motion="true"]::backdrop,
 .coverflow-gallery-dialog[data-reduced-motion="true"] .coverflow-gallery-shell,
-.coverflow-gallery-dialog[data-reduced-motion="true"] .coverflow-gallery-swipe-surface,
+.coverflow-gallery-dialog[data-reduced-motion="true"] .coverflow-gallery-track,
+.coverflow-gallery-dialog[data-reduced-motion="true"] .coverflow-gallery-transform,
 .coverflow-gallery-dialog[data-reduced-motion="true"] .gallery-image-placeholder {
   transition-duration: 0.001ms;
 }
