@@ -4,14 +4,25 @@ import {
   type FocusReturnOptions,
   type MediaGalleryCloseReason,
   type MediaGalleryItem,
+  type MediaGalleryMessages,
   type MediaGalleryNavigationReason,
 } from "@snap-motion/vue/media-gallery";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 
 import type { LabPhysicsSettings } from "@/fixtures/lab-types";
 import { mediaFixtures } from "@/fixtures/media";
 
-type ScenarioId = "baseline" | "full-failure" | "preview-failure" | "single-item";
+type ScenarioId =
+  | "baseline"
+  | "delayed-full"
+  | "final-item"
+  | "first-item"
+  | "full-failure"
+  | "long-localized"
+  | "preview-failure"
+  | "preview-only"
+  | "retry-success"
+  | "single-item";
 
 interface CertificationScenario {
   readonly id: ScenarioId;
@@ -19,6 +30,12 @@ interface CertificationScenario {
   readonly purpose: string;
   readonly initialIndex: number;
   readonly items: readonly MediaGalleryItem[];
+  readonly messages?: Partial<MediaGalleryMessages>;
+  readonly expectedCurrentItem: string;
+  readonly fullMedia: "No" | "Yes";
+  readonly loadingExpected: "No" | "Yes";
+  readonly failureExpected: "Full image" | "No" | "Preview image";
+  readonly retryExpectation: "Fails" | "Not offered" | "Succeeds";
 }
 
 interface TraceEntry {
@@ -36,7 +53,9 @@ const props = defineProps<{
 const regular = mediaFixtures.find((fixture) => fixture.id === "regular")!;
 const wide = mediaFixtures.find((fixture) => fixture.id === "extremely-wide")!;
 const tall = mediaFixtures.find((fixture) => fixture.id === "extremely-tall")!;
-const invalidImageUrl = "data:image/png;base64,bm90LWFuLWltYWdl";
+const invalidImageUrl = new URL("__at-media__/invalid.png", document.baseURI).href;
+const delayedImageUrl = new URL("__at-media__/delayed.svg", document.baseURI).href;
+const retryImageUrl = new URL("__at-media__/retry.svg", document.baseURI).href;
 
 const baselineItems: readonly MediaGalleryItem[] = [
   {
@@ -76,6 +95,37 @@ const scenarios: readonly CertificationScenario[] = [
       "Starts on item 2 so previous and next are available. Use it for dialog entry, reading order, navigation, zoom, status timing, and focus return.",
     initialIndex: 1,
     items: baselineItems,
+    expectedCurrentItem: "Wide timeline (item 2)",
+    fullMedia: "Yes",
+    loadingExpected: "Yes",
+    failureExpected: "No",
+    retryExpectation: "Not offered",
+  },
+  {
+    id: "first-item",
+    label: "First-item boundary",
+    purpose:
+      "Starts on item 1 of 3 with Previous unavailable. Reload and select this scenario to begin at the exact first boundary.",
+    initialIndex: 0,
+    items: baselineItems,
+    expectedCurrentItem: "Landscape overview (item 1)",
+    fullMedia: "Yes",
+    loadingExpected: "Yes",
+    failureExpected: "No",
+    retryExpectation: "Not offered",
+  },
+  {
+    id: "final-item",
+    label: "Final-item boundary",
+    purpose:
+      "Starts on item 3 of 3 with Next unavailable. Reload and select this scenario to begin at the exact final boundary.",
+    initialIndex: 2,
+    items: baselineItems,
+    expectedCurrentItem: "Tall document (item 3)",
+    fullMedia: "Yes",
+    loadingExpected: "Yes",
+    failureExpected: "No",
+    retryExpectation: "Not offered",
   },
   {
     id: "single-item",
@@ -84,12 +134,79 @@ const scenarios: readonly CertificationScenario[] = [
       "Exposes one named image with both navigation directions unavailable. Use it to verify boundary controls and the stable dialog order.",
     initialIndex: 0,
     items: [baselineItems[0]!],
+    expectedCurrentItem: "Landscape overview (item 1)",
+    fullMedia: "Yes",
+    loadingExpected: "Yes",
+    failureExpected: "No",
+    retryExpectation: "Not offered",
+  },
+  {
+    id: "preview-only",
+    label: "Preview-only media",
+    purpose:
+      "Uses one valid preview with no full source. Use it to verify a stable named image without a loading state or Retry.",
+    initialIndex: 0,
+    items: [
+      {
+        id: "preview-only-image",
+        title: "Preview-only landscape",
+        alt: baselineItems[0]!.alt,
+        previewSrc: baselineItems[0]!.previewSrc,
+        width: baselineItems[0]!.width,
+        height: baselineItems[0]!.height,
+      },
+    ],
+    expectedCurrentItem: "Preview-only landscape (item 1)",
+    fullMedia: "No",
+    loadingExpected: "No",
+    failureExpected: "No",
+    retryExpectation: "Not offered",
+  },
+  {
+    id: "delayed-full",
+    label: "Delayed full image",
+    purpose:
+      "The lab server holds the full image for 1.5 seconds. Use it to observe a deterministic pending state followed by a successful reveal.",
+    initialIndex: 0,
+    items: [
+      {
+        ...baselineItems[0]!,
+        id: "delayed-full-image",
+        title: "Delayed full image",
+        fullSrc: delayedImageUrl,
+      },
+    ],
+    expectedCurrentItem: "Delayed full image (item 1)",
+    fullMedia: "Yes",
+    loadingExpected: "Yes",
+    failureExpected: "No",
+    retryExpectation: "Not offered",
+  },
+  {
+    id: "retry-success",
+    label: "Retry failure then success",
+    purpose:
+      "The first full-image response is intentionally invalid. Retry requests a valid image so the same run deterministically changes from failure to success.",
+    initialIndex: 0,
+    items: [
+      {
+        ...baselineItems[0]!,
+        id: "retry-success-image",
+        title: "Retry succeeds",
+        fullSrc: retryImageUrl,
+      },
+    ],
+    expectedCurrentItem: "Retry succeeds (item 1)",
+    fullMedia: "Yes",
+    loadingExpected: "Yes",
+    failureExpected: "Full image",
+    retryExpectation: "Succeeds",
   },
   {
     id: "full-failure",
     label: "Full-image failure",
     purpose:
-      "Uses a valid named preview and a deliberately invalid full-image data URL. Use it to verify the failure message, preview fallback, Retry, navigation safety, and close.",
+      "Uses a valid named preview and a deliberately invalid lab-served full image. Use it to verify the failure message, preview fallback, Retry, navigation safety, and close.",
     initialIndex: 0,
     items: [
       {
@@ -99,12 +216,17 @@ const scenarios: readonly CertificationScenario[] = [
         fullSrc: invalidImageUrl,
       },
     ],
+    expectedCurrentItem: "Full image unavailable (item 1)",
+    fullMedia: "Yes",
+    loadingExpected: "Yes",
+    failureExpected: "Full image",
+    retryExpectation: "Fails",
   },
   {
     id: "preview-failure",
     label: "Preview failure",
     purpose:
-      "Uses a deliberately invalid preview-only data URL. Use it to verify that the preview failure is exposed without inventing a full-image retry.",
+      "Uses a deliberately invalid lab-served preview with no full image. Use it to verify that the preview failure is exposed without inventing a full-image retry.",
     initialIndex: 0,
     items: [
       {
@@ -116,6 +238,48 @@ const scenarios: readonly CertificationScenario[] = [
         height: 1_000,
       },
     ],
+    expectedCurrentItem: "Preview unavailable (item 1)",
+    fullMedia: "No",
+    loadingExpected: "No",
+    failureExpected: "Preview image",
+    retryExpectation: "Not offered",
+  },
+  {
+    id: "long-localized",
+    label: "Long localized content",
+    purpose:
+      "Uses deliberately long Dutch labels, status text, title, description, and alternative text to expose wrapping and reflow defects.",
+    initialIndex: 0,
+    items: [
+      {
+        ...baselineItems[2]!,
+        id: "long-localized-document",
+        title: "Uitgebreide documentweergave voor toegankelijkheidscertificering",
+        alt: "Een uitzonderlijk lang, smal groen testdocument met markeringen voor afmetingen en een beschrijvende titel die bewust over meerdere regels kan lopen.",
+        description:
+          "Deze beschrijving is opzettelijk lang om tekstterugloop, vergroting en kleine schermen zonder afkapping te kunnen controleren.",
+        fullSrc: `${tall.src}?at-long-localized`,
+      },
+    ],
+    messages: {
+      closeGallery: "Mediagalerij sluiten en terugkeren naar de scenario-opener",
+      fit: "Afbeelding passend binnen het beschikbare venster weergeven",
+      gestureInstructions:
+        "Veeg wanneer passend; sleep wanneer ingezoomd; knijp of tik tweemaal om in te zoomen",
+      loadingFullImage:
+        "De volledige afbeelding voor toegankelijkheidscertificering wordt geladen…",
+      retry: "Volledige afbeelding opnieuw proberen te laden",
+      zoomControls: "Bediening voor vergroting van de geselecteerde afbeelding",
+      zoomIn: "Verder inzoomen op de geselecteerde afbeelding",
+      zoomLabel: "Huidige vergroting van de afbeelding",
+      zoomOut: "Verder uitzoomen op de geselecteerde afbeelding",
+    },
+    expectedCurrentItem:
+      "Uitgebreide documentweergave voor toegankelijkheidscertificering (item 1)",
+    fullMedia: "Yes",
+    loadingExpected: "Yes",
+    failureExpected: "No",
+    retryExpectation: "Not offered",
   },
 ];
 
@@ -129,6 +293,7 @@ let traceSequence = 0;
 const selectedScenario = computed(
   () => scenarios.find((scenario) => scenario.id === selectedScenarioId.value) ?? scenarios[0]!,
 );
+const selectedMessages = computed(() => selectedScenario.value.messages ?? {});
 const focusReturn = computed<FocusReturnOptions>(() => ({
   opener: opener.value,
   fallback: () => harness.value,
@@ -182,8 +347,15 @@ function onRequestClose(finalIndex: number, reason: MediaGalleryCloseReason) {
   appendTrace("requestClose", `final index ${finalIndex}; reason ${reason}`);
 }
 
-function onClosed(finalIndex: number) {
+async function onClosed(finalIndex: number) {
   appendTrace("closed", `final index ${finalIndex}`);
+  await nextTick();
+  const activeElement = opener.value?.ownerDocument.activeElement;
+  const focusTarget =
+    activeElement instanceof HTMLElement
+      ? (activeElement.dataset.testid ?? activeElement.id ?? activeElement.tagName.toLowerCase())
+      : "none";
+  appendTrace("focus-restored", focusTarget);
 }
 </script>
 
@@ -243,8 +415,28 @@ function onClosed(finalIndex: number) {
             <dd>{{ selectedScenario.id }}</dd>
           </div>
           <div>
-            <dt>Start position</dt>
-            <dd>{{ selectedScenario.initialIndex + 1 }} of {{ selectedScenario.items.length }}</dd>
+            <dt>Expected current item</dt>
+            <dd>{{ selectedScenario.expectedCurrentItem }}</dd>
+          </div>
+          <div>
+            <dt>Expected item count</dt>
+            <dd>{{ selectedScenario.items.length }}</dd>
+          </div>
+          <div>
+            <dt>Full media exists</dt>
+            <dd>{{ selectedScenario.fullMedia }}</dd>
+          </div>
+          <div>
+            <dt>Loading expected</dt>
+            <dd>{{ selectedScenario.loadingExpected }}</dd>
+          </div>
+          <div>
+            <dt>Failure expected</dt>
+            <dd>{{ selectedScenario.failureExpected }}</dd>
+          </div>
+          <div>
+            <dt>Retry expectation</dt>
+            <dd>{{ selectedScenario.retryExpectation }}</dd>
           </div>
           <div>
             <dt>Motion mode</dt>
@@ -257,6 +449,10 @@ function onClosed(finalIndex: number) {
                     : "Full"
               }}
             </dd>
+          </div>
+          <div>
+            <dt>Trace mode</dt>
+            <dd>Non-live</dd>
           </div>
         </dl>
       </section>
@@ -287,6 +483,7 @@ function onClosed(finalIndex: number) {
       :focus-return="focusReturn"
       :initial-index="selectedScenario.initialIndex"
       :items="selectedScenario.items"
+      :messages="selectedMessages"
       :open="open"
       :reduced-motion-override="props.reducedMotionOverride"
       eyebrow="AT certification"

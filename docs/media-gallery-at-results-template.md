@@ -38,16 +38,17 @@ entered as a human `Pass`.
 
 ## Run disposition
 
-| Field               | Value                           |
-| ------------------- | ------------------------------- |
-| Matrix row          |                                 |
-| Overall result      | Pass / Fail / Blocked / Not run |
-| Started             |                                 |
-| Completed           |                                 |
-| Issue links         |                                 |
-| Retest of run/issue |                                 |
-| Retest date         |                                 |
-| Reviewer            |                                 |
+| Field                | Value                           |
+| -------------------- | ------------------------------- |
+| Certification status | Not yet manually certified      |
+| Matrix row           |                                 |
+| Overall result       | Pass / Fail / Blocked / Not run |
+| Started              |                                 |
+| Completed            |                                 |
+| Issue links          |                                 |
+| Retest of run/issue  |                                 |
+| Retest date          |                                 |
+| Reviewer             |                                 |
 
 Overall `Pass` requires every applicable required contract below to pass. A failed or blocked
 required contract makes the row `Fail` or `Blocked`; explain any accepted platform limitation.
@@ -76,6 +77,10 @@ required contract makes the row `Fail` or `Blocked`; explain any accepted platfo
 | C08 | Not run |                     |                                   |       |
 | C09 | Not run |                     |                                   |       |
 | C10 | Not run |                     |                                   |       |
+| C11 | Not run |                     |                                   |       |
+| C12 | Not run |                     |                                   |       |
+| C13 | Not run |                     |                                   |       |
+| C14 | Not run |                     |                                   |       |
 
 ## Scenario results
 
@@ -105,6 +110,51 @@ required contract makes the row `Fail` or `Blocked`; explain any accepted platfo
 | Modal traversal         | Not run |                                |       |
 | Close and focus return  | Not run |                                |       |
 
+### First-item boundary
+
+| Step                               | Result  | Exact speech, state, and order | Issue |
+| ---------------------------------- | ------- | ------------------------------ | ----- |
+| Open directly at item 1 of 3       | Not run |                                |       |
+| Previous boundary                  | Not run |                                |       |
+| Next destination remains available | Not run |                                |       |
+| Close and focus-restoration trace  | Not run |                                |       |
+
+### Final-item boundary
+
+| Step                                   | Result  | Exact speech, state, and order | Issue |
+| -------------------------------------- | ------- | ------------------------------ | ----- |
+| Open directly at item 3 of 3           | Not run |                                |       |
+| Next boundary                          | Not run |                                |       |
+| Previous destination remains available | Not run |                                |       |
+| Close and focus-restoration trace      | Not run |                                |       |
+
+### Preview-only media
+
+| Step                            | Result  | Exact speech, state, and operability | Issue |
+| ------------------------------- | ------- | ------------------------------------ | ----- |
+| Named preview becomes available | Not run |                                      |       |
+| No loading status is exposed    | Not run |                                      |       |
+| No Retry control is exposed     | Not run |                                      |       |
+| Close and focus return          | Not run |                                      |       |
+
+### Delayed full image
+
+| Step                                    | Result  | Exact speech, timing, and state | Issue |
+| --------------------------------------- | ------- | ------------------------------- | ----- |
+| Pending/loading state becomes available | Not run |                                 |       |
+| Preview remains named while pending     | Not run |                                 |       |
+| Full image replaces pending state       | Not run |                                 |       |
+| No failure or Retry is exposed          | Not run |                                 |       |
+
+### Retry failure then success
+
+| Step                             | Result  | Exact speech, timing, and state | Issue |
+| -------------------------------- | ------- | ------------------------------- | ----- |
+| Initial full-image failure       | Not run |                                 |       |
+| Named preview fallback remains   | Not run |                                 |       |
+| Retry is named and activated     | Not run |                                 |       |
+| Retry changes failure to success | Not run |                                 |       |
+
 ### Full-image failure
 
 | Step                            | Result  | Exact speech, state, and operability | Issue |
@@ -122,6 +172,17 @@ required contract makes the row `Fail` or `Blocked`; explain any accepted platfo
 | No full-image Retry is exposed    | Not run |                                      |       |
 | Close remains operable            | Not run |                                      |       |
 
+### Long localized content
+
+| Step                                     | Result  | Exact speech, wrapping, and focus notes | Issue |
+| ---------------------------------------- | ------- | --------------------------------------- | ----- |
+| Open with long Dutch labels              | Not run |                                         |       |
+| Complete forward and reverse traversal   | Not run |                                         |       |
+| Inspect title, description, and alt text | Not run |                                         |       |
+| Check 320 CSS-pixel layout               | Not run |                                         |       |
+| Check physical 200 percent browser zoom  | Not run |                                         |       |
+| Close and focus return                   | Not run |                                         |       |
+
 ## Event trace comparison
 
 Paste or transcribe the non-live trace only after completing the spoken-interaction notes.
@@ -130,13 +191,14 @@ Paste or transcribe the non-live trace only after completing the spoken-interact
 
 ```
 
-| Check                                                        | Result  | Notes |
-| ------------------------------------------------------------ | ------- | ----- |
-| `opened` follows the open request                            | Not run |       |
-| Each committed navigation has one `indexChanged`             | Not run |       |
-| Spoken item output corresponds to the committed index        | Not run |       |
-| Close order is `requestClose`, `update:open false`, `closed` | Not run |       |
-| Trace itself was not announced as a live update              | Not run |       |
+| Check                                                                            | Result  | Notes |
+| -------------------------------------------------------------------------------- | ------- | ----- |
+| `opened` follows the open request                                                | Not run |       |
+| Each committed navigation has one `indexChanged`                                 | Not run |       |
+| Spoken item output corresponds to the committed index                            | Not run |       |
+| Close order ends `requestClose`, `update:open false`, `closed`, `focus-restored` | Not run |       |
+| `focus-restored` identifies `at-open-gallery`                                    | Not run |       |
+| Trace itself was not announced as a live update                                  | Not run |       |
 
 ## Defects and limitations
 

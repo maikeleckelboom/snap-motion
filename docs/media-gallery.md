@@ -105,9 +105,10 @@ the bottom sheet, Router, Nuxt, or lab code.
 
 > Prepared for manual assistive-technology certification
 
-The dedicated lab harness is available at `?demo=gallery-at`. It supplies deterministic baseline,
-single-item, full-image-failure, and preview-failure scenarios plus a deliberately non-live
-component event trace.
+The dedicated lab harness is available at `?demo=gallery-at`. It supplies ten deterministic
+scenarios covering baseline navigation, exact boundary starts, preview-only media, delayed loading,
+retry failure-to-success, terminal failures, and long localized content. Its deliberately non-live
+component event trace includes a bounded post-close focus-target sample.
 
 Use the
 [media gallery assistive-technology certification dossier](media-gallery-at-certification.md) and
