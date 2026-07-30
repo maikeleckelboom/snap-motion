@@ -96,4 +96,34 @@ describe("production component SSR contract", () => {
     expect(new Set(titleIds).size).toBe(2);
     expect(first).toBe(second);
   });
+
+  it("fails deterministically when normalized media-gallery IDs collide", async () => {
+    const app = createSSRApp(() =>
+      h(MediaGalleryDialog, {
+        open: false,
+        items: [
+          {
+            id: "item",
+            title: "First",
+            alt: "First",
+            previewSrc: "/first.jpg",
+            width: 1_600,
+            height: 1_000,
+          },
+          {
+            id: " item ",
+            title: "Second",
+            alt: "Second",
+            previewSrc: "/second.jpg",
+            width: 1_600,
+            height: 1_000,
+          },
+        ],
+      }),
+    );
+
+    await expect(renderToString(app)).rejects.toThrowError(
+      /Media gallery item IDs must be unique non-empty strings/,
+    );
+  });
 });

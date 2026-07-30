@@ -27,18 +27,34 @@ import "@snap-motion/vue/style.css";
 ## Item contract
 
 Every item requires a stable non-empty `id`, `title`, `alt`, `previewSrc`, `width`, and `height`.
-`fullSrc` and `description` are optional. Duplicate or empty IDs are ignored. Dimensions are used to
-reserve the media ratio before images load.
+`fullSrc` and `description` are optional. IDs are trimmed, and the complete collection must contain
+unique, non-empty IDs after trimming. An empty or duplicate ID is a consumer error and throws
+`RangeError`; items are never silently filtered.
+
+Intrinsic dimensions reserve the media ratio before images load. Width and height are accepted only
+as one positive finite pair. If either axis is invalid, both axes fall back to `1 × 1`, producing a
+finite, positive square ratio instead of preserving a potentially destructive partial dimension.
 
 The preview remains mounted while an optional distinct full image decodes. A failed full image is
 removed without hiding the preview and can be retried. A `fullSrc` equal to `previewSrc` is treated
-as preview-only.
+as preview-only. While full media is pending or failed, the preview owns the accessible name. After
+successful decode, the full image owns the name and the preview is hidden from assistive technology.
+
+The persistent previous and next slots remain mounted as visual preload surfaces for directional
+continuity, but are `aria-hidden`. Only the item at the committed gallery index is semantically
+exposed. During settlement, the incoming destination stays hidden until the index commits; the live
+announcement and `indexChanged` event follow that semantic commit.
 
 ## Controlled lifecycle
 
 `open` is controlled through `v-model:open`. `initialIndex` is clamped when the dialog opens.
 Changing `items` preserves the active item by ID when possible, clamps when it is removed, and
 closes safely when the collection becomes empty.
+
+Opening, navigation, track settlement, image decode, and item-replacement work is generation
+guarded. Closing, replacement, reopening, or unmounting invalidates scheduled work before it can
+publish focus, state, measurements, announcements, or events. Body-lock and media work owned by a
+prior open cycle cannot publish into a later cycle.
 
 The component emits:
 

@@ -415,17 +415,80 @@ describe("gallery item normalization", () => {
     expect(clampGalleryIndex(8, 0)).toBe(0);
   });
 
-  it("drops empty and duplicate IDs while normalizing invalid dimensions", () => {
+  it("preserves a valid positive finite intrinsic-dimension pair", () => {
+    expect(normalizeMediaGalleryItems([galleryItem()])[0]).toMatchObject({
+      height: 1_000,
+      width: 1_600,
+    });
+  });
+
+  it.each([
+    ["invalid height", 1_600, -1],
+    ["invalid width", Number.NaN, 1_000],
+    ["NaN", Number.NaN, Number.NaN],
+    ["infinity", Number.POSITIVE_INFINITY, 1_000],
+    ["zero", 0, 0],
+    ["negative values", -20, -30],
+    ["mixed invalid values", 1_600, Number.NEGATIVE_INFINITY],
+  ])("falls back the complete pair for %s", (_label, width, height) => {
+    const normalized = normalizeMediaGalleryItems([galleryItem({ width, height })])[0]!;
+    expect({ height: normalized.height, width: normalized.width }).toEqual({
+      height: 1,
+      width: 1,
+    });
+    expect(Number.isFinite(normalized.width / normalized.height)).toBe(true);
+    expect(normalized.width / normalized.height).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["empty", ""],
+    ["whitespace-only", "   "],
+  ])("rejects an %s ID", (_label, id) => {
+    expect(() => normalizeMediaGalleryItems([galleryItem({ id })])).toThrowError(
+      new RangeError(
+        "Media gallery item IDs must be unique non-empty strings; item at index 0 has an empty ID.",
+      ),
+    );
+  });
+
+  it("rejects an exact duplicate ID without returning a filtered collection", () => {
+    const input = [galleryItem(), galleryItem({ title: "Duplicate" })];
+    expect(() => normalizeMediaGalleryItems(input)).toThrowError(
+      /"one" at index 1 duplicates an earlier item/,
+    );
+    expect(input).toHaveLength(2);
+  });
+
+  it("validates every ID before partially normalizing item fields", () => {
+    let previewReads = 0;
+    const first = galleryItem();
+    Object.defineProperty(first, "previewSrc", {
+      configurable: true,
+      get() {
+        previewReads += 1;
+        return "/one-preview.jpg";
+      },
+    });
+
+    expect(() => normalizeMediaGalleryItems([first, galleryItem()])).toThrowError(RangeError);
+    expect(previewReads).toBe(0);
+  });
+
+  it("rejects a duplicate after trimming", () => {
+    expect(() =>
+      normalizeMediaGalleryItems([galleryItem(), galleryItem({ id: " one " })]),
+    ).toThrowError(/"one" at index 1 duplicates an earlier item/);
+  });
+
+  it("trims unique IDs while preserving item order", () => {
     expect(
       normalizeMediaGalleryItems([
-        galleryItem({ id: "" }),
-        galleryItem(),
-        galleryItem({ width: Number.NaN, height: -4 }),
-        galleryItem({ id: "two", width: Number.NaN, height: -4 }),
-      ]),
+        galleryItem({ id: " first ", title: "First" }),
+        galleryItem({ id: " second ", title: "Second" }),
+      ]).map(({ id, title }) => ({ id, title })),
     ).toEqual([
-      galleryItem(),
-      galleryItem({ id: "two", width: Number.EPSILON, height: Number.EPSILON }),
+      { id: "first", title: "First" },
+      { id: "second", title: "Second" },
     ]);
   });
 

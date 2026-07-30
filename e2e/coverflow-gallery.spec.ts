@@ -4,6 +4,9 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { dragSyntheticPointerBy, expectCarouselAt, openLabDemo } from "./helpers";
 
 const CENTER_ID = "map";
+const collectedPageErrors = new WeakMap<Page, string[]>();
+const existingResizeObserverWarning =
+  /ResizeObserver loop completed with undelivered notifications\./;
 
 function carousel(page: Page) {
   return page.getByTestId("coverflow-viewport");
@@ -164,7 +167,25 @@ async function expectDialogFocus(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  const errors: string[] = [];
+  collectedPageErrors.set(page, errors);
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" ||
+      /hydration|resizeobserver loop|unhandled promise/i.test(message.text())
+    ) {
+      errors.push(`${message.type()}: ${message.text()}`);
+    }
+  });
   await openLabDemo(page, "coverflow", "no-preference");
+});
+
+test.afterEach(async ({ page }) => {
+  const unexpectedErrors = (collectedPageErrors.get(page) ?? []).filter(
+    (error) => !existingResizeObserverWarning.test(error),
+  );
+  expect(unexpectedErrors).toEqual([]);
 });
 
 test("settled card, side card, touch tap, cancellation, and stage focus resolve once", async ({
@@ -323,6 +344,7 @@ test("dialog entrance and directional track expose rendered intermediate states"
           ? Math.max(0, Math.min(rect.right, viewport.right) - Math.max(rect.left, viewport.left))
           : 0;
         return {
+          ariaHidden: slot.getAttribute("aria-hidden"),
           id: slot.dataset.itemId,
           left: rect.left,
           position: slot.dataset.slotPosition,
@@ -340,6 +362,12 @@ test("dialog entrance and directional track expose rendered intermediate states"
   expect(continuity.every((slot) => slot.previewVisible)).toBe(true);
   const currentSlot = continuity.find((slot) => slot.id === "map");
   const nextSlot = continuity.find((slot) => slot.id === "team");
+  expect(currentSlot?.ariaHidden).toBeNull();
+  expect(nextSlot?.ariaHidden).toBe("true");
+  await expect(dialog.getByRole("img")).toHaveCount(1);
+  await expect(dialog.getByRole("img")).toHaveAccessibleName(
+    "Location and planning screen with a map, route lines, and a selected location.",
+  );
   expect(Math.abs((currentSlot?.right ?? 0) - (nextSlot?.left ?? 0))).toBeLessThan(1);
   expect(
     await page.getByTestId("snap-motion-media-gallery-viewport").evaluate((element) => {
@@ -363,6 +391,13 @@ test("dialog entrance and directional track expose rendered intermediate states"
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("4 / 5");
   await expect(dialog).toHaveAttribute("data-track-state", "idle");
   await expect(page.locator('[data-slot-position="0"]')).toHaveAttribute("data-item-id", "team");
+  await expect(
+    dialog.locator(".snap-motion-media-gallery-slot:not([aria-hidden='true'])"),
+  ).toHaveCount(1);
+  await expect(dialog.getByRole("img")).toHaveCount(1);
+  await expect(dialog.getByRole("img")).toHaveAccessibleName(
+    "Team and roles screen with six member cards arranged in a roster.",
+  );
 });
 
 test("native modal contains focus, guards the background, and restores scroll styles", async ({
@@ -441,8 +476,27 @@ test("close synchronizes every carousel owner and resumes navigation without cat
   const pagination = page.getByRole("group", { name: "Coverflow screens" }).getByRole("button");
   await pagination.nth(1).click();
   await expectCarouselAt(viewport, "project");
+  const coverflowMessageBeforeRace = await page.getByTestId("coverflow-status").textContent();
   await openGallery(page);
 
+  await gallery(page).evaluate((dialog) => {
+    dialog
+      .querySelector<HTMLButtonElement>('[data-testid="snap-motion-media-gallery-next"]')
+      ?.click();
+    dialog
+      .querySelector<HTMLButtonElement>('[data-testid="snap-motion-media-gallery-close"]')
+      ?.click();
+  });
+  await expect(gallery(page)).not.toBeVisible();
+  await expectCarouselAt(viewport, "project");
+  await page.waitForTimeout(400);
+  await expect(viewport).toHaveAttribute("data-active-id", "project");
+  await expect(page.getByTestId("snap-motion-media-gallery-status")).toHaveText(
+    "Project 24031 — Horizon, 2 of 5",
+  );
+  await expect(page.getByTestId("coverflow-status")).toHaveText(coverflowMessageBeforeRace ?? "");
+
+  await openGallery(page);
   await page.getByTestId("coverflow-status").evaluate((element) => {
     const messages: string[] = [];
     const observer = new MutationObserver(() => {
@@ -759,7 +813,11 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
       await retryHold;
       await route.continue();
     } else {
-      await route.abort("failed");
+      await route.fulfill({
+        body: "invalid image",
+        contentType: "image/png",
+        status: 200,
+      });
     }
   });
   await openLabDemo(page, "coverflow", "no-preference");
@@ -773,6 +831,13 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
     .getByRole("button", { name: "Retry" })
     .click();
   await expect(page.getByTestId("snap-motion-media-gallery-loading")).toBeVisible();
+  await expect(gallery(page).getByRole("img")).toHaveCount(1);
+  await expect(gallery(page).getByRole("img")).toHaveAccessibleName(
+    "Location and planning screen with a map, route lines, and a selected location.",
+  );
+  await expect(
+    page.locator('[data-slot-position="0"] .snap-motion-media-gallery-full'),
+  ).toHaveAttribute("aria-hidden", "true");
   if (!releaseRetry) throw new Error("Retry request hold was not initialized.");
   releaseRetry();
   await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded", {
@@ -785,13 +850,64 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
   await expect(
     page.locator('[data-slot-position="0"] .snap-motion-media-gallery-full.revealed'),
   ).toHaveCount(1);
+  await expect(
+    page.locator('[data-slot-position="0"] .snap-motion-media-gallery-preview'),
+  ).toHaveAttribute("aria-hidden", "true");
+  await expect(gallery(page).getByRole("img")).toHaveCount(1);
+  await expect(gallery(page).getByRole("img")).toHaveAccessibleName(
+    "Location and planning screen with a map, route lines, and a selected location.",
+  );
+
+  const invalidPairGeometry = await gallery(page).evaluate(async (element) => {
+    type GalleryItem = {
+      alt: string;
+      fullSrc?: string;
+      height: number;
+      id: string;
+      previewSrc: string;
+      title: string;
+      width: number;
+    };
+    const instance = Reflect.get(element, "__vueParentComponent") as
+      | { props: { items: GalleryItem[] } }
+      | undefined;
+    const currentIndex = Number(element.dataset.galleryIndex);
+    const current = instance?.props.items[currentIndex];
+    if (!instance || !current) throw new Error("Gallery component props are unavailable.");
+    instance.props.items = [{ ...current, height: -1, width: 1_600 }];
+    await Promise.resolve();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const viewportElement = element.querySelector<HTMLElement>(
+      '[data-testid="snap-motion-media-gallery-viewport"]',
+    );
+    const preview = element.querySelector<HTMLImageElement>(
+      '[data-slot-position="0"] .snap-motion-media-gallery-preview',
+    );
+    const rect = viewportElement?.getBoundingClientRect();
+    return {
+      aspectRatio: rect && rect.height > 0 ? rect.width / rect.height : 0,
+      height: rect?.height ?? 0,
+      intrinsicHeight: Number(preview?.getAttribute("height") ?? 0),
+      intrinsicWidth: Number(preview?.getAttribute("width") ?? 0),
+      width: rect?.width ?? 0,
+    };
+  });
+  expect(invalidPairGeometry.intrinsicWidth).toBe(1);
+  expect(invalidPairGeometry.intrinsicHeight).toBe(1);
+  expect(invalidPairGeometry.aspectRatio).toBeCloseTo(1, 2);
+  expect(invalidPairGeometry.width).toBeGreaterThan(100);
+  expect(invalidPairGeometry.height).toBeGreaterThan(100);
 });
 
 test("a failed full image retains its preview and leaves navigation and close usable", async ({
   page,
 }) => {
   await page.route("**/coverflow-gallery/map.svg?full", async (route) => {
-    await route.abort("failed");
+    await route.fulfill({
+      body: "invalid image",
+      contentType: "image/png",
+      status: 200,
+    });
   });
   await openLabDemo(page, "coverflow", "no-preference");
   await openGallery(page);
@@ -802,6 +918,10 @@ test("a failed full image retains its preview and leaves navigation and close us
   await expect(
     page.locator('[data-slot-position="0"] .snap-motion-media-gallery-preview'),
   ).toHaveAttribute("alt", /Location and planning screen/);
+  await expect(gallery(page).getByRole("img")).toHaveCount(1);
+  await expect(gallery(page).getByRole("img")).toHaveAccessibleName(
+    "Location and planning screen with a map, route lines, and a selected location.",
+  );
   const failureBox = await page.getByTestId("snap-motion-media-gallery-error").boundingBox();
   const mediaBox = await page.getByTestId("snap-motion-media-gallery-viewport").boundingBox();
   expect(failureBox?.y).toBeGreaterThanOrEqual((mediaBox?.y ?? 0) + (mediaBox?.height ?? 0));
@@ -826,6 +946,14 @@ test("semantics, focus visibility, coarse discovery, reduced motion, and reflow 
   const dialog = gallery(page);
   await expect(dialog).toHaveAccessibleName("Screen gallery");
   await expect(dialog).toHaveAttribute("data-reduced-motion", "true");
+  await expect(dialog.locator(".snap-motion-media-gallery-slot")).toHaveCount(3);
+  await expect(dialog.locator(".snap-motion-media-gallery-slot[aria-hidden='true']")).toHaveCount(
+    2,
+  );
+  await expect(
+    dialog.locator(".snap-motion-media-gallery-slot:not([aria-hidden='true'])"),
+  ).toHaveCount(1);
+  await expect(dialog.getByRole("img")).toHaveCount(1);
   await page.getByTestId("snap-motion-media-gallery-zoom-in").click();
   await expect(dialog).toHaveAttribute("data-scale", "1.5000");
   expect(

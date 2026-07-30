@@ -31,6 +31,15 @@ function positive(value: number): number {
   return Math.max(Number.EPSILON, nonNegative(value));
 }
 
+function normalizeIntrinsicSize(item: MediaGalleryItem): MediaSize {
+  return Number.isFinite(item.width) &&
+    item.width > 0 &&
+    Number.isFinite(item.height) &&
+    item.height > 0
+    ? { height: item.height, width: item.width }
+    : { height: 1, width: 1 };
+}
+
 function normalizedLimits(limits: MediaTransformLimits): MediaTransformLimits {
   const minScale = positive(limits.minScale);
   return {
@@ -318,25 +327,36 @@ export function clampGalleryIndex(index: number, itemCount: number): number {
 
 export function normalizeMediaGalleryItems(items: readonly MediaGalleryItem[]): MediaGalleryItem[] {
   const ids = new Set<string>();
-  const normalized: MediaGalleryItem[] = [];
-  for (const item of items) {
+  const normalizedIds = items.map((item, index) => {
     const id = item.id.trim();
-    if (!id || ids.has(id)) continue;
+    if (!id) {
+      throw new RangeError(
+        `Media gallery item IDs must be unique non-empty strings; item at index ${index} has an empty ID.`,
+      );
+    }
+    if (ids.has(id)) {
+      throw new RangeError(
+        `Media gallery item IDs must be unique non-empty strings; "${id}" at index ${index} duplicates an earlier item.`,
+      );
+    }
     ids.add(id);
+    return id;
+  });
+
+  return items.map((item, index) => {
+    const intrinsicSize = normalizeIntrinsicSize(item);
     const { fullSrc: _fullSrc, ...itemWithoutFullSrc } = item;
     const previewSrc = item.previewSrc;
     const fullSrc = item.fullSrc && item.fullSrc !== previewSrc ? item.fullSrc : undefined;
-    const normalizedItem: MediaGalleryItem = {
+    return {
       ...itemWithoutFullSrc,
-      id,
+      id: normalizedIds[index]!,
       previewSrc,
-      width: positive(item.width),
-      height: positive(item.height),
+      width: intrinsicSize.width,
+      height: intrinsicSize.height,
       ...(fullSrc ? { fullSrc } : {}),
     };
-    normalized.push(normalizedItem);
-  }
-  return normalized;
+  });
 }
 
 export function resolvePreservedGalleryIndex(

@@ -103,6 +103,8 @@ const imageLoadStateByItem = ref<Record<string, ImageLoadState>>({});
 const imageRetryAttemptByItem = ref<Record<string, number>>({});
 const previewFailedByItem = ref<Record<string, boolean>>({});
 const mounted = ref(false);
+const openCycleGeneration = ref(0);
+const itemCollectionGeneration = ref(0);
 const liveMessage = ref("");
 const pointerMode = ref<PointerMode | "idle">("idle");
 const pointerCount = ref(0);
@@ -133,8 +135,12 @@ let lockedRoot: HTMLElement | undefined;
 let previousPaddingInlineEnd = "";
 let closeRequested = false;
 let pendingTrackDestination: number | undefined;
+let pendingTrackDestinationId: string | undefined;
 let pendingTrackAnnouncement = true;
 let pendingTrackReason: MediaGalleryNavigationReason | undefined;
+let pendingTrackGeneration: number | undefined;
+let navigationGeneration = 0;
+let closeGeneration = 0;
 let capturedOpener: HTMLElement | undefined;
 let geometry = {
   height: 0,
@@ -190,15 +196,109 @@ const nextLabel = computed(() => {
 });
 
 const { start: startCloseFallback, stop: stopCloseFallback } = useTimeoutFn(
-  finishClose,
+  (generation: number) => finishClose(generation),
   MEDIA_GALLERY_TUNING.closeDuration + 80,
   { immediate: false },
 );
 const { start: startTrackFallback, stop: stopTrackFallback } = useTimeoutFn(
-  completeTrackSettlement,
+  (generation: number) => void completeTrackSettlement(generation),
   MEDIA_GALLERY_TUNING.trackDuration + 80,
   { immediate: false },
 );
+
+function cancelOpeningWork() {
+  if (openingFrame === undefined) return;
+  cancelAnimationFrame(openingFrame);
+  openingFrame = undefined;
+}
+
+function resetTrackState() {
+  pendingTrackDestination = undefined;
+  pendingTrackDestinationId = undefined;
+  pendingTrackAnnouncement = true;
+  pendingTrackReason = undefined;
+  pendingTrackGeneration = undefined;
+  trackDestinationIndex.value = undefined;
+  trackOffsetX.value = 0;
+  trackTransitionEnabled.value = false;
+  trackNavigationState.value = "idle";
+}
+
+function cancelTrackWork() {
+  stopTrackFallback();
+  if (trackFrame !== undefined) {
+    cancelAnimationFrame(trackFrame);
+    trackFrame = undefined;
+  }
+  resetTrackState();
+}
+
+function invalidateOpenCycle(): number {
+  openCycleGeneration.value += 1;
+  cancelOpeningWork();
+  return openCycleGeneration.value;
+}
+
+function invalidateNavigation(): number {
+  navigationGeneration += 1;
+  cancelTrackWork();
+  return navigationGeneration;
+}
+
+function beginNavigation(preserveTrackOffset = false): number {
+  const currentTrackOffset = trackOffsetX.value;
+  const generation = invalidateNavigation();
+  if (preserveTrackOffset) trackOffsetX.value = currentTrackOffset;
+  return generation;
+}
+
+function invalidateClose(): number {
+  closeGeneration += 1;
+  stopCloseFallback();
+  return closeGeneration;
+}
+
+function isOpenCycleCurrent(
+  generation: number,
+  target: HTMLDialogElement | undefined = dialog.value,
+): boolean {
+  return (
+    mounted.value &&
+    generation === openCycleGeneration.value &&
+    props.open &&
+    target !== undefined &&
+    target === dialog.value &&
+    target.open &&
+    dialogState.value === "opening"
+  );
+}
+
+function isNavigationCurrent(generation: number): boolean {
+  return (
+    mounted.value &&
+    generation === navigationGeneration &&
+    props.open &&
+    dialog.value?.open === true &&
+    (dialogState.value === "open" || dialogState.value === "opening")
+  );
+}
+
+function isMediaOperationCurrent(
+  openGeneration: number,
+  collectionGeneration: number,
+  item: MediaGalleryItem,
+  attempt?: number,
+): boolean {
+  return (
+    mounted.value &&
+    props.open &&
+    dialog.value?.open === true &&
+    openGeneration === openCycleGeneration.value &&
+    collectionGeneration === itemCollectionGeneration.value &&
+    items.value.some((candidate) => candidate.id === item.id) &&
+    (attempt === undefined || attempt === imageRetryAttempt(item))
+  );
+}
 
 function clampIndex(index: number): number {
   return clampGalleryIndex(index, items.value.length);
@@ -233,7 +333,7 @@ function localPoint(clientX: number, clientY: number): MediaPoint {
 
 function measureGeometry() {
   const target = imageViewport.value;
-  if (!target) return;
+  if (!mounted.value || !props.open || !dialog.value?.open || !target) return;
   const rect = target.getBoundingClientRect();
   geometry = {
     height: rect.height,
@@ -326,21 +426,22 @@ function setImageLoadState(item: MediaGalleryItem, state: ImageLoadState) {
 async function onFullImageLoad(event: Event, item: MediaGalleryItem) {
   const image = event.currentTarget;
   if (!(image instanceof HTMLImageElement)) {
-    setImageLoadState(item, "failed");
     return;
   }
   const attempt = Number(image.dataset.retryAttempt);
+  const openGeneration = Number(image.dataset.openCycle);
+  const collectionGeneration = Number(image.dataset.itemCollection);
+  if (!isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt)) return;
   try {
     await image.decode();
   } catch {
-    if (attempt === imageRetryAttempt(item)) setImageLoadState(item, "failed");
+    if (isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt)) {
+      setImageLoadState(item, "failed");
+    }
     return;
   }
   if (
-    !props.open ||
-    !dialog.value?.open ||
-    !items.value.some((candidate) => candidate.id === item.id) ||
-    attempt !== imageRetryAttempt(item) ||
+    !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt) ||
     !image.complete ||
     image.naturalWidth <= 0 ||
     image.naturalHeight <= 0
@@ -350,6 +451,7 @@ async function onFullImageLoad(event: Event, item: MediaGalleryItem) {
   setImageLoadState(item, "loaded");
   if (item.id === activeItem.value?.id) {
     await nextTick();
+    if (!isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt)) return;
     measureGeometry();
   }
 }
@@ -358,14 +460,29 @@ function onFullImageError(event: Event, item: MediaGalleryItem) {
   const image = event.currentTarget;
   if (
     image instanceof HTMLImageElement &&
-    Number(image.dataset.retryAttempt) === imageRetryAttempt(item)
+    isMediaOperationCurrent(
+      Number(image.dataset.openCycle),
+      Number(image.dataset.itemCollection),
+      item,
+      Number(image.dataset.retryAttempt),
+    )
   ) {
     setImageLoadState(item, "failed");
   }
 }
 
-function onPreviewImageError(item: MediaGalleryItem) {
-  previewFailedByItem.value = { ...previewFailedByItem.value, [item.id]: true };
+function onPreviewImageError(event: Event, item: MediaGalleryItem) {
+  const image = event.currentTarget;
+  if (
+    image instanceof HTMLImageElement &&
+    isMediaOperationCurrent(
+      Number(image.dataset.openCycle),
+      Number(image.dataset.itemCollection),
+      item,
+    )
+  ) {
+    previewFailedByItem.value = { ...previewFailedByItem.value, [item.id]: true };
+  }
 }
 
 function retryImage() {
@@ -420,11 +537,16 @@ function beginTrackSettlement(
   destinationIndex?: number,
   announcement = true,
   reason?: MediaGalleryNavigationReason,
+  generation = navigationGeneration,
+  destinationId?: string,
 ) {
+  if (!isNavigationCurrent(generation)) return;
   stopTrackFallback();
   pendingTrackDestination = destinationIndex;
+  pendingTrackDestinationId = destinationId;
   pendingTrackAnnouncement = announcement;
   pendingTrackReason = reason;
+  pendingTrackGeneration = generation;
   trackTransitionEnabled.value = true;
   trackNavigationState.value = "settling";
   if (destinationIndex === undefined) {
@@ -435,25 +557,39 @@ function beginTrackSettlement(
   }
   if (reducedMotion.value) {
     trackTransitionEnabled.value = false;
-    void completeTrackSettlement();
+    void completeTrackSettlement(generation);
     return;
   }
-  startTrackFallback();
+  startTrackFallback(generation);
 }
 
-async function completeTrackSettlement() {
-  if (trackNavigationState.value !== "settling") return;
+async function completeTrackSettlement(generation = pendingTrackGeneration) {
+  if (
+    generation === undefined ||
+    !isNavigationCurrent(generation) ||
+    pendingTrackGeneration !== generation ||
+    trackNavigationState.value !== "settling"
+  ) {
+    return;
+  }
   stopTrackFallback();
   const destination = pendingTrackDestination;
+  const destinationId = pendingTrackDestinationId;
   const announcement = pendingTrackAnnouncement;
   const reason = pendingTrackReason;
   pendingTrackDestination = undefined;
+  pendingTrackDestinationId = undefined;
   pendingTrackAnnouncement = true;
   pendingTrackReason = undefined;
 
   if (destination === undefined) {
     trackTransitionEnabled.value = false;
     trackNavigationState.value = "idle";
+    pendingTrackGeneration = undefined;
+    return;
+  }
+  if (items.value[destination]?.id !== destinationId) {
+    invalidateNavigation();
     return;
   }
 
@@ -466,11 +602,14 @@ async function completeTrackSettlement() {
   resetTransform();
   ensureTrackImageStates();
   await nextTick();
+  if (!isNavigationCurrent(generation) || pendingTrackGeneration !== generation) return;
   measureGeometry();
   if (trackFrame !== undefined) cancelAnimationFrame(trackFrame);
   trackFrame = requestAnimationFrame(() => {
     trackFrame = undefined;
+    if (!isNavigationCurrent(generation) || pendingTrackGeneration !== generation) return;
     trackNavigationState.value = "idle";
+    pendingTrackGeneration = undefined;
     if (reason) emit("indexChanged", galleryIndex.value, reason);
     if (announcement) announceCurrent();
   });
@@ -478,7 +617,7 @@ async function completeTrackSettlement() {
 
 function onTrackTransitionEnd(event: TransitionEvent) {
   if (event.currentTarget === event.target && event.propertyName === "transform") {
-    void completeTrackSettlement();
+    void completeTrackSettlement(pendingTrackGeneration);
   }
 }
 
@@ -490,13 +629,24 @@ async function changeIndex(
   const nextIndex = clampIndex(index);
   if (nextIndex === galleryIndex.value || galleryBusy.value) return false;
   clearPointerState();
+  const generation = beginNavigation();
+  const destinationId = items.value[nextIndex]?.id;
+  if (!destinationId) return false;
   trackDestinationIndex.value = nextIndex;
   ensureTrackImageStates();
   await nextTick();
+  if (
+    !isNavigationCurrent(generation) ||
+    items.value[nextIndex]?.id !== destinationId ||
+    trackDestinationIndex.value !== nextIndex
+  ) {
+    return false;
+  }
   if (trackFrame !== undefined) cancelAnimationFrame(trackFrame);
   trackFrame = requestAnimationFrame(() => {
     trackFrame = undefined;
-    beginTrackSettlement(nextIndex, announcement, reason);
+    if (!isNavigationCurrent(generation) || items.value[nextIndex]?.id !== destinationId) return;
+    beginTrackSettlement(nextIndex, announcement, reason, generation, destinationId);
   });
   return true;
 }
@@ -732,11 +882,17 @@ function onWindowPointerUp(event: PointerEvent) {
   const wasTap = Math.hypot(deltaX, deltaY) < MEDIA_GALLERY_TUNING.swipeThreshold;
   if (direction !== 0) {
     const destination = galleryIndex.value + direction;
+    const generation = beginNavigation(true);
+    const destinationId = items.value[destination]?.id;
+    if (!destinationId) return;
     trackDestinationIndex.value = destination;
     ensureTrackImageStates();
-    beginTrackSettlement(destination, true, "swipe");
+    beginTrackSettlement(destination, true, "swipe", generation, destinationId);
   } else {
-    if (Math.abs(trackOffsetX.value) > 0.01) beginTrackSettlement();
+    if (Math.abs(trackOffsetX.value) > 0.01) {
+      const generation = beginNavigation(true);
+      beginTrackSettlement(undefined, true, undefined, generation);
+    }
     if (wasTap) handleTouchTap(event);
   }
   gesture = undefined;
@@ -749,7 +905,8 @@ function onWindowPointerCancel(event: PointerEvent) {
   safeReleasePointer(event.pointerId);
   if (gesture) gesture.cancelled = true;
   clearPointerState();
-  beginTrackSettlement();
+  const generation = beginNavigation(true);
+  beginTrackSettlement(undefined, true, undefined, generation);
 }
 
 function onLostPointerCapture(event: PointerEvent) {
@@ -822,7 +979,11 @@ function unlockDocumentScroll() {
 
 async function openDialog() {
   const target = dialog.value;
-  if (!target || target.open) return;
+  if (!mounted.value || !target || target.open) return;
+  const generation = invalidateOpenCycle();
+  invalidateNavigation();
+  invalidateClose();
+  capturedOpener = props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
   if (items.value.length === 0) {
     requestClose("programmatic");
     return;
@@ -836,28 +997,31 @@ async function openDialog() {
   mediaTransitionMode.value = "direct";
   resetTransform();
   dialogState.value = "opening";
-  capturedOpener = props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
   target.showModal();
   lockDocumentScroll();
   for (const slot of trackSlots.value) ensureImageState(slot.item, true);
   await nextTick();
+  if (!isOpenCycleCurrent(generation, target)) return;
   measureGeometry();
   focusInitial(props.initialFocus, {
     close: closeButton.value,
     container: shell.value,
     title: titleHeading.value,
   });
+  if (!isOpenCycleCurrent(generation, target)) return;
   announceCurrent();
   emit("opened", galleryIndex.value);
+  if (!isOpenCycleCurrent(generation, target)) return;
 
   if (reducedMotion.value) {
     dialogState.value = "open";
     return;
   }
   target.getBoundingClientRect();
-  if (openingFrame !== undefined) cancelAnimationFrame(openingFrame);
+  cancelOpeningWork();
   openingFrame = requestAnimationFrame(() => {
     openingFrame = undefined;
+    if (!isOpenCycleCurrent(generation, target)) return;
     dialogState.value = "open";
   });
 }
@@ -865,6 +1029,8 @@ async function openDialog() {
 function requestClose(reason: MediaGalleryCloseReason = "programmatic") {
   if (closeRequested || (!dialog.value?.open && !props.open)) return;
   closeRequested = true;
+  invalidateOpenCycle();
+  invalidateNavigation();
   clearPointerState();
   emit("requestClose", galleryIndex.value, reason);
   emit("update:open", false);
@@ -877,22 +1043,30 @@ function onCancel(event: Event) {
 
 function startClose() {
   if (!dialog.value?.open || dialogState.value === "closing") return;
+  invalidateOpenCycle();
+  invalidateNavigation();
+  const generation = invalidateClose();
   clearPointerState();
-  stopTrackFallback();
-  trackTransitionEnabled.value = false;
-  trackNavigationState.value = "idle";
   resetTransform();
   dialogState.value = "closing";
   if (reducedMotion.value) {
-    finishClose();
+    finishClose(generation);
   } else {
-    startCloseFallback();
+    startCloseFallback(generation);
   }
 }
 
-function finishClose() {
+function finishClose(generation = closeGeneration) {
+  if (
+    !mounted.value ||
+    generation !== closeGeneration ||
+    dialogState.value !== "closing" ||
+    !dialog.value?.open
+  ) {
+    return;
+  }
   stopCloseFallback();
-  if (dialog.value?.open) dialog.value.close();
+  dialog.value.close();
 }
 
 function onShellTransitionEnd(event: TransitionEvent) {
@@ -901,27 +1075,29 @@ function onShellTransitionEnd(event: TransitionEvent) {
     event.currentTarget === event.target &&
     event.propertyName === "opacity"
   ) {
-    finishClose();
+    finishClose(closeGeneration);
   }
 }
 
 function onClose() {
+  if (dialog.value?.open) return;
+  invalidateOpenCycle();
+  invalidateNavigation();
+  invalidateClose();
+  clearPointerState();
   dialogState.value = "closed";
   closeRequested = false;
-  stopTrackFallback();
-  trackDestinationIndex.value = undefined;
-  trackOffsetX.value = 0;
-  trackTransitionEnabled.value = false;
-  trackNavigationState.value = "idle";
   mediaTransitionMode.value = "direct";
   resetTransform();
   unlockDocumentScroll();
+  if (!mounted.value) return;
   restoreFocus({
     fallback: props.focusReturn?.fallback,
     opener: capturedOpener ?? props.focusReturn?.opener,
   });
   capturedOpener = undefined;
   emit("closed", galleryIndex.value);
+  if (props.open) void openDialog();
 }
 
 function onBackdropPointerDown(event: PointerEvent) {
@@ -940,7 +1116,7 @@ function onBackdropPointerUp(event: PointerEvent) {
 }
 
 function onReducedMotionChange(event: MediaQueryListEvent) {
-  systemReducedMotion.value = event.matches;
+  if (mounted.value) systemReducedMotion.value = event.matches;
 }
 
 useEventListener("pointermove", onWindowPointerMove, { passive: false });
@@ -981,6 +1157,10 @@ watch(
 );
 
 watch(items, (nextItems, previousItems) => {
+  itemCollectionGeneration.value += 1;
+  const collectionGeneration = itemCollectionGeneration.value;
+  const openGeneration = openCycleGeneration.value;
+  const navigation = invalidateNavigation();
   const previousId = previousItems[galleryIndex.value]?.id;
   const nextIds = new Set(nextItems.map((item) => item.id));
   imageLoadStateByItem.value = Object.fromEntries(
@@ -997,27 +1177,35 @@ watch(items, (nextItems, previousItems) => {
   }
 
   if (nextItems.length === 0) {
-    if (props.open) requestClose("programmatic");
+    if (props.open) {
+      invalidateOpenCycle();
+      requestClose("programmatic");
+    }
     galleryIndex.value = 0;
     return;
   }
 
   galleryIndex.value = resolvePreservedGalleryIndex(previousId, galleryIndex.value, nextItems);
-  trackDestinationIndex.value = undefined;
-  trackOffsetX.value = 0;
-  trackTransitionEnabled.value = false;
-  trackNavigationState.value = "idle";
   resetTransform();
   ensureTrackImageStates();
-  void nextTick().then(measureGeometry);
+  void (async () => {
+    await nextTick();
+    if (
+      mounted.value &&
+      collectionGeneration === itemCollectionGeneration.value &&
+      openGeneration === openCycleGeneration.value &&
+      navigation === navigationGeneration
+    ) {
+      measureGeometry();
+    }
+  })();
 });
 
 onBeforeUnmount(() => {
   mounted.value = false;
-  stopCloseFallback();
-  stopTrackFallback();
-  if (openingFrame !== undefined) cancelAnimationFrame(openingFrame);
-  if (trackFrame !== undefined) cancelAnimationFrame(trackFrame);
+  invalidateOpenCycle();
+  invalidateNavigation();
+  invalidateClose();
   clearPointerState();
   unlockDocumentScroll();
   mediaTransformElements.clear();
@@ -1134,6 +1322,7 @@ defineExpose({
             <div
               v-for="slot in trackSlots"
               :key="slot.item?.id"
+              :aria-hidden="slot.item?.id === activeItem?.id ? undefined : 'true'"
               class="snap-motion-media-gallery-slot"
               :data-item-id="slot.item?.id"
               :data-slot-position="slot.position"
@@ -1157,25 +1346,45 @@ defineExpose({
                   class="snap-motion-media-gallery-media snap-motion-media-gallery-preview"
                   :class="{ concealed: imageLoadState(slot.item) === 'loaded' }"
                   :src="slot.item.previewSrc"
-                  :alt="imageLoadState(slot.item) === 'loaded' ? '' : slot.item.alt"
-                  :aria-hidden="imageLoadState(slot.item) === 'loaded' ? 'true' : undefined"
+                  :alt="
+                    slot.item.id === activeItem?.id && imageLoadState(slot.item) !== 'loaded'
+                      ? slot.item.alt
+                      : ''
+                  "
+                  :aria-hidden="
+                    slot.item.id !== activeItem?.id || imageLoadState(slot.item) === 'loaded'
+                      ? 'true'
+                      : undefined
+                  "
+                  :data-item-collection="itemCollectionGeneration"
+                  :data-open-cycle="openCycleGeneration"
                   decoding="async"
                   draggable="false"
                   :height="slot.item.height"
                   :width="slot.item.width"
-                  @error="onPreviewImageError(slot.item)"
+                  @error="onPreviewImageError($event, slot.item)"
                 />
                 <img
                   v-if="
                     mounted && open && slot.item.fullSrc && imageLoadState(slot.item) !== 'failed'
                   "
-                  :key="`${slot.item.id}-${imageRetryAttempt(slot.item)}`"
+                  :key="`${openCycleGeneration}-${itemCollectionGeneration}-${slot.item.id}-${imageRetryAttempt(slot.item)}`"
                   class="snap-motion-media-gallery-media snap-motion-media-gallery-full"
                   :class="{ revealed: imageLoadState(slot.item) === 'loaded' }"
+                  :data-item-collection="itemCollectionGeneration"
+                  :data-open-cycle="openCycleGeneration"
                   :data-retry-attempt="imageRetryAttempt(slot.item)"
                   :src="visibleFullSrc(slot.item)"
-                  :alt="imageLoadState(slot.item) === 'loaded' ? slot.item.alt : ''"
-                  :aria-hidden="imageLoadState(slot.item) === 'loaded' ? undefined : 'true'"
+                  :alt="
+                    slot.item.id === activeItem?.id && imageLoadState(slot.item) === 'loaded'
+                      ? slot.item.alt
+                      : ''
+                  "
+                  :aria-hidden="
+                    slot.item.id === activeItem?.id && imageLoadState(slot.item) === 'loaded'
+                      ? undefined
+                      : 'true'
+                  "
                   decoding="async"
                   draggable="false"
                   :fetchpriority="slot.item.id === activeItem?.id ? 'high' : 'low'"
