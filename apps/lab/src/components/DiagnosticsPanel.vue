@@ -31,6 +31,18 @@ function scalar(value: number) {
         <dt>Card velocity</dt>
         <dd data-testid="speed-in-cards">{{ scalar(diagnostics.speedInCards) }} cards/s</dd>
       </div>
+      <div v-if="diagnostics.physicalIndex !== undefined">
+        <dt>Physical index</dt>
+        <dd data-testid="physical-index">{{ scalar(diagnostics.physicalIndex) }}</dd>
+      </div>
+      <div v-if="diagnostics.visualIndex !== undefined">
+        <dt>Visual index</dt>
+        <dd data-testid="visual-index">{{ diagnostics.visualIndex }}</dd>
+      </div>
+      <div v-if="diagnostics.settledIndex !== undefined">
+        <dt>Settled index</dt>
+        <dd data-testid="settled-index">{{ diagnostics.settledIndex }}</dd>
+      </div>
       <div>
         <dt>Target</dt>
         <dd data-testid="target-id">{{ diagnostics.targetId ?? "—" }}</dd>
@@ -43,9 +55,21 @@ function scalar(value: number) {
         <dt>Active</dt>
         <dd data-testid="active-id">{{ diagnostics.activeId ?? "—" }}</dd>
       </div>
-      <div v-if="diagnostics.committedIndex !== undefined">
-        <dt>Committed index</dt>
-        <dd data-testid="committed-index">{{ diagnostics.committedIndex }}</dd>
+      <div v-if="diagnostics.focusedPaginationIndex !== undefined">
+        <dt>Focused pagination</dt>
+        <dd data-testid="focused-pagination-index">{{ diagnostics.focusedPaginationIndex }}</dd>
+      </div>
+      <div v-if="diagnostics.keyboardTargetIndex !== undefined">
+        <dt>Keyboard target</dt>
+        <dd data-testid="keyboard-target-index">{{ diagnostics.keyboardTargetIndex }}</dd>
+      </div>
+      <div v-if="diagnostics.indicatorX !== undefined">
+        <dt>Indicator x</dt>
+        <dd data-testid="indicator-x">{{ scalar(diagnostics.indicatorX) }} px</dd>
+      </div>
+      <div v-if="diagnostics.indicatorScale !== undefined">
+        <dt>Indicator scale</dt>
+        <dd data-testid="indicator-scale">{{ scalar(diagnostics.indicatorScale) }}</dd>
       </div>
       <div v-if="diagnostics.centerInfluence !== undefined">
         <dt>Center influence</dt>

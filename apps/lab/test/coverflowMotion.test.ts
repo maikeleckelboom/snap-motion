@@ -8,9 +8,14 @@ import { describe, expect, it } from "vitest";
 import {
   advanceBoundedCoverflowSpring,
   COVERFLOW_MOTION_TUNING,
-  CoverflowSemanticCommitment,
+  COVERFLOW_PAGINATION_TUNING,
+  CoverflowSettledSelection,
+  resolveAdjacentCoverflowIndex,
   resolveAutonomousReleaseVelocity,
+  resolveCoverflowKeyboardAction,
   resolveCoverflowKinetics,
+  resolveCoverflowPaginationIndicator,
+  resolveCoverflowVisualIndex,
   type CoverflowKineticState,
   type MutableSpringState,
 } from "../src/demos/coverflowMotion";
@@ -62,7 +67,6 @@ function simulateSettle(cardDistance: number, bounded: boolean) {
   const frame = 1 / 120;
   let elapsed = 0;
   let maximumSpeed = 0;
-  let authorityTime: number | null = null;
 
   while (
     elapsed < 3 &&
@@ -76,17 +80,28 @@ function simulateSettle(cardDistance: number, bounded: boolean) {
     }
     maximumSpeed = Math.max(maximumSpeed, Math.abs(state.velocity));
     elapsed += frame;
-    if (
-      authorityTime === null &&
-      Math.abs(state.position - target) <=
-        COVERFLOW_MOTION_TUNING.semanticAuthorityRadius * CARD_PITCH &&
-      Math.abs(state.velocity) / CARD_PITCH <= COVERFLOW_MOTION_TUNING.semanticAuthoritySpeed
-    ) {
-      authorityTime = elapsed;
-    }
   }
 
-  return { authorityTime, elapsed, maximumSpeed, state };
+  return { elapsed, maximumSpeed, state };
+}
+
+function paginationIndicator(physicalIndex: number, physicalVelocityInCards = 0, itemCount = 5) {
+  return resolveCoverflowPaginationIndicator(
+    physicalIndex,
+    -physicalVelocityInCards * CARD_PITCH,
+    CARD_PITCH,
+    itemCount,
+    {
+      position: 0,
+      x: 0,
+      scaleX: 1,
+      stretchRatio: 0,
+      speedInCards: 0,
+      softDirection: 0,
+      leftStretch: 0,
+      rightStretch: 0,
+    },
+  );
 }
 
 describe("Coverflow kinetic focus", () => {
@@ -158,8 +173,6 @@ describe("Coverflow autonomous release envelope", () => {
     expect(traversal.maximumSpeed / CARD_PITCH).toBeLessThanOrEqual(
       COVERFLOW_MOTION_TUNING.maximumFreeVelocity,
     );
-    expect(traversal.authorityTime).toBeGreaterThan(0.35);
-    expect(traversal.authorityTime).toBeLessThan(0.6);
     expect(traversal.elapsed).toBeLessThan(0.7);
     expect(Math.abs(traversal.state.position + 4 * CARD_PITCH)).toBeLessThanOrEqual(
       BALANCED_SPRING.restDistance,
@@ -195,101 +208,149 @@ describe("Coverflow autonomous release envelope", () => {
   });
 });
 
-describe("Coverflow semantic commitment", () => {
-  it("uses hysteresis while directly dragging", () => {
-    const commitment = new CoverflowSemanticCommitment(2, 5);
+describe("Coverflow fluid pagination", () => {
+  const slotPitch = COVERFLOW_PAGINATION_TUNING.slotSize + COVERFLOW_PAGINATION_TUNING.slotGap;
 
-    commitment.update({
-      phase: "dragging",
-      physicalIndex: 2.52,
-      targetIndex: null,
-      activeIndex: 3,
-      speedInCards: 0,
-    });
-    expect(commitment.committedIndex).toBe(2);
-
-    commitment.update({
-      phase: "dragging",
-      physicalIndex: 2.58,
-      targetIndex: null,
-      activeIndex: 3,
-      speedInCards: 0,
-    });
-    expect(commitment.committedIndex).toBe(3);
-
-    commitment.update({
-      phase: "dragging",
-      physicalIndex: 2.48,
-      targetIndex: null,
-      activeIndex: 2,
-      speedInCards: 0,
-    });
-    expect(commitment.committedIndex).toBe(3);
+  it("aligns every resting index exactly with scale one", () => {
+    for (let index = 0; index < 5; index += 1) {
+      const indicator = paginationIndicator(index);
+      expect(indicator.position).toBe(index);
+      expect(indicator.x).toBe(index * slotPitch);
+      expect(indicator.scaleX).toBe(1);
+      expect(indicator.stretchRatio).toBe(0);
+    }
   });
 
-  it("cancels pending semantic commitment when re-grabbed", () => {
-    const commitment = new CoverflowSemanticCommitment(0, 5);
-
-    commitment.update({
-      phase: "settling",
-      physicalIndex: 1,
-      targetIndex: 4,
-      activeIndex: 1,
-      speedInCards: 8,
-    });
-    expect(commitment.pendingTargetIndex).toBe(4);
-    expect(commitment.committedIndex).toBe(0);
-
-    commitment.update({
-      phase: "dragging",
-      physicalIndex: 1.1,
-      targetIndex: null,
-      activeIndex: 1,
-      speedInCards: 0,
-    });
-    expect(commitment.pendingTargetIndex).toBeNull();
-    expect(commitment.committedIndex).toBe(1);
+  it("places halfway physical positions halfway between fixed slot centers", () => {
+    expect(paginationIndicator(1.5).x).toBe(1.5 * slotPitch);
   });
 
-  it("announces the settled destination only", () => {
-    const commitment = new CoverflowSemanticCommitment(0, 5);
+  it("remains continuous across integer boundaries", () => {
+    const before = paginationIndicator(0.999).x;
+    const after = paginationIndicator(1.001).x;
+    expect(after - before).toBeCloseTo(slotPitch * 0.002, 10);
+  });
 
+  it("is symmetric for positive and negative physical travel", () => {
+    const restingX = paginationIndicator(2).x;
+    const forward = paginationIndicator(2, 3);
+    const backward = paginationIndicator(2, -3);
+
+    expect(forward.scaleX).toBeCloseTo(backward.scaleX, 10);
+    expect(forward.x - restingX).toBeCloseTo(restingX - backward.x, 10);
+    expect(forward.softDirection).toBeCloseTo(-backward.softDirection, 10);
+  });
+
+  it("increases stretch smoothly with speed and keeps it bounded", () => {
+    const resting = paginationIndicator(2, 0);
+    const low = paginationIndicator(2, 0.75);
+    const medium = paginationIndicator(2, 2.5);
+    const high = paginationIndicator(2, 8);
+
+    expect(resting.stretchRatio).toBe(0);
+    expect(low.stretchRatio).toBeGreaterThan(0);
+    expect(low.stretchRatio).toBeLessThan(medium.stretchRatio);
+    expect(medium.stretchRatio).toBeLessThan(high.stretchRatio);
+    expect(high.stretchRatio).toBe(COVERFLOW_PAGINATION_TUNING.maximumStretchRatio);
+    expect(high.scaleX).toBeLessThanOrEqual(1 + COVERFLOW_PAGINATION_TUNING.maximumStretchRatio);
+  });
+
+  it("reverses its directional edge bias", () => {
+    const forward = paginationIndicator(2, 3);
+    const backward = paginationIndicator(2, -3);
+
+    expect(forward.rightStretch).toBeGreaterThan(forward.leftStretch);
+    expect(backward.leftStretch).toBeGreaterThan(backward.rightStretch);
+    expect(forward.rightStretch).toBeCloseTo(backward.leftStretch, 10);
+    expect(forward.leftStretch).toBeCloseTo(backward.rightStretch, 10);
+  });
+
+  it("crosses zero velocity without a directional discontinuity", () => {
+    const barelyForward = paginationIndicator(2, 0.001);
+    const barelyBackward = paginationIndicator(2, -0.001);
+
+    expect(barelyForward.x).toBeCloseTo(barelyBackward.x, 10);
+    expect(barelyForward.scaleX).toBeCloseTo(barelyBackward.scaleX, 10);
+  });
+
+  it("clamps physical position at the first and last item", () => {
+    expect(paginationIndicator(-0.5).position).toBe(0);
+    expect(paginationIndicator(-0.5).x).toBe(0);
+    expect(paginationIndicator(4.5).position).toBe(4);
+    expect(paginationIndicator(4.5).x).toBe(4 * slotPitch);
+  });
+});
+
+describe("Coverflow visual and settled selection", () => {
+  it("follows the nearest physical card with narrow midpoint hysteresis", () => {
+    expect(resolveCoverflowVisualIndex(2.53, 2, 5)).toBe(2);
+    expect(resolveCoverflowVisualIndex(2.541, 2, 5)).toBe(3);
+    expect(resolveCoverflowVisualIndex(2.47, 3, 5)).toBe(3);
+    expect(resolveCoverflowVisualIndex(2.459, 3, 5)).toBe(2);
+  });
+
+  it("prevents midpoint chatter without perceptible source retention", () => {
+    const switchPoint = 0.5 + COVERFLOW_PAGINATION_TUNING.visualHysteresis;
+    expect(switchPoint).toBeLessThanOrEqual(0.55);
+    expect(resolveCoverflowVisualIndex(switchPoint - 0.001, 0, 5)).toBe(0);
+    expect(resolveCoverflowVisualIndex(switchPoint + 0.001, 0, 5)).toBe(1);
+    expect(resolveCoverflowVisualIndex(3.8, 0, 5)).toBe(4);
+  });
+
+  it("keeps settled selection independent until final idle", () => {
+    const selection = new CoverflowSettledSelection(0, 5);
+
+    expect(selection.update({ phase: "settling", targetIndex: 4, activeIndex: 1 })).toBeNull();
+    expect(selection.settledIndex).toBe(0);
+    expect(selection.update({ phase: "settling", targetIndex: 4, activeIndex: 3 })).toBeNull();
+    expect(selection.settledIndex).toBe(0);
+    expect(selection.update({ phase: "idle", targetIndex: 4, activeIndex: 4 })).toBe(4);
+    expect(selection.settledIndex).toBe(4);
+    expect(selection.update({ phase: "idle", targetIndex: 4, activeIndex: 4 })).toBeNull();
+  });
+
+  it("cancels obsolete pending announcements on re-grab and retarget", () => {
+    const selection = new CoverflowSettledSelection(0, 5);
+
+    selection.update({ phase: "settling", targetIndex: 4, activeIndex: 1 });
+    expect(selection.pendingTargetIndex).toBe(4);
+    selection.update({ phase: "dragging", targetIndex: null, activeIndex: 1 });
+    expect(selection.pendingTargetIndex).toBeNull();
+    expect(selection.settledIndex).toBe(0);
+
+    selection.update({ phase: "settling", targetIndex: 4, activeIndex: 2 });
+    selection.update({ phase: "settling", targetIndex: 2, activeIndex: 2 });
+    expect(selection.pendingTargetIndex).toBe(2);
+    expect(selection.update({ phase: "idle", targetIndex: 2, activeIndex: 2 })).toBe(2);
+  });
+});
+
+describe("Coverflow keyboard navigation", () => {
+  it("resolves previous and next as exactly one adjacent item", () => {
+    expect(resolveAdjacentCoverflowIndex(2, -1, 5)).toBe(1);
+    expect(resolveAdjacentCoverflowIndex(2, 1, 5)).toBe(3);
+  });
+
+  it("keeps boundary actions as no-ops", () => {
+    expect(resolveAdjacentCoverflowIndex(0, -1, 5)).toBe(0);
+    expect(resolveAdjacentCoverflowIndex(4, 1, 5)).toBe(4);
+  });
+
+  it("maps arrows, Home, and End while leaving unrelated keys untouched", () => {
+    const target = { closest: () => null } as unknown as EventTarget;
+    expect(resolveCoverflowKeyboardAction({ key: "ArrowLeft", target })).toBe("previous");
+    expect(resolveCoverflowKeyboardAction({ key: "ArrowRight", target })).toBe("next");
+    expect(resolveCoverflowKeyboardAction({ key: "Home", target })).toBe("home");
+    expect(resolveCoverflowKeyboardAction({ key: "End", target })).toBe("end");
+    expect(resolveCoverflowKeyboardAction({ key: "PageDown", target })).toBeUndefined();
+  });
+
+  it("excludes form controls and contenteditable owners", () => {
+    const ownedTarget = {
+      closest: () => ({ tagName: "INPUT" }),
+    } as unknown as EventTarget;
     expect(
-      commitment.update({
-        phase: "settling",
-        physicalIndex: 1,
-        targetIndex: 4,
-        activeIndex: 1,
-        speedInCards: 8,
-      }),
-    ).toBeNull();
-    expect(
-      commitment.update({
-        phase: "settling",
-        physicalIndex: 3.8,
-        targetIndex: 4,
-        activeIndex: 4,
-        speedInCards: 2,
-      }),
-    ).toBeNull();
-    expect(commitment.committedIndex).toBe(4);
-    expect(
-      commitment.update({
-        phase: "idle",
-        physicalIndex: 4,
-        targetIndex: 4,
-        activeIndex: 4,
-        speedInCards: 0,
-      }),
-    ).toBe(4);
-    expect(
-      commitment.update({
-        phase: "idle",
-        physicalIndex: 4,
-        targetIndex: 4,
-        activeIndex: 4,
-        speedInCards: 0,
-      }),
-    ).toBeNull();
+      resolveCoverflowKeyboardAction({ key: "ArrowRight", target: ownedTarget }),
+    ).toBeUndefined();
   });
 });

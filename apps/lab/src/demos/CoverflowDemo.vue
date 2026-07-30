@@ -18,11 +18,17 @@ import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 
 import {
   COVERFLOW_MOTION_TUNING,
-  CoverflowSemanticCommitment,
+  COVERFLOW_PAGINATION_TUNING,
+  CoverflowSettledSelection,
+  resolveAdjacentCoverflowIndex,
+  resolveCoverflowKeyboardAction,
   resolveCoverflowKinetics,
+  resolveCoverflowPaginationIndicator,
+  resolveCoverflowVisualIndex,
   resolveSpeedInCards,
   useBoundedCoverflowDriver,
   type CoverflowKineticState,
+  type CoverflowPaginationIndicatorState,
 } from "./coverflowMotion";
 
 type ScreenId = "templates" | "project" | "map" | "team" | "settings";
@@ -93,6 +99,7 @@ const screens: readonly ShowcaseScreen[] = [
 ];
 
 const ids = screens.map((screen) => screen.id);
+const coverflowRoot = ref<HTMLElement>();
 const viewport = ref<HTMLElement>();
 const track = ref<HTMLElement>();
 const reducedOverride = computed(() => props.reducedMotionOverride);
@@ -152,15 +159,17 @@ const motion = useCarouselMotion({
 });
 
 const initialIndex = Math.floor(ids.length / 2);
-const semanticCommitment = new CoverflowSemanticCommitment(initialIndex, ids.length);
-const committedIndex = ref(initialIndex);
+const settledSelection = new CoverflowSettledSelection(initialIndex, ids.length);
+const visualIndex = ref(initialIndex);
+const settledIndex = ref(initialIndex);
 const pendingTargetIndex = ref<number | null>(null);
+const focusedPaginationIndex = ref<number | null>(null);
 const liveMessage = ref("");
-const activeIndex = computed(() => committedIndex.value);
-const activeId = computed(() => ids[activeIndex.value] ?? ids[initialIndex]!);
-const activeScreen = computed(() => screens[activeIndex.value] ?? screens[0]!);
+const visualId = computed(() => ids[visualIndex.value] ?? ids[initialIndex]!);
+const settledId = computed(() => ids[settledIndex.value] ?? ids[initialIndex]!);
+const visualScreen = computed(() => screens[visualIndex.value] ?? screens[0]!);
 
-/** Continuous physical index. It never owns semantic selection or horizontal card position. */
+/** Continuous physical index. It projects motion but never controls the carousel mass. */
 const physicalIndex = computed(() => {
   const max = Math.max(0, ids.length - 1);
   const raw = pitch.value <= 0 ? 0 : -motion.position.value / pitch.value;
@@ -172,7 +181,7 @@ const paginationDots = computed(() =>
   screens.map((screen, index) => ({
     id: screen.id,
     title: screen.title,
-    selected: index === committedIndex.value,
+    current: index === visualIndex.value,
   })),
 );
 
@@ -180,25 +189,30 @@ watch(
   motion.snapshot,
   (snapshot) => {
     const currentPitch = Math.max(1, pitch.value);
+    const currentPhysicalIndex = clamp(-snapshot.position / currentPitch, 0, ids.length - 1);
     const targetIndex =
       snapshot.target === null ? null : Math.max(0, ids.indexOf(snapshot.target.id));
     const nearestIndex =
-      snapshot.active === null
-        ? committedIndex.value
-        : Math.max(0, ids.indexOf(snapshot.active.id));
-    const announcementIndex = semanticCommitment.update({
+      snapshot.active === null ? settledIndex.value : Math.max(0, ids.indexOf(snapshot.active.id));
+    const nextVisualIndex = resolveCoverflowVisualIndex(
+      currentPhysicalIndex,
+      visualIndex.value,
+      ids.length,
+    );
+    const announcementIndex = settledSelection.update({
       phase: snapshot.phase,
-      physicalIndex: clamp(-snapshot.position / currentPitch, 0, ids.length - 1),
       targetIndex,
       activeIndex: nearestIndex,
-      speedInCards: resolveSpeedInCards(snapshot.velocity, currentPitch),
     });
 
-    if (committedIndex.value !== semanticCommitment.committedIndex) {
-      committedIndex.value = semanticCommitment.committedIndex;
+    if (visualIndex.value !== nextVisualIndex) {
+      visualIndex.value = nextVisualIndex;
     }
-    if (pendingTargetIndex.value !== semanticCommitment.pendingTargetIndex) {
-      pendingTargetIndex.value = semanticCommitment.pendingTargetIndex;
+    if (settledIndex.value !== settledSelection.settledIndex) {
+      settledIndex.value = settledSelection.settledIndex;
+    }
+    if (pendingTargetIndex.value !== settledSelection.pendingTargetIndex) {
+      pendingTargetIndex.value = settledSelection.pendingTargetIndex;
     }
     if (announcementIndex !== null) {
       const screen = screens[announcementIndex];
@@ -346,6 +360,42 @@ const stageStyle = computed(() => ({
   "--coverflow-card-height": `${cardHeight.value}px`,
 }));
 
+const paginationIndicator = computed<CoverflowPaginationIndicatorState>(() =>
+  resolveCoverflowPaginationIndicator(
+    physicalIndex.value,
+    motion.velocity.value,
+    pitch.value,
+    ids.length,
+    {
+      position: 0,
+      x: 0,
+      scaleX: 1,
+      stretchRatio: 0,
+      speedInCards: 0,
+      softDirection: 0,
+      leftStretch: 0,
+      rightStretch: 0,
+    },
+  ),
+);
+
+const paginationStyle = computed(() => ({
+  "--_pagination-slot-size": `${COVERFLOW_PAGINATION_TUNING.slotSize}px`,
+  "--_pagination-slot-gap": `${COVERFLOW_PAGINATION_TUNING.slotGap}px`,
+  "--_pagination-indicator-width": `${COVERFLOW_PAGINATION_TUNING.restingWidth}px`,
+  "--_pagination-indicator-height": `${COVERFLOW_PAGINATION_TUNING.height}px`,
+  "--_pagination-indicator-x": `${paginationIndicator.value.x.toFixed(4)}px`,
+  "--_pagination-indicator-scale-x": paginationIndicator.value.scaleX.toFixed(5),
+}));
+
+const keyboardTargetIndex = computed(() => {
+  const semanticId = motion.targetId.value ?? motion.activeId.value ?? settledId.value;
+  const index = ids.indexOf(semanticId);
+  return index < 0 ? settledIndex.value : index;
+});
+const canGoPrevious = computed(() => keyboardTargetIndex.value > 0);
+const canGoNext = computed(() => keyboardTargetIndex.value < ids.length - 1);
+
 const diagnostics = computed<LabDiagnostics>(() => {
   const geometry = measureGeometry();
   const currentPitch = Math.max(1, pitch.value);
@@ -360,7 +410,15 @@ const diagnostics = computed<LabDiagnostics>(() => {
     phase: motion.phase.value,
     pointerOwned: motion.pointerOwned.value,
     position: motion.position.value,
-    committedIndex: committedIndex.value,
+    physicalIndex: physicalIndex.value,
+    visualIndex: visualIndex.value,
+    settledIndex: settledIndex.value,
+    ...(focusedPaginationIndex.value === null
+      ? {}
+      : { focusedPaginationIndex: focusedPaginationIndex.value }),
+    indicatorX: paginationIndicator.value.x,
+    indicatorScale: paginationIndicator.value.scaleX,
+    keyboardTargetIndex: keyboardTargetIndex.value,
     centerInfluence: kineticState.centerInfluence,
     kineticFocus: kineticState.kineticFocus,
     maxAnchorSkip: props.settings.maxAnchorSkip,
@@ -378,9 +436,54 @@ const diagnostics = computed<LabDiagnostics>(() => {
   };
 });
 
-function selectScreen(id: ScreenId) {
-  if (id === motion.targetId.value || motion.isDragging.value || motion.pointerOwned.value) return;
+function goToIndex(index: number): boolean {
+  if (motion.isDragging.value || motion.pointerOwned.value) return false;
+  const targetIndex = clamp(index, 0, ids.length - 1);
+  const id = ids[targetIndex];
+  if (!id || targetIndex === keyboardTargetIndex.value) return false;
   motion.moveTo(id);
+  return true;
+}
+
+function goToPrevious(): boolean {
+  return goToIndex(resolveAdjacentCoverflowIndex(keyboardTargetIndex.value, -1, ids.length));
+}
+
+function goToNext(): boolean {
+  return goToIndex(resolveAdjacentCoverflowIndex(keyboardTargetIndex.value, 1, ids.length));
+}
+
+function onCoverflowKeyDown(event: KeyboardEvent) {
+  const action = resolveCoverflowKeyboardAction(event);
+  if (!action) return;
+
+  event.preventDefault();
+  if (action === "previous") {
+    goToPrevious();
+  } else if (action === "next") {
+    goToNext();
+  } else {
+    goToIndex(action === "home" ? 0 : ids.length - 1);
+  }
+}
+
+function onCoverflowPointerDown(event: PointerEvent) {
+  const root = coverflowRoot.value;
+  const activeElement = document.activeElement;
+  if (root && viewport.value && (!activeElement || !root.contains(activeElement))) {
+    viewport.value.focus({ preventScroll: true });
+  }
+  motion.onPointerDown(event);
+}
+
+function onPaginationFocus(index: number) {
+  focusedPaginationIndex.value = index;
+}
+
+function onPaginationBlur(index: number) {
+  if (focusedPaginationIndex.value === index) {
+    focusedPaginationIndex.value = null;
+  }
 }
 
 watch(
@@ -403,7 +506,12 @@ watch(
 </script>
 
 <template>
-  <section class="coverflow-demo" aria-labelledby="coverflow-title">
+  <section
+    ref="coverflowRoot"
+    class="coverflow-demo"
+    aria-labelledby="coverflow-title"
+    @keydown="onCoverflowKeyDown"
+  >
     <header class="coverflow-header">
       <div>
         <p class="eyebrow">Spatial carousel</p>
@@ -417,9 +525,9 @@ watch(
         <button
           aria-label="Previous screen"
           data-testid="coverflow-previous"
-          :disabled="!motion.canPrevious.value"
+          :disabled="!canGoPrevious"
           type="button"
-          @click="motion.previous()"
+          @click="goToPrevious"
         >
           <svg aria-hidden="true" height="18" viewBox="0 0 24 24" width="18">
             <path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" />
@@ -428,9 +536,9 @@ watch(
         <button
           aria-label="Next screen"
           data-testid="coverflow-next"
-          :disabled="!motion.canNext.value"
+          :disabled="!canGoNext"
           type="button"
-          @click="motion.next()"
+          @click="goToNext"
         >
           <svg aria-hidden="true" height="18" viewBox="0 0 24 24" width="18">
             <path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" />
@@ -445,25 +553,27 @@ watch(
       aria-roledescription="carousel"
       class="coverflow-viewport"
       data-testid="coverflow-viewport"
-      :data-active-id="activeId"
-      :data-committed-index="committedIndex"
+      :data-active-id="settledId"
+      :data-keyboard-target-index="keyboardTargetIndex"
       :data-pending-index="pendingTargetIndex"
       :data-phase="motion.phase.value"
       :data-physical-index="physicalIndex"
       :data-position="motion.position.value"
+      :data-settled-index="settledIndex"
       :data-speed-in-cards="speedInCards"
       :data-target-id="motion.targetId.value"
+      :data-visual-id="visualId"
+      :data-visual-index="visualIndex"
       :style="[stageStyle, motion.surfaceStyle]"
       tabindex="0"
-      @keydown="motion.onKeyDown"
-      @pointerdown="motion.onPointerDown"
+      @pointerdown="onCoverflowPointerDown"
       @wheel="motion.onWheel"
     >
       <div ref="track" class="coverflow-stage">
         <article
           v-for="(screen, index) in screens"
           :key="screen.id"
-          :aria-current="screen.id === activeId ? 'true' : undefined"
+          :aria-current="screen.id === visualId ? 'true' : undefined"
           :aria-hidden="slideStyles[screen.id]?.visibility === 'hidden' ? 'true' : undefined"
           :aria-label="`${screen.title}, ${index + 1} of ${screens.length}`"
           aria-roledescription="slide"
@@ -471,11 +581,11 @@ watch(
           :class="[
             `tone-${screen.tone}`,
             `layout-${screen.layout}`,
-            { active: screen.id === activeId },
+            { active: screen.id === visualId },
           ]"
           :data-screen-id="screen.id"
           :style="slideStyles[screen.id]"
-          @click="selectScreen(screen.id)"
+          @click="goToIndex(index)"
         >
           <div class="screen-chrome">
             <header class="screen-top">
@@ -536,24 +646,37 @@ watch(
 
     <div class="coverflow-meta">
       <p>
-        <span class="tabular" data-testid="coverflow-counter">{{ activeIndex + 1 }}</span>
+        <span class="tabular" data-testid="coverflow-counter">{{ visualIndex + 1 }}</span>
         /
         <span class="tabular">{{ screens.length }}</span>
-        <strong data-testid="coverflow-caption">{{ activeScreen.title }}</strong>
+        <strong data-testid="coverflow-caption">{{ visualScreen.title }}</strong>
       </p>
-      <div class="dots" role="tablist" aria-label="Coverflow screens">
+      <div
+        aria-label="Coverflow screens"
+        class="dots"
+        :data-focused-index="focusedPaginationIndex"
+        :style="paginationStyle"
+        role="group"
+      >
+        <span
+          aria-hidden="true"
+          class="coverflow-pagination-indicator"
+          :data-position="paginationIndicator.position.toFixed(5)"
+          :data-scale-x="paginationIndicator.scaleX.toFixed(5)"
+          :data-soft-direction="paginationIndicator.softDirection.toFixed(5)"
+          :data-stretch-ratio="paginationIndicator.stretchRatio.toFixed(5)"
+          data-testid="coverflow-pagination-indicator"
+        />
         <button
-          v-for="dot in paginationDots"
+          v-for="(dot, index) in paginationDots"
           :key="dot.id"
-          :aria-label="dot.title"
-          :aria-selected="dot.selected"
+          :aria-current="dot.current ? 'true' : undefined"
+          :aria-label="`${dot.title}, ${index + 1} of ${screens.length}`"
           class="dot"
-          role="tab"
           type="button"
-          :style="{
-            '--dot-weight': dot.selected ? '1' : '0',
-          }"
-          @click="selectScreen(dot.id)"
+          @blur="onPaginationBlur(index)"
+          @click="goToIndex(index)"
+          @focus="onPaginationFocus(index)"
         >
           <span aria-hidden="true" class="dot-indicator" />
         </button>
@@ -1163,16 +1286,25 @@ watch(
 }
 
 .dots {
+  --_pagination-slot-size: 44px;
+  --_pagination-slot-gap: 2px;
+  --_pagination-indicator-width: 22.4px;
+  --_pagination-indicator-height: 8.8px;
+  --_pagination-indicator-x: 0px;
+  --_pagination-indicator-scale-x: 1;
+
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: 0.125rem;
+  gap: var(--_pagination-slot-gap);
+  isolation: isolate;
 }
 
 .dot {
-  --dot-weight: 0;
-
+  position: relative;
   display: grid;
-  inline-size: 2.75rem;
-  block-size: 2.75rem;
+  inline-size: var(--_pagination-slot-size);
+  block-size: var(--_pagination-slot-size);
   place-items: center;
   padding: 0;
   border: 0;
@@ -1185,14 +1317,32 @@ watch(
   outline-offset: 2px;
 }
 
-.dot-indicator {
-  inline-size: calc(0.55rem + var(--dot-weight) * 0.85rem);
-  min-inline-size: 0.55rem;
-  block-size: 0.55rem;
-  min-block-size: 0.55rem;
+.coverflow-pagination-indicator {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 50%;
+  inset-inline-start: calc((var(--_pagination-slot-size) - var(--_pagination-indicator-width)) / 2);
+  inline-size: var(--_pagination-indicator-width);
+  block-size: var(--_pagination-indicator-height);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) calc(var(--dot-weight) * 100%), #c9d2de);
+  background: var(--ink);
   pointer-events: none;
+  transform: translate3d(var(--_pagination-indicator-x), -50%, 0)
+    scaleX(var(--_pagination-indicator-scale-x));
+  transform-origin: center;
+  transition: none;
+  will-change: transform;
+}
+
+.dot-indicator {
+  inline-size: var(--_pagination-indicator-height);
+  min-inline-size: var(--_pagination-indicator-height);
+  block-size: var(--_pagination-indicator-height);
+  min-block-size: var(--_pagination-indicator-height);
+  border-radius: 999px;
+  background: #c9d2de;
+  pointer-events: none;
+  transition: none;
 }
 
 @media (max-width: 48rem) {

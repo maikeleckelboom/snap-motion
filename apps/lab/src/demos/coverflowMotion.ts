@@ -20,11 +20,21 @@ export const COVERFLOW_MOTION_TUNING = {
   maximumFreeVelocity: 12,
   maximumFreeAcceleration: 520,
   releaseVelocityKnee: 6.5,
-  dragHysteresis: 0.07,
-  semanticAuthorityRadius: 0.28,
-  semanticAuthoritySpeed: 2.5,
   maximumFrameDelta: 0.05,
   integrationStep: 1 / 120,
+} as const;
+
+export const COVERFLOW_PAGINATION_TUNING = {
+  slotSize: 44,
+  slotGap: 2,
+  restingWidth: 22.4,
+  height: 8.8,
+  maximumStretchRatio: 0.42,
+  stretchStartSpeed: 0.35,
+  stretchFullSpeed: 4.5,
+  directionSofteningSpeed: 1.5,
+  directionalBias: 0.18,
+  visualHysteresis: 0.04,
 } as const;
 
 export interface CoverflowKineticState {
@@ -39,6 +49,17 @@ export interface CoverflowKineticState {
   contactShadowStrength: number;
 }
 
+export interface CoverflowPaginationIndicatorState {
+  position: number;
+  x: number;
+  scaleX: number;
+  stretchRatio: number;
+  speedInCards: number;
+  softDirection: number;
+  leftStretch: number;
+  rightStretch: number;
+}
+
 export interface MutableSpringState {
   position: number;
   velocity: number;
@@ -51,12 +72,10 @@ interface ActiveSpring {
   readonly state: MutableSpringState;
 }
 
-interface SemanticUpdate {
+interface SettledSelectionUpdate {
   readonly phase: ControllerPhase;
-  readonly physicalIndex: number;
   readonly targetIndex: number | null;
   readonly activeIndex: number;
-  readonly speedInCards: number;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -76,6 +95,134 @@ export function resolveSpeedInCards(velocityPxPerSecond: number, cardPitchPx: nu
     return 0;
   }
   return Math.abs(velocityPxPerSecond) / cardPitchPx;
+}
+
+/**
+ * Projects the physical carousel mass onto the fixed pagination rail. The physical position owns
+ * translation; velocity contributes only a bounded, directionally biased capsule stretch.
+ */
+export function resolveCoverflowPaginationIndicator(
+  physicalIndex: number,
+  velocityPxPerSecond: number,
+  cardPitchPx: number,
+  itemCount: number,
+  output: CoverflowPaginationIndicatorState,
+): CoverflowPaginationIndicatorState {
+  const maximumIndex = Math.max(0, itemCount - 1);
+  const position = clamp(Number.isFinite(physicalIndex) ? physicalIndex : 0, 0, maximumIndex);
+  const speedInCards = resolveSpeedInCards(velocityPxPerSecond, cardPitchPx);
+  const stretchProgress = smoothstep(
+    COVERFLOW_PAGINATION_TUNING.stretchStartSpeed,
+    COVERFLOW_PAGINATION_TUNING.stretchFullSpeed,
+    speedInCards,
+  );
+  const stretchRatio = COVERFLOW_PAGINATION_TUNING.maximumStretchRatio * stretchProgress;
+  const totalStretch = COVERFLOW_PAGINATION_TUNING.restingWidth * stretchRatio;
+  const signedSpeedInCards =
+    Number.isFinite(velocityPxPerSecond) && cardPitchPx > 0
+      ? -velocityPxPerSecond / cardPitchPx
+      : 0;
+  const softDirection = clamp(
+    signedSpeedInCards / COVERFLOW_PAGINATION_TUNING.directionSofteningSpeed,
+    -1,
+    1,
+  );
+  const leftStretch =
+    totalStretch * (0.5 - COVERFLOW_PAGINATION_TUNING.directionalBias * softDirection);
+  const rightStretch =
+    totalStretch * (0.5 + COVERFLOW_PAGINATION_TUNING.directionalBias * softDirection);
+  const slotPitch = COVERFLOW_PAGINATION_TUNING.slotSize + COVERFLOW_PAGINATION_TUNING.slotGap;
+
+  output.position = position;
+  output.x = position * slotPitch + (rightStretch - leftStretch) / 2;
+  output.scaleX = 1 + stretchRatio;
+  output.stretchRatio = stretchRatio;
+  output.speedInCards = speedInCards;
+  output.softDirection = softDirection;
+  output.leftStretch = leftStretch;
+  output.rightStretch = rightStretch;
+  return output;
+}
+
+/**
+ * Follows the nearest physical card with a narrow dead band around the midpoint. The dead band is
+ * symmetric, so a reversal retraces the same small threshold instead of retaining source authority.
+ */
+export function resolveCoverflowVisualIndex(
+  physicalIndex: number,
+  currentIndex: number,
+  itemCount: number,
+): number {
+  const maximumIndex = Math.max(0, itemCount - 1);
+  const position = clamp(Number.isFinite(physicalIndex) ? physicalIndex : 0, 0, maximumIndex);
+  let nextIndex = clamp(currentIndex, 0, maximumIndex);
+  const boundary = 0.5 + COVERFLOW_PAGINATION_TUNING.visualHysteresis;
+
+  while (nextIndex < maximumIndex && position >= nextIndex + boundary) {
+    nextIndex += 1;
+  }
+  while (nextIndex > 0 && position <= nextIndex - boundary) {
+    nextIndex -= 1;
+  }
+  return nextIndex;
+}
+
+export type CoverflowKeyboardAction = "end" | "home" | "next" | "previous";
+
+const COVERFLOW_KEYBOARD_OWNER_SELECTOR = [
+  "input",
+  "textarea",
+  "select",
+  "option",
+  "video[controls]",
+  "audio[controls]",
+  "[contenteditable]:not([contenteditable='false'])",
+  "[role='slider']",
+  "[role='spinbutton']",
+  "[role='combobox']",
+  "[role='listbox']",
+  "[data-snap-motion-keyboard-owner]",
+].join(", ");
+
+function targetOwnsCoverflowKeyboard(target: EventTarget | null): boolean {
+  const candidate = target as { closest?: (selector: string) => Element | null } | null;
+  return Boolean(candidate?.closest?.(COVERFLOW_KEYBOARD_OWNER_SELECTOR));
+}
+
+export function resolveCoverflowKeyboardAction(
+  event: Pick<KeyboardEvent, "key" | "target"> &
+    Partial<Pick<KeyboardEvent, "altKey" | "ctrlKey" | "defaultPrevented" | "metaKey">>,
+): CoverflowKeyboardAction | undefined {
+  if (
+    event.defaultPrevented ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    targetOwnsCoverflowKeyboard(event.target)
+  ) {
+    return undefined;
+  }
+
+  switch (event.key) {
+    case "ArrowLeft":
+      return "previous";
+    case "ArrowRight":
+      return "next";
+    case "Home":
+      return "home";
+    case "End":
+      return "end";
+    default:
+      return undefined;
+  }
+}
+
+export function resolveAdjacentCoverflowIndex(
+  currentIndex: number,
+  direction: -1 | 1,
+  itemCount: number,
+): number {
+  return clamp(currentIndex + direction, 0, Math.max(0, itemCount - 1));
 }
 
 /**
@@ -260,25 +407,8 @@ export function useBoundedCoverflowDriver(cardPitchPx: () => number): AnimationD
   };
 }
 
-function resolveHystereticIndex(
-  physicalIndex: number,
-  currentIndex: number,
-  itemCount: number,
-): number {
-  let nextIndex = clamp(currentIndex, 0, Math.max(0, itemCount - 1));
-  const boundary = 0.5 + COVERFLOW_MOTION_TUNING.dragHysteresis;
-
-  while (nextIndex < itemCount - 1 && physicalIndex >= nextIndex + boundary) {
-    nextIndex += 1;
-  }
-  while (nextIndex > 0 && physicalIndex <= nextIndex - boundary) {
-    nextIndex -= 1;
-  }
-  return nextIndex;
-}
-
-export class CoverflowSemanticCommitment {
-  committedIndex: number;
+export class CoverflowSettledSelection {
+  settledIndex: number;
   pendingTargetIndex: number | null = null;
 
   readonly #itemCount: number;
@@ -287,52 +417,37 @@ export class CoverflowSemanticCommitment {
 
   constructor(initialIndex: number, itemCount: number) {
     this.#itemCount = Math.max(1, itemCount);
-    this.committedIndex = clamp(initialIndex, 0, this.#itemCount - 1);
-    this.#lastAnnouncedIndex = this.committedIndex;
+    this.settledIndex = clamp(initialIndex, 0, this.#itemCount - 1);
+    this.#lastAnnouncedIndex = this.settledIndex;
   }
 
   /**
-   * Returns the index to announce only when an autonomous settle completes. Drag feedback and
-   * intermediate cards never write to the live region.
+   * Returns the index to announce only when the controller reaches idle. Drag feedback,
+   * intermediate cards, obsolete targets, and autonomous retargets never write to the live region.
    */
-  update(input: SemanticUpdate): number | null {
+  update(input: SettledSelectionUpdate): number | null {
     if (input.phase === "dragging") {
       this.pendingTargetIndex = null;
       this.#settlingTargetIndex = null;
-      this.committedIndex = resolveHystereticIndex(
-        input.physicalIndex,
-        this.committedIndex,
-        this.#itemCount,
-      );
       return null;
     }
 
     if (input.phase === "settling") {
-      if (input.targetIndex !== null && input.targetIndex !== this.#settlingTargetIndex) {
+      if (input.targetIndex !== this.#settlingTargetIndex) {
         this.#settlingTargetIndex = input.targetIndex;
         this.pendingTargetIndex = input.targetIndex;
-      }
-
-      if (this.pendingTargetIndex !== null) {
-        const destinationHasAuthority =
-          Math.abs(input.physicalIndex - this.pendingTargetIndex) <=
-            COVERFLOW_MOTION_TUNING.semanticAuthorityRadius &&
-          input.speedInCards <= COVERFLOW_MOTION_TUNING.semanticAuthoritySpeed;
-        if (destinationHasAuthority) {
-          this.committedIndex = this.pendingTargetIndex;
-        }
       }
       return null;
     }
 
     this.pendingTargetIndex = null;
     this.#settlingTargetIndex = null;
-    this.committedIndex = clamp(input.activeIndex, 0, this.#itemCount - 1);
-    if (this.committedIndex === this.#lastAnnouncedIndex) {
+    this.settledIndex = clamp(input.activeIndex, 0, this.#itemCount - 1);
+    if (this.settledIndex === this.#lastAnnouncedIndex) {
       return null;
     }
 
-    this.#lastAnnouncedIndex = this.committedIndex;
-    return this.committedIndex;
+    this.#lastAnnouncedIndex = this.settledIndex;
+    return this.settledIndex;
   }
 }

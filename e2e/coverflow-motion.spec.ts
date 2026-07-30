@@ -6,6 +6,12 @@ async function setMaximumSkip(page: Page, value: number) {
   await setNumericInput(page.getByRole("spinbutton", { name: "Maximum skip", exact: true }), value);
 }
 
+function paginationButton(page: Page, name: string) {
+  return page
+    .getByRole("group", { name: "Coverflow screens" })
+    .getByRole("button", { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},`) });
+}
+
 async function maximumCardProperty(page: Page, property: string) {
   return page
     .locator(".coverflow-card")
@@ -54,37 +60,58 @@ test("slow direct drag stays 1:1 and visually neutral in both directions", async
   await expect(viewport).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
 });
 
-test("fast maximum-skip traversal commits once and retains kinetic material in both directions", async ({
+test("fast maximum-skip traversal projects every intermediate card and announces only the settle", async ({
   page,
 }) => {
   const viewport = page.getByTestId("coverflow-viewport");
   const status = page.getByTestId("coverflow-status");
   await setMaximumSkip(page, 5);
-  await page.getByRole("tab", { name: "Projectsjablonen", exact: true }).click();
+  await paginationButton(page, "Projectsjablonen").click();
   await expectCarouselAt(viewport, "templates");
   const sourceAnnouncement = await status.textContent();
 
-  let sourceAtRelease = "";
   await dragSyntheticPointerBy(page, viewport, -250, 0, {
     steps: 3,
     stepDelay: 0,
     eventIntervalMs: 3,
     async beforeRelease() {
-      sourceAtRelease = (await viewport.getAttribute("data-active-id")) ?? "";
       await viewport.evaluate((element) => {
-        const values = [element.getAttribute("data-active-id") ?? ""];
-        const observer = new MutationObserver(() => {
-          values.push(element.getAttribute("data-active-id") ?? "");
+        const visualValues = [element.getAttribute("data-visual-id") ?? ""];
+        const visualObserver = new MutationObserver(() => {
+          visualValues.push(element.getAttribute("data-visual-id") ?? "");
         });
-        observer.observe(element, { attributes: true, attributeFilter: ["data-active-id"] });
-        const motionTrace = {
+        visualObserver.observe(element, {
+          attributes: true,
+          attributeFilter: ["data-visual-id"],
+        });
+        const statusElement = document.querySelector<HTMLElement>(
+          '[data-testid="coverflow-status"]',
+        );
+        const announcements = statusElement ? [statusElement.textContent?.trim() ?? ""] : [];
+        const statusObserver = new MutationObserver(() => {
+          announcements.push(statusElement?.textContent?.trim() ?? "");
+        });
+        if (statusElement) {
+          statusObserver.observe(statusElement, {
+            characterData: true,
+            childList: true,
+            subtree: true,
+          });
+        }
+        const trace = {
+          announcements,
           contactAtMaximumKinetic: 1,
           frame: 0,
+          indicatorPositions: [] as number[],
+          maximumIndicatorScale: 1,
           maximumKinetic: 0,
           stopped: false,
+          statusObserver,
+          visualObserver,
+          visualValues,
         };
         const sampleMotion = () => {
-          if (motionTrace.stopped) {
+          if (trace.stopped) {
             return;
           }
 
@@ -102,69 +129,93 @@ test("fast maximum-skip traversal commits once and retains kinetic material in b
             );
           }
 
-          if (maximumKinetic > motionTrace.maximumKinetic) {
-            motionTrace.contactAtMaximumKinetic = maximumContact;
-            motionTrace.maximumKinetic = maximumKinetic;
+          if (maximumKinetic > trace.maximumKinetic) {
+            trace.contactAtMaximumKinetic = maximumContact;
+            trace.maximumKinetic = maximumKinetic;
           }
-
-          motionTrace.frame = requestAnimationFrame(sampleMotion);
+          const indicator = document.querySelector<HTMLElement>(
+            '[data-testid="coverflow-pagination-indicator"]',
+          );
+          trace.indicatorPositions.push(Number(indicator?.dataset.position ?? 0));
+          trace.maximumIndicatorScale = Math.max(
+            trace.maximumIndicatorScale,
+            Number(indicator?.dataset.scaleX ?? 1),
+          );
+          trace.frame = requestAnimationFrame(sampleMotion);
         };
-        motionTrace.frame = requestAnimationFrame(sampleMotion);
+        trace.frame = requestAnimationFrame(sampleMotion);
         (
           window as typeof window & {
-            coverflowCommitTrace?: { observer: MutationObserver; values: string[] };
-            coverflowMotionTrace?: typeof motionTrace;
+            coverflowTraversalTrace?: typeof trace;
           }
-        ).coverflowCommitTrace = { observer, values };
-        (
-          window as typeof window & {
-            coverflowMotionTrace?: typeof motionTrace;
-          }
-        ).coverflowMotionTrace = motionTrace;
+        ).coverflowTraversalTrace = trace;
       });
     },
   });
 
   await expect(viewport).toHaveAttribute("data-target-id", "settings");
   await expect(viewport).toHaveAttribute("data-phase", "settling");
-  await expect(viewport).toHaveAttribute("data-active-id", sourceAtRelease);
+  await expect(viewport).toHaveAttribute("data-active-id", "templates");
+  await expect(viewport).not.toHaveAttribute("data-visual-id", "templates");
   await expect(status).toHaveText(sourceAnnouncement ?? "");
   await expectCarouselAt(viewport, "settings");
   const traces = await page.evaluate(() => {
-    const commitTrace = (
+    const trace = (
       window as typeof window & {
-        coverflowCommitTrace?: { observer: MutationObserver; values: string[] };
-      }
-    ).coverflowCommitTrace;
-    const motionTrace = (
-      window as typeof window & {
-        coverflowMotionTrace?: {
+        coverflowTraversalTrace?: {
+          announcements: string[];
           contactAtMaximumKinetic: number;
           frame: number;
+          indicatorPositions: number[];
+          maximumIndicatorScale: number;
           maximumKinetic: number;
           stopped: boolean;
+          statusObserver: MutationObserver;
+          visualObserver: MutationObserver;
+          visualValues: string[];
         };
       }
-    ).coverflowMotionTrace;
-    commitTrace?.observer.disconnect();
-    if (motionTrace) {
-      motionTrace.stopped = true;
-      cancelAnimationFrame(motionTrace.frame);
+    ).coverflowTraversalTrace;
+    if (trace) {
+      trace.stopped = true;
+      cancelAnimationFrame(trace.frame);
+      trace.statusObserver.disconnect();
+      trace.visualObserver.disconnect();
     }
     return {
-      committed: commitTrace?.values ?? [],
-      contactAtMaximumKinetic: motionTrace?.contactAtMaximumKinetic ?? 1,
-      maximumKinetic: motionTrace?.maximumKinetic ?? 0,
+      announcements: trace?.announcements ?? [],
+      contactAtMaximumKinetic: trace?.contactAtMaximumKinetic ?? 1,
+      indicatorPositions: trace?.indicatorPositions ?? [],
+      maximumIndicatorScale: trace?.maximumIndicatorScale ?? 1,
+      maximumKinetic: trace?.maximumKinetic ?? 0,
+      visualValues: trace?.visualValues ?? [],
     };
   });
   expect(traces.maximumKinetic).toBeGreaterThan(0.05);
   expect(traces.contactAtMaximumKinetic).toBeLessThan(0.8);
-  expect(traces.committed).toContain("settings");
-  expect(traces.committed.every((id) => id === sourceAtRelease || id === "settings")).toBe(true);
+  expect(traces.maximumIndicatorScale).toBeGreaterThan(1.05);
+  expect(traces.maximumIndicatorScale).toBeLessThanOrEqual(1.42);
+  expect(traces.indicatorPositions.length).toBeGreaterThan(3);
+  expect(traces.indicatorPositions.at(-1)).toBeCloseTo(4, 3);
+  for (let index = 1; index < traces.indicatorPositions.length; index += 1) {
+    expect(traces.indicatorPositions[index]! - traces.indicatorPositions[index - 1]!).toBeLessThan(
+      0.75,
+    );
+  }
+  expect(traces.visualValues).toEqual(
+    expect.arrayContaining(["project", "map", "team", "settings"]),
+  );
+  expect(
+    traces.announcements.every(
+      (message) =>
+        message === sourceAnnouncement?.trim() || message === "Werkruimte-instellingen, 5 of 5",
+    ),
+  ).toBe(true);
   await expect(status).toContainText("Werkruimte-instellingen, 5 of 5");
-  await expect(
-    page.getByRole("tab", { name: "Werkruimte-instellingen", exact: true }),
-  ).toHaveAttribute("aria-selected", "true");
+  await expect(paginationButton(page, "Werkruimte-instellingen")).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
 
   const settledCard = page.locator('[data-screen-id="settings"]');
   await expect(settledCard).toHaveCSS("opacity", "1");
@@ -202,7 +253,7 @@ test("maximum skip 1, 2, and 5 preserve destination policy", async ({ page }) =>
   ] as const;
 
   for (const scenario of cases) {
-    await page.getByRole("tab", { name: "Projectsjablonen", exact: true }).click();
+    await paginationButton(page, "Projectsjablonen").click();
     await expectCarouselAt(viewport, "templates");
     await setMaximumSkip(page, scenario.maximumSkip);
     await dragSyntheticPointerBy(page, viewport, -250, 0, {
@@ -220,7 +271,7 @@ test("re-grab cancels a pending semantic handoff and preserves continuous orderi
 }) => {
   const viewport = page.getByTestId("coverflow-viewport");
   await setMaximumSkip(page, 5);
-  await page.getByRole("tab", { name: "Projectsjablonen", exact: true }).click();
+  await paginationButton(page, "Projectsjablonen").click();
   await expectCarouselAt(viewport, "templates");
 
   await dragSyntheticPointerBy(page, viewport, -250, 0, {
@@ -254,7 +305,7 @@ test("elastic ends remain symmetric and reduced motion settles exactly across st
 }) => {
   const viewport = page.getByTestId("coverflow-viewport");
   await setMaximumSkip(page, 5);
-  await page.getByRole("tab", { name: "Projectsjablonen", exact: true }).click();
+  await paginationButton(page, "Projectsjablonen").click();
   await expectCarouselAt(viewport, "templates");
 
   await dragSyntheticPointerBy(page, viewport, 120, 0, {
@@ -269,7 +320,7 @@ test("elastic ends remain symmetric and reduced motion settles exactly across st
   });
   await expectCarouselAt(viewport, "templates");
 
-  await page.getByRole("tab", { name: "Werkruimte-instellingen", exact: true }).click();
+  await paginationButton(page, "Werkruimte-instellingen").click();
   await expectCarouselAt(viewport, "settings");
   const endPosition = Number(await viewport.getAttribute("data-position"));
   await dragSyntheticPointerBy(page, viewport, -120, 0, {
@@ -291,7 +342,7 @@ test("elastic ends remain symmetric and reduced motion settles exactly across st
   }
 
   await page.getByTestId("reduced-motion-mode").selectOption("reduce");
-  await page.getByRole("tab", { name: "Locatie & planning", exact: true }).click();
+  await paginationButton(page, "Locatie & planning").click();
   await expectCarouselAt(viewport, "map");
   expect(await maximumCardProperty(page, "--kinetic-focus")).toBeCloseTo(0, 5);
 });

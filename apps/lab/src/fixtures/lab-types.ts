@@ -21,21 +21,27 @@ export interface LabDiagnostics {
   anchors: readonly SnapAnchor<string>[];
   bounds: { min: number; max: number };
   centerInfluence?: number;
-  committedIndex?: number;
+  focusedPaginationIndex?: number;
+  indicatorScale?: number;
+  indicatorX?: number;
   isAnimating: boolean;
+  keyboardTargetIndex?: number;
   kineticFocus?: number;
   maxAnchorSkip?: number;
   phase: string;
+  physicalIndex?: number;
   pointerOwned: boolean;
   position: number;
   reducedMotion: boolean;
   releaseVelocityCapActive?: boolean;
+  settledIndex?: number;
   settledness?: number;
   speedInCards?: number;
   targetId?: string;
   targetIndex?: number;
   trackExtent: number;
   velocity: number;
+  visualIndex?: number;
   viewportSize: number;
 }
 
