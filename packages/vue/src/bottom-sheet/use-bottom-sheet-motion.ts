@@ -66,12 +66,16 @@ export interface UseBottomSheetMotionOptions<Id extends string = BottomSheetOpen
 export interface UseBottomSheetMotionReturn<Id extends string = BottomSheetOpenSnapId> {
   readonly activeId: ComputedRef<Id | undefined>;
   readonly activeSnapId: ComputedRef<Id | undefined>;
+  /** Latest measured body client height; this is not read on every motion frame. */
   readonly bodyClientHeight: Ref<number>;
+  /** Latest measured body scroll height; this is not read on every motion frame. */
   readonly bodyScrollHeight: Ref<number>;
+  /** Latest measured body scroll position; this is not read on every motion frame. */
   readonly bodyScrollTop: Ref<number>;
   readonly close: () => void;
   readonly configure: (update: ControllerConfigurationUpdate) => void;
   readonly fullPosition: ComputedRef<number>;
+  /** Combines frame-live visible geometry with the latest measured body metrics. */
   readonly geometry: ComputedRef<BottomSheetGeometry>;
   readonly interrupt: () => void;
   readonly intrinsicBodyContentHeight: Ref<number>;
@@ -450,6 +454,7 @@ export function useBottomSheetMotion<Id extends string = BottomSheetOpenSnapId>(
       bodyScrollHeight: bodyScrollHeight.value,
       bodyScrollTop: bodyScrollTop.value,
       intrinsicBodyContentHeight: intrinsicBodyContentHeight.value,
+      intrinsicSheetHeight: panelIntrinsicSize.value,
       measuredChromeHeight: measuredChromeHeight.value,
       physicalSheetY: motion.position.value,
       visualViewportHeight: viewportHeight.value,

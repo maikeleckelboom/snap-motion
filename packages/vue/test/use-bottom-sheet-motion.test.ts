@@ -203,6 +203,30 @@ describe("useBottomSheetMotion", () => {
     });
   });
 
+  it("uses an explicit panel intrinsic size as the authoritative intrinsic sheet height", async () => {
+    const panel = ref<HTMLElement>();
+    let motion: ReturnType<typeof useBottomSheetMotion> | undefined;
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          motion = useBottomSheetMotion({
+            getMeasureContext: () => ({ panelIntrinsicSize: 1_200 }),
+            panel,
+          });
+          return () => h("section", { ref: panel });
+        },
+      }),
+    );
+    await nextTick();
+
+    motion?.remeasure();
+
+    expect(motion?.panelIntrinsicSize.value).toBe(1_200);
+    expect(motion?.intrinsicSheetHeight.value).toBe(1_200);
+    expect(motion?.geometry.value.intrinsicSheetHeight).toBe(1_200);
+    wrapper.unmount();
+  });
+
   it("remeasures intrinsic chrome and body content without observing the motion shell", async () => {
     let observerCallback: ResizeObserverCallback | undefined;
     const observe = vi.fn<ResizeObserver["observe"]>();

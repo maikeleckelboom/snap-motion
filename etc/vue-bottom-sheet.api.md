@@ -28,11 +28,8 @@ export const BottomSheet: typeof __VLS_export;
 
 // @public (undocumented)
 export interface BottomSheetGeometry {
-    // (undocumented)
     readonly bodyClientHeight: number;
-    // (undocumented)
     readonly bodyScrollHeight: number;
-    // (undocumented)
     readonly bodyScrollTop: number;
     // (undocumented)
     readonly intrinsicBodyContentHeight: number;
@@ -62,6 +59,7 @@ export interface BottomSheetGeometryInput {
     readonly bodyScrollTop?: number;
     // (undocumented)
     readonly intrinsicBodyContentHeight?: number;
+    readonly intrinsicSheetHeight?: number;
     // (undocumented)
     readonly measuredChromeHeight?: number;
     // (undocumented)
@@ -224,11 +222,8 @@ export interface UseBottomSheetMotionReturn<Id extends string = BottomSheetOpenS
     readonly activeId: ComputedRef<Id | undefined>;
     // (undocumented)
     readonly activeSnapId: ComputedRef<Id | undefined>;
-    // (undocumented)
     readonly bodyClientHeight: Ref<number>;
-    // (undocumented)
     readonly bodyScrollHeight: Ref<number>;
-    // (undocumented)
     readonly bodyScrollTop: Ref<number>;
     // (undocumented)
     readonly close: () => void;
@@ -236,7 +231,6 @@ export interface UseBottomSheetMotionReturn<Id extends string = BottomSheetOpenS
     readonly configure: (update: ControllerConfigurationUpdate) => void;
     // (undocumented)
     readonly fullPosition: ComputedRef<number>;
-    // (undocumented)
     readonly geometry: ComputedRef<BottomSheetGeometry>;
     // (undocumented)
     readonly interrupt: () => void;

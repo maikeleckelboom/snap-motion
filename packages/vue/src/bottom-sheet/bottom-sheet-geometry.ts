@@ -3,14 +3,19 @@ export interface BottomSheetGeometryInput {
   readonly bodyScrollHeight?: number;
   readonly bodyScrollTop?: number;
   readonly intrinsicBodyContentHeight?: number;
+  /** Authoritative total intrinsic sheet height. Defaults to measured chrome plus body content. */
+  readonly intrinsicSheetHeight?: number;
   readonly measuredChromeHeight?: number;
   readonly physicalSheetY: number;
   readonly visualViewportHeight: number;
 }
 
 export interface BottomSheetGeometry {
+  /** Latest measured body client height; this is not read on every motion frame. */
   readonly bodyClientHeight: number;
+  /** Latest measured body scroll height; this is not read on every motion frame. */
   readonly bodyScrollHeight: number;
+  /** Latest measured body scroll position; this is not read on every motion frame. */
   readonly bodyScrollTop: number;
   readonly intrinsicBodyContentHeight: number;
   readonly intrinsicSheetHeight: number;
@@ -43,6 +48,10 @@ export function resolveBottomSheetGeometry(input: BottomSheetGeometryInput): Bot
       ? input.bodyScrollTop
       : 0;
   const intrinsicBodyContentHeight = finiteNonNegative(input.intrinsicBodyContentHeight);
+  const intrinsicSheetHeight =
+    input.intrinsicSheetHeight === undefined
+      ? measuredChromeHeight + intrinsicBodyContentHeight
+      : finiteNonNegative(input.intrinsicSheetHeight);
   const visibleSheetHeight = Math.max(0, visualViewportHeight - physicalSheetY);
   const visibleBodyHeight = Math.max(0, visibleSheetHeight - measuredChromeHeight);
 
@@ -51,7 +60,7 @@ export function resolveBottomSheetGeometry(input: BottomSheetGeometryInput): Bot
     bodyScrollHeight,
     bodyScrollTop,
     intrinsicBodyContentHeight,
-    intrinsicSheetHeight: measuredChromeHeight + intrinsicBodyContentHeight,
+    intrinsicSheetHeight,
     maximumBodyScrollTop: Math.max(0, bodyScrollHeight - bodyClientHeight),
     measuredChromeHeight,
     physicalSheetY,
