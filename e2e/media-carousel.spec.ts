@@ -341,6 +341,7 @@ test.describe("media lightbox", () => {
         const activeSlide = viewport.querySelector<HTMLElement>(`[data-fixture="${fixtureMode}"]`);
         const frame = activeSlide?.querySelector<HTMLElement>(".media-frame");
         const image = activeSlide?.querySelector<HTMLImageElement>("img");
+        const morphing = activeSlide?.querySelector<HTMLElement>(".media-transition-surface");
         const slides = Array.from(viewport.querySelectorAll<HTMLElement>(".media-slide"));
         if (!track || !activeSlide || !frame) {
           throw new Error("Media stage geometry is incomplete.");
@@ -350,6 +351,7 @@ test.describe("media lightbox", () => {
         const activeRect = activeSlide.getBoundingClientRect();
         const frameRect = frame.getBoundingClientRect();
         const imageRect = image?.getBoundingClientRect();
+        const morphingRect = morphing?.getBoundingClientRect();
 
         return {
           activeLeft: activeRect.left,
@@ -357,6 +359,10 @@ test.describe("media lightbox", () => {
           imageContained:
             !imageRect ||
             (imageRect.width <= frameRect.width + 1 && imageRect.height <= frameRect.height + 1),
+          morphingContained:
+            !morphingRect ||
+            (morphingRect.width <= frameRect.width + 1 &&
+              morphingRect.height <= frameRect.height + 1),
           slideWidths: slides.map((slide) => slide.offsetWidth),
           trackWidth: track.scrollWidth,
           viewportLeft: viewportRect.left + viewport.clientLeft,
@@ -371,11 +377,16 @@ test.describe("media lightbox", () => {
         geometry.slideWidths.every((width) => Math.abs(width - geometry.viewportWidth) <= 1),
       ).toBe(true);
       expect(Math.abs(geometry.trackWidth - geometry.viewportWidth * 5)).toBeLessThanOrEqual(2);
+      // The element that carries view-transition-name is the media's contained
+      // rectangle for every fixture, decorated or not. A transition lifts that
+      // element out of the stage and loses the stage's clip, so it has to be
+      // subordinate to the frame on its own.
+      expect(geometry.morphingContained).toBe(true);
       if (fixture !== "transformed") {
         expect(geometry.imageContained).toBe(true);
       } else {
-        await expect(page.locator('[data-fixture="transformed"] .media-layer')).toHaveClass(
-          /media-layer--transformed/,
+        await expect(page.getByTestId("media-image-transformed")).toHaveClass(
+          /media-image--transformed/,
         );
         await expect(page.locator(".is-transformed")).toHaveCount(0);
       }
@@ -555,8 +566,8 @@ test.describe("media lightbox", () => {
         (window as Window & { mediaTransitionRects?: CapturedMediaTransition[] })
           .mediaTransitionRects,
     );
-    expect(openingRect?.old?.testId).toBe("media-thumbnail-image-extremely-tall");
-    expect(openingRect?.new?.testId).toBe("media-image-extremely-tall");
+    expect(openingRect?.old?.testId).toBe("media-thumbnail-transition-extremely-tall");
+    expect(openingRect?.new?.testId).toBe("media-transition-extremely-tall");
     expect(openingRect?.old?.width / (openingRect?.old?.height ?? 1)).toBeCloseTo(1_600 / 12_000);
     expect(openingRect?.new?.width / (openingRect?.new?.height ?? 1)).toBeCloseTo(1_600 / 12_000);
 
@@ -589,8 +600,8 @@ test.describe("media lightbox", () => {
           .mediaTransitionRects,
     );
     const wideOpeningRect = transitionRects?.[2];
-    expect(wideOpeningRect?.old?.testId).toBe("media-thumbnail-image-extremely-wide");
-    expect(wideOpeningRect?.new?.testId).toBe("media-image-extremely-wide");
+    expect(wideOpeningRect?.old?.testId).toBe("media-thumbnail-transition-extremely-wide");
+    expect(wideOpeningRect?.new?.testId).toBe("media-transition-extremely-wide");
     expect(wideOpeningRect?.old?.width / (wideOpeningRect?.old?.height ?? 1)).toBeCloseTo(
       12_000 / 1_600,
     );
@@ -612,14 +623,25 @@ test.describe("media lightbox", () => {
             .mediaTransitionRects,
       )
     )?.[4];
-    expect(transformedOpeningRect?.old?.testId).toBe("media-thumbnail-image-transformed");
-    expect(transformedOpeningRect?.new?.testId).toBe("media-image-transformed");
+    expect(transformedOpeningRect?.old?.testId).toBe("media-thumbnail-transition-transformed");
+    expect(transformedOpeningRect?.new?.testId).toBe("media-transition-transformed");
     expect(
       transformedOpeningRect?.old?.layoutWidth / (transformedOpeningRect?.old?.layoutHeight ?? 1),
     ).toBeCloseTo(1_600 / 1_000, 1);
     expect(
       transformedOpeningRect?.new?.layoutWidth / (transformedOpeningRect?.new?.layoutHeight ?? 1),
     ).toBeCloseTo(1_600 / 1_000, 1);
+    // A decorative ancestor transform used to be folded into the transition's
+    // own geometry, so the media flew to 116% of the stage and snapped back on
+    // landing. The morphing element must render at exactly its layout size.
+    expect(transformedOpeningRect?.new?.width).toBeCloseTo(
+      transformedOpeningRect?.new?.layoutWidth ?? 0,
+      0,
+    );
+    expect(transformedOpeningRect?.new?.height).toBeCloseTo(
+      transformedOpeningRect?.new?.layoutHeight ?? 0,
+      0,
+    );
 
     await page.getByTestId("media-transition-toggle").uncheck();
     await page.getByTestId("media-thumbnail-regular").click();

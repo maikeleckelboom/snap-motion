@@ -319,8 +319,7 @@ async function openLightbox(fixtureId?: MediaFixtureId) {
 
   const thumbnailOpener = fixtureId ? thumbnailElements.get(fixtureId) : undefined;
   const transitionSource =
-    thumbnailOpener?.querySelector<HTMLImageElement>(".media-transition-surface > img") ??
-    undefined;
+    thumbnailOpener?.querySelector<HTMLElement>(".media-transition-surface") ?? undefined;
   const fixture = fixtureId ? mediaFixtures.find(({ id }) => id === fixtureId) : undefined;
   storedOpener = thumbnailOpener ?? opener.value ?? captureFocusOpener(document);
   openedFromThumbnailId = fixtureId;
@@ -395,7 +394,7 @@ async function closeLightbox() {
         canReturnToThumbnail
           ? (thumbnailElements
               .get(activeId)
-              ?.querySelector<HTMLImageElement>(".media-transition-surface > img") ?? undefined)
+              ?.querySelector<HTMLElement>(".media-transition-surface") ?? undefined)
           : undefined,
       document: target.ownerDocument,
       enabled: transitionMotionEnabled.value && canReturnToThumbnail,
@@ -523,7 +522,11 @@ onBeforeUnmount(() => {
         @click="openLightbox(fixture.id)"
       >
         <span class="media-thumbnail-visual">
-          <span class="media-transition-surface" :style="mediaTransitionStyle(fixture)">
+          <span
+            class="media-transition-surface"
+            :data-testid="`media-thumbnail-transition-${fixture.id}`"
+            :style="mediaTransitionStyle(fixture)"
+          >
             <img
               :src="fixture.src"
               alt=""
@@ -688,14 +691,7 @@ onBeforeUnmount(() => {
                       :data-media-state="fixtureLoadState(fixture)"
                       :data-testid="`media-frame-${fixture.id}`"
                     >
-                      <div
-                        :class="[
-                          'media-layer',
-                          {
-                            'media-layer--transformed': fixture.mode === 'transformed',
-                          },
-                        ]"
-                      >
+                      <div class="media-layer">
                         <div
                           class="media-transform-surface"
                           :data-testid="`media-transform-${fixture.id}`"
@@ -706,23 +702,26 @@ onBeforeUnmount(() => {
                           "
                         >
                           <div
+                            :ref="
+                              (element) =>
+                                setMediaTransitionElement(fixture.id, element as HTMLElement | null)
+                            "
                             class="media-transition-surface"
+                            :data-testid="`media-transition-${fixture.id}`"
                             :style="mediaTransitionStyle(fixture)"
                           >
                             <img
                               v-if="isOpen && fixtureSourceReady(fixture)"
-                              :ref="
-                                (element) =>
-                                  setMediaTransitionElement(
-                                    fixture.id,
-                                    element as HTMLElement | null,
-                                  )
-                              "
                               :alt="
                                 fixtureLoadState(fixture) === 'loaded' ? fixture.description : ''
                               "
                               :aria-hidden="fixtureLoadState(fixture) !== 'loaded'"
-                              class="media-image"
+                              :class="[
+                                'media-image',
+                                {
+                                  'media-image--transformed': fixture.mode === 'transformed',
+                                },
+                              ]"
                               :data-load-generation="mediaLoadGeneration"
                               :data-media-state="fixtureLoadState(fixture)"
                               :data-testid="`media-image-${fixture.id}`"
@@ -1041,6 +1040,13 @@ onBeforeUnmount(() => {
   object-fit: contain;
 }
 
+/*
+ * The morphing element. Its box is the media's own contained rectangle, so the
+ * thumbnail and the stage agree on what "the media" is for any intrinsic ratio.
+ * It clips its own content because a view transition lifts the snapshot out of
+ * the stage: any ancestor clip is lost, so decorative overflow has to be cut
+ * here or the flight would paint outside the stage and pop on landing.
+ */
 .media-transition-surface {
   position: relative;
   display: grid;
@@ -1048,6 +1054,7 @@ onBeforeUnmount(() => {
   inline-size: var(--media-transition-inline-size, auto);
   block-size: var(--media-transition-block-size, auto);
   aspect-ratio: var(--media-transition-aspect-ratio);
+  overflow: clip;
 }
 
 .fixture-thumbnail-copy {
@@ -1390,11 +1397,6 @@ onBeforeUnmount(() => {
 
 .media-layer {
   position: relative;
-  transform-origin: center;
-}
-
-.media-layer--transformed {
-  transform: scale(1.16) rotate(-1.5deg);
 }
 
 .media-image {
@@ -1407,6 +1409,17 @@ onBeforeUnmount(() => {
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
+}
+
+/*
+ * Decorative scale lives inside the morphing element, never above it. A view
+ * transition folds every ancestor transform into the group's own geometry, so
+ * hanging this on a parent would make the flight 16% larger than the stage it
+ * lands in. Inside, it is captured as content and clipped like the real frame.
+ */
+.media-image--transformed {
+  transform: scale(1.16) rotate(-1.5deg);
+  transform-origin: center;
 }
 
 .media-image:not([data-media-state="loaded"]) {
