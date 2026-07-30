@@ -100,3 +100,17 @@ ancestor through:
 The `@snap-motion/vue/media-gallery` runtime graph contains Vue, VueUse listeners/measurement/scroll
 lock/timers, and the shared focus helper. It does not import Motion, Snap Motion core, the carousel,
 the bottom sheet, Router, Nuxt, or lab code.
+
+## Assistive-technology certification
+
+> Prepared for manual assistive-technology certification
+
+The dedicated lab harness is available at `?demo=gallery-at`. It supplies deterministic baseline,
+single-item, full-image-failure, and preview-failure scenarios plus a deliberately non-live
+component event trace.
+
+Use the
+[media gallery assistive-technology certification dossier](media-gallery-at-certification.md) and
+[results template](media-gallery-at-results-template.md) for physical NVDA, VoiceOver, and TalkBack
+runs. Automated DOM, focus, event, axe, and accessibility-tree coverage does not establish spoken
+output or a real assistive-technology certification result.

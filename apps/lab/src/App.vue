@@ -6,15 +6,22 @@ import PhysicsControls from "@/components/PhysicsControls.vue";
 import StageControls from "@/components/StageControls.vue";
 import BottomSheetDemo from "@/demos/BottomSheetDemo.vue";
 import CoverflowDemo from "@/demos/CoverflowDemo.vue";
+import MediaGalleryAtCertificationDemo from "@/demos/MediaGalleryAtCertificationDemo.vue";
 import MediaLightboxDemo from "@/demos/MediaLightboxDemo.vue";
 import PagedGridDemo from "@/demos/PagedGridDemo.vue";
 import { settingsFromPreset } from "@/fixtures/lab-settings";
 import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fixtures/lab-types";
 
-type DemoId = "coverflow" | "media" | "grid" | "sheet";
+type DemoId = "coverflow" | "gallery-at" | "media" | "grid" | "sheet";
 
 function isDemoId(value: unknown): value is DemoId {
-  return value === "coverflow" || value === "media" || value === "grid" || value === "sheet";
+  return (
+    value === "coverflow" ||
+    value === "gallery-at" ||
+    value === "media" ||
+    value === "grid" ||
+    value === "sheet"
+  );
 }
 
 const demos = [
@@ -24,6 +31,13 @@ const demos = [
     shortLabel: "Coverflow",
     description: "Physical 2.5D stack: 1:1 drag, spring settle, elastic ends.",
     component: CoverflowDemo,
+  },
+  {
+    id: "gallery-at" as const,
+    label: "Gallery AT harness",
+    shortLabel: "Gallery AT",
+    description: "Deterministic manual assistive-technology certification scenarios and trace.",
+    component: MediaGalleryAtCertificationDemo,
   },
   {
     id: "media" as const,
@@ -346,6 +360,8 @@ function resetPreset() {
 
   .demo-tabs button {
     flex: 1;
+    min-inline-size: 0;
+    padding-inline: 0.4rem;
   }
 
   .lab-workspace {

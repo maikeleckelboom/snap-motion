@@ -37,24 +37,31 @@ Axe passing is a regression gate, not a conformance claim.
 
 ## Manual assistive-technology release gate
 
+> Prepared for manual assistive-technology certification
+
 Run this matrix on representative physical devices before maikel.site integration. Record the OS,
 browser/AT versions, result, issue link, and retest date. A blank result means certification is not
 complete.
 
-| Environment                  | Required checks                                              | Result                             |
-| ---------------------------- | ------------------------------------------------------------ | ---------------------------------- |
-| NVDA + Firefox on Windows    | names, dialog entry/exit, slide status, radio snap selection | Not yet executed                   |
-| NVDA + Chromium on Windows   | names, dialog entry/exit, slide status, radio snap selection | Not yet executed                   |
-| VoiceOver + Safari on macOS  | rotor order, modal containment, status timing                | Not yet executed                   |
-| VoiceOver + Safari on iOS    | touch reading order, modal containment, snap picker          | Not yet executed                   |
-| TalkBack + Chrome on Android | swipe order, modal containment, snap picker                  | Not yet executed                   |
-| Windows forced-colors        | focus visibility, controls, selected radio state             | Not yet executed                   |
-| Browser zoom 200% and 400%   | reflow, no obscured focus/content                            | Automated; physical review pending |
-| Text-only zoom               | wrapping, control labels, no clipping                        | Not yet executed                   |
+| Environment                   | Required checks                                              | Result                             |
+| ----------------------------- | ------------------------------------------------------------ | ---------------------------------- |
+| NVDA + Firefox on Windows     | names, dialog entry/exit, slide status, radio snap selection | Prepared; not executed             |
+| NVDA + Chrome/Edge on Windows | names, dialog entry/exit, slide status, radio snap selection | Prepared; not executed             |
+| VoiceOver + Safari on macOS   | rotor order, modal containment, status timing                | Prepared; not executed             |
+| VoiceOver + Safari on iPhone  | touch reading order, modal containment, snap picker          | Prepared; not executed             |
+| TalkBack + Chrome on Android  | swipe order, modal containment, snap picker                  | Prepared; not executed             |
+| Windows forced-colors         | focus visibility, controls, selected radio state             | Not yet executed                   |
+| Browser zoom 200% and 400%    | reflow, no obscured focus/content                            | Automated; physical review pending |
+| Text-only zoom                | wrapping, control labels, no clipping                        | Not yet executed                   |
 
 ## Manual script
 
-For each screen reader/browser pair:
+The complete media-gallery scripts and evidence rules are in
+[media gallery assistive-technology certification](media-gallery-at-certification.md). Record each
+human run from the
+[media gallery assistive-technology results template](media-gallery-at-results-template.md).
+
+For the remaining component-wide screen reader/browser checks:
 
 1. Open the lightbox and verify the visible close button receives focus.
 2. Without pressing Tab, press Right Arrow, then Left Arrow. Verify the item changes, the close
