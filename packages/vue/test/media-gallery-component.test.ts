@@ -58,15 +58,26 @@ function runAnimationFrameImmediately(callback: FrameRequestCallback) {
   return 1;
 }
 
+function preferReducedMotion(): MediaQueryList {
+  return Object.assign(new EventTarget(), {
+    matches: true,
+    media: "(prefers-reduced-motion: reduce)",
+    onchange: null,
+    addListener() {},
+    removeListener() {},
+  }) as MediaQueryList;
+}
+
 function mountGallery(
   props: Partial<InstanceType<typeof MediaGalleryDialog>["$props"]> = {},
+  useReducedMotionOverride = true,
 ): VueWrapper<InstanceType<typeof MediaGalleryDialog>> {
   return mount(MediaGalleryDialog, {
     attachTo: document.body,
     props: {
       items,
       open: true,
-      reducedMotionOverride: true,
+      ...(useReducedMotionOverride ? { reducedMotionOverride: true } : {}),
       ...props,
     },
   });
@@ -77,6 +88,12 @@ async function settleTrack(wrapper: VueWrapper) {
   await wrapper.get('[data-testid="snap-motion-media-gallery-track"]').trigger("transitionend", {
     propertyName: "transform",
   });
+  await nextTick();
+}
+
+async function flushReactiveTasks() {
+  await nextTick();
+  await Promise.resolve();
   await nextTick();
 }
 
@@ -122,6 +139,27 @@ describe("MediaGalleryDialog lifecycle", () => {
     expect(document.documentElement.style.overflow).toBe("hidden");
 
     wrapper.unmount();
+  });
+
+  it("uses the system preference for immediate open, navigation, and close completion", async () => {
+    const matchMedia = vi.spyOn(window, "matchMedia").mockImplementation(preferReducedMotion);
+    const wrapper = mountGallery({}, false);
+    await flushReactiveTasks();
+
+    expect(wrapper.get("dialog").attributes("data-dialog-state")).toBe("open");
+    await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
+    await flushReactiveTasks();
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("1");
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-track"]').classes()).not.toContain(
+      "transitioning",
+    );
+    expect(wrapper.emitted("indexChanged")?.at(-1)).toEqual([1, "next"]);
+
+    await wrapper.setProps({ open: false });
+    await nextTick();
+    expect(wrapper.get("dialog").attributes("open")).toBeUndefined();
+    expect(wrapper.emitted("closed")?.at(-1)).toEqual([1]);
+    matchMedia.mockRestore();
   });
 
   it("fails a requested empty open cycle safely", async () => {

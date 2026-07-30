@@ -38,7 +38,7 @@ export interface MediaGalleryDialogProps {
   open: boolean;
   items: readonly MediaGalleryItem[];
   initialIndex?: number;
-  reducedMotionOverride?: boolean;
+  reducedMotionOverride?: boolean | undefined;
   messages?: Partial<MediaGalleryMessages>;
   focusReturn?: FocusReturnOptions;
   initialFocus?: InitialFocus;

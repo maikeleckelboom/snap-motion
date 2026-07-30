@@ -75,6 +75,7 @@ const props = withDefaults(defineProps<MediaGalleryDialogProps>(), {
   eyebrow: "Media",
   initialFocus: "close",
   initialIndex: 0,
+  reducedMotionOverride: undefined,
   title: "Gallery",
 });
 
@@ -88,7 +89,9 @@ const emit = defineEmits<{
 
 const items = computed(() => normalizeMediaGalleryItems(props.items));
 const messages = computed(() => createEnglishMediaGalleryMessages(props.messages));
-const reducedMotion = computed(() => props.reducedMotionOverride ?? false);
+const systemReducedMotion = ref(false);
+const reducedMotionQuery = shallowRef<MediaQueryList>();
+const reducedMotion = computed(() => props.reducedMotionOverride ?? systemReducedMotion.value);
 const dialog = ref<HTMLDialogElement>();
 const shell = ref<HTMLElement>();
 const closeButton = ref<HTMLButtonElement>();
@@ -429,6 +432,11 @@ function beginTrackSettlement(
   } else {
     const direction = Math.sign(destinationIndex - galleryIndex.value) as -1 | 1;
     trackOffsetX.value = resolveGalleryCommitOffset(direction, geometry.width);
+  }
+  if (reducedMotion.value) {
+    trackTransitionEnabled.value = false;
+    void completeTrackSettlement();
+    return;
   }
   startTrackFallback();
 }
@@ -931,15 +939,25 @@ function onBackdropPointerUp(event: PointerEvent) {
   if (closes) requestClose("backdrop");
 }
 
+function onReducedMotionChange(event: MediaQueryListEvent) {
+  systemReducedMotion.value = event.matches;
+}
+
 useEventListener("pointermove", onWindowPointerMove, { passive: false });
 useEventListener("pointerup", onWindowPointerUp);
 useEventListener("pointercancel", onWindowPointerCancel);
 useEventListener("blur", clearPointerState);
 useEventListener(imageViewport, "lostpointercapture", onLostPointerCapture);
+useEventListener(reducedMotionQuery, "change", onReducedMotionChange);
 useResizeObserver(imageViewport, measureGeometry);
 
 onMounted(() => {
   mounted.value = true;
+  const ownerWindow = dialog.value?.ownerDocument.defaultView;
+  if (typeof ownerWindow?.matchMedia === "function") {
+    reducedMotionQuery.value = ownerWindow.matchMedia("(prefers-reduced-motion: reduce)");
+    systemReducedMotion.value = reducedMotionQuery.value.matches;
+  }
   if (props.open) void openDialog();
 });
 

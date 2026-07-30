@@ -69,7 +69,7 @@ export interface MediaGalleryDialogProps {
     // (undocumented)
     open: boolean;
     // (undocumented)
-    reducedMotionOverride?: boolean;
+    reducedMotionOverride?: boolean | undefined;
     // (undocumented)
     title?: string;
 }
