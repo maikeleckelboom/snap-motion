@@ -704,22 +704,18 @@ describe("MediaGalleryDialog media lifecycle", () => {
     expect(namedImages(wrapper)).toHaveLength(1);
   });
 
-  it("normalizes a partially invalid intrinsic pair to a usable square viewport", async () => {
+  it("normalizes a partially invalid intrinsic pair without changing stage geometry", async () => {
     const wrapper = mountGallery({
       items: [{ ...items[0]!, height: -1 }],
     });
     await flushReactiveTasks();
 
-    const viewportStyle = wrapper
-      .get('[data-testid="snap-motion-media-gallery-viewport"]')
-      .attributes("style");
+    const viewport = wrapper.get('[data-testid="snap-motion-media-gallery-viewport"]');
     const preview = wrapper.get<HTMLImageElement>(".snap-motion-media-gallery-preview");
-    const ratio = Number(/--_gallery-aspect-ratio:\s*([^;]+)/.exec(viewportStyle ?? "")?.[1]);
 
     expect(preview.attributes("width")).toBe("1");
     expect(preview.attributes("height")).toBe("1");
-    expect(Number.isFinite(ratio)).toBe(true);
-    expect(ratio).toBe(1);
+    expect(viewport.attributes("style")).toBeUndefined();
   });
 
   it("surfaces invalid IDs as a RangeError", () => {

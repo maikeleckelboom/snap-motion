@@ -393,6 +393,112 @@ test.describe("media lightbox", () => {
     }
   });
 
+  test("keeps the mixed-aspect stage stable during direct wide and tall transitions", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1_200, height: 800 });
+    await openLabDemo(page, "media", "no-preference");
+    await page.getByTestId("open-lightbox").click();
+    const carousel = page.getByTestId("media-carousel");
+    const next = page.getByTestId("media-next");
+
+    await next.click();
+    await expectCarouselAt(carousel, "extremely-wide");
+
+    const captureGeometry = (id: string) =>
+      carousel.evaluate((viewport, itemId) => {
+        const slide = viewport.querySelector<HTMLElement>(
+          `[data-slide-id="${CSS.escape(itemId)}"]`,
+        );
+        const image = slide?.querySelector<HTMLImageElement>(".media-image");
+        const dialog = viewport.closest("dialog");
+        if (!slide || !image || !dialog) throw new Error(`Missing media geometry for ${itemId}.`);
+        const viewportRect = viewport.getBoundingClientRect();
+        const imageRect = image.getBoundingClientRect();
+        const dialogRect = dialog.getBoundingClientRect();
+        const intrinsicRatio =
+          Number(image.getAttribute("width")) / Number(image.getAttribute("height"));
+        const boxRatio = imageRect.width / imageRect.height;
+        return {
+          dialog: {
+            bottom: dialogRect.bottom,
+            left: dialogRect.left,
+            right: dialogRect.right,
+            top: dialogRect.top,
+          },
+          documentOverflow: document.documentElement.scrollWidth - window.innerWidth,
+          fittedHeight:
+            intrinsicRatio > boxRatio ? imageRect.width / intrinsicRatio : imageRect.height,
+          fittedWidth:
+            intrinsicRatio > boxRatio ? imageRect.width : imageRect.height * intrinsicRatio,
+          viewport: {
+            bottom: viewportRect.bottom,
+            height: viewportRect.height,
+            left: viewportRect.left,
+            right: viewportRect.right,
+            top: viewportRect.top,
+            width: viewportRect.width,
+          },
+        };
+      }, id);
+
+    const wideSettled = await captureGeometry("extremely-wide");
+    const viewportWidth = wideSettled.viewport.width;
+    let wideToTallMidpoint: Awaited<ReturnType<typeof captureGeometry>> | undefined;
+    await dragMouseBy(page, carousel, -viewportWidth * 0.62, 0, {
+      beforeRelease: async () => {
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+            ),
+        );
+        wideToTallMidpoint = await captureGeometry("extremely-tall");
+      },
+      stepDelay: 0,
+      steps: 8,
+    });
+    expect(wideToTallMidpoint).toBeDefined();
+    expect(wideToTallMidpoint!.viewport).toEqual(wideSettled.viewport);
+    expect(wideToTallMidpoint!.fittedHeight).toBeGreaterThanOrEqual(
+      wideToTallMidpoint!.viewport.height * 0.95,
+    );
+    expect(wideToTallMidpoint!.fittedWidth).toBeGreaterThanOrEqual(
+      wideToTallMidpoint!.viewport.width * 0.06,
+    );
+    expect(wideToTallMidpoint!.documentOverflow).toBe(0);
+    await expectCarouselAt(carousel, "extremely-tall");
+
+    const tallSettled = await captureGeometry("extremely-tall");
+    expect(tallSettled.viewport).toEqual(wideSettled.viewport);
+    expect(tallSettled.viewport.left).toBeGreaterThanOrEqual(tallSettled.dialog.left);
+    expect(tallSettled.viewport.top).toBeGreaterThanOrEqual(tallSettled.dialog.top);
+    expect(tallSettled.viewport.right).toBeLessThanOrEqual(tallSettled.dialog.right);
+    expect(tallSettled.viewport.bottom).toBeLessThanOrEqual(tallSettled.dialog.bottom);
+
+    let tallToWideMidpoint: Awaited<ReturnType<typeof captureGeometry>> | undefined;
+    await dragMouseBy(page, carousel, viewportWidth * 0.62, 0, {
+      beforeRelease: async () => {
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+            ),
+        );
+        tallToWideMidpoint = await captureGeometry("extremely-tall");
+      },
+      stepDelay: 0,
+      steps: 8,
+    });
+    expect(tallToWideMidpoint).toBeDefined();
+    expect(tallToWideMidpoint!.viewport).toEqual(tallSettled.viewport);
+    expect(tallToWideMidpoint!.fittedHeight).toBeCloseTo(tallSettled.fittedHeight, 0);
+    expect(tallToWideMidpoint!.fittedWidth).toBeCloseTo(tallSettled.fittedWidth, 0);
+    expect(tallToWideMidpoint!.documentOverflow).toBe(0);
+    await expectCarouselAt(carousel, "extremely-wide");
+    expect((await captureGeometry("extremely-wide")).viewport).toEqual(wideSettled.viewport);
+  });
+
   test("preserves the delayed semantic target through decode and viewport remeasurement", async ({
     page,
   }) => {

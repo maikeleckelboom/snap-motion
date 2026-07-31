@@ -11,6 +11,42 @@ interface RuntimeErrors {
   readonly page: string[];
 }
 
+interface GeometryRect {
+  readonly bottom: number;
+  readonly height: number;
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly width: number;
+}
+
+interface GalleryGeometry {
+  readonly documentOverflow: number;
+  readonly footer: GeometryRect;
+  readonly header: GeometryRect;
+  readonly items: Record<
+    string,
+    {
+      readonly fittedContent: GeometryRect;
+      readonly media: GeometryRect;
+      readonly slot: GeometryRect;
+    }
+  >;
+  readonly modal: GeometryRect;
+  readonly viewport: GeometryRect;
+  readonly viewportStyles: {
+    readonly aspectRatio: string;
+    readonly contain: string;
+    readonly display: string;
+    readonly height: string;
+    readonly maxHeight: string;
+    readonly minHeight: string;
+    readonly overflow: string;
+    readonly position: string;
+  };
+  readonly workspace: GeometryRect;
+}
+
 const runtimeErrors = new WeakMap<Page, RuntimeErrors>();
 
 function harness(page: Page) {
@@ -45,6 +81,118 @@ async function openScenario(page: Page, id: string) {
 async function closeGallery(page: Page) {
   await page.getByTestId("snap-motion-media-gallery-close").click();
   await expect(gallery(page)).not.toBeVisible();
+}
+
+async function holdButtonTransitionAtMidpoint(page: Page, direction: "next" | "previous") {
+  const control = page.getByTestId(`snap-motion-media-gallery-${direction}`);
+  const track = page.getByTestId("snap-motion-media-gallery-track");
+  await control.click();
+  await expect(gallery(page)).toHaveAttribute("data-track-state", "settling");
+  await track.evaluate(async () => {
+    await new Promise<void>((finishPaint) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => finishPaint())),
+    );
+  });
+}
+
+async function completeHeldButtonTransition(page: Page) {
+  await page.getByTestId("snap-motion-media-gallery-track").evaluate((element) => {
+    element.dispatchEvent(
+      new TransitionEvent("transitionend", { bubbles: true, propertyName: "transform" }),
+    );
+  });
+  await expect(gallery(page)).toHaveAttribute("data-track-state", "idle");
+}
+
+async function captureGalleryGeometry(page: Page, itemIds: readonly string[]) {
+  return gallery(page).evaluate((dialog, ids): GalleryGeometry => {
+    const required = <ElementType extends Element>(selector: string) => {
+      const element = dialog.querySelector<ElementType>(selector);
+      if (!element) throw new Error(`Missing gallery geometry element: ${selector}`);
+      return element;
+    };
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper must execute in the browser evaluation scope.
+    const rect = (element: Element): GeometryRect => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        bottom: bounds.bottom,
+        height: bounds.height,
+        left: bounds.left,
+        right: bounds.right,
+        top: bounds.top,
+        width: bounds.width,
+      };
+    };
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper must execute in the browser evaluation scope.
+    const fittedContentRect = (media: HTMLImageElement): GeometryRect => {
+      const bounds = media.getBoundingClientRect();
+      const intrinsicWidth = Number(media.getAttribute("width"));
+      const intrinsicHeight = Number(media.getAttribute("height"));
+      const intrinsicRatio = intrinsicWidth / intrinsicHeight;
+      const boxRatio = bounds.width / bounds.height;
+      const width = intrinsicRatio > boxRatio ? bounds.width : bounds.height * intrinsicRatio;
+      const height = intrinsicRatio > boxRatio ? bounds.width / intrinsicRatio : bounds.height;
+      const left = bounds.left + (bounds.width - width) / 2;
+      const top = bounds.top + (bounds.height - height) / 2;
+      return { bottom: top + height, height, left, right: left + width, top, width };
+    };
+
+    const viewport = required<HTMLElement>(".snap-motion-media-gallery-viewport");
+    const viewportStyle = getComputedStyle(viewport);
+    const items = Object.fromEntries(
+      ids.map((id) => {
+        const slot = required<HTMLElement>(
+          `.snap-motion-media-gallery-slot[data-item-id="${CSS.escape(id)}"]`,
+        );
+        const media = required<HTMLImageElement>(
+          `.snap-motion-media-gallery-slot[data-item-id="${CSS.escape(id)}"] img`,
+        );
+        return [
+          id,
+          { fittedContent: fittedContentRect(media), media: rect(media), slot: rect(slot) },
+        ];
+      }),
+    );
+
+    return {
+      documentOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      footer: rect(required(".snap-motion-media-gallery-footer")),
+      header: rect(required(".snap-motion-media-gallery-header")),
+      items,
+      modal: rect(dialog),
+      viewport: rect(viewport),
+      viewportStyles: {
+        aspectRatio: viewportStyle.aspectRatio,
+        contain: viewportStyle.contain,
+        display: viewportStyle.display,
+        height: viewportStyle.height,
+        maxHeight: viewportStyle.maxHeight,
+        minHeight: viewportStyle.minHeight,
+        overflow: viewportStyle.overflow,
+        position: viewportStyle.position,
+      },
+      workspace: rect(required(".snap-motion-media-gallery-workspace")),
+    };
+  }, itemIds);
+}
+
+function expectRectStable(actual: GeometryRect, expected: GeometryRect) {
+  for (const axis of ["height", "left", "top", "width"] as const) {
+    expect(Math.abs(actual[axis] - expected[axis]), `${axis} changed`).toBeLessThanOrEqual(2);
+  }
+}
+
+function expectSizeStable(actual: GeometryRect, expected: GeometryRect) {
+  for (const axis of ["height", "width"] as const) {
+    expect(Math.abs(actual[axis] - expected[axis]), `${axis} changed`).toBeLessThanOrEqual(2);
+  }
+}
+
+function expectContained(inner: GeometryRect, outer: GeometryRect) {
+  expect(inner.left).toBeGreaterThanOrEqual(outer.left - 1);
+  expect(inner.top).toBeGreaterThanOrEqual(outer.top - 1);
+  expect(inner.right).toBeLessThanOrEqual(outer.right + 1);
+  expect(inner.bottom).toBeLessThanOrEqual(outer.bottom + 1);
 }
 
 async function expectNoHarnessViolations(page: Page) {
@@ -106,13 +254,22 @@ async function cancelPointerGesture(page: Page, target: Locator) {
   }, center);
 }
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   const errors: RuntimeErrors = { console: [], page: [] };
   runtimeErrors.set(page, errors);
   page.on("console", (message) => {
     if (message.type() === "error") errors.console.push(message.text());
   });
   page.on("pageerror", (error) => errors.page.push(error.message));
+  if (testInfo.title.includes("mixed-aspect navigation")) {
+    await page.addInitScript(() => {
+      const nativeSetTimeout = window.setTimeout;
+      window.setTimeout = ((handler: TimerHandler, timeout?: number, ...arguments_: unknown[]) => {
+        if (timeout === 240) return 2_147_483_647;
+        return nativeSetTimeout(handler, timeout, ...arguments_);
+      }) as typeof window.setTimeout;
+    });
+  }
   await openLabDemo(page, "gallery-at", "reduce");
 });
 
@@ -216,6 +373,108 @@ test("baseline event order ends with a bounded focus-restoration trace entry", a
   await expect(trace(page).locator("li").last()).toContainText("at-open-gallery");
   await expect(trace(page)).toContainText("reason next");
   await expect(trace(page)).toContainText("reason escape");
+});
+
+test("mixed-aspect navigation preserves usable geometry through both transition directions", async ({
+  browserName,
+  page,
+}) => {
+  await page.setViewportSize({ width: 2_560, height: 1_312 });
+  await page.addStyleTag({
+    content:
+      ".snap-motion-media-gallery-track.transitioning { transition-delay: -5s !important; transition-duration: 10s !important; }",
+  });
+  await page.getByTestId("reduced-motion-mode").selectOption("no-preference");
+  await page.getByTestId("at-open-gallery").click();
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded");
+  await expect(gallery(page)).toHaveAttribute("data-dialog-state", "open");
+  await page.getByTestId("snap-motion-media-gallery-shell").evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+  });
+
+  const wideSettled = await captureGalleryGeometry(page, ["wide-timeline"]);
+  expect(wideSettled.viewportStyles).toMatchObject({
+    contain: "layout paint",
+    display: "block",
+    overflow: "hidden",
+    position: "relative",
+  });
+  expect(wideSettled.viewport.width / wideSettled.viewport.height).toBeCloseTo(1.6, 2);
+  expectContained(wideSettled.items["wide-timeline"]!.fittedContent, wideSettled.viewport);
+  expectContained(wideSettled.viewport, wideSettled.workspace);
+  expectContained(wideSettled.workspace, wideSettled.modal);
+
+  await holdButtonTransitionAtMidpoint(page, "next");
+  const wideToTall = await captureGalleryGeometry(page, ["wide-timeline", "tall-document"]);
+  if (browserName === "chromium") {
+    const artifactDirectory = resolve(".artifacts/media-gallery-at-certification");
+    await mkdir(artifactDirectory, { recursive: true });
+    await page.screenshot({
+      path: resolve(artifactDirectory, "07-wide-to-tall-button-mid-transition.png"),
+    });
+  }
+  expectRectStable(wideToTall.viewport, wideSettled.viewport);
+  expectRectStable(wideToTall.header, wideSettled.header);
+  expectRectStable(wideToTall.footer, wideSettled.footer);
+  expect(
+    Math.abs(wideToTall.items["tall-document"]!.slot.height - wideToTall.viewport.height),
+  ).toBeLessThanOrEqual(2);
+  expect(wideToTall.items["tall-document"]!.fittedContent.height).toBeGreaterThanOrEqual(
+    wideToTall.viewport.height * 0.95,
+  );
+  expect(wideToTall.items["tall-document"]!.fittedContent.width).toBeGreaterThanOrEqual(
+    wideToTall.viewport.width * 0.06,
+  );
+  expectContained(
+    wideToTall.items["tall-document"]!.fittedContent,
+    wideToTall.items["tall-document"]!.slot,
+  );
+  expectContained(wideToTall.viewport, wideToTall.modal);
+  expect(wideToTall.documentOverflow).toBe(0);
+  await completeHeldButtonTransition(page);
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("3 / 3");
+  const tallSettled = await captureGalleryGeometry(page, ["tall-document"]);
+  expectRectStable(tallSettled.viewport, wideSettled.viewport);
+  expectRectStable(tallSettled.header, wideSettled.header);
+  expectRectStable(tallSettled.footer, wideSettled.footer);
+  expect(tallSettled.items["tall-document"]!.fittedContent.height).toBeGreaterThanOrEqual(
+    tallSettled.viewport.height * 0.95,
+  );
+  expectContained(tallSettled.items["tall-document"]!.fittedContent, tallSettled.viewport);
+  expectContained(tallSettled.viewport, tallSettled.modal);
+  expect(tallSettled.documentOverflow).toBe(0);
+
+  await holdButtonTransitionAtMidpoint(page, "previous");
+  const tallToWide = await captureGalleryGeometry(page, ["tall-document", "wide-timeline"]);
+  expectRectStable(tallToWide.viewport, tallSettled.viewport);
+  expectSizeStable(
+    tallToWide.items["tall-document"]!.fittedContent,
+    tallSettled.items["tall-document"]!.fittedContent,
+  );
+  expect(tallToWide.items["wide-timeline"]!.fittedContent.width).toBeGreaterThanOrEqual(
+    tallToWide.viewport.width * 0.95,
+  );
+  expectContained(
+    tallToWide.items["wide-timeline"]!.fittedContent,
+    tallToWide.items["wide-timeline"]!.slot,
+  );
+  expectRectStable(tallToWide.header, tallSettled.header);
+  expectRectStable(tallToWide.footer, tallSettled.footer);
+  expectContained(tallToWide.viewport, tallToWide.modal);
+  expect(tallToWide.documentOverflow).toBe(0);
+
+  await completeHeldButtonTransition(page);
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 3");
+  const wideResettled = await captureGalleryGeometry(page, ["wide-timeline"]);
+  expectRectStable(wideResettled.viewport, wideSettled.viewport);
+  expectRectStable(wideResettled.header, wideSettled.header);
+  expectRectStable(wideResettled.footer, wideSettled.footer);
+  expectSizeStable(
+    wideResettled.items["wide-timeline"]!.fittedContent,
+    wideSettled.items["wide-timeline"]!.fittedContent,
+  );
+  expectContained(wideResettled.viewport, wideResettled.modal);
+  expect(wideResettled.documentOverflow).toBe(0);
 });
 
 test("named first, final, and single-item boundaries start at their exact states", async ({

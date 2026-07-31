@@ -35,6 +35,11 @@ Intrinsic dimensions reserve the media ratio before images load. Width and heigh
 as one positive finite pair. If either axis is invalid, both axes fall back to `1 × 1`, producing a
 finite, positive square ratio instead of preserving a potentially destructive partial dimension.
 
+Mixed-aspect items share one stable `16 / 10` media viewport. Intrinsic dimensions determine each
+image's contained fit inside that viewport; they do not resize the stage when the semantic index
+commits. The persistent outgoing and incoming slots therefore keep the same containing block for
+the complete horizontal transition.
+
 The preview remains mounted while an optional distinct full image decodes. A failed full image is
 removed without hiding the preview and can be retried. A `fullSrc` equal to `previewSrc` is treated
 as preview-only. While full media is pending or failed, the preview owns the accessible name. After

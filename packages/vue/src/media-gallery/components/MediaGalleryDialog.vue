@@ -164,17 +164,10 @@ const isZoomed = computed(() => transform.value.scale > 1.001);
 const canZoomIn = computed(() => transform.value.scale < 4 - 0.001);
 const canZoomOut = computed(() => isZoomed.value);
 const scalePercentage = computed(() => Math.round(transform.value.scale * 100));
-const activeAspectRatio = computed(() => {
-  const item = activeItem.value;
-  return item && item.height > 0 ? item.width / item.height : 1;
-});
 const activeImageLoadState = computed<ImageLoadState>(() => {
   const item = activeItem.value;
   return item ? (imageLoadStateByItem.value[item.id] ?? imageLoadDefault(item)) : "preview";
 });
-const viewportStyle = computed(() => ({
-  "--_gallery-aspect-ratio": String(activeAspectRatio.value),
-}));
 const transformStyle = computed(() => ({
   "--_gallery-pan-x": `${transform.value.x.toFixed(3)}px`,
   "--_gallery-pan-y": `${transform.value.y.toFixed(3)}px`,
@@ -1308,7 +1301,6 @@ defineExpose({
           data-testid="snap-motion-media-gallery-viewport"
           :data-pointer-mode="pointerMode"
           :data-track-state="trackNavigationState"
-          :style="viewportStyle"
           @dblclick="onDoubleClick"
           @pointerdown="onImagePointerDown"
         >

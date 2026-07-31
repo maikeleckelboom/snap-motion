@@ -51,6 +51,7 @@ async function clickVisibleCard(page: Page, target: Locator) {
 
 interface PointerGestureOptions {
   readonly cancel?: boolean;
+  readonly captureSettlementControls?: boolean;
   readonly deltaX?: number;
   readonly deltaY?: number;
   readonly elapsedMs?: number;
@@ -59,11 +60,20 @@ interface PointerGestureOptions {
   readonly releaseTarget?: Locator;
 }
 
+interface NavigationControlSnapshot {
+  readonly nextAriaDisabled: string | null;
+  readonly nextDisabled: boolean;
+  readonly previousAriaDisabled: string | null;
+  readonly previousDisabled: boolean;
+  readonly trackState: string | undefined;
+}
+
 async function pointerGesture(
   page: Page,
   target: Locator,
   {
     cancel = false,
+    captureSettlementControls = false,
     deltaX = 0,
     deltaY = 0,
     elapsedMs = 240,
@@ -135,8 +145,8 @@ async function pointerGesture(
     return;
   }
   const endTarget = releaseTarget ?? page.locator("body");
-  await endTarget.evaluate(
-    (element, input) => {
+  return endTarget.evaluate(
+    async (element, input): Promise<NavigationControlSnapshot | undefined> => {
       const event = new PointerEvent("pointerup", {
         bubbles: true,
         button: 0,
@@ -152,8 +162,42 @@ async function pointerGesture(
         value: input.timestamp + input.elapsedMs,
       });
       element.dispatchEvent(event);
+      if (!input.captureSettlementControls) return undefined;
+
+      const dialog = document.querySelector<HTMLElement>(
+        '[data-testid="snap-motion-media-gallery"]',
+      );
+      const previous = document.querySelector<HTMLButtonElement>(
+        '[data-testid="snap-motion-media-gallery-previous"]',
+      );
+      const next = document.querySelector<HTMLButtonElement>(
+        '[data-testid="snap-motion-media-gallery-next"]',
+      );
+      if (!dialog || !previous || !next) throw new Error("Gallery controls are unavailable.");
+      for (let frame = 0; frame < 8; frame += 1) {
+        if (dialog.dataset.trackState === "settling") {
+          return {
+            nextAriaDisabled: next.getAttribute("aria-disabled"),
+            nextDisabled: next.disabled,
+            previousAriaDisabled: previous.getAttribute("aria-disabled"),
+            previousDisabled: previous.disabled,
+            trackState: dialog.dataset.trackState,
+          };
+        }
+        await new Promise<void>((resolveFrame) => requestAnimationFrame(() => resolveFrame()));
+      }
+      throw new Error("Gallery swipe settlement did not start.");
     },
-    { ...point, deltaX, deltaY, elapsedMs, pointerId, pointerType, timestamp },
+    {
+      ...point,
+      captureSettlementControls,
+      deltaX,
+      deltaY,
+      elapsedMs,
+      pointerId,
+      pointerType,
+      timestamp,
+    },
   );
 }
 
@@ -166,23 +210,7 @@ async function expectDialogFocus(page: Page) {
   ).toBe(true);
 }
 
-async function pauseGalleryTrackTransition(page: Page) {
-  const track = page.getByTestId("snap-motion-media-gallery-track");
-  await expect
-    .poll(() =>
-      track.evaluate((element) => {
-        const transition = element.getAnimations()[0];
-        if (!transition) return false;
-        transition.pause();
-        transition.currentTime = 100;
-        return true;
-      }),
-    )
-    .toBe(true);
-  await expect(gallery(page)).toHaveAttribute("data-track-state", "settling");
-}
-
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   const errors: string[] = [];
   collectedPageErrors.set(page, errors);
   page.on("pageerror", (error) => errors.push(error.message));
@@ -194,6 +222,15 @@ test.beforeEach(async ({ page }) => {
       errors.push(`${message.type()}: ${message.text()}`);
     }
   });
+  if (testInfo.title.includes("navigation controls stay boundary-driven")) {
+    await page.addInitScript(() => {
+      const nativeSetTimeout = window.setTimeout;
+      window.setTimeout = ((handler: TimerHandler, timeout?: number, ...arguments_: unknown[]) => {
+        if (timeout === 240) return 2_147_483_647;
+        return nativeSetTimeout(handler, timeout, ...arguments_);
+      }) as typeof window.setTimeout;
+    });
+  }
   await openLabDemo(page, "coverflow", "no-preference");
 });
 
@@ -579,8 +616,10 @@ test("buttons, keys, announcements, and item changes own bounded gallery navigat
 
   await page.keyboard.press("ArrowLeft");
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("3 / 5");
+  await expect(gallery(page)).toHaveAttribute("data-track-state", "idle");
   await page.keyboard.press("Home");
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("1 / 5");
+  await expect(gallery(page)).toHaveAttribute("data-track-state", "idle");
   await expect(page.getByTestId("snap-motion-media-gallery-previous")).toBeDisabled();
   await page.keyboard.press("End");
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("5 / 5");
@@ -590,18 +629,46 @@ test("buttons, keys, announcements, and item changes own bounded gallery navigat
 test("navigation controls stay boundary-driven during button and swipe settlement", async ({
   page,
 }) => {
+  const buttonTransitionHold = await page.addStyleTag({
+    content:
+      ".snap-motion-media-gallery-track.transitioning { transition-duration: 10s !important; }",
+  });
   await openGallery(page);
-  const previous = page.getByTestId("snap-motion-media-gallery-previous");
   const next = page.getByTestId("snap-motion-media-gallery-next");
 
-  await next.evaluate((button: HTMLButtonElement) => button.click());
-  await pauseGalleryTrackTransition(page);
-  await expect(previous).toBeEnabled();
-  await expect(previous).toHaveAttribute("aria-disabled", "false");
-  await expect(next).toBeEnabled();
-  await expect(next).toHaveAttribute("aria-disabled", "false");
+  const buttonSettlement = await next.evaluate(
+    async (button: HTMLButtonElement): Promise<NavigationControlSnapshot> => {
+      const dialog = button.closest<HTMLElement>("dialog");
+      const previous = dialog?.querySelector<HTMLButtonElement>(
+        '[data-testid="snap-motion-media-gallery-previous"]',
+      );
+      if (!dialog || !previous) throw new Error("Gallery controls are unavailable.");
+      button.click();
+      for (let frame = 0; frame < 8; frame += 1) {
+        if (dialog.dataset.trackState === "settling") {
+          return {
+            nextAriaDisabled: button.getAttribute("aria-disabled"),
+            nextDisabled: button.disabled,
+            previousAriaDisabled: previous.getAttribute("aria-disabled"),
+            previousDisabled: previous.disabled,
+            trackState: dialog.dataset.trackState,
+          };
+        }
+        await new Promise<void>((resolveFrame) => requestAnimationFrame(() => resolveFrame()));
+      }
+      throw new Error("Gallery button settlement did not start.");
+    },
+  );
+  expect(buttonSettlement).toEqual({
+    nextAriaDisabled: "false",
+    nextDisabled: false,
+    previousAriaDisabled: "false",
+    previousDisabled: false,
+    trackState: "settling",
+  });
   await page.getByTestId("snap-motion-media-gallery-close").click();
   await expect(gallery(page)).not.toBeVisible();
+  await buttonTransitionHold.evaluate((element) => element.remove());
 
   await openGallery(page);
   await page.keyboard.press("Home");
@@ -610,16 +677,27 @@ test("navigation controls stay boundary-driven during button and swipe settlemen
   await page.keyboard.press("ArrowRight");
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 5");
   await expect(gallery(page)).toHaveAttribute("data-track-state", "idle");
-  await pointerGesture(page, page.getByTestId("snap-motion-media-gallery-viewport"), {
-    deltaX: -180,
-    elapsedMs: 480,
-    pointerId: 590,
+  await page.addStyleTag({
+    content:
+      ".snap-motion-media-gallery-track.transitioning { transition-duration: 10s !important; }",
   });
-  await pauseGalleryTrackTransition(page);
-  await expect(previous).toBeEnabled();
-  await expect(previous).toHaveAttribute("aria-disabled", "false");
-  await expect(next).toBeEnabled();
-  await expect(next).toHaveAttribute("aria-disabled", "false");
+  const swipeSettlement = await pointerGesture(
+    page,
+    page.getByTestId("snap-motion-media-gallery-viewport"),
+    {
+      captureSettlementControls: true,
+      deltaX: -180,
+      elapsedMs: 480,
+      pointerId: 590,
+    },
+  );
+  expect(swipeSettlement).toEqual({
+    nextAriaDisabled: "false",
+    nextDisabled: false,
+    previousAriaDisabled: "false",
+    previousDisabled: false,
+    trackState: "settling",
+  });
 });
 
 test("discrete, focal, touch, and wheel zoom preserve the canonical fit state", async ({
@@ -642,6 +720,11 @@ test("discrete, focal, touch, and wheel zoom preserve the canonical fit state", 
   await expect(dialog).toHaveAttribute("data-scale", "1.5000");
   await page.keyboard.press("-");
   await expect(dialog).toHaveAttribute("data-scale", "1.0000");
+  await page
+    .locator('[data-slot-position="0"] .snap-motion-media-gallery-transform')
+    .evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    });
 
   const box = await viewport.boundingBox();
   if (!box) throw new Error("Gallery viewport is not measurable.");
@@ -735,6 +818,10 @@ test("discrete, focal, touch, and wheel zoom preserve the canonical fit state", 
 test("fit swipe, zoomed pan, pinch, cancellation, and resize keep exclusive ownership", async ({
   page,
 }) => {
+  await page.addStyleTag({
+    content:
+      ".snap-motion-media-gallery-transform.transitioning { transition-duration: 10s !important; }",
+  });
   await openGallery(page);
   const dialog = gallery(page);
   const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
@@ -758,11 +845,17 @@ test("fit swipe, zoomed pan, pinch, cancellation, and resize keep exclusive owne
   await page.getByTestId("snap-motion-media-gallery-zoom-in").click();
   await page
     .locator('[data-slot-position="0"] .snap-motion-media-gallery-transform')
-    .evaluate((element) => {
-      const animation = element.getAnimations()[0];
-      if (!animation) throw new Error("Discrete zoom transition did not start.");
-      animation.pause();
-      animation.currentTime = 90;
+    .evaluate(async (element) => {
+      for (let frame = 0; frame < 8; frame += 1) {
+        const animation = element.getAnimations()[0];
+        if (animation) {
+          animation.pause();
+          animation.currentTime = 90;
+          return;
+        }
+        await new Promise<void>((resolveFrame) => requestAnimationFrame(() => resolveFrame()));
+      }
+      throw new Error("Discrete zoom transition did not start.");
     });
   await pointerGesture(page, viewport, {
     deltaX: 260,
@@ -874,6 +967,9 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
   await openLabDemo(page, "coverflow", "no-preference");
   await page.getByTestId("coverflow-inspect").click();
   await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
+  await page.getByTestId("snap-motion-media-gallery-shell").evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+  });
 
   const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
   const before = await viewport.boundingBox();
@@ -945,7 +1041,7 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
   });
   expect(invalidPairGeometry.intrinsicWidth).toBe(1);
   expect(invalidPairGeometry.intrinsicHeight).toBe(1);
-  expect(invalidPairGeometry.aspectRatio).toBeCloseTo(1, 2);
+  expect(invalidPairGeometry.aspectRatio).toBeCloseTo(1.6, 2);
   expect(invalidPairGeometry.width).toBeGreaterThan(100);
   expect(invalidPairGeometry.height).toBeGreaterThan(100);
 });
