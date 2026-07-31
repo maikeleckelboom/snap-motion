@@ -23,7 +23,7 @@ catalog:
   "@vue/server-renderer": 3.5.40
   "@vue/test-utils": 2.4.11
   "@vueuse/core": 14.3.0
-  happy-dom: 20.10.6
+  happy-dom: 20.11.1
   motion: 12.42.2
   nuxt: 4.5.0
   oxfmt: 0.59.0
