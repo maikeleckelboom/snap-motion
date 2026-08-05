@@ -121,50 +121,64 @@ function scalar(value: number) {
         <dt>Viewport</dt>
         <dd>{{ scalar(diagnostics.viewportSize) }} px</dd>
       </div>
-      <div v-if="diagnostics.visualViewportHeight !== undefined">
-        <dt>Visual viewport</dt>
-        <dd data-testid="visual-viewport-height">
-          {{ scalar(diagnostics.visualViewportHeight) }} px
+      <div v-if="diagnostics.visualViewportPrimaryExtent !== undefined">
+        <dt>Visual primary extent</dt>
+        <dd data-testid="visual-viewport-primary-extent">
+          {{ scalar(diagnostics.visualViewportPrimaryExtent) }} px
         </dd>
       </div>
-      <div v-if="diagnostics.physicalSheetY !== undefined">
-        <dt>Physical sheet Y</dt>
-        <dd data-testid="physical-sheet-y">{{ scalar(diagnostics.physicalSheetY) }} px</dd>
-      </div>
-      <div v-if="diagnostics.visibleSheetHeight !== undefined">
-        <dt>Visible sheet</dt>
-        <dd data-testid="visible-sheet-height">{{ scalar(diagnostics.visibleSheetHeight) }} px</dd>
-      </div>
-      <div v-if="diagnostics.chromeHeight !== undefined">
-        <dt>Chrome</dt>
-        <dd data-testid="sheet-chrome-height">{{ scalar(diagnostics.chromeHeight) }} px</dd>
-      </div>
-      <div v-if="diagnostics.bodyClientHeight !== undefined">
-        <dt>Body client</dt>
-        <dd data-testid="sheet-body-client-height">
-          {{ scalar(diagnostics.bodyClientHeight) }} px
+      <div v-if="diagnostics.canonicalPosition !== undefined">
+        <dt>Canonical position</dt>
+        <dd data-testid="sheet-canonical-position">
+          {{ scalar(diagnostics.canonicalPosition) }} px
         </dd>
       </div>
-      <div v-if="diagnostics.bodyScrollHeight !== undefined">
-        <dt>Body scroll height</dt>
-        <dd data-testid="sheet-body-scroll-height">
-          {{ scalar(diagnostics.bodyScrollHeight) }} px
+      <div v-if="diagnostics.physicalTransform !== undefined">
+        <dt>Physical transform</dt>
+        <dd data-testid="sheet-physical-transform">
+          {{ scalar(diagnostics.physicalTransform) }} px
         </dd>
       </div>
-      <div v-if="diagnostics.bodyScrollTop !== undefined">
-        <dt>Body scroll top</dt>
-        <dd data-testid="sheet-body-scroll-top">{{ scalar(diagnostics.bodyScrollTop) }} px</dd>
-      </div>
-      <div v-if="diagnostics.maximumScrollTop !== undefined">
-        <dt>Maximum scroll</dt>
-        <dd data-testid="sheet-maximum-scroll-top">
-          {{ scalar(diagnostics.maximumScrollTop) }} px
+      <div v-if="diagnostics.visiblePrimaryExtent !== undefined">
+        <dt>Visible primary extent</dt>
+        <dd data-testid="sheet-visible-primary-extent">
+          {{ scalar(diagnostics.visiblePrimaryExtent) }} px
         </dd>
       </div>
-      <div v-if="diagnostics.intrinsicSheetHeight !== undefined">
-        <dt>Intrinsic sheet</dt>
-        <dd data-testid="intrinsic-sheet-height">
-          {{ scalar(diagnostics.intrinsicSheetHeight) }} px
+      <div v-if="diagnostics.measuredChromeBlockExtent !== undefined">
+        <dt>Chrome block extent</dt>
+        <dd data-testid="sheet-chrome-block-extent">
+          {{ scalar(diagnostics.measuredChromeBlockExtent) }} px
+        </dd>
+      </div>
+      <div v-if="diagnostics.bodyClientBlockExtent !== undefined">
+        <dt>Body client block</dt>
+        <dd data-testid="sheet-body-client-block-extent">
+          {{ scalar(diagnostics.bodyClientBlockExtent) }} px
+        </dd>
+      </div>
+      <div v-if="diagnostics.bodyScrollBlockExtent !== undefined">
+        <dt>Body scroll block</dt>
+        <dd data-testid="sheet-body-scroll-block-extent">
+          {{ scalar(diagnostics.bodyScrollBlockExtent) }} px
+        </dd>
+      </div>
+      <div v-if="diagnostics.bodyScrollOffset !== undefined">
+        <dt>Body scroll offset</dt>
+        <dd data-testid="sheet-body-scroll-offset">
+          {{ scalar(diagnostics.bodyScrollOffset) }} px
+        </dd>
+      </div>
+      <div v-if="diagnostics.maximumBodyScrollOffset !== undefined">
+        <dt>Maximum body scroll</dt>
+        <dd data-testid="sheet-maximum-body-scroll-offset">
+          {{ scalar(diagnostics.maximumBodyScrollOffset) }} px
+        </dd>
+      </div>
+      <div v-if="diagnostics.intrinsicContentPrimaryExtent !== undefined">
+        <dt>Intrinsic primary extent</dt>
+        <dd data-testid="sheet-intrinsic-primary-extent">
+          {{ scalar(diagnostics.intrinsicContentPrimaryExtent) }} px
         </dd>
       </div>
       <div>

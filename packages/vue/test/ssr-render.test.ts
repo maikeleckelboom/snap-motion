@@ -2,7 +2,6 @@ import { renderToString } from "@vue/server-renderer";
 import { describe, expect, it } from "vitest";
 import { createSSRApp, h } from "vue";
 
-import BottomSheet from "../src/bottom-sheet/components/BottomSheet.vue";
 import CarouselNext from "../src/carousel/components/CarouselNext.vue";
 import CarouselPrevious from "../src/carousel/components/CarouselPrevious.vue";
 import CarouselRoot from "../src/carousel/components/CarouselRoot.vue";
@@ -12,6 +11,7 @@ import CarouselTrack from "../src/carousel/components/CarouselTrack.vue";
 import CarouselViewport from "../src/carousel/components/CarouselViewport.vue";
 import ModalDialog from "../src/dialog/components/ModalDialog.vue";
 import MediaGalleryDialog from "../src/media-gallery/components/MediaGalleryDialog.vue";
+import Sheet from "../src/sheet/components/Sheet.vue";
 
 function carousel(activeId: string, label: string) {
   return h(
@@ -48,7 +48,7 @@ function createCertificationApp() {
           { title: () => "Modal title", default: () => h("p", "Modal content") },
         ),
         h(
-          BottomSheet,
+          Sheet,
           { activeId: "comfortable", open: true },
           { title: () => "Sheet title", default: () => h("p", "Sheet content") },
         ),

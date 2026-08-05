@@ -17,7 +17,7 @@ const configurations = [
   { packageName: "core", path: "packages/core/api-extractor.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.carousel.json" },
-  { packageName: "vue", path: "packages/vue/api-extractor.bottom-sheet.json" },
+  { packageName: "vue", path: "packages/vue/api-extractor.sheet.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.dialog.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.localization.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.media-gallery.json" },

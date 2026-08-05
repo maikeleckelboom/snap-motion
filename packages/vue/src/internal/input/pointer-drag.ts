@@ -14,7 +14,7 @@ export interface PointerDragSample {
 }
 
 export interface PointerDragOptions {
-  axis: "x" | "y";
+  axis: "x" | "y" | (() => "x" | "y");
   intent?: "immediate" | "horizontal";
   onBegin: (sample: PointerDragSample, event: PointerEvent) => void;
   onCancel: (sample: PointerDragSample, event: PointerEvent) => void;
@@ -41,9 +41,14 @@ export function usePointerDrag(options: PointerDragOptions) {
   let startX = 0;
   let startY = 0;
   let previousUserSelect: string | undefined;
+  let activeAxis: "x" | "y" = typeof options.axis === "function" ? options.axis() : options.axis;
+
+  function currentAxis() {
+    return typeof options.axis === "function" ? options.axis() : options.axis;
+  }
 
   function sample(event: PointerEvent): PointerDragSample {
-    const position = eventPosition(event, options.axis);
+    const position = eventPosition(event, activeAxis);
     return {
       delta: position - startPosition,
       position,
@@ -86,7 +91,7 @@ export function usePointerDrag(options: PointerDragOptions) {
       return;
     }
 
-    pointerIntent.value = options.axis === "x" ? "horizontal" : "vertical";
+    pointerIntent.value = activeAxis === "x" ? "horizontal" : "vertical";
     isDragging.value = true;
     safelyCapturePointer();
     setSelectionSuppressed(true);
@@ -206,7 +211,8 @@ export function usePointerDrag(options: PointerDragOptions) {
 
     captureTarget = target;
     pointerId = event.pointerId;
-    startPosition = eventPosition(event, options.axis);
+    activeAxis = currentAxis();
+    startPosition = eventPosition(event, activeAxis);
     startX = event.clientX;
     startY = event.clientY;
     pointerIntent.value = "pending";

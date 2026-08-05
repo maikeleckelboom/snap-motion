@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { inject } from "vue";
 
-import { bottomSheetContextKey } from "../bottom-sheet-context";
+import { sheetContextKey } from "../sheet-context";
 
 defineProps<{ legend?: string }>();
-const context = inject(bottomSheetContextKey);
-if (!context) throw new Error("BottomSheetSnapPicker must be used inside BottomSheet.");
+const context = inject(sheetContextKey);
+if (!context) throw new Error("SheetSnapPicker must be used inside Sheet.");
 </script>
 
 <template>

@@ -4,16 +4,12 @@
 
 ```ts
 
-import { AnimationDriver } from '@snap-motion/core';
+import type { AnimationDriver } from '@snap-motion/core';
 import { ComponentOptionsMixin } from 'vue';
 import { ComponentProvideOptions } from 'vue';
 import { ComputedRef } from 'vue';
-import { ControllerConfigurationUpdate } from '@snap-motion/core';
-import { ControllerMeasurement } from '@snap-motion/core';
-import { ControllerMoveByOptions } from '@snap-motion/core';
-import { ControllerMoveOptions } from '@snap-motion/core';
-import { ControllerPhase } from '@snap-motion/core';
-import { ControllerSnapshot } from '@snap-motion/core';
+import type { ControllerConfigurationUpdate } from '@snap-motion/core';
+import type { ControllerSnapshot } from '@snap-motion/core';
 import { CSSProperties } from 'vue';
 import { DefineComponent } from 'vue';
 import type { ElasticityOptions } from '@snap-motion/core';
@@ -21,118 +17,10 @@ import { MaybeRefOrGetter } from 'vue';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
 import type { ReleaseTargetPolicy } from '@snap-motion/core';
-import { ShallowRef } from 'vue';
 import { ShallowUnwrapRef } from 'vue';
-import { SnapAnchor } from '@snap-motion/core';
-import { SnapController } from '@snap-motion/core';
-import { SnapControllerOptions } from '@snap-motion/core';
-import { SnapDirection } from '@snap-motion/core';
+import type { SnapAnchor } from '@snap-motion/core';
 import type { SpringConfiguration } from '@snap-motion/core';
 import { VNode } from 'vue';
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselActivePosition: typeof __VLS_export;
-
-// @public (undocumented)
-export interface CarouselGeometryMeasureContext<Id extends string> {
-    // (undocumented)
-    readonly ids: readonly Id[];
-    // (undocumented)
-    readonly slides: ReadonlyMap<Id, HTMLElement>;
-    // (undocumented)
-    readonly track?: HTMLElement;
-    // (undocumented)
-    readonly viewport: HTMLElement;
-}
-
-// @public
-export interface CarouselGeometryStrategy<Id extends string> {
-    // (undocumented)
-    measure(context: CarouselGeometryMeasureContext<Id>): ControllerMeasurement<Id>;
-}
-
-// @public
-export type CarouselKeyboardScope = "auto" | "carousel" | "dialog" | "off";
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_2" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselNext: typeof __VLS_export_2;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_3" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselPagination: typeof __VLS_export_3;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_4" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselPaginationItem: typeof __VLS_export_4;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_5" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselPrevious: typeof __VLS_export_5;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_6" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselProgress: typeof __VLS_export_6;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_7" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselRoot: typeof __VLS_export_7;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_8" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselSlide: typeof __VLS_export_8;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_9" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselStatus: typeof __VLS_export_9;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_10" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselTrack: typeof __VLS_export_10;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_11" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const CarouselViewport: typeof __VLS_export_11;
-
-// @public (undocumented)
-export interface CarouselWindowOptions {
-    // (undocumented)
-    readonly mountAfter: number;
-    // (undocumented)
-    readonly mountBefore: number;
-    // (undocumented)
-    readonly preloadAfter: number;
-    // (undocumented)
-    readonly preloadBefore: number;
-    // (undocumented)
-    readonly wrap?: boolean;
-}
-
-// @public (undocumented)
-export interface CarouselWindowState<Id extends string> {
-    // (undocumented)
-    readonly activeId: Id | undefined;
-    // (undocumented)
-    readonly mountedIds: ReadonlySet<Id>;
-    // (undocumented)
-    readonly nextIds: readonly Id[];
-    // (undocumented)
-    readonly preloadIds: ReadonlySet<Id>;
-    // (undocumented)
-    readonly previousIds: readonly Id[];
-}
 
 // @public (undocumented)
 export type CloseReason = "close-button" | "escape" | "scrim" | "route" | "programmatic";
@@ -141,19 +29,7 @@ export type CloseReason = "close-button" | "escape" | "scrim" | "route" | "progr
 export function createDefaultSheetSnapPoints(side: SheetSide, overrides?: Partial<SheetViewportPolicy>): readonly SheetSnapPoint<SheetOpenSnapId>[];
 
 // @public
-export function createEnglishSnapMotionMessages(overrides?: Partial<SnapMotionMessages>): SnapMotionMessages;
-
-// @public
 export function createFixedSheetSnapPoints(): readonly SheetSnapPoint<SheetFixedSnapId>[];
-
-// @public
-export function createFixedStageCarouselGeometryStrategy<Id extends string>(options?: FixedStageCarouselGeometryOptions): CarouselGeometryStrategy<Id>;
-
-// @public (undocumented)
-export function createMotionDriver(): AnimationDriver;
-
-// @public
-export function createVariableWidthCenteredCarouselGeometryStrategy<Id extends string>(options?: VariableWidthCenteredCarouselGeometryOptions): CarouselGeometryStrategy<Id>;
 
 // @public
 export function createViewportSheetSnapPoints(overrides?: Partial<SheetViewportPolicy>): readonly SheetSnapPoint<SheetViewportSnapId>[];
@@ -162,59 +38,13 @@ export function createViewportSheetSnapPoints(overrides?: Partial<SheetViewportP
 export function defaultSheetOpenSnapId(side: SheetSide): SheetOpenSnapId;
 
 // @public (undocumented)
-export interface FixedStageCarouselGeometryOptions {
-    // (undocumented)
-    readonly gap?: number;
-}
-
-// @public (undocumented)
-export interface FocusReturnOptions {
-    // (undocumented)
-    fallback?: HTMLElement | (() => HTMLElement | undefined) | undefined;
-    // (undocumented)
-    opener?: HTMLElement | undefined;
-}
-
-// @public (undocumented)
 export function getSheetSideDescriptor(side: SheetSide): SheetSideDescriptor;
-
-// @public
-export type InitialFocus = "close" | "title" | "first-interactive" | HTMLElement | (() => HTMLElement | undefined);
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_14" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const ModalDialog: typeof __VLS_export_14;
 
 // @public (undocumented)
 export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "route";
 
 // @public (undocumented)
 export type PointerIntent = "horizontal" | "pending" | "vertical";
-
-// @public (undocumented)
-export interface PublicCarouselContext<Id extends string = string> {
-    // (undocumented)
-    readonly activeId: ComputedRef<Id | undefined>;
-    // (undocumented)
-    readonly canNext: ComputedRef<boolean>;
-    // (undocumented)
-    readonly canPrevious: ComputedRef<boolean>;
-    // (undocumented)
-    readonly count: ComputedRef<number>;
-    // (undocumented)
-    readonly direction: ComputedRef<"ltr" | "rtl">;
-    // (undocumented)
-    readonly ids: ComputedRef<readonly Id[]>;
-    // (undocumented)
-    readonly navigate: (id: Id, reason?: NavigationReason) => void;
-    // (undocumented)
-    readonly next: (reason?: NavigationReason) => void;
-    // (undocumented)
-    readonly phase: ComputedRef<ControllerPhase>;
-    // (undocumented)
-    readonly previous: (reason?: NavigationReason) => void;
-}
 
 // @public (undocumented)
 export interface ResolvedSheetSnapPoint<Id extends string> {
@@ -238,10 +68,10 @@ export function resolveSheetGeometry(input: SheetGeometryInput): SheetGeometry;
 // @public
 export function resolveSheetSnapPoints<Id extends string>(points: readonly SheetSnapPoint<Id>[], context: SheetMeasureContext): ResolvedSheetSnapPoint<Id>[];
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_12" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const Sheet: typeof __VLS_export_12;
+export const Sheet: typeof __VLS_export;
 
 // @public (undocumented)
 export type SheetAxis = "x" | "y";
@@ -392,10 +222,10 @@ export const sheetSideDescriptors: Readonly<Record<SheetSide, SheetSideDescripto
 // @public (undocumented)
 export const sheetSides: readonly ["top", "right", "bottom", "left"];
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_13" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_export_2" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const SheetSnapPicker: typeof __VLS_export_13;
+export const SheetSnapPicker: typeof __VLS_export_2;
 
 // @public
 export interface SheetSnapPoint<Id extends string> {
@@ -453,112 +283,11 @@ export interface SheetViewportPolicy {
 // @public (undocumented)
 export type SheetViewportSnapId = "compact" | "comfortable" | "full";
 
-// @public
-export type SnapMotionDirection = "auto" | "ltr" | "rtl";
-
-// @public
-export interface SnapMotionMessages {
-    // (undocumented)
-    carouselInstructions: string;
-    // (undocumented)
-    closeDialog: string;
-    // (undocumented)
-    closeSheet: string;
-    // (undocumented)
-    itemStatus(context: {
-        id: string;
-        index: number;
-        count: number;
-        label?: string;
-    }): string;
-    // (undocumented)
-    nextItem: string;
-    // (undocumented)
-    paginationLabel: string;
-    // (undocumented)
-    previousItem: string;
-    // (undocumented)
-    progressLabel: string;
-    // (undocumented)
-    sheetSnapLegend: string;
-    // (undocumented)
-    sheetStatus(context: {
-        id: string;
-        label: string;
-    }): string;
-}
-
 // @public (undocumented)
 export function toCanonicalSheetDelta(side: SheetSide, physicalDelta: number): number;
 
 // @public (undocumented)
 export function toPhysicalSheetPosition(side: SheetSide, canonicalPosition: number): number;
-
-// @public
-export function useCarouselContext<Id extends string = string>(): PublicCarouselContext<Id>;
-
-// @public (undocumented)
-export function useCarouselMotion<Id extends string>(options: UseCarouselMotionOptions<Id>): {
-    canNext: ComputedRef<boolean>;
-    canPrevious: ComputedRef<boolean>;
-    direction: ComputedRef<"ltr" | "rtl">;
-    isWheeling: Ref<boolean, boolean>;
-    interrupt: () => void;
-    moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-    moveTo: (id: Id, options?: ControllerMoveOptions | undefined) => SnapAnchor<Id> | null;
-    next: (options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-    onKeyDown: (event: KeyboardEvent) => void;
-    onPointerDown: (event: PointerEvent) => void;
-    onWheel: (event: WheelEvent) => void;
-    previous: (options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-    remeasure: () => SnapAnchor<Id> | null;
-    surfaceStyle: {
-        touchAction: string;
-    };
-    trackStyle: ComputedRef<    {
-    transform: string;
-    willChange: string;
-    }>;
-    activeId: ComputedRef<Id | undefined>;
-    configure: (update: ControllerConfigurationUpdate) => void;
-    controller: SnapController<Id>;
-    isAnimating: ComputedRef<boolean>;
-    isDragging: Ref<boolean, boolean>;
-    onNativeDragStart: (event: DragEvent) => void;
-    phase: ComputedRef<ControllerPhase>;
-    pointerIntent: Ref<PointerIntent, PointerIntent>;
-    pointerOwned: Ref<boolean, boolean>;
-    position: ComputedRef<number>;
-    reducedMotion: ComputedRef<boolean>;
-    snapshot: ShallowRef<ControllerSnapshot<Id>, ControllerSnapshot<Id>>;
-    targetId: ComputedRef<Id | undefined>;
-    velocity: ComputedRef<number>;
-};
-
-// @public (undocumented)
-export interface UseCarouselMotionOptions<Id extends string> extends Omit<UseSnapMotionOptions<Id>, "axis" | "pointerIntent"> {
-    // (undocumented)
-    direction?: SnapMotionDirection | Readonly<Ref<SnapMotionDirection>>;
-    // (undocumented)
-    measure: () => ControllerMeasurement<Id>;
-    // (undocumented)
-    onTargetSelected?: (id: Id, reason: "drag" | "wheel") => void;
-    // (undocumented)
-    track?: Ref<HTMLElement | undefined>;
-    // (undocumented)
-    viewport: Ref<HTMLElement | undefined>;
-    // (undocumented)
-    wheelSettleDelay?: number;
-}
-
-// @public
-export function useCarouselWindow<Id extends string>(idsSource: MaybeRefOrGetter<readonly Id[]>, activeIdSource: MaybeRefOrGetter<Id | undefined>, optionsSource: MaybeRefOrGetter<CarouselWindowOptions>): {
-    activeId: ComputedRef<Id | undefined>;
-    mountedIds: ComputedRef<ReadonlySet<Id>>;
-    nextIds: ComputedRef<readonly Id[]>;
-    preloadIds: ComputedRef<ReadonlySet<Id>>;
-    previousIds: ComputedRef<readonly Id[]>;
-};
 
 // @public (undocumented)
 export function useSheetMotion<Id extends string = SheetOpenSnapId>(options: UseSheetMotionOptions<Id>): UseSheetMotionReturn<Id>;
@@ -703,61 +432,6 @@ export interface UseSheetMotionReturn<Id extends string = SheetOpenSnapId> {
     readonly visiblePrimaryExtent: ComputedRef<number>;
 }
 
-// @public (undocumented)
-export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<Id>): {
-    activeId: ComputedRef<Id | undefined>;
-    configure: (update: ControllerConfigurationUpdate) => void;
-    controller: SnapController<Id>;
-    interrupt: () => void;
-    isAnimating: ComputedRef<boolean>;
-    isDragging: Ref<boolean, boolean>;
-    moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions) => SnapAnchor<Id> | null;
-    moveTo: (id: Id, options?: ControllerMoveOptions) => SnapAnchor<Id> | null;
-    next: (options?: ControllerMoveByOptions) => SnapAnchor<Id> | null;
-    onNativeDragStart: (event: DragEvent) => void;
-    onPointerDown: (event: PointerEvent) => void;
-    phase: ComputedRef<ControllerPhase>;
-    pointerIntent: Ref<PointerIntent, PointerIntent>;
-    pointerOwned: Ref<boolean, boolean>;
-    position: ComputedRef<number>;
-    previous: (options?: ControllerMoveByOptions) => SnapAnchor<Id> | null;
-    reducedMotion: ComputedRef<boolean>;
-    remeasure: (measurement: ControllerMeasurement<Id>) => SnapAnchor<Id> | null;
-    snapshot: ShallowRef<ControllerSnapshot<Id>>;
-    targetId: ComputedRef<Id | undefined>;
-    velocity: ComputedRef<number>;
-};
-
-// @public (undocumented)
-export interface UseSnapMotionOptions<Id extends string> extends Omit<SnapControllerOptions<Id>, "driver" | "onChange" | "reducedMotion"> {
-    // (undocumented)
-    axis: "x" | "y" | (() => "x" | "y");
-    // (undocumented)
-    driver?: AnimationDriver;
-    // (undocumented)
-    onChange?: (snapshot: ControllerSnapshot<Id>) => void;
-    // (undocumented)
-    onReleaseTargetSelected?: (id: Id | undefined) => void;
-    // (undocumented)
-    pointerDeltaMultiplier?: () => number;
-    // (undocumented)
-    pointerIntent?: "horizontal" | "immediate";
-    // (undocumented)
-    reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
-    // (undocumented)
-    resolveReleaseTarget?: (context: {
-        controller: SnapController<Id>;
-        snapshot: ControllerSnapshot<Id>;
-        velocity: number;
-    }) => Id | undefined;
-}
-
-// @public (undocumented)
-export interface VariableWidthCenteredCarouselGeometryOptions {
-    // (undocumented)
-    readonly endGutter?: number;
-    // (undocumented)
-    readonly startGutter?: number;
-}
+// (No @packageDocumentation comment for this package)
 
 ```

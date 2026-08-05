@@ -4,7 +4,7 @@ Status: accepted.
 
 ## Decision
 
-Organize the Vue package around `carousel`, `bottom-sheet`, `dialog`, `motion`, and `localization`.
+Organize the Vue package around `carousel`, `sheet`, `dialog`, `motion`, and `localization`.
 Keep browser mechanics under precise internal capabilities. Publish capability entrypoints and a
 curated root, but no implementation-form, wildcard, or internal deep-import entrypoints.
 

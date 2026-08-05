@@ -104,7 +104,7 @@ ancestor through:
 
 The `@snap-motion/vue/media-gallery` runtime graph contains Vue, VueUse listeners/measurement/scroll
 lock/timers, and the shared focus helper. It does not import Motion, Snap Motion core, the carousel,
-the bottom sheet, Router, Nuxt, or lab code.
+the sheet, Router, Nuxt, or lab code.
 
 ## Assistive-technology certification
 

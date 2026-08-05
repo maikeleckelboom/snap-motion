@@ -37,7 +37,7 @@ measurement, and lifecycle cleanup.
 The package also owns a style-light production component layer above those composables. The layer
 encodes carousel and slide roles, stable accessibility relationships, inactive-slide inertness,
 native dialog lifecycle, explicit focus entry and return, settled status announcements, controlled
-models and events, and the bottom sheet's native radio snap alternative. Consumers still own media,
+models and events, and the sheet's native radio snap alternative. Consumers still own media,
 captions, application layout, routing, and visual treatment.
 
 The generic reduced-motion media query, resize observation, and event-listener cleanup use
@@ -57,7 +57,7 @@ replace the Pointer Event policy.
 
 - `carousel` owns carousel components, context, contracts, geometry, keyboard and wheel policy,
   render windows, and carousel composables.
-- `bottom-sheet` owns sheet components, context, semantic snap policy, state contracts, and the
+- `sheet` owns sheet components, context, semantic snap policy, side descriptors, state contracts, and the
   sheet composable.
 - `dialog` owns the native modal component, close contract, and the deliberately public headless
   focus-policy facade.
@@ -68,7 +68,7 @@ replace the Pointer Event policy.
   pointer capture/intent, and remeasurement mechanics.
 
 Components may depend on their feature, `motion`, `localization`, and precise internal capabilities.
-The bottom sheet may use the dialog close contract. Internal capabilities never depend on finished
+The sheet may use the dialog close contract. Internal capabilities never depend on finished
 features; feature internals do not cross-import one another. Application and fixture code consumes
 package entrypoints, never source paths. `pnpm architecture:check` enforces these directions, rejects
 cycles and wildcard entrypoint exports, and enforces extensionless TypeScript-relative imports.
@@ -82,6 +82,12 @@ Each interaction surface has exactly one authoritative scalar position. The trac
 is derived from it. CSS transitions, smooth scrolling, native scroll snap, and parallel animation
 systems are not allowed to animate the same value. Sheet scrim opacity is also derived from the
 sheet scalar rather than animated independently.
+
+Every sheet side is adapted onto the same canonical scalar: the scalar increases toward closed.
+Bottom and right use a positive physical transform; top and left mirror it. Pointer deltas and
+release velocity are normalized at the adapter boundary, so release policy and scrim progress have
+one direction-independent implementation. Hidden is an internal final anchor and is always the
+largest canonical position.
 
 For 2.5D presentations, projected depth and DOM paint order are intentionally separate outputs of
 the same frame resolver. Paint ownership can use hysteresis without changing the active target,

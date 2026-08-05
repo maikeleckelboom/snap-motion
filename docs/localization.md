@@ -10,13 +10,13 @@ const nl = createEnglishSnapMotionMessages({
   previousItem: "Vorig item",
   nextItem: "Volgend item",
   closeDialog: "Dialoog sluiten",
-  closeBottomSheet: "Paneel sluiten",
+  closeSheet: "Paneel sluiten",
   carouselInstructions: "Gebruik Pijl links en Pijl rechts om tussen items te bewegen.",
   paginationLabel: "Kies een item",
   progressLabel: "Voortgang",
   itemStatus: ({ index, count, label }) => label ?? `${index + 1} van ${count}`,
-  sheetStatus: ({ label }) => `Paneelhoogte: ${label}`,
-  sheetSnapLegend: "Paneelhoogte",
+  sheetStatus: ({ label }) => `Paneelpositie: ${label}`,
+  sheetSnapLegend: "Paneelpositie",
 });
 ```
 

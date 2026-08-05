@@ -1,32 +1,43 @@
-# Custom bottom-sheet snap points
+# Custom sheet snap points
 
-Snap points use arbitrary stable string IDs and resolve to panel translation positions from a
-normalized measurement context.
+Snap points use arbitrary stable string IDs and resolve the amount of the fixed sheet surface that
+is visible on its primary axis. Consumer code never needs to invert top or left coordinates.
 
 ```ts
-import { bottomSheetSnapPosition, type BottomSheetSnapPoint } from "@snap-motion/vue";
+import { sheetSnapVisibleExtent, type SheetSnapPoint } from "@snap-motion/vue/sheet";
 
 type SheetId = "peek" | "content" | "full";
 
 const snapPoints = [
-  { id: "peek", label: "Peek", resolve: bottomSheetSnapPosition.viewportFraction(0.72) },
-  { id: "content", label: "Content", resolve: bottomSheetSnapPosition.intrinsicContent },
+  { id: "peek", label: "Peek", resolveVisibleExtent: sheetSnapVisibleExtent.pixels(176) },
+  {
+    id: "content",
+    label: "Content",
+    resolveVisibleExtent: sheetSnapVisibleExtent.intrinsicContent,
+  },
   {
     id: "full",
     label: "Full",
-    resolve: bottomSheetSnapPosition.safeArea(bottomSheetSnapPosition.pixels(16)),
-    disabled: ({ viewportHeight }) => viewportHeight < 480,
+    resolveVisibleExtent: sheetSnapVisibleExtent.viewportFraction(0.8),
+    disabled: ({ primaryViewportExtent }) => primaryViewportExtent < 480,
   },
-] as const satisfies readonly BottomSheetSnapPoint<SheetId>[];
+] as const satisfies readonly SheetSnapPoint<SheetId>[];
 ```
 
 ```vue
-<BottomSheet v-model:active-id="activeId" v-model:open="open" :snap-points="snapPoints" />
+<Sheet v-model:active-id="activeId" v-model:open="open" side="left" :snap-points="snapPoints" />
 ```
 
 Resolvers include pixels, viewport fractions, intrinsic content, safe-area composition, and min/max
-composition. Disabled points stay visible but disabled in the native radio picker. Distinct IDs may
-share one physical position. The internal hidden close position is never an open picker option.
+composition. The context exposes physical `side`, neutral `axis`, layout and visual viewport inline
+and block sizes, primary and cross extents, measured panel extents, all four safe-area insets,
+opposite-edge gap, hidden overshoot, and intrinsic primary-axis content extent.
 
-`createViewportBottomSheetSnapPoints()` returns the built-in `full`, `comfortable`, and `compact`
-preset. Recalculation preserves semantic IDs across viewport and Visual Viewport changes.
+Disabled points stay visible but disabled in the native radio picker. Distinct IDs may share one
+canonical position. The internal hidden closing anchor is never a consumer snap point.
+
+`createViewportSheetSnapPoints()` returns the `full`, `comfortable`, and `compact` defaults used by
+vertical sheets. `createFixedSheetSnapPoints()` returns the single `open` default for left and
+right sheets. A horizontal custom point reveals less of the already-laid-out fixed-width surface;
+it does not resize the surface or reflow text while dragging. Remeasurement and side changes retain
+the semantic ID when valid, then use the new side default or first configured point as fallback.

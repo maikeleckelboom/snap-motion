@@ -17,8 +17,8 @@ Selection suppression exists only during an active drag. Images disable native d
 
 An inline horizontal carousel does not claim touch immediately. After a small threshold, horizontal
 displacement must clearly dominate vertical displacement before the rail owns the gesture. A
-vertical decision remains page scrolling. The bottom-sheet handle is an explicit vertical drag
-surface and may claim directly.
+vertical decision remains page scrolling. A sheet handle is an explicit primary-axis drag surface
+and may claim directly. The scrollable body never initiates sheet drag.
 
 ## Wheel
 
@@ -48,14 +48,14 @@ Carousel regions use stable accessible names and `aria-roledescription="carousel
 meaning. Item position/count and restrained live status are exposed for explicit navigation. Icons
 are real SVG markup with named controls.
 
-The media lightbox and bottom sheet use native modal dialogs. Escape uses the dialog cancellation
+The media lightbox and sheet use native modal dialogs. Escape uses the dialog cancellation
 path. Both provide an explicit close button, move focus inside after opening, restore the connected
-opener on close, and clean modal document state on unmount. The bottom sheet keeps a dedicated drag
-handle and an independently scrollable body with safe-area padding.
+opener on close, and clean modal document state on unmount. The sheet keeps a dedicated inner-edge
+drag handle and an independently scrollable body with four-edge safe-area padding.
 
 Initial focus is explicit: close button, title/static introduction, first interactive element, or a
 provided element/resolver. Focus restoration accepts both an opener and a route-safe fallback.
-Bottom-sheet scrims are non-focusable pointer surfaces. Meaningful sheet snaps are also exposed as a
+Sheet scrims are non-focusable pointer surfaces. Meaningful sheet snaps are also exposed as a
 native single-choice radio group.
 
 ## Reduced motion

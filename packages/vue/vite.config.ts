@@ -25,7 +25,7 @@ export default defineConfig({
     lib: {
       cssFileName: "style",
       entry: {
-        "bottom-sheet": "src/bottom-sheet/index.ts",
+        sheet: "src/sheet/index.ts",
         carousel: "src/carousel/index.ts",
         dialog: "src/dialog/index.ts",
         index: "src/index.ts",

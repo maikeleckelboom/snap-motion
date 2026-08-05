@@ -10,7 +10,7 @@ const importGraph = new Map();
 const semanticExtensions = new Set([".css", ".json", ".svg", ".vue"]);
 const codeExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const featureNames = new Set([
-  "bottom-sheet",
+  "sheet",
   "carousel",
   "dialog",
   "localization",
@@ -69,13 +69,13 @@ function allowedFeatureDependency(importer, target) {
   const targetPath = relative(vueRoot, target).split(sep).join("/");
   if (to === "localization" && targetPath === "localization/messages.ts") return true;
   if (
-    (from === "carousel" || from === "bottom-sheet") &&
+    (from === "carousel" || from === "sheet") &&
     to === "motion" &&
     ["motion/motion-contracts.ts", "motion/use-snap-motion.ts"].includes(targetPath)
   ) {
     return true;
   }
-  if (from === "bottom-sheet" && to === "dialog" && targetPath === "dialog/dialog-contracts.ts") {
+  if (from === "sheet" && to === "dialog" && targetPath === "dialog/dialog-contracts.ts") {
     return true;
   }
   return false;

@@ -30,7 +30,7 @@ for (const [name, budget] of Object.entries(budgets)) {
       ["Motion", /(?:from\s*|import\s*)["']motion["']/],
       ["Snap Motion core", /(?:from\s*|import\s*)["']@snap-motion\/core["']/],
       ["carousel", /carousel/i],
-      ["bottom sheet", /bottom-sheet/i],
+      ["sheet", /(?:from\s*|import\s*)["'][^"']*sheet[^"']*["']/i],
       ["lab", /apps[\\/]lab|@\/|coverflow/i],
       ["Nuxt", /from\s*["'](?:#app|nuxt)/],
       ["router", /from\s*["'](?:vue-router|#vue-router)/],

@@ -111,13 +111,13 @@ test.describe("keyboard certification", () => {
     await expect(close).toBeFocused();
   });
 
-  test("bottom-sheet radio group supplies the non-drag Arrow-key path", async ({ page }) => {
+  test("sheet radio group supplies the non-drag Arrow-key path", async ({ page }) => {
     await openLabDemo(page, "sheet");
     await page.getByTestId("open-sheet").click();
-    const full = page.getByTestId("snap-full");
-    const comfortable = page.getByTestId("snap-comfortable");
-    const compact = page.getByTestId("snap-compact");
-    const dialog = page.getByTestId("bottom-sheet");
+    const dialog = page.getByTestId("sheet");
+    const full = dialog.locator('input[type="radio"][value="full"]');
+    const comfortable = dialog.locator('input[type="radio"][value="comfortable"]');
+    const compact = dialog.locator('input[type="radio"][value="compact"]');
 
     await comfortable.focus();
     await expect(comfortable).toBeChecked();

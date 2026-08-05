@@ -1,5 +1,5 @@
 /**
- * Accessible, interruptible Vue carousel, dialog, and bottom-sheet primitives.
+ * Accessible, interruptible Vue carousel, dialog, and multi-edge sheet primitives.
  *
  * @packageDocumentation
  */
@@ -35,27 +35,46 @@ export type {
   VariableWidthCenteredCarouselGeometryOptions,
 } from "./carousel";
 export {
-  BottomSheet,
-  BottomSheetSnapPicker,
-  bottomSheetSnapPosition,
-  createViewportBottomSheetSnapPoints,
-  resolveBottomSheetGeometry,
-  resolveBottomSheetSnapPoints,
-  useBottomSheetMotion,
-} from "./bottom-sheet";
+  Sheet,
+  SheetSnapPicker,
+  createDefaultSheetSnapPoints,
+  createFixedSheetSnapPoints,
+  createViewportSheetSnapPoints,
+  defaultSheetOpenSnapId,
+  getSheetSideDescriptor,
+  resolveSheetGeometry,
+  resolveSheetSnapPoints,
+  sheetMaximumVisibleExtent,
+  sheetSideDescriptors,
+  sheetSides,
+  sheetSnapVisibleExtent,
+  sheetTransform,
+  toCanonicalSheetDelta,
+  toPhysicalSheetPosition,
+  useSheetMotion,
+} from "./sheet";
 export type {
-  BottomSheetGeometry,
-  BottomSheetGeometryInput,
-  BottomSheetMeasureContext,
-  BottomSheetOpenSnapId,
-  BottomSheetSnapResolver,
-  BottomSheetSnapPoint,
-  BottomSheetState,
-  BottomSheetViewportPolicy,
-  ResolvedBottomSheetSnapPoint,
-  UseBottomSheetMotionOptions,
-  UseBottomSheetMotionReturn,
-} from "./bottom-sheet";
+  ResolvedSheetSnapPoint,
+  SheetAxis,
+  SheetEdge,
+  SheetFixedSnapId,
+  SheetGeometry,
+  SheetGeometryInput,
+  SheetMeasureContext,
+  SheetNavigationReason,
+  SheetOpenSnapId,
+  SheetSafeAreaInsets,
+  SheetSide,
+  SheetSideDescriptor,
+  SheetSnapPoint,
+  SheetSnapResolver,
+  SheetState,
+  SheetViewportDimensions,
+  SheetViewportPolicy,
+  SheetViewportSnapId,
+  UseSheetMotionOptions,
+  UseSheetMotionReturn,
+} from "./sheet";
 export { ModalDialog } from "./dialog";
 export type { CloseReason, FocusReturnOptions, InitialFocus } from "./dialog";
 export { createEnglishSnapMotionMessages } from "./localization";

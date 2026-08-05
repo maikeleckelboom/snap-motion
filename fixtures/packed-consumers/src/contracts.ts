@@ -1,5 +1,5 @@
 import { SnapController, createFixedStageGeometry, type AnimationDriver } from "@snap-motion/core";
-import { bottomSheetSnapPosition, type BottomSheetSnapPoint } from "@snap-motion/vue/bottom-sheet";
+import { Sheet as RootSheet } from "@snap-motion/vue";
 import {
   CarouselPaginationItem,
   CarouselRoot,
@@ -21,6 +21,7 @@ import {
   type MediaGalleryNavigationReason,
 } from "@snap-motion/vue/media-gallery";
 import { createMotionDriver, useSnapMotion } from "@snap-motion/vue/motion";
+import { Sheet, sheetSnapVisibleExtent, type SheetSnapPoint } from "@snap-motion/vue/sheet";
 import { h, ref } from "vue";
 
 type MediaId = "overview" | "system" | "outcome";
@@ -41,9 +42,17 @@ const controller = new SnapController({
 void controller;
 
 const sheetPoints = [
-  { id: "peek", label: "Peek", resolve: bottomSheetSnapPosition.viewportFraction(0.25) },
-  { id: "content", label: "Content", resolve: bottomSheetSnapPosition.intrinsicContent },
-] as const satisfies readonly BottomSheetSnapPoint<"peek" | "content">[];
+  {
+    id: "peek",
+    label: "Peek",
+    resolveVisibleExtent: sheetSnapVisibleExtent.viewportFraction(0.25),
+  },
+  {
+    id: "content",
+    label: "Content",
+    resolveVisibleExtent: sheetSnapVisibleExtent.intrinsicContent,
+  },
+] as const satisfies readonly SheetSnapPoint<"peek" | "content">[];
 void sheetPoints;
 
 const messages: SnapMotionMessages = createEnglishSnapMotionMessages({
@@ -54,6 +63,8 @@ void createFixedStageCarouselGeometryStrategy<MediaId>();
 void h(CarouselRoot<MediaId>, { activeId: "overview", ids });
 void h(CarouselPaginationItem<MediaId>, { id: "system" });
 void h(ModalDialog, { open: false });
+void h(Sheet, { open: false, side: "right" });
+void h(RootSheet, { open: false, side: "bottom" });
 void useCarouselWindow(ids, ref<MediaId>("overview"), {
   mountBefore: 1,
   mountAfter: 1,

@@ -16,7 +16,7 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<
   SnapControllerOptions<Id>,
   "driver" | "onChange" | "reducedMotion"
 > {
-  axis: "x" | "y";
+  axis: "x" | "y" | (() => "x" | "y");
   driver?: AnimationDriver;
   onChange?: (snapshot: ControllerSnapshot<Id>) => void;
   pointerIntent?: "horizontal" | "immediate";
@@ -131,7 +131,10 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     activeId,
     configure: controller.configure.bind(controller),
     controller,
-    interrupt: () => controller.interrupt(),
+    interrupt: () => {
+      pointer.stop();
+      controller.interrupt();
+    },
     isAnimating,
     isDragging: pointer.isDragging,
     moveBy: controller.moveBy.bind(controller),

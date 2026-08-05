@@ -19,27 +19,28 @@ export interface LabPhysicsSettings {
 export interface LabDiagnostics {
   activeId?: string;
   anchors: readonly SnapAnchor<string>[];
-  bodyClientHeight?: number;
-  bodyScrollHeight?: number;
-  bodyScrollTop?: number;
+  bodyClientBlockExtent?: number;
+  bodyScrollBlockExtent?: number;
+  bodyScrollOffset?: number;
   bounds: { min: number; max: number };
   centerInfluence?: number;
-  chromeHeight?: number;
+  canonicalPosition?: number;
   focusedPaginationIndex?: number;
   indicatorScale?: number;
   indicatorX?: number;
-  intrinsicSheetHeight?: number;
+  intrinsicContentPrimaryExtent?: number;
   isAnimating: boolean;
   keyboardTargetIndex?: number;
   kineticFocus?: number;
   maxAnchorSkip?: number;
-  maximumScrollTop?: number;
+  maximumBodyScrollOffset?: number;
+  measuredChromeBlockExtent?: number;
   motionPitch?: number;
   ownerIndex?: number;
   pairFraction?: number;
   passingLane?: number;
   phase: string;
-  physicalSheetY?: number;
+  physicalTransform?: number;
   physicalIndex?: number;
   pointerOwned: boolean;
   position: number;
@@ -53,9 +54,9 @@ export interface LabDiagnostics {
   trackExtent: number;
   tuningProfile?: string;
   velocity: number;
-  visibleSheetHeight?: number;
+  visiblePrimaryExtent?: number;
   visualIndex?: number;
-  visualViewportHeight?: number;
+  visualViewportPrimaryExtent?: number;
   viewportSize: number;
 }
 

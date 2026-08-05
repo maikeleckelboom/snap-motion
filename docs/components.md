@@ -1,7 +1,7 @@
 # Components
 
 All components are available from `@snap-motion/vue`. Capability imports use
-`@snap-motion/vue/carousel`, `@snap-motion/vue/bottom-sheet`, `@snap-motion/vue/dialog`, or
+`@snap-motion/vue/carousel`, `@snap-motion/vue/sheet`, `@snap-motion/vue/dialog`, or
 `@snap-motion/vue/media-gallery`.
 Components are semantic and style-light; application markup inside slides remains consumer-owned.
 
@@ -62,17 +62,49 @@ is a real history predecessor. The Router and Nuxt fixtures certify this policy.
 The same primitive supports numbered, dot, and thumbnail presentations. Previous and next slots
 expose `disabled` and their action for custom rendering.
 
-## Carousel inside a bottom sheet
+## Sheet
+
+`Sheet` is always a modal native `<dialog>`. `side` accepts the physical values `top`, `right`,
+`bottom`, and `left`; it never changes meaning in RTL. Top and bottom use the default `full`,
+`comfortable`, and `compact` points. Left and right use one `open` point and a fixed-width surface.
 
 ```vue
-<BottomSheet v-model:open="open" v-model:active-id="sheetId">
+<Sheet v-model:open="open" v-model:active-id="activeId" side="bottom">
+  <template #title>Filters</template>
+  ...
+</Sheet>
+```
+
+```vue
+<Sheet v-model:open="open" side="right">
+  <template #title>Inspector</template>
+  ...
+</Sheet>
+```
+
+The handle is the only drag surface and sits on the inner movable edge. The body remains a native
+vertical scrollport. Dynamic `side` changes interrupt current motion, retain the active semantic
+snap ID when the new point set contains it, remeasure, and atomically remap the scalar. Otherwise
+the side default, then the first configured point, is used.
+
+Responsive presentation belongs to the host. Mount either an inline `<aside>` or a `Sheet`, hoist
+the feature state above both hosts, and never keep two live copies hidden with CSS. When replacing
+an open modal with an inline pane, `closeForPresentationChange()` provides the focused-inside signal,
+closes immediately without an exit spring, and suppresses focus return to an unmounting trigger.
+The host can then focus the corresponding inline heading. Narrowing from inline leaves the modal
+closed. The lab and Nuxt fixtures certify this composition.
+
+## Carousel inside a sheet
+
+```vue
+<Sheet v-model:open="open" v-model:active-id="sheetId" side="bottom">
   <template #title>Choose media</template>
   <CarouselRoot v-model:active-id="mediaId" :ids="mediaIds" keyboard-scope="carousel">
     <CarouselViewport data-snap-motion-ignore-drag>
       <CarouselTrack>...</CarouselTrack>
     </CarouselViewport>
   </CarouselRoot>
-</BottomSheet>
+</Sheet>
 ```
 
 Keep the sheet's drag region separate from the carousel viewport. Add

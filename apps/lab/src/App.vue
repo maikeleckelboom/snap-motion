@@ -4,11 +4,11 @@ import { computed, ref, shallowRef } from "vue";
 
 import PhysicsControls from "@/components/PhysicsControls.vue";
 import StageControls from "@/components/StageControls.vue";
-import BottomSheetDemo from "@/demos/BottomSheetDemo.vue";
 import CoverflowDemo from "@/demos/CoverflowDemo.vue";
 import MediaGalleryAtCertificationDemo from "@/demos/MediaGalleryAtCertificationDemo.vue";
 import MediaLightboxDemo from "@/demos/MediaLightboxDemo.vue";
 import PagedGridDemo from "@/demos/PagedGridDemo.vue";
+import SheetDemo from "@/demos/SheetDemo.vue";
 import StackedDeckDemo from "@/demos/StackedDeckDemo.vue";
 import { settingsFromPreset } from "@/fixtures/lab-settings";
 import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fixtures/lab-types";
@@ -64,10 +64,10 @@ const demos = [
   },
   {
     id: "sheet" as const,
-    label: "Bottom sheet",
+    label: "Sheet",
     shortLabel: "Sheet",
-    description: "Viewport snap policy, top elasticity, focus, and physical closure.",
-    component: BottomSheetDemo,
+    description: "Four physical sides, canonical closing motion, and adaptive host composition.",
+    component: SheetDemo,
   },
 ];
 

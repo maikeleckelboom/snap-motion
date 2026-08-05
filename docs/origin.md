@@ -11,7 +11,7 @@ experiment explored direction-aware replacement of one full-stage slide. The ori
 was explored before AI-assisted development.
 
 The second line is the native-dialog
-[`bottom sheet`](https://github.com/maikeleckelboom/portfolio-2026-v1/tree/main/app/components/sheet)
+[`sheet`](https://github.com/maikeleckelboom/portfolio-2026-v1/tree/main/app/components/sheet)
 in `portfolio-2026-v1`. It contributed semantic snap points, pure snap helpers, nonlinear top
 elasticity, Pointer Event capture, viewport measurement, focus restoration, a scrollable modal
 shell, and scrim opacity derived from the physical position.

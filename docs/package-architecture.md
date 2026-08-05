@@ -66,15 +66,18 @@ modules but are no longer package exports.
   `NavigationReason`, `PublicCarouselContext`, `SnapMotionDirection`, `UseCarouselMotionOptions`,
   `VariableWidthCenteredCarouselGeometryOptions`.
 
-### `@snap-motion/vue/bottom-sheet`
+### `@snap-motion/vue/sheet`
 
-- Components and composable: `BottomSheet`, `BottomSheetSnapPicker`, `useBottomSheetMotion`.
-- Policy: `bottomSheetSnapPosition`, `createViewportBottomSheetSnapPoints`,
-  `resolveBottomSheetSnapPoints`.
-- Types: `BottomSheetMeasureContext`, `BottomSheetOpenSnapId`, `BottomSheetSnapResolver`,
-  `BottomSheetSnapPoint`, `BottomSheetState`, `BottomSheetViewportPolicy`,
-  `ResolvedBottomSheetSnapPoint`, `UseBottomSheetMotionOptions`, `UseBottomSheetMotionReturn`,
-  `CloseReason`, `NavigationReason`.
+- Components and composable: `Sheet`, `SheetSnapPicker`, `useSheetMotion`.
+- Policy: `sheetSnapVisibleExtent`, `createViewportSheetSnapPoints`,
+  `createFixedSheetSnapPoints`, `createDefaultSheetSnapPoints`, `defaultSheetOpenSnapId`,
+  `resolveSheetSnapPoints`, and `sheetMaximumVisibleExtent`.
+- Side normalization: `sheetSides`, `sheetSideDescriptors`, `getSheetSideDescriptor`,
+  `toCanonicalSheetDelta`, `toPhysicalSheetPosition`, and `sheetTransform`.
+- Types: `SheetAxis`, `SheetEdge`, `SheetSide`, `SheetSideDescriptor`, `SheetMeasureContext`,
+  `SheetOpenSnapId`, `SheetSnapResolver`, `SheetSnapPoint`, `SheetState`, `SheetViewportPolicy`,
+  `ResolvedSheetSnapPoint`, `UseSheetMotionOptions`, `UseSheetMotionReturn`, `CloseReason`,
+  `NavigationReason`, `PointerIntent`, and `SheetNavigationReason`.
 
 ### `@snap-motion/vue/dialog`
 
@@ -106,8 +109,8 @@ listed above. The dialog focus functions are intentionally available only from t
   `elementOwnsSnapMotionDrag`, `elementOwnsSnapMotionWheel`, `horizontalWheelDelta`,
   `normalizeWheelDelta`, `resolvePointerIntent`, `NormalizedWheelDelta`, `PointerIntentOptions`,
   `firstInteractive`, `focusInside`, `interactiveElements`, `resolveInitialFocus`,
-  `useReducedMotionPreference`, `ReducedMotionOptions`, `defaultBottomSheetReleasePolicy`,
-  `defaultBottomSheetViewportPolicy`, `BottomSheetReleasePolicy`.
+  `useReducedMotionPreference`, `ReducedMotionOptions`, and former feature-specific default release
+  and viewport policy constants.
 - Relocated from the Vue root to `@snap-motion/vue/dialog`: `captureFocusOpener`, `focusInitial`,
   `maintainModalTabOrder`, `restoreFocus`.
 - Removed core implementation helpers: `assertFiniteNumber`, `assertNonNegative`,
@@ -119,14 +122,14 @@ compatibility facade.
 ## Dependency direction
 
 Feature components depend on their own concrete modules and precise internal capabilities.
-Carousel and bottom sheet may depend on motion; all rendered features may depend on localization;
-bottom sheet may depend on the dialog close contract. Internal capabilities cannot depend on a
+Carousel and sheet may depend on motion; all rendered features may depend on localization; sheet
+may depend on the dialog close contract. Internal capabilities cannot depend on a
 feature. Core cannot import Vue, DOM, or another runtime package. Apps and fixtures import package
 entrypoints. A deterministic architecture check enforces these rules and rejects source cycles.
 
 ## Declaration output
 
-Core ships one declaration rollup. Vue ships six: root, carousel, bottom sheet, dialog, motion, and
-localization. None contains a relative module specifier. `vue-tsc` still needs a temporary
+Core ships one declaration rollup. Vue ships seven: root, carousel, sheet, dialog, media gallery,
+motion, and localization. None contains a relative module specifier. `vue-tsc` still needs a temporary
 normalization step for Vue SFC declarations and minimum-Vue generic compatibility, but those files
 exist only under `temp/declarations` and never enter a tarball.

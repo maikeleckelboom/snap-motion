@@ -1,7 +1,7 @@
 # Composables
 
-Import carousel composables from `@snap-motion/vue/carousel`, bottom-sheet composables from
-`@snap-motion/vue/bottom-sheet`, and the lower-level scalar adapter from `@snap-motion/vue/motion`.
+Import carousel composables from `@snap-motion/vue/carousel`, sheet composables from
+`@snap-motion/vue/sheet`, and the lower-level scalar adapter from `@snap-motion/vue/motion`.
 The root entrypoint also re-exports these stable composables.
 
 ## `useCarouselMotion`
@@ -32,10 +32,13 @@ The lower-level Vue adapter wraps `SnapController`. It is useful for a new seman
 not for bypassing the component event contract. A custom animation driver implements the public
 scalar `AnimationDriver` interface; Motion-specific playback types are not public.
 
-## `useBottomSheetMotion`
+## `useSheetMotion`
 
-This composable accepts generic string snap IDs and `BottomSheetSnapPoint` resolvers. Its public
-return type never exposes the internal hidden closing anchor.
+This composable accepts a physical `side`, generic string snap IDs, and `SheetSnapPoint`
+visible-extent resolvers. Its adapter converts primary-axis pointer delta and velocity into one
+canonical scalar where positive always closes. The public return type never exposes the internal
+hidden closing anchor. `setSide()` interrupts, remeasures, and atomically remaps a valid semantic
+snap ID onto the new axis.
 
 ## `useCarouselContext`
 

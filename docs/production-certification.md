@@ -18,6 +18,16 @@ browser keyboard tests cannot establish assistive-technology interoperability.
 - exact controlled target/settle ordering for controls, keyboard, drag, wheel, pagination, and route
 - LTR/RTL keys, drag, wheel, geometry, interruption, and remeasurement
 - localized component messages and generic custom snap-point radio states
+- table-driven side descriptors, mirrored release metamorphics, canonical hidden ordering, and
+  direction-independent scrim progress
+- four-side modal opening, drag/fling, interruption, physical RTL placement, safe-area mapping, and
+  dynamic side remapping
+- fixed-width horizontal partial reveals with stable line wrapping, native long-body scrolling, and
+  no persistent idle `will-change`
+- full-bleed vertical surfaces with shared centered content measure and continuation during elastic
+  overdrag
+- host-owned inline/right/bottom adaptive composition with one mounted host, preserved state,
+  modal-to-inline focus transfer, rapid resizing, SSR, and hydration
 - pagination semantics and bounded deterministic render/preload windows
 - Node `renderToString()` with no browser globals
 - deterministic multi-instance `useId()` relationships and cross-request markup
@@ -72,8 +82,8 @@ For the remaining component-wide screen reader/browser checks:
    directional keys. Verify the unique primary carousel owns dialog-wide keys when two are present.
 6. Test LTR and RTL. From the viewport, verify Left/Right, Home, End, repeated keys, and interruption.
 7. Repeatedly activate previous, next, and pagination controls; verify focus and announcements.
-8. Open the bottom sheet, verify title focus, select every enabled custom snap radio, and close via
-   Escape and the visible button. Test a carousel in the scrollable sheet body.
+8. Open the sheet on every physical side, verify title focus, select every enabled custom snap
+   radio, and close via Escape and the visible button. Test a carousel in the scrollable sheet body.
 9. Close the lightbox with Escape and the visible close button; verify logical focus restoration.
 10. Change the route while open, use browser Back, delete the active item, and unmount the overlay.
     Confirm focus never lands on body or remains inside inert content.

@@ -8,7 +8,7 @@ until npm ownership is manually verified.
 - `@snap-motion/core`
 - `@snap-motion/vue`
 - `@snap-motion/vue/carousel`
-- `@snap-motion/vue/bottom-sheet`
+- `@snap-motion/vue/sheet`
 - `@snap-motion/vue/dialog`
 - `@snap-motion/vue/motion`
 - `@snap-motion/vue/localization`

@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@snap-motion/vue": "workspace:*",
+    "@vueuse/core": "catalog:",
     "nuxt": "catalog:"
   }
 }

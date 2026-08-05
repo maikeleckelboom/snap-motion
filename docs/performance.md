@@ -8,14 +8,14 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 
 | Entry             |  Bytes | Gzip bytes | Budget bytes / gzip |
 | ----------------- | -----: | ---------: | ------------------: |
-| Core              | 32,684 |      9,343 |     35,000 / 10,000 |
-| Vue root          | 62,347 |     17,064 |     65,000 / 17,500 |
-| Vue carousel      | 34,554 |      9,888 |     52,000 / 15,000 |
-| Vue bottom sheet  | 33,050 |      9,855 |     40,000 / 12,500 |
-| Vue dialog        |  6,134 |      2,409 |      10,000 / 3,500 |
+| Core              | 32,683 |      9,340 |     35,000 / 10,000 |
+| Vue root          | 70,665 |     19,355 |     72,000 / 20,000 |
+| Vue carousel      | 34,698 |      9,918 |     52,000 / 15,000 |
+| Vue sheet         | 41,353 |     11,933 |     42,000 / 12,500 |
+| Vue dialog        |  6,125 |      2,403 |      10,000 / 3,500 |
 | Vue media gallery | 40,704 |     11,065 |     60,000 / 16,000 |
-| Vue motion        |  7,625 |      2,656 |      16,000 / 5,500 |
-| Base CSS          | 16,960 |      3,044 |      18,000 / 4,000 |
+| Vue motion        |  7,778 |      2,694 |      16,000 / 5,500 |
+| Base CSS          | 22,206 |      3,664 |      23,000 / 4,000 |
 
 `pnpm performance:check` covers 60/120-sample drag streams, repeated interruption, 1/20/100/1,000
 items, bounded render windows, simultaneous instances, resize/mutation storms, wheel coalescing,
@@ -25,6 +25,12 @@ The core ceiling increased for the additive public stacked-deck frame resolver. 
 path mutates caller-owned poses, performs no DOM measurement, and allocates no arrays or sort keys.
 The lab only applies compositor hints to visible cards; compact hidden cards resolve to
 `will-change: auto` and cannot receive pointer input.
+
+The Vue root, sheet, and raw CSS ceilings increased narrowly for the four-side descriptors,
+dimension-complete measurement policy, side-change remapping, fixed-width horizontal structure,
+four-edge continuation and safe-area rules, and shared centered-content shells. Gzip remains within
+the former sheet and CSS ceilings; the new limits preserve less than 4% raw headroom on the sheet
+and CSS artifacts and less than 4% compressed headroom on the root graph.
 
 ## Manual profiling
 

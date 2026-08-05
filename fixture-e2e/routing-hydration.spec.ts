@@ -48,3 +48,28 @@ test("Nuxt full media route remains meaningful without JavaScript", async ({ bro
   ).toBeVisible();
   await context.close();
 });
+
+test("Nuxt adaptive sheet hydrates one host and transfers focused state inline", async ({
+  page,
+}) => {
+  const hydrationMessages: string[] = [];
+  page.on("console", (message) => {
+    if (/hydration|mismatch/i.test(message.text())) hydrationMessages.push(message.text());
+  });
+  page.on("pageerror", (error) => hydrationMessages.push(error.message));
+
+  await page.setViewportSize({ width: 600, height: 800 });
+  const response = await page.goto("http://127.0.0.1:4175/sheet");
+  expect(response?.status()).toBe(200);
+  await expect(page.getByTestId("nuxt-sheet-trigger")).toBeVisible();
+  await expect(page.getByTestId("nuxt-inline-inspector")).toHaveCount(0);
+
+  await page.getByTestId("nuxt-sheet-trigger").click();
+  await page.getByTestId("nuxt-inspector-name").fill("Preserved through hosts");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.getByTestId("nuxt-inline-inspector")).toBeVisible();
+  await expect(page.getByTestId("nuxt-sheet")).toHaveCount(0);
+  await expect(page.getByTestId("nuxt-inspector-name")).toHaveValue("Preserved through hosts");
+  await expect(page.getByTestId("nuxt-inline-heading")).toBeFocused();
+  expect(hydrationMessages).toEqual([]);
+});

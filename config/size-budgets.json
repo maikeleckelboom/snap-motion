@@ -6,17 +6,17 @@
   },
   "vueRoot": {
     "entry": "packages/vue/dist/index.js",
-    "maxBytes": 65000,
-    "maxGzipBytes": 17500
+    "maxBytes": 72000,
+    "maxGzipBytes": 20000
   },
   "vueCarousel": {
     "entry": "packages/vue/dist/carousel.js",
     "maxBytes": 52000,
     "maxGzipBytes": 15000
   },
-  "vueBottomSheet": {
-    "entry": "packages/vue/dist/bottom-sheet.js",
-    "maxBytes": 40000,
+  "vueSheet": {
+    "entry": "packages/vue/dist/sheet.js",
+    "maxBytes": 42000,
     "maxGzipBytes": 12500
   },
   "vueDialog": {
@@ -36,7 +36,7 @@
   },
   "baseCss": {
     "entry": "packages/vue/dist/style.css",
-    "maxBytes": 18000,
+    "maxBytes": 23000,
     "maxGzipBytes": 4000
   }
 }

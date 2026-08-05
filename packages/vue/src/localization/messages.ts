@@ -3,7 +3,7 @@ export interface SnapMotionMessages {
   previousItem: string;
   nextItem: string;
   closeDialog: string;
-  closeBottomSheet: string;
+  closeSheet: string;
   carouselInstructions: string;
   paginationLabel: string;
   progressLabel: string;
@@ -20,14 +20,14 @@ export function createEnglishSnapMotionMessages(
     previousItem: "Previous item",
     nextItem: "Next item",
     closeDialog: "Close dialog",
-    closeBottomSheet: "Close bottom sheet",
+    closeSheet: "Close sheet",
     carouselInstructions:
       "Use Left and Right Arrow to move between items. Use Home and End to jump.",
     paginationLabel: "Choose an item",
     progressLabel: "Item progress",
     itemStatus: ({ index, count, label }) => label ?? `${index + 1} of ${count}`,
-    sheetStatus: ({ label }) => `Sheet height: ${label}`,
-    sheetSnapLegend: "Sheet height",
+    sheetStatus: ({ label }) => `Sheet position: ${label}`,
+    sheetSnapLegend: "Sheet position",
     ...overrides,
   };
 }

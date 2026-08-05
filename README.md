@@ -1,7 +1,7 @@
 # Snap Motion
 
 Snap Motion is a private, public-beta release candidate for interruptible Vue carousels, modal
-lightboxes, and bottom sheets. The framework-neutral core owns semantic geometry and one scalar
+lightboxes, and multi-edge sheets. The framework-neutral core owns semantic geometry and one scalar
 physical position; the Vue package owns DOM integration and uses Motion as its imperative spring
 driver.
 
@@ -56,12 +56,27 @@ const activeId = ref<(typeof ids)[number]>("overview");
 </template>
 ```
 
+The modal sheet uses physical sides and semantic visible extents:
+
+```vue
+<script setup lang="ts">
+import { Sheet } from "@snap-motion/vue/sheet";
+</script>
+
+<template>
+  <Sheet v-model:open="open" v-model:active-id="activeId" side="right">
+    <template #title>Inspector</template>
+    ...
+  </Sheet>
+</template>
+```
+
 ## Workspace
 
 - `packages/core` — zero-dependency geometry, target policy, velocity, elasticity, and controller
 - `packages/vue` — feature-owned Vue APIs with package-internal accessibility, input, and layout
   capabilities
-- `apps/lab` — media, paged-grid, variable-rail, render-window, and bottom-sheet fixtures
+- `apps/lab` — media, paged-grid, variable-rail, render-window, and sheet fixtures
 - `apps/router-fixture` and `apps/nuxt-fixture` — routing, SSR, hydration, and fallback proof
 - `e2e` and `fixture-e2e` — Chromium, Firefox, WebKit, Router, and Nuxt certification
 - `etc` — tracked API Extractor reports

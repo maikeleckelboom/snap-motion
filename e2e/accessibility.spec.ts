@@ -103,16 +103,16 @@ test.describe("automated accessibility certification", () => {
     }
   });
 
-  test("bottom sheet passes every snap and reduced-motion state", async ({ page }) => {
+  test("sheet passes every vertical snap and reduced-motion state", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openLabDemo(page, "sheet", "reduce");
     await page.getByTestId("open-sheet").click();
-    const dialog = page.getByTestId("bottom-sheet");
+    const dialog = page.getByTestId("sheet");
 
     for (const id of ["full", "comfortable", "compact"] as const) {
-      await page.getByTestId(`snap-${id}`).check();
+      await dialog.locator(`input[type="radio"][value="${id}"]`).check();
       await expectSheetOpenAt(dialog, id);
-      await expectNoAxeViolations(page, `bottom sheet ${id}`);
+      await expectNoAxeViolations(page, `sheet ${id}`);
     }
   });
 

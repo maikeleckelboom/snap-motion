@@ -12,9 +12,9 @@ export interface SnapMotionMessages {
     // (undocumented)
     carouselInstructions: string;
     // (undocumented)
-    closeBottomSheet: string;
-    // (undocumented)
     closeDialog: string;
+    // (undocumented)
+    closeSheet: string;
     // (undocumented)
     itemStatus(context: {
         id: string;

@@ -56,7 +56,7 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
 // @public (undocumented)
 export interface UseSnapMotionOptions<Id extends string> extends Omit<SnapControllerOptions<Id>, "driver" | "onChange" | "reducedMotion"> {
     // (undocumented)
-    axis: "x" | "y";
+    axis: "x" | "y" | (() => "x" | "y");
     // (undocumented)
     driver?: AnimationDriver;
     // (undocumented)

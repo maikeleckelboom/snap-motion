@@ -11,7 +11,7 @@ Snap Motion owns:
 - semantic carousel and page geometry
 - release projection and target policy
 - Vue motion, gesture, resize, and reduced-motion primitives
-- style-light semantic carousel, native dialog, and bottom-sheet components
+- style-light semantic carousel, native dialog, and multi-edge sheet components
 - the reusable media-gallery composition, including preview/full-image loading, zoom, pan, and
   swipe behavior
 - stable IDs, focus policy, inertness, status completion, and native snap-picker semantics
