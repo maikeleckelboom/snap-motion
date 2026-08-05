@@ -156,6 +156,52 @@ can drive side-surface thickness, directional lighting, and depth-dependent shad
 geometry. Those are finishing cues, not structure — they make coherent geometry look like material,
 and cannot make incoherent geometry look like anything.
 
+## Stacked deck
+
+Stacked deck is a separate presentation topology, not a tighter configuration of the Coverflow
+rail. It reuses `createCoverflowGeometry`, `useCarouselMotion`, and one live physical position, but
+projects the complete card set through `resolveStackedCoverflowFrame`. The rail resolver remains
+unchanged: its steep side rails need a permanent clearing, while the deck deliberately keeps large
+screens closely overlapped at rest.
+
+`resolveStackedCoverflowTuning` is the single responsive source for card size, projected side
+position, virtual depth, yaw, far-stack convergence, visibility, material strength, and the passing
+excursion. The wide profile settles the center near 60% of the stage width and projects immediate
+neighbors near 75% of that apparent size. Medium and compact profiles enlarge the center relative
+to the stage, narrow the exposed strips, reduce yaw and excursion, and hide far cards sooner.
+
+### Tight rest, open pass, tight rest
+
+For a pair fraction `t`, the resolver derives a bounded passing envelope:
+
+```text
+lane = 16 × t² × (1 - t)²
+```
+
+The lane is zero at both anchors, peaks at the midpoint, and has zero endpoint velocity. It moves
+the outgoing and incoming cards slightly apart while their base horizontal travel remains
+monotonic. The cards retain overlap throughout: the excursion reveals two independent screen edges
+without recreating either the rail's empty corridor or a folded-sheet intersection. Reversal and
+re-grab simply retrace the same scalar frame; no card owns a CSS transition or delayed timeline.
+
+### Virtual depth is not paint order
+
+Virtual Z determines projected scale, lift, veil, and local surface treatment. DOM paint order is a
+separate explicit integer layer contract. `ownerIndex` crosses once through a symmetric
+`handoffLower`/`handoffUpper` hysteresis band, so repeated reversal near the midpoint cannot chatter.
+Every pose receives a globally unique layer, including during multi-item frame jumps. Paint owner,
+live visual selection, settled semantic selection, and announcement ownership remain independent.
+
+The outer card owns projected X/Y, projected scale, visibility, pointer eligibility, and z-index.
+The inner screen surface owns its modest yaw, border edge, contact shadow, directional occlusion,
+and neutral veil. The transform carrier stays fully opaque and filter-free. Only actually exposed
+adjacent cards are interactive; the foreground card naturally intercepts covered neighbor regions,
+and far or hidden cards have neither pointer eligibility nor a compositor hint.
+
+Reduced motion keeps the same exact anchors and layering but flattens yaw, removes the passing
+excursion and blur, softens depth/lift, and retains direct manipulation. It does not collapse the
+cards into an unordered flat overlap.
+
 ## Responsive remeasurement
 
 ResizeObserver, viewport resize, visual-viewport resize, orientation-style size changes, item-set

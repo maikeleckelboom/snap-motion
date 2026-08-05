@@ -27,9 +27,15 @@ and mixed ownership rather than a source cycle.
   `ScalarBounds`.
 - Geometry: `calculateFixedCellSize`, `createFixedStageGeometry`, `createPagedGridGeometry`,
   `createVariableWidthGeometry`, `createCoverflowGeometry`, `resolveCoverflowProgress`,
-  `resolveCoverflowModularProgress`, `resolveCoverflowPresentation`, `CarouselGeometry`,
+  `resolveCoverflowModularProgress`, `resolveCoverflowPresentation`,
+  `createStackedCoverflowFrame`, `resolveStackedCoverflowFrame`,
+  `resolveStackedCoverflowTuning`, `CarouselGeometry`,
   `CoverflowGeometry`, `CoverflowGeometryOptions`, `CoverflowModularProgressOptions`,
   `CoverflowPresentation`, `CoverflowPresentationOptions`, `CoverflowProgressOptions`,
+  `MutableStackedCoverflowFrame`, `MutableStackedCoverflowPose`,
+  `ResolveStackedCoverflowFrameOptions`, `ResolveStackedCoverflowTuningOptions`,
+  `StackedCoverflowFrame`, `StackedCoverflowPose`, `StackedCoverflowProfile`,
+  `StackedCoverflowTuning`,
   `FixedStageGeometry`, `MeasuredItemBox`, `PagedGridGeometry`, `PagedGridGeometryOptions`,
   `PagedGridPageContext`, `VariableWidthGeometryOptions`.
 - Controller: `SnapController`, `SnapControllerOptions`, `ControllerListener`,

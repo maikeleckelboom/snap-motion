@@ -16,6 +16,12 @@ controller. It imports neither Vue nor the DOM and has no runtime dependency.
 An anchor combines a stable ID, a physical scalar position, and logical order. Physical positions
 may repeat. Semantic identity is therefore never inferred from a deduplicated number array.
 
+Presentation projection is also framework-neutral. Per-card Coverflow rail resolution and the
+whole-frame stacked-deck resolver both consume scalar position without becoming animation
+authorities. The stacked resolver receives caller-owned output storage and carries only the
+hysteretic paint owner between frames; it does not own motion, targets, semantic selection, or DOM
+state.
+
 The controller has three public phases: `idle`, `dragging`, and `settling`. Every input interrupts
 the current playback before acting. There is no queue and no animation-event ownership handoff.
 The controller tracks rendered position and velocity from driver updates, guards callbacks with a
@@ -76,6 +82,10 @@ Each interaction surface has exactly one authoritative scalar position. The trac
 is derived from it. CSS transitions, smooth scrolling, native scroll snap, and parallel animation
 systems are not allowed to animate the same value. Sheet scrim opacity is also derived from the
 sheet scalar rather than animated independently.
+
+For 2.5D presentations, projected depth and DOM paint order are intentionally separate outputs of
+the same frame resolver. Paint ownership can use hysteresis without changing the active target,
+visual caption, settled selection, pagination, focus, or announcement timing.
 
 ## Remeasurement
 
