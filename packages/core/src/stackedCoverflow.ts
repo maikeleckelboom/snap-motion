@@ -117,7 +117,7 @@ const PROFILE_VALUES: Record<StackedCoverflowProfile, ProfileValues> = {
   wide: {
     cardWidthRatio: 0.6,
     cardWidthMax: 680,
-    sideProjectedXRatio: 0.44,
+    sideProjectedXRatio: 0.35,
     sideRotateY: 12,
     sideLiftRatio: -0.07,
     sideVirtualZ: -300,
@@ -134,7 +134,7 @@ const PROFILE_VALUES: Record<StackedCoverflowProfile, ProfileValues> = {
   medium: {
     cardWidthRatio: 0.7,
     cardWidthMax: 620,
-    sideProjectedXRatio: 0.42,
+    sideProjectedXRatio: 0.34,
     sideRotateY: 10,
     sideLiftRatio: -0.055,
     sideVirtualZ: -285,
@@ -151,7 +151,7 @@ const PROFILE_VALUES: Record<StackedCoverflowProfile, ProfileValues> = {
   compact: {
     cardWidthRatio: 0.87,
     cardWidthMax: 420,
-    sideProjectedXRatio: 0.36,
+    sideProjectedXRatio: 0.3,
     sideRotateY: 6,
     sideLiftRatio: -0.035,
     sideVirtualZ: -220,
@@ -169,10 +169,6 @@ const PROFILE_VALUES: Record<StackedCoverflowProfile, ProfileValues> = {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
-}
-
-function lerp(from: number, to: number, t: number): number {
-  return from + (to - from) * t;
 }
 
 function smoothstep(t: number): number {

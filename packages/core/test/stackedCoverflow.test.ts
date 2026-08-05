@@ -51,6 +51,10 @@ function expectFiniteFrame(frame: ReturnType<typeof resolveFrame>) {
   }
 }
 
+function projectedScale(tuning: StackedCoverflowTuning) {
+  return tuning.perspective / (tuning.perspective - tuning.sideVirtualZ);
+}
+
 describe("stacked Coverflow responsive tuning", () => {
   it("selects deliberate compact, medium, and wide profiles at exact boundaries", () => {
     expect(resolveStackedCoverflowTuning({ stageWidth: 599.999, stageHeight: 500 }).profile).toBe(
@@ -71,12 +75,12 @@ describe("stacked Coverflow responsive tuning", () => {
     const wide = resolveStackedCoverflowTuning({ stageWidth: 1_120, stageHeight: 620 });
     const medium = resolveStackedCoverflowTuning({ stageWidth: 768, stageHeight: 520 });
     const compact = resolveStackedCoverflowTuning({ stageWidth: 360, stageHeight: 420 });
-    const projectedScale = (tuning: StackedCoverflowTuning) =>
-      tuning.perspective / (tuning.perspective - tuning.sideVirtualZ);
-
     expect(wide.cardWidth / 1_120).toBeCloseTo(0.6, 2);
+    expect(wide.sideProjectedX / wide.cardWidth).toBeCloseTo(0.35, 2);
     expect(medium.cardWidth / 768).toBeCloseTo(0.7, 2);
+    expect(medium.sideProjectedX / medium.cardWidth).toBeCloseTo(0.34, 2);
     expect(compact.cardWidth / 360).toBeCloseTo(0.87, 2);
+    expect(compact.sideProjectedX / compact.cardWidth).toBeCloseTo(0.3, 2);
     expect(projectedScale(wide)).toBeGreaterThanOrEqual(0.7);
     expect(projectedScale(wide)).toBeLessThanOrEqual(0.78);
     expect(projectedScale(medium)).toBeGreaterThan(projectedScale(wide));
@@ -180,6 +184,7 @@ describe("stacked Coverflow frame", () => {
   });
 
   it("keeps virtual depth and projected scale coherent across the passing pair", () => {
+    const pairDepthDifferences: number[] = [];
     for (let step = 0; step <= 100; step += 1) {
       const frame = resolveFrame(step / 100, 5, step >= 54 ? 1 : 0);
       const outgoing = frame.poses[0]!;
@@ -192,11 +197,7 @@ describe("stacked Coverflow frame", () => {
       expect(incoming.virtualZ).toBeGreaterThanOrEqual(
         WIDE_TUNING.sideVirtualZ - WIDE_TUNING.passingRecess,
       );
-      if (step < 46) expect(outgoing.virtualZ).toBeGreaterThan(incoming.virtualZ);
-      if (step >= 46 && step <= 54) {
-        expect(outgoing.virtualZ).toBeCloseTo(incoming.virtualZ);
-      }
-      if (step > 54) expect(outgoing.virtualZ).toBeLessThan(incoming.virtualZ);
+      pairDepthDifferences.push(outgoing.virtualZ - incoming.virtualZ);
       expect(outgoing.projectedScale).toBeCloseTo(
         WIDE_TUNING.perspective / (WIDE_TUNING.perspective - outgoing.virtualZ),
       );
@@ -204,6 +205,11 @@ describe("stacked Coverflow frame", () => {
         WIDE_TUNING.perspective / (WIDE_TUNING.perspective - incoming.virtualZ),
       );
     }
+    expect(pairDepthDifferences.slice(0, 46).every((difference) => difference > 0)).toBe(true);
+    expect(
+      pairDepthDifferences.slice(46, 55).every((difference) => Math.abs(difference) < 1e-9),
+    ).toBe(true);
+    expect(pairDepthDifferences.slice(55).every((difference) => difference < 0)).toBe(true);
   });
 
   it("hands foreground ownership over exactly once in forward and reverse travel", () => {
