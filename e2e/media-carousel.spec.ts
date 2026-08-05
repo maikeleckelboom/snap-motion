@@ -27,6 +27,43 @@ interface CapturedMediaTransition {
   old: CapturedMediaRect | undefined;
 }
 
+interface CapturedFixedStageGeometry {
+  dialog: {
+    bottom: number;
+    left: number;
+    right: number;
+    top: number;
+  };
+  documentOverflow: number;
+  fittedHeight: number;
+  fittedWidth: number;
+  slideWidths: number[];
+  trackWidth: number;
+  viewport: {
+    bottom: number;
+    height: number;
+    left: number;
+    right: number;
+    top: number;
+    width: number;
+  };
+  viewportClientWidth: number;
+}
+
+function expectFixedStageContract(geometry: CapturedFixedStageGeometry) {
+  expect(
+    geometry.slideWidths.every((width) => Math.abs(width - geometry.viewportClientWidth) <= 1),
+  ).toBe(true);
+  expect(
+    Math.abs(geometry.trackWidth - geometry.viewportClientWidth * geometry.slideWidths.length),
+  ).toBeLessThanOrEqual(2);
+  expect(geometry.viewport.left).toBeGreaterThanOrEqual(geometry.dialog.left);
+  expect(geometry.viewport.top).toBeGreaterThanOrEqual(geometry.dialog.top);
+  expect(geometry.viewport.right).toBeLessThanOrEqual(geometry.dialog.right);
+  expect(geometry.viewport.bottom).toBeLessThanOrEqual(geometry.dialog.bottom);
+  expect(geometry.documentOverflow).toBe(0);
+}
+
 function channelToLinear(value: number): number {
   const channel = value / 255;
   return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
@@ -496,20 +533,6 @@ test.describe("media lightbox", () => {
           viewportClientWidth: viewport.clientWidth,
         };
       }, id);
-
-    const expectFixedStageContract = (geometry: Awaited<ReturnType<typeof captureGeometry>>) => {
-      expect(
-        geometry.slideWidths.every((width) => Math.abs(width - geometry.viewportClientWidth) <= 1),
-      ).toBe(true);
-      expect(
-        Math.abs(geometry.trackWidth - geometry.viewportClientWidth * geometry.slideWidths.length),
-      ).toBeLessThanOrEqual(2);
-      expect(geometry.viewport.left).toBeGreaterThanOrEqual(geometry.dialog.left);
-      expect(geometry.viewport.top).toBeGreaterThanOrEqual(geometry.dialog.top);
-      expect(geometry.viewport.right).toBeLessThanOrEqual(geometry.dialog.right);
-      expect(geometry.viewport.bottom).toBeLessThanOrEqual(geometry.dialog.bottom);
-      expect(geometry.documentOverflow).toBe(0);
-    };
 
     const wideSettled = await captureGeometry("extremely-wide");
     expectFixedStageContract(wideSettled);
