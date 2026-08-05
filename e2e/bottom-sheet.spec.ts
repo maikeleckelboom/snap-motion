@@ -152,8 +152,13 @@ async function scrollFinalRowIntoView(page: Page) {
     Math.abs(geometry.bodyScrollTop - geometry.maximumScrollTop),
     "native maximum scroll offset",
   ).toBeLessThanOrEqual(1);
-  expect(geometry.finalTop, "final row top").toBeGreaterThanOrEqual(geometry.bodyTop - 1);
-  expect(geometry.finalBottom, "final row bottom").toBeLessThanOrEqual(geometry.bodyBottom + 1);
+  expect(
+    Math.abs((geometry.finalBottom ?? Number.NaN) - geometry.bodyBottom),
+    "final content edge aligned with the scrollport edge",
+  ).toBeLessThanOrEqual(1);
+  expect(geometry.finalTop, "final row has positive rendered height").toBeLessThan(
+    geometry.finalBottom ?? Number.NEGATIVE_INFINITY,
+  );
   return geometry;
 }
 

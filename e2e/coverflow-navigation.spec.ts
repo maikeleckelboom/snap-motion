@@ -9,12 +9,11 @@ function pagination(page: Page) {
 }
 
 async function coverflowPitch(viewport: Locator) {
-  return viewport.evaluate((element) => {
-    const cardWidth = Number.parseFloat(
-      getComputedStyle(element).getPropertyValue("--coverflow-card-width"),
-    );
-    return Math.round(cardWidth * 0.8);
-  });
+  const pitch = Number(await viewport.getAttribute("data-motion-pitch"));
+  if (!Number.isFinite(pitch) || pitch <= 0) {
+    throw new Error(`Expected a positive canonical Coverflow motion pitch, received ${pitch}.`);
+  }
+  return pitch;
 }
 
 async function beginPointer(viewport: Locator) {

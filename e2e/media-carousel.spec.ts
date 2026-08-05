@@ -404,6 +404,45 @@ test.describe("media lightbox", () => {
 
     await next.click();
     await expectCarouselAt(carousel, "extremely-wide");
+    await expect(page.getByTestId("media-frame-extremely-wide")).toHaveAttribute(
+      "data-media-state",
+      "loaded",
+    );
+    await carousel.evaluate(
+      (viewport) =>
+        new Promise<void>((resolve, reject) => {
+          let previous: DOMRect | undefined;
+          let stableFrames = 0;
+          let sampledFrames = 0;
+
+          const sample = () => {
+            const current = viewport.getBoundingClientRect();
+            sampledFrames += 1;
+            if (
+              previous &&
+              Math.abs(current.left - previous.left) <= 0.01 &&
+              Math.abs(current.top - previous.top) <= 0.01 &&
+              Math.abs(current.width - previous.width) <= 0.01 &&
+              Math.abs(current.height - previous.height) <= 0.01
+            ) {
+              stableFrames += 1;
+            } else {
+              stableFrames = 0;
+            }
+            previous = current;
+
+            if (stableFrames >= 2) {
+              resolve();
+            } else if (sampledFrames >= 120) {
+              reject(new Error("Media carousel geometry did not stabilize on the page clock."));
+            } else {
+              requestAnimationFrame(sample);
+            }
+          };
+
+          requestAnimationFrame(sample);
+        }),
+    );
 
     const captureGeometry = (id: string) =>
       carousel.evaluate((viewport, itemId) => {

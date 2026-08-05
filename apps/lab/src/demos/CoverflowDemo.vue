@@ -844,6 +844,7 @@ onBeforeUnmount(() => {
       :data-active-id="settledId"
       :data-gallery-open="galleryOpen ? 'true' : 'false'"
       :data-keyboard-target-index="keyboardTargetIndex"
+      :data-motion-pitch="pitch"
       :data-pending-index="pendingTargetIndex"
       :data-phase="motion.phase.value"
       :data-physical-index="physicalIndex"
