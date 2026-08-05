@@ -45,6 +45,21 @@ export type {
   CoverflowPresentationOptions,
   CoverflowProgressOptions,
 } from "./coverflow";
+export {
+  createStackedCoverflowFrame,
+  resolveStackedCoverflowFrame,
+  resolveStackedCoverflowTuning,
+} from "./stackedCoverflow";
+export type {
+  MutableStackedCoverflowFrame,
+  MutableStackedCoverflowPose,
+  ResolveStackedCoverflowFrameOptions,
+  ResolveStackedCoverflowTuningOptions,
+  StackedCoverflowFrame,
+  StackedCoverflowPose,
+  StackedCoverflowProfile,
+  StackedCoverflowTuning,
+} from "./stackedCoverflow";
 export { SnapController } from "./controller";
 export type { ControllerListener, SnapControllerOptions } from "./controller";
 export { applyElasticity, createSymmetricElasticity, nonlinearElasticDistance } from "./elastic";

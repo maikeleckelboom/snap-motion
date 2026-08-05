@@ -1,8 +1,8 @@
 {
   "core": {
     "entry": "packages/core/dist/index.js",
-    "maxBytes": 25000,
-    "maxGzipBytes": 7500
+    "maxBytes": 35000,
+    "maxGzipBytes": 10000
   },
   "vueRoot": {
     "entry": "packages/vue/dist/index.js",

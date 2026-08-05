@@ -242,6 +242,9 @@ export function createFixedStageGeometry<Id extends SemanticId>(options: {
 // @public (undocumented)
 export function createPagedGridGeometry<ItemId extends SemanticId>(options: PagedGridGeometryOptions<ItemId>): PagedGridGeometry;
 
+// @public
+export function createStackedCoverflowFrame(itemCount: number): MutableStackedCoverflowFrame;
+
 // @public (undocumented)
 export function createSymmetricElasticity(boundary: ElasticBoundaryOptions): ElasticityOptions;
 
@@ -483,6 +486,46 @@ export interface MotionPreset {
 // @public (undocumented)
 export type MotionPresetName = "tight" | "balanced" | "heavy" | "loose";
 
+// @public
+export interface MutableStackedCoverflowFrame {
+    // (undocumented)
+    ownerIndex: number;
+    // (undocumented)
+    pairFraction: number;
+    // (undocumented)
+    pairStartIndex: number;
+    // (undocumented)
+    passingLane: number;
+    // (undocumented)
+    physicalIndex: number;
+    // (undocumented)
+    poses: MutableStackedCoverflowPose[];
+}
+
+// @public
+export interface MutableStackedCoverflowPose {
+    // (undocumented)
+    blur: number;
+    // (undocumented)
+    interactive: boolean;
+    // (undocumented)
+    layer: number;
+    // (undocumented)
+    projectedScale: number;
+    // (undocumented)
+    rotateY: number;
+    // (undocumented)
+    translateX: number;
+    // (undocumented)
+    translateY: number;
+    // (undocumented)
+    veil: number;
+    // (undocumented)
+    virtualZ: number;
+    // (undocumented)
+    visible: boolean;
+}
+
 // @public (undocumented)
 export function nearestAnchor<Id extends SemanticId>(anchors: readonly SnapAnchor<Id>[], position: number, options?: NearestAnchorOptions<Id>): SnapAnchor<Id> | null;
 
@@ -591,6 +634,34 @@ export function resolveProgrammaticTarget<Id extends SemanticId>(input: Programm
 
 // @public (undocumented)
 export function resolveReleaseTarget<Id extends SemanticId>(input: ReleaseTargetInput<Id>): SnapAnchor<Id> | null;
+
+// @public
+export function resolveStackedCoverflowFrame(options: ResolveStackedCoverflowFrameOptions, output: MutableStackedCoverflowFrame): StackedCoverflowFrame;
+
+// @public (undocumented)
+export interface ResolveStackedCoverflowFrameOptions {
+    // (undocumented)
+    readonly itemCount: number;
+    // (undocumented)
+    readonly physicalIndex: number;
+    // (undocumented)
+    readonly previousOwnerIndex?: number;
+    // (undocumented)
+    readonly tuning: StackedCoverflowTuning;
+}
+
+// @public
+export function resolveStackedCoverflowTuning(options: ResolveStackedCoverflowTuningOptions): StackedCoverflowTuning;
+
+// @public (undocumented)
+export interface ResolveStackedCoverflowTuningOptions {
+    // (undocumented)
+    readonly reducedMotion?: boolean;
+    // (undocumented)
+    readonly stageHeight: number;
+    // (undocumented)
+    readonly stageWidth: number;
+}
 
 // @public (undocumented)
 export interface ScalarAnimationRequest {
@@ -724,6 +795,95 @@ export interface SpringConfiguration {
     readonly restSpeed: number;
     // (undocumented)
     readonly stiffness: number;
+}
+
+// @public (undocumented)
+export interface StackedCoverflowFrame {
+    // (undocumented)
+    readonly ownerIndex: number;
+    // (undocumented)
+    readonly pairFraction: number;
+    // (undocumented)
+    readonly pairStartIndex: number;
+    // (undocumented)
+    readonly passingLane: number;
+    // (undocumented)
+    readonly physicalIndex: number;
+    // (undocumented)
+    readonly poses: readonly StackedCoverflowPose[];
+}
+
+// @public (undocumented)
+export interface StackedCoverflowPose {
+    // (undocumented)
+    readonly blur: number;
+    // (undocumented)
+    readonly interactive: boolean;
+    // (undocumented)
+    readonly layer: number;
+    // (undocumented)
+    readonly projectedScale: number;
+    // (undocumented)
+    readonly rotateY: number;
+    // (undocumented)
+    readonly translateX: number;
+    // (undocumented)
+    readonly translateY: number;
+    // (undocumented)
+    readonly veil: number;
+    // (undocumented)
+    readonly virtualZ: number;
+    // (undocumented)
+    readonly visible: boolean;
+}
+
+// @public (undocumented)
+export type StackedCoverflowProfile = "compact" | "medium" | "wide";
+
+// @public (undocumented)
+export interface StackedCoverflowTuning {
+    // (undocumented)
+    readonly cardHeight: number;
+    // (undocumented)
+    readonly cardWidth: number;
+    // (undocumented)
+    readonly handoffLower: number;
+    // (undocumented)
+    readonly handoffUpper: number;
+    // (undocumented)
+    readonly hideAfter: number;
+    // (undocumented)
+    readonly motionPitch: number;
+    // (undocumented)
+    readonly passingRecess: number;
+    // (undocumented)
+    readonly passingRotateY: number;
+    // (undocumented)
+    readonly passingX: number;
+    // (undocumented)
+    readonly perspective: number;
+    // (undocumented)
+    readonly profile: StackedCoverflowProfile;
+    // (undocumented)
+    readonly sideBlur: number;
+    // (undocumented)
+    readonly sideLift: number;
+    // (undocumented)
+    readonly sideProjectedX: number;
+    // (undocumented)
+    readonly sideRotateY: number;
+    // (undocumented)
+    readonly sideVeil: number;
+    // (undocumented)
+    readonly sideVirtualZ: number;
+    // (undocumented)
+    readonly stackStrideX: number;
+    // (undocumented)
+    readonly stackStrideY: number;
+    // (undocumented)
+    readonly stackStrideZ: number;
+    // (undocumented)
+    readonly stackVeil: number;
 }
 
 // @public (undocumented)
