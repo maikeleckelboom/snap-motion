@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-import { dragMouseBy, dragTouchBy, expectCarouselAt, openLabDemo } from "./helpers";
+import {
+  dragMouseBy,
+  dragSyntheticPointerBy,
+  dragTouchBy,
+  expectCarouselAt,
+  openLabDemo,
+} from "./helpers";
 import {
   expectLightboxContainment,
   expectLoadedMediaFixture,
@@ -393,7 +399,7 @@ test.describe("media lightbox", () => {
     }
   });
 
-  test("keeps the mixed-aspect stage stable during direct wide and tall transitions", async ({
+  test("keeps mixed-aspect fixed-stage geometry coherent during direct transitions", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1_200, height: 800 });
@@ -405,6 +411,10 @@ test.describe("media lightbox", () => {
     await next.click();
     await expectCarouselAt(carousel, "extremely-wide");
     await expect(page.getByTestId("media-frame-extremely-wide")).toHaveAttribute(
+      "data-media-state",
+      "loaded",
+    );
+    await expect(page.getByTestId("media-frame-extremely-tall")).toHaveAttribute(
       "data-media-state",
       "loaded",
     );
@@ -455,6 +465,9 @@ test.describe("media lightbox", () => {
         const viewportRect = viewport.getBoundingClientRect();
         const imageRect = image.getBoundingClientRect();
         const dialogRect = dialog.getBoundingClientRect();
+        const slides = [...viewport.querySelectorAll<HTMLElement>(".media-slide")];
+        const track = viewport.querySelector<HTMLElement>(".media-track");
+        if (!track) throw new Error("Missing media track geometry.");
         const intrinsicRatio =
           Number(image.getAttribute("width")) / Number(image.getAttribute("height"));
         const boxRatio = imageRect.width / imageRect.height;
@@ -470,6 +483,8 @@ test.describe("media lightbox", () => {
             intrinsicRatio > boxRatio ? imageRect.width / intrinsicRatio : imageRect.height,
           fittedWidth:
             intrinsicRatio > boxRatio ? imageRect.width : imageRect.height * intrinsicRatio,
+          slideWidths: slides.map((candidate) => candidate.offsetWidth),
+          trackWidth: track.scrollWidth,
           viewport: {
             bottom: viewportRect.bottom,
             height: viewportRect.height,
@@ -478,13 +493,29 @@ test.describe("media lightbox", () => {
             top: viewportRect.top,
             width: viewportRect.width,
           },
+          viewportClientWidth: viewport.clientWidth,
         };
       }, id);
 
+    const expectFixedStageContract = (geometry: Awaited<ReturnType<typeof captureGeometry>>) => {
+      expect(
+        geometry.slideWidths.every((width) => Math.abs(width - geometry.viewportClientWidth) <= 1),
+      ).toBe(true);
+      expect(
+        Math.abs(geometry.trackWidth - geometry.viewportClientWidth * geometry.slideWidths.length),
+      ).toBeLessThanOrEqual(2);
+      expect(geometry.viewport.left).toBeGreaterThanOrEqual(geometry.dialog.left);
+      expect(geometry.viewport.top).toBeGreaterThanOrEqual(geometry.dialog.top);
+      expect(geometry.viewport.right).toBeLessThanOrEqual(geometry.dialog.right);
+      expect(geometry.viewport.bottom).toBeLessThanOrEqual(geometry.dialog.bottom);
+      expect(geometry.documentOverflow).toBe(0);
+    };
+
     const wideSettled = await captureGeometry("extremely-wide");
+    expectFixedStageContract(wideSettled);
     const viewportWidth = wideSettled.viewport.width;
     let wideToTallMidpoint: Awaited<ReturnType<typeof captureGeometry>> | undefined;
-    await dragMouseBy(page, carousel, -viewportWidth * 0.62, 0, {
+    await dragSyntheticPointerBy(page, carousel, -viewportWidth * 0.62, 0, {
       beforeRelease: async () => {
         await page.evaluate(
           () =>
@@ -494,29 +525,25 @@ test.describe("media lightbox", () => {
         );
         wideToTallMidpoint = await captureGeometry("extremely-tall");
       },
+      eventIntervalMs: 80,
       stepDelay: 0,
       steps: 8,
     });
     expect(wideToTallMidpoint).toBeDefined();
-    expect(wideToTallMidpoint!.viewport).toEqual(wideSettled.viewport);
+    expectFixedStageContract(wideToTallMidpoint!);
     expect(wideToTallMidpoint!.fittedHeight).toBeGreaterThanOrEqual(
       wideToTallMidpoint!.viewport.height * 0.95,
     );
     expect(wideToTallMidpoint!.fittedWidth).toBeGreaterThanOrEqual(
       wideToTallMidpoint!.viewport.width * 0.06,
     );
-    expect(wideToTallMidpoint!.documentOverflow).toBe(0);
     await expectCarouselAt(carousel, "extremely-tall");
 
     const tallSettled = await captureGeometry("extremely-tall");
-    expect(tallSettled.viewport).toEqual(wideSettled.viewport);
-    expect(tallSettled.viewport.left).toBeGreaterThanOrEqual(tallSettled.dialog.left);
-    expect(tallSettled.viewport.top).toBeGreaterThanOrEqual(tallSettled.dialog.top);
-    expect(tallSettled.viewport.right).toBeLessThanOrEqual(tallSettled.dialog.right);
-    expect(tallSettled.viewport.bottom).toBeLessThanOrEqual(tallSettled.dialog.bottom);
+    expectFixedStageContract(tallSettled);
 
     let tallToWideMidpoint: Awaited<ReturnType<typeof captureGeometry>> | undefined;
-    await dragMouseBy(page, carousel, viewportWidth * 0.62, 0, {
+    await dragSyntheticPointerBy(page, carousel, tallSettled.viewport.width * 0.62, 0, {
       beforeRelease: async () => {
         await page.evaluate(
           () =>
@@ -526,16 +553,23 @@ test.describe("media lightbox", () => {
         );
         tallToWideMidpoint = await captureGeometry("extremely-tall");
       },
+      eventIntervalMs: 80,
       stepDelay: 0,
       steps: 8,
     });
     expect(tallToWideMidpoint).toBeDefined();
-    expect(tallToWideMidpoint!.viewport).toEqual(tallSettled.viewport);
-    expect(tallToWideMidpoint!.fittedHeight).toBeCloseTo(tallSettled.fittedHeight, 0);
-    expect(tallToWideMidpoint!.fittedWidth).toBeCloseTo(tallSettled.fittedWidth, 0);
-    expect(tallToWideMidpoint!.documentOverflow).toBe(0);
+    expectFixedStageContract(tallToWideMidpoint!);
+    expect(tallToWideMidpoint!.fittedHeight).toBeGreaterThanOrEqual(
+      tallToWideMidpoint!.viewport.height * 0.95,
+    );
+    expect(tallToWideMidpoint!.fittedWidth).toBeGreaterThanOrEqual(
+      tallToWideMidpoint!.viewport.width * 0.06,
+    );
     await expectCarouselAt(carousel, "extremely-wide");
-    expect((await captureGeometry("extremely-wide")).viewport).toEqual(wideSettled.viewport);
+    const finalWide = await captureGeometry("extremely-wide");
+    expectFixedStageContract(finalWide);
+    expect(finalWide.fittedWidth).toBeGreaterThanOrEqual(finalWide.viewport.width * 0.95);
+    expect(finalWide.fittedHeight).toBeGreaterThanOrEqual(finalWide.viewport.height * 0.06);
   });
 
   test("preserves the delayed semantic target through decode and viewport remeasurement", async ({

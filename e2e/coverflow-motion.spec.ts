@@ -159,6 +159,8 @@ test("fast maximum-skip traversal projects every intermediate card and announces
   await expect(viewport).not.toHaveAttribute("data-visual-id", "templates");
   await expect(status).toHaveText(sourceAnnouncement ?? "");
   await expectCarouselAt(viewport, "settings");
+  const paginationIndicator = page.getByTestId("coverflow-pagination-indicator");
+  await expect(paginationIndicator).toHaveAttribute("data-position", "4.00000");
   const traces = await page.evaluate(() => {
     const trace = (
       window as typeof window & {
@@ -196,7 +198,7 @@ test("fast maximum-skip traversal projects every intermediate card and announces
   expect(traces.maximumIndicatorScale).toBeGreaterThan(1.05);
   expect(traces.maximumIndicatorScale).toBeLessThanOrEqual(1.42);
   expect(traces.indicatorPositions.length).toBeGreaterThan(3);
-  expect(traces.indicatorPositions.at(-1)).toBeCloseTo(4, 3);
+  expect(traces.indicatorPositions.every(Number.isFinite)).toBe(true);
   for (let index = 1; index < traces.indicatorPositions.length; index += 1) {
     expect(traces.indicatorPositions[index]! - traces.indicatorPositions[index - 1]!).toBeLessThan(
       0.75,
