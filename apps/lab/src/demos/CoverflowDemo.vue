@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import {
   createCoverflowGeometry,
+  createStackedCoverflowFrame,
   resolveCoverflowPresentation,
   resolveCoverflowProgress,
+  resolveStackedCoverflowFrame,
+  resolveStackedCoverflowTuning,
 } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
 import {
@@ -64,10 +67,24 @@ interface ShowcaseScreen extends MediaGalleryItem {
 }
 
 const props = defineProps<{
+  presentation?: "coverflow" | "stacked-deck";
   reducedMotionOverride: boolean | undefined;
   settings: LabPhysicsSettings;
   stageWidth: number;
 }>();
+
+const isStackedDeck = computed(() => props.presentation === "stacked-deck");
+const surfaceId = computed(() => (isStackedDeck.value ? "stacked-deck" : "coverflow"));
+const surfaceTitle = computed(() => (isStackedDeck.value ? "Stacked deck" : "Coverflow stack"));
+const surfaceDescription = computed(() =>
+  isStackedDeck.value
+    ? "Large screens rest closely behind the current screen. A bounded passing lane reveals the foreground handoff without introducing a second motion authority."
+    : "Center face stays solid. Neighbors park in left/right rails with real perspective. Drag and spring still own one scalar position.",
+);
+
+function testId(suffix: string): string {
+  return `${surfaceId.value}-${suffix}`;
+}
 
 const screens: readonly ShowcaseScreen[] = [
   {
@@ -176,8 +193,29 @@ const stageWidthPx = computed(() =>
   Math.max(320, viewportWidth.value || Math.min(props.stageWidth, 1_280)),
 );
 
-const cardWidth = computed(() => Math.round(clamp(stageWidthPx.value * 0.4, 280, 420)));
-const cardHeight = computed(() => Math.round(cardWidth.value * 0.7));
+const stageHeightPx = computed(() => clamp(stageWidthPx.value * 0.56, 320, 640));
+const stackedTuning = computed(() =>
+  resolveStackedCoverflowTuning({
+    stageWidth: stageWidthPx.value,
+    stageHeight: stageHeightPx.value,
+  }),
+);
+const reducedStackedTuning = computed(() =>
+  resolveStackedCoverflowTuning({
+    stageWidth: stageWidthPx.value,
+    stageHeight: stageHeightPx.value,
+    reducedMotion: true,
+  }),
+);
+
+const cardWidth = computed(() =>
+  isStackedDeck.value
+    ? stackedTuning.value.cardWidth
+    : Math.round(clamp(stageWidthPx.value * 0.4, 280, 420)),
+);
+const cardHeight = computed(() =>
+  isStackedDeck.value ? stackedTuning.value.cardHeight : Math.round(cardWidth.value * 0.7),
+);
 
 /**
  * X of the first side slot, and so the gap between the crossing pair for the whole step.
@@ -194,7 +232,9 @@ const sidePeakX = computed(() => Math.round(cardWidth.value * 0.8));
 const stackGap = computed(() => Math.round(cardWidth.value * 0.34));
 
 /** Pitch equals the rail travel, so a drag of N px moves the focused card exactly N px. */
-const pitch = computed(() => sidePeakX.value);
+const pitch = computed(() =>
+  isStackedDeck.value ? stackedTuning.value.motionPitch : sidePeakX.value,
+);
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -240,11 +280,16 @@ const visualScreen = computed(() => screens[visualIndex.value] ?? screens[0]!);
 const settledScreen = computed(() => screens[settledIndex.value] ?? screens[0]!);
 
 /** Continuous physical index. It projects motion but never controls the carousel mass. */
+const rawPhysicalIndex = computed(() =>
+  pitch.value <= 0 ? 0 : -motion.position.value / pitch.value,
+);
 const physicalIndex = computed(() => {
   const max = Math.max(0, ids.length - 1);
-  const raw = pitch.value <= 0 ? 0 : -motion.position.value / pitch.value;
-  return clamp(raw, 0, max);
+  return clamp(rawPhysicalIndex.value, 0, max);
 });
+const runtimePhysicalIndex = computed(() =>
+  isStackedDeck.value ? rawPhysicalIndex.value : physicalIndex.value,
+);
 const speedInCards = computed(() => resolveSpeedInCards(motion.velocity.value, pitch.value));
 
 const paginationDots = computed(() =>
@@ -341,10 +386,12 @@ const STAGE_PERSPECTIVE = 900;
 
 interface SlideStyle {
   opacity: number;
+  transformOrigin?: string;
   transform: string;
   zIndex: number;
   visibility: "visible" | "hidden";
   pointerEvents: "auto" | "none";
+  willChange?: "auto" | "transform";
   [customProperty: `--${string}`]: string;
 }
 
@@ -360,12 +407,59 @@ const kineticState: CoverflowKineticState = {
   contactShadowStrength: 1,
 };
 
+const stackedFrameOutput = createStackedCoverflowFrame(ids.length);
+const stackedFrame = computed(() => {
+  const tuning = motion.reducedMotion.value ? reducedStackedTuning.value : stackedTuning.value;
+  return resolveStackedCoverflowFrame(
+    {
+      itemCount: ids.length,
+      physicalIndex: rawPhysicalIndex.value,
+      tuning,
+    },
+    stackedFrameOutput,
+  );
+});
+
+function stackedPose(index: number) {
+  return isStackedDeck.value ? stackedFrame.value.poses[index] : undefined;
+}
+
 const slideStyles = computed(() => {
   const reduced = motion.reducedMotion.value;
   const position = motion.position.value;
   const velocity = motion.velocity.value;
   const currentPitch = pitch.value;
   const styles = {} as Record<ScreenId, SlideStyle>;
+
+  if (isStackedDeck.value) {
+    const frame = stackedFrame.value;
+    const tuning = motion.reducedMotion.value ? reducedStackedTuning.value : stackedTuning.value;
+    for (let index = 0; index < screens.length; index += 1) {
+      const screen = screens[index]!;
+      const pose = frame.poses[index]!;
+      styles[screen.id] = {
+        opacity: 1,
+        transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.projectedScale.toFixed(5)})`,
+        transformOrigin: "center center",
+        zIndex: pose.layer,
+        visibility: pose.visible ? "visible" : "hidden",
+        pointerEvents: pose.interactive ? "auto" : "none",
+        willChange: pose.visible ? "transform" : "auto",
+        "--screen-accent": screen.accent,
+        "--deck-blur": `${pose.blur.toFixed(3)}px`,
+        "--deck-edge-offset": `${(Math.sign(pose.rotateY) * -1.5).toFixed(3)}px`,
+        "--deck-occlusion-angle": pose.translateX < 0 ? "90deg" : "270deg",
+        "--deck-rotate-y": `${pose.rotateY.toFixed(3)}deg`,
+        "--deck-shadow-strength": clamp(
+          1 - Math.abs(index - frame.physicalIndex) * 0.12,
+          0.55,
+          1,
+        ).toFixed(4),
+        "--deck-veil": pose.veil.toFixed(4),
+      };
+    }
+    return styles;
+  }
 
   for (const screen of screens) {
     const anchorPosition = anchorsById.value.get(screen.id) ?? 0;
@@ -505,7 +599,16 @@ const diagnostics = computed<LabDiagnostics>(() => {
     phase: motion.phase.value,
     pointerOwned: motion.pointerOwned.value,
     position: motion.position.value,
-    physicalIndex: physicalIndex.value,
+    physicalIndex: runtimePhysicalIndex.value,
+    motionPitch: pitch.value,
+    ...(isStackedDeck.value
+      ? {
+          ownerIndex: stackedFrame.value.ownerIndex,
+          pairFraction: stackedFrame.value.pairFraction,
+          passingLane: stackedFrame.value.passingLane,
+          tuningProfile: stackedTuning.value.profile,
+        }
+      : {}),
     visualIndex: visualIndex.value,
     settledIndex: settledIndex.value,
     ...(focusedPaginationIndex.value === null
@@ -797,22 +900,20 @@ onBeforeUnmount(() => {
   <section
     ref="coverflowRoot"
     class="coverflow-demo"
-    aria-labelledby="coverflow-title"
+    :class="{ 'stacked-deck-demo': isStackedDeck }"
+    :aria-labelledby="`${surfaceId}-title`"
     @keydown="onCoverflowKeyDown"
   >
     <header class="coverflow-header">
       <div>
         <p class="eyebrow">Spatial carousel</p>
-        <h3 id="coverflow-title">Coverflow stack</h3>
-        <p class="lede">
-          Center face stays solid. Neighbors park in left/right rails with real perspective. Drag
-          and spring still own one scalar position.
-        </p>
+        <h3 :id="`${surfaceId}-title`">{{ surfaceTitle }}</h3>
+        <p class="lede">{{ surfaceDescription }}</p>
       </div>
       <div class="coverflow-controls">
         <button
           aria-label="Previous screen"
-          data-testid="coverflow-previous"
+          :data-testid="testId('previous')"
           :disabled="galleryOpen || !canGoPrevious"
           type="button"
           @click="goToPrevious"
@@ -823,7 +924,7 @@ onBeforeUnmount(() => {
         </button>
         <button
           aria-label="Next screen"
-          data-testid="coverflow-next"
+          :data-testid="testId('next')"
           :disabled="galleryOpen || !canGoNext"
           type="button"
           @click="goToNext"
@@ -837,18 +938,23 @@ onBeforeUnmount(() => {
 
     <div
       ref="viewport"
-      aria-label="Product screen coverflow"
+      :aria-label="isStackedDeck ? 'Product screen stacked deck' : 'Product screen coverflow'"
       aria-roledescription="carousel"
       class="coverflow-viewport"
-      data-testid="coverflow-viewport"
+      :data-testid="testId('viewport')"
       :data-active-id="settledId"
+      :data-card-width="cardWidth"
       :data-gallery-open="galleryOpen ? 'true' : 'false'"
       :data-keyboard-target-index="keyboardTargetIndex"
       :data-motion-pitch="pitch"
+      :data-owner-index="isStackedDeck ? stackedFrame.ownerIndex : undefined"
+      :data-pair-fraction="isStackedDeck ? stackedFrame.pairFraction : undefined"
       :data-pending-index="pendingTargetIndex"
+      :data-passing-lane="isStackedDeck ? stackedFrame.passingLane : undefined"
       :data-phase="motion.phase.value"
-      :data-physical-index="physicalIndex"
+      :data-physical-index="runtimePhysicalIndex"
       :data-position="motion.position.value"
+      :data-profile="isStackedDeck ? stackedTuning.profile : undefined"
       :data-settled-index="settledIndex"
       :data-speed-in-cards="speedInCards"
       :data-target-id="motion.targetId.value"
@@ -859,7 +965,7 @@ onBeforeUnmount(() => {
       @pointerdown="onCoverflowPointerDown"
       @wheel="onCoverflowWheel"
     >
-      <div ref="track" class="coverflow-stage">
+      <div ref="track" class="coverflow-stage" :class="{ 'stacked-deck-stage': isStackedDeck }">
         <article
           v-for="(screen, index) in screens"
           :key="screen.id"
@@ -871,64 +977,87 @@ onBeforeUnmount(() => {
           :class="[
             `tone-${screen.tone}`,
             `layout-${screen.layout}`,
-            { active: screen.id === visualId, inspectable: isCardGalleryEligible(index) },
+            {
+              active: screen.id === visualId,
+              inspectable: isCardGalleryEligible(index),
+              'stacked-deck-card': isStackedDeck,
+            },
           ]"
+          :data-interactive="stackedPose(index)?.interactive"
+          :data-layer="stackedPose(index)?.layer"
+          :data-projected-scale="stackedPose(index)?.projectedScale"
+          :data-rotate-y="stackedPose(index)?.rotateY"
           :data-screen-id="screen.id"
+          :data-translate-x="stackedPose(index)?.translateX"
+          :data-veil="stackedPose(index)?.veil"
+          :data-visible="stackedPose(index)?.visible"
           :style="slideStyles[screen.id]"
           @click.prevent
         >
           <div class="screen-chrome">
-            <header class="screen-top">
-              <div class="brand-row">
-                <span class="brand-mark">Y</span>
-                <div>
-                  <p>{{ screen.eyebrow }}</p>
-                  <strong>{{ screen.title }}</strong>
-                </div>
-              </div>
-              <div class="chrome-actions" aria-hidden="true">
-                <span />
-                <span />
-                <span class="avatar">MV</span>
-              </div>
-            </header>
-
-            <div class="screen-body">
-              <aside class="screen-nav" aria-hidden="true">
-                <span class="nav-pill" />
-                <span />
-                <span />
-                <span class="active-nav" />
-                <span />
-                <span />
-              </aside>
-
-              <div class="screen-main">
-                <div class="toolbar" aria-hidden="true">
-                  <span class="search" />
-                  <span class="chip" />
-                  <span class="chip" />
-                  <span class="cta" />
-                </div>
-
-                <div class="feature-card" aria-hidden="true">
-                  <span class="feature-icon" />
+            <img
+              v-if="isStackedDeck"
+              alt=""
+              aria-hidden="true"
+              class="stacked-screen-image"
+              draggable="false"
+              :height="screen.height"
+              :src="screen.previewSrc"
+              :width="screen.width"
+            />
+            <template v-else>
+              <header class="screen-top">
+                <div class="brand-row">
+                  <span class="brand-mark">Y</span>
                   <div>
-                    <strong>Yoot Project Structuur V2.1</strong>
-                    <p>Standaard projectstructuur met complete documentatie.</p>
+                    <p>{{ screen.eyebrow }}</p>
+                    <strong>{{ screen.title }}</strong>
                   </div>
-                  <span class="ghost-btn">Bekijken</span>
                 </div>
+                <div class="chrome-actions" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span class="avatar">MV</span>
+                </div>
+              </header>
 
-                <div class="card-grid" aria-hidden="true">
-                  <span v-for="slot in 6" :key="slot" class="mini-card">
-                    <i />
-                    <b />
-                    <em />
-                  </span>
+              <div class="screen-body">
+                <aside class="screen-nav" aria-hidden="true">
+                  <span class="nav-pill" />
+                  <span />
+                  <span />
+                  <span class="active-nav" />
+                  <span />
+                  <span />
+                </aside>
+
+                <div class="screen-main">
+                  <div class="toolbar" aria-hidden="true">
+                    <span class="search" />
+                    <span class="chip" />
+                    <span class="chip" />
+                    <span class="cta" />
+                  </div>
+
+                  <div class="feature-card" aria-hidden="true">
+                    <span class="feature-icon" />
+                    <div>
+                      <strong>Yoot Project Structuur V2.1</strong>
+                      <p>Standaard projectstructuur met complete documentatie.</p>
+                    </div>
+                    <span class="ghost-btn">Bekijken</span>
+                  </div>
+
+                  <div class="card-grid" aria-hidden="true">
+                    <span v-for="slot in 6" :key="slot" class="mini-card">
+                      <i />
+                      <b />
+                      <em />
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
+            </template>
           </div>
         </article>
       </div>
@@ -936,16 +1065,16 @@ onBeforeUnmount(() => {
 
     <div class="coverflow-meta">
       <p>
-        <span class="tabular" data-testid="coverflow-counter">{{ visualIndex + 1 }}</span>
+        <span class="tabular" :data-testid="testId('counter')">{{ visualIndex + 1 }}</span>
         /
         <span class="tabular">{{ screens.length }}</span>
-        <strong data-testid="coverflow-caption">{{ visualScreen.title }}</strong>
+        <strong :data-testid="testId('caption')">{{ visualScreen.title }}</strong>
       </p>
       <button
         ref="inspectControl"
         :aria-label="`Inspect ${settledScreen.title} in screen gallery, ${settledIndex + 1} of ${screens.length}`"
         class="coverflow-inspect"
-        data-testid="coverflow-inspect"
+        :data-testid="testId('inspect')"
         :disabled="!isCardGalleryEligible(settledIndex)"
         type="button"
         @click="openGallery(settledIndex)"
@@ -962,7 +1091,7 @@ onBeforeUnmount(() => {
         <span>Inspect screen</span>
       </button>
       <div
-        aria-label="Coverflow screens"
+        :aria-label="isStackedDeck ? 'Stacked deck screens' : 'Coverflow screens'"
         class="dots"
         :data-focused-index="focusedPaginationIndex"
         :style="paginationStyle"
@@ -975,7 +1104,7 @@ onBeforeUnmount(() => {
           :data-scale-x="paginationIndicator.scaleX.toFixed(5)"
           :data-soft-direction="paginationIndicator.softDirection.toFixed(5)"
           :data-stretch-ratio="paginationIndicator.stretchRatio.toFixed(5)"
-          data-testid="coverflow-pagination-indicator"
+          :data-testid="testId('pagination-indicator')"
         />
         <button
           v-for="(dot, index) in paginationDots"
@@ -994,7 +1123,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <p class="sr-only" aria-atomic="true" data-testid="coverflow-status" role="status">
+    <p class="sr-only" aria-atomic="true" :data-testid="testId('status')" role="status">
       {{ liveMessage }}
     </p>
     <DiagnosticsPanel :diagnostics="diagnostics" />
@@ -1221,6 +1350,74 @@ onBeforeUnmount(() => {
   background: #0f172a;
   color: #e2e8f0;
   border-color: rgb(255 255 255 / 0.08);
+}
+
+.stacked-deck-demo .coverflow-viewport {
+  background:
+    radial-gradient(circle at 50% 28%, rgb(255 255 255 / 0.92), transparent 56%),
+    linear-gradient(180deg, #f1f4f8 0%, #e7ecf2 100%);
+  perspective: none;
+}
+
+.stacked-deck-demo .coverflow-viewport::before {
+  inset-block-end: 1.1rem;
+  inline-size: min(72%, 46rem);
+  block-size: 4.5rem;
+  background: radial-gradient(
+    ellipse at center,
+    rgb(15 23 42 / 0.16) 0%,
+    rgb(15 23 42 / 0.06) 46%,
+    rgb(15 23 42 / 0) 74%
+  );
+}
+
+.stacked-deck-stage,
+.stacked-deck-card {
+  transform-style: flat;
+}
+
+.stacked-deck-card {
+  --deck-blur: 0px;
+  --deck-edge-offset: 0px;
+  --deck-occlusion-angle: 90deg;
+  --deck-rotate-y: 0deg;
+  --deck-shadow-strength: 1;
+  --deck-veil: 0;
+}
+
+.stacked-deck-card .screen-chrome {
+  border-color: rgb(15 23 42 / 0.16);
+  border-radius: 0.8rem;
+  background: #fff;
+  box-shadow:
+    var(--deck-edge-offset) 0 0 1px rgb(100 116 139 / 0.5),
+    0 18px 38px -18px rgb(15 23 42 / calc(0.38 * var(--deck-shadow-strength))),
+    0 4px 10px -6px rgb(15 23 42 / calc(0.32 * var(--deck-shadow-strength)));
+  transform: perspective(900px) rotateY(var(--deck-rotate-y));
+  transform-origin: center;
+}
+
+.stacked-deck-card .screen-chrome::after {
+  background-image:
+    linear-gradient(
+      var(--deck-occlusion-angle),
+      rgb(15 23 42 / calc(0.12 * var(--deck-veil))),
+      rgb(15 23 42 / 0) 8%,
+      rgb(255 255 255 / calc(0.1 * var(--deck-veil))) 72%,
+      rgb(255 255 255 / 0) 100%
+    ),
+    linear-gradient(
+      rgb(226 232 240 / var(--deck-veil)),
+      rgb(241 245 249 / calc(0.78 * var(--deck-veil)))
+    );
+}
+
+.stacked-screen-image {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  pointer-events: none;
 }
 
 .screen-top,

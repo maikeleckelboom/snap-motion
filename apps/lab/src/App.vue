@@ -9,14 +9,16 @@ import CoverflowDemo from "@/demos/CoverflowDemo.vue";
 import MediaGalleryAtCertificationDemo from "@/demos/MediaGalleryAtCertificationDemo.vue";
 import MediaLightboxDemo from "@/demos/MediaLightboxDemo.vue";
 import PagedGridDemo from "@/demos/PagedGridDemo.vue";
+import StackedDeckDemo from "@/demos/StackedDeckDemo.vue";
 import { settingsFromPreset } from "@/fixtures/lab-settings";
 import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fixtures/lab-types";
 
-type DemoId = "coverflow" | "gallery-at" | "media" | "grid" | "sheet";
+type DemoId = "coverflow" | "stacked-deck" | "gallery-at" | "media" | "grid" | "sheet";
 
 function isDemoId(value: unknown): value is DemoId {
   return (
     value === "coverflow" ||
+    value === "stacked-deck" ||
     value === "gallery-at" ||
     value === "media" ||
     value === "grid" ||
@@ -31,6 +33,13 @@ const demos = [
     shortLabel: "Coverflow",
     description: "Physical 2.5D stack: 1:1 drag, spring settle, elastic ends.",
     component: CoverflowDemo,
+  },
+  {
+    id: "stacked-deck" as const,
+    label: "Stacked deck",
+    shortLabel: "Deck",
+    description: "Tight settled overlap with a controlled foreground passing corridor.",
+    component: StackedDeckDemo,
   },
   {
     id: "gallery-at" as const,
@@ -180,7 +189,7 @@ function resetPreset() {
   z-index: 20;
   inset-block-start: 0;
   display: grid;
-  grid-template-columns: minmax(12rem, 1fr) auto minmax(12rem, 1fr);
+  grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr) minmax(10rem, 16rem);
   align-items: stretch;
   min-block-size: 4.5rem;
   border-block-end: 1px solid var(--strong);
@@ -230,9 +239,11 @@ function resetPreset() {
   display: flex;
   align-items: stretch;
   border-inline: 1px solid var(--strong);
+  overflow-x: auto;
 }
 
 .demo-tabs button {
+  flex: 1;
   min-inline-size: 7.25rem;
   padding: 0.75rem 0.85rem;
   border: 0;
@@ -325,7 +336,7 @@ function resetPreset() {
 
 @media (max-width: 72rem) {
   .lab-header {
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr) minmax(9rem, auto);
   }
 
   .demo-tabs button {

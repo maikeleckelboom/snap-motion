@@ -35,6 +35,26 @@ function scalar(value: number) {
         <dt>Physical index</dt>
         <dd data-testid="physical-index">{{ scalar(diagnostics.physicalIndex) }}</dd>
       </div>
+      <div v-if="diagnostics.motionPitch !== undefined">
+        <dt>Motion pitch</dt>
+        <dd data-testid="motion-pitch">{{ scalar(diagnostics.motionPitch) }} px</dd>
+      </div>
+      <div v-if="diagnostics.pairFraction !== undefined">
+        <dt>Pair fraction</dt>
+        <dd data-testid="pair-fraction">{{ scalar(diagnostics.pairFraction) }}</dd>
+      </div>
+      <div v-if="diagnostics.passingLane !== undefined">
+        <dt>Passing lane</dt>
+        <dd data-testid="passing-lane">{{ scalar(diagnostics.passingLane) }}</dd>
+      </div>
+      <div v-if="diagnostics.ownerIndex !== undefined">
+        <dt>Paint owner</dt>
+        <dd data-testid="owner-index">{{ diagnostics.ownerIndex }}</dd>
+      </div>
+      <div v-if="diagnostics.tuningProfile !== undefined">
+        <dt>Tuning profile</dt>
+        <dd data-testid="tuning-profile">{{ diagnostics.tuningProfile }}</dd>
+      </div>
       <div v-if="diagnostics.visualIndex !== undefined">
         <dt>Visual index</dt>
         <dd data-testid="visual-index">{{ diagnostics.visualIndex }}</dd>

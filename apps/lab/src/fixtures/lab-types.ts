@@ -34,6 +34,10 @@ export interface LabDiagnostics {
   kineticFocus?: number;
   maxAnchorSkip?: number;
   maximumScrollTop?: number;
+  motionPitch?: number;
+  ownerIndex?: number;
+  pairFraction?: number;
+  passingLane?: number;
   phase: string;
   physicalSheetY?: number;
   physicalIndex?: number;
@@ -47,6 +51,7 @@ export interface LabDiagnostics {
   targetId?: string;
   targetIndex?: number;
   trackExtent: number;
+  tuningProfile?: string;
   velocity: number;
   visibleSheetHeight?: number;
   visualIndex?: number;
