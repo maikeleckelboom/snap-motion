@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export type DemoId = "coverflow" | "gallery-at" | "grid" | "media" | "sheet";
+export type DemoId = "coverflow" | "gallery-at" | "grid" | "media" | "sheet" | "stacked-deck";
 export type ReducedMotionMode = "no-preference" | "reduce" | "system";
 
 interface DragOptions {
@@ -38,8 +38,8 @@ export async function openLabDemo(
 }
 
 export async function expectCarouselAt(carousel: Locator, id: string) {
-  await expect(carousel).toHaveAttribute("data-active-id", id);
   await expect(carousel).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+  await expect(carousel).toHaveAttribute("data-active-id", id);
 }
 
 export async function expectSheetOpenAt(dialog: Locator, id: string) {
