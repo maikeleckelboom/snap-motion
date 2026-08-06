@@ -51,6 +51,11 @@ export interface LabDiagnostics {
   targetId?: string;
   targetIndex?: number;
   trackExtent: number;
+  transitionDirection?: number;
+  transitionFromIndex?: number;
+  transitionPhase?: string;
+  transitionProgress?: number;
+  transitionToIndex?: number;
   tuningProfile?: string;
   velocity: number;
   visiblePrimaryExtent?: number;

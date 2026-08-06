@@ -38,7 +38,8 @@ const demos = [
     id: "stacked-deck" as const,
     label: "Stacked deck",
     shortLabel: "Deck",
-    description: "A dominant top screen reveals the next screen beneath a concealed handoff.",
+    description:
+      "A compact pile exchanges one committed top screen through explicit physical roles.",
     component: StackedDeckDemo,
   },
   {

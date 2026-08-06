@@ -2,6 +2,7 @@
 "@snap-motion/core": minor
 ---
 
-Add an allocation-conscious stacked-deck frame resolver with explicit visual roles, asymmetric
-top-card-shuffle projection, late hysteretic paint ownership, responsive tuning, unique layers,
-and reduced-motion hierarchy.
+Replace the stacked-deck rail projection with an allocation-conscious physical pile compositor.
+The renderer accepts explicit settled, outgoing, incoming, direction, progress, and phase state;
+keeps paint ownership stable through visible overlap; supports distinct forward peel and backward
+retrieval choreography; and preserves responsive and reduced-motion hierarchy.

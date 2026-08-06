@@ -47,6 +47,26 @@ function scalar(value: number) {
         <dt>Paint owner</dt>
         <dd data-testid="owner-index">{{ diagnostics.ownerIndex }}</dd>
       </div>
+      <div v-if="diagnostics.transitionPhase !== undefined">
+        <dt>Deck transition</dt>
+        <dd data-testid="deck-transition-phase">{{ diagnostics.transitionPhase }}</dd>
+      </div>
+      <div v-if="diagnostics.transitionProgress !== undefined">
+        <dt>Deck progress</dt>
+        <dd data-testid="deck-transition-progress">
+          {{ scalar(diagnostics.transitionProgress) }}
+        </dd>
+      </div>
+      <div v-if="diagnostics.transitionDirection !== undefined">
+        <dt>Deck direction</dt>
+        <dd data-testid="deck-transition-direction">{{ diagnostics.transitionDirection }}</dd>
+      </div>
+      <div v-if="diagnostics.transitionFromIndex !== undefined">
+        <dt>Deck exchange</dt>
+        <dd data-testid="deck-transition-indices">
+          {{ diagnostics.transitionFromIndex }} → {{ diagnostics.transitionToIndex }}
+        </dd>
+      </div>
       <div v-if="diagnostics.tuningProfile !== undefined">
         <dt>Tuning profile</dt>
         <dd data-testid="tuning-profile">{{ diagnostics.tuningProfile }}</dd>

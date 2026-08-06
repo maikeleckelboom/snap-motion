@@ -59,6 +59,8 @@ export type {
   StackedDeckPose,
   StackedDeckProfile,
   StackedDeckRole,
+  StackedDeckTransition,
+  StackedDeckTransitionPhase,
   StackedDeckTuning,
 } from "./stackedDeck";
 export { SnapController } from "./controller";

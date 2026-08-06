@@ -158,65 +158,53 @@ and cannot make incoherent geometry look like anything.
 
 ## Stacked deck
 
-Stacked deck is a separate presentation topology, not a tighter configuration of the Coverflow
-rail. It reuses `createCoverflowGeometry`, `useCarouselMotion`, and one live physical position, but
-projects the complete card set through `resolveStackedDeckFrame`. The rail resolver remains
-unchanged: its steep side rails need a permanent clearing, while the deck deliberately keeps large
-screens closely overlapped at rest.
+The deck is a physical pile with one authoritative top card and at most three restrained backing
+layers. It reuses `createCoverflowGeometry` and `useCarouselMotion` only for generic scalar gesture,
+constraint, velocity, and settlement mechanics. It does not reuse the rail renderer. No card is
+assigned a horizontal slot from its index.
 
-`resolveStackedDeckTuning` is the single responsive source for card size, projected side position,
-virtual depth, yaw, far-stack convergence, visibility, material strength, and ownership thresholds.
-The wide profile settles the center near 60% of the stage width, exposes about 30% of each immediate
-neighbor, and projects those neighbors near 75% of the center size. Medium and compact profiles
-enlarge the center relative to the stage, narrow the exposed strips, reduce yaw, and hide far cards
-sooner.
+`resolveStackedDeckTuning` owns responsive card size, motion pitch, compact backing offsets, and the
+two exchange excursions. `resolveStackedDeckFrame` receives an explicit transition containing the
+settled index, outgoing index, incoming index, direction, phase, and progress. It returns `top`,
+`outgoing`, `incoming`, `backing`, or `hidden` roles. Render order follows those roles and stays
+constant throughout visible overlap; it is never recalculated when progress crosses a scalar
+threshold.
 
-### Asymmetric top-card shuffle
+### Committed state and transient roles
 
-For a forward step from item `i` to `i + 1`, the active pair uses different monotonic paths:
+The settled index is the sole authority for caption, pagination, current-item semantics, focus, and
+inspection. The transition's `fromIndex` remains that settled index until the controller reaches the
+target and becomes idle. `toIndex`, progress, and phase describe only the transient compositor.
+Cancellation therefore reverses the same exchange back to the settled card, while completion
+commits the target exactly once. A re-grab or a second command starts from the rendered physical
+position; it does not reconstruct an idle deck from semantic state.
 
-```text
-outgoingX = -sideProjectedX × t^2.3
-incomingX =  sideProjectedX × (1 - t)^1.85
-```
+### Forward exchange
 
-The outgoing card yields the center slowly while the incoming card approaches quickly underneath
-it. Their center separation never exceeds the normal settled side offset, and at least one active
-card remains within 12% of a card width from visual center. The pair remains heavily overlapped;
-there is no midpoint lane, empty center, or equal side-by-side standoff.
+The target begins as the first backing card directly beneath the top card. It rises by only the
+existing backing offset and scale. The outgoing card keeps the upper layer for the entire exchange,
+peels laterally with restrained lift and rotation, and accelerates away only after the target is
+established beneath it. The incoming card never travels from a side rail. It is revealed at the pile
+center and becomes the top card only after settlement. The outgoing card becomes transparent only
+after it has left meaningful overlap, then returns to the back of the cyclic pile while fully
+concealed. The two faces never dissolve through one another.
 
-Depth, scale, lift, veil, yaw, and contact shadow use continuous but deliberately unequal curves.
-Before handoff the outgoing card stays close to foreground depth and the incoming card remains
-visibly subordinate. Near handoff both paths converge without an equal-depth plateau. After
-handoff the incoming card completes its exact center pose while the outgoing card recedes quickly
-into the opposite stack. Reverse drag evaluates the same functions from the same physical index, so
-re-grab and reversal never reconstruct motion from semantic state.
+### Backward retrieval
 
-Every pose names its visual role: `foreground`, `incoming`, `outgoing`, or `rear`. The role is not
-inferred from signed X, and it does not replace semantic selection, pagination, focus, or settled
-announcement state.
+The previous card is retrieved from behind rather than evaluated as a mirrored slot. It begins fully
+clipped, owns one uninterrupted upper exchange layer while visible, emerges around the leading edge
+of the pile, and settles at center. The current card continuously settles onto the first backing
+layer beneath it. Because the retrieved card is concealed at the instant its exchange role is
+assigned, no visible overlap ever changes paint ownership.
 
-### Virtual depth is not paint order
+### Visual and accessibility invariants
 
-Virtual Z determines projected scale, lift, veil, and local surface treatment. DOM paint order is a
-separate explicit integer layer contract. Forward ownership changes at `0.66`, only after the
-incoming screen is close to center; reverse ownership changes at `0.62`. This narrow late
-hysteresis band prevents layer chatter without holding the pair at equal depth. Every pose receives
-a globally unique layer, including during multi-item frame jumps. Paint owner, live visual
-selection, settled semantic selection, and announcement ownership remain independent.
-
-The outer card owns projected X/Y, projected scale, visibility, pointer eligibility, and z-index.
-The inner screen surface owns its modest yaw, border edge, contact shadow, directional occlusion,
-and neutral veil. The transform carrier stays fully opaque and filter-free. The lab deliberately
-uses a flat outer compositor with explicit integer layers, then applies restrained local perspective
-only to the inner yaw surface. This prevents browser 3D sorting from overruling the resolver while
-preserving a physical edge cue. Only exposed adjacent cards are interactive; the foreground card
-naturally intercepts covered neighbor regions, and far or hidden cards have neither pointer
-eligibility nor a compositor hint.
-
-Reduced motion keeps the same exact anchors, overlap, and deterministic ownership. It removes yaw,
-softens depth, lift, and rear-stack excursion, avoids blur, and retains direct manipulation. It does
-not collapse the deck into two equally prominent flat cards.
+At rest only one semantic card is current and interactive. Backing instances are hidden from the
+accessibility tree and expose only small translated edges; non-participating cards never cross the
+stage. During an exchange both visual participants remain non-interactive and only the settled card
+retains current-item semantics. Compact, medium, wide, and reduced-motion profiles preserve the
+same role topology and exact settled anchors. Reduced motion removes exchange rotation and shortens
+displacement without creating an alternate state or competing full-size face.
 
 ## Responsive remeasurement
 

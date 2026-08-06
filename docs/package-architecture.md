@@ -35,7 +35,7 @@ and mixed ownership rather than a source cycle.
   `MutableStackedDeckFrame`, `MutableStackedDeckPose`,
   `ResolveStackedDeckFrameOptions`, `ResolveStackedDeckTuningOptions`,
   `StackedDeckFrame`, `StackedDeckPose`, `StackedDeckProfile`, `StackedDeckRole`,
-  `StackedDeckTuning`,
+  `StackedDeckTransition`, `StackedDeckTransitionPhase`, `StackedDeckTuning`,
   `FixedStageGeometry`, `MeasuredItemBox`, `PagedGridGeometry`, `PagedGridGeometryOptions`,
   `PagedGridPageContext`, `VariableWidthGeometryOptions`.
 - Controller: `SnapController`, `SnapControllerOptions`, `ControllerListener`,

@@ -8,7 +8,7 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 
 | Entry             |  Bytes | Gzip bytes | Budget bytes / gzip |
 | ----------------- | -----: | ---------: | ------------------: |
-| Core              | 32,466 |      9,347 |      33,000 / 9,500 |
+| Core              | 32,981 |      9,286 |      33,000 / 9,500 |
 | Vue root          | 70,665 |     19,355 |     72,000 / 20,000 |
 | Vue carousel      | 34,698 |      9,918 |     52,000 / 15,000 |
 | Vue sheet         | 41,353 |     11,933 |     42,000 / 12,500 |
@@ -21,12 +21,11 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 items, bounded render windows, simultaneous instances, resize/mutation storms, wheel coalescing,
 reactive publication counts, playback disposal, and listener cleanup.
 
-The corrected public stacked-deck frame resolver fits under a 33,000-byte raw and 9,500-byte gzip
-ceiling. This replaces the earlier 35,000/10,000 allowance with 534 raw bytes and 153 gzip bytes of
-measured headroom. The frame path mutates caller-owned poses, performs no DOM measurement, and
-allocates no arrays or sort keys. The lab explicitly invalidates Vue's shallow frame signal after
-reuse, applies compositor hints only to visible cards, and gives hidden compact cards
-`will-change: auto` with no pointer input.
+The physical stacked-deck frame resolver fits under a 33,000-byte raw and 9,500-byte gzip ceiling,
+with 19 raw bytes and 214 gzip bytes of measured headroom. The frame path mutates caller-owned
+poses, performs no DOM measurement, and allocates no arrays or sort keys. The lab explicitly
+invalidates Vue's shallow frame signal after reuse, applies compositor hints only to visible cards,
+and gives hidden cards `will-change: auto` with no pointer input.
 
 The Vue root, sheet, and raw CSS ceilings increased narrowly for the four-side descriptors,
 dimension-complete measurement policy, side-change remapping, fixed-width horizontal structure,

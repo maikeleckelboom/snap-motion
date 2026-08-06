@@ -489,15 +489,19 @@ export type MotionPresetName = "tight" | "balanced" | "heavy" | "loose";
 // @public
 export interface MutableStackedDeckFrame {
     // (undocumented)
-    ownerIndex: number;
+    direction: -1 | 0 | 1;
     // (undocumented)
-    pairFraction: number;
+    fromIndex: number;
     // (undocumented)
-    pairStartIndex: number;
-    // (undocumented)
-    physicalIndex: number;
+    phase: StackedDeckTransitionPhase;
     // (undocumented)
     poses: MutableStackedDeckPose[];
+    // (undocumented)
+    progress: number;
+    // (undocumented)
+    settledIndex: number;
+    // (undocumented)
+    toIndex: number;
 }
 
 // @public
@@ -507,21 +511,23 @@ export interface MutableStackedDeckPose {
     // (undocumented)
     layer: number;
     // (undocumented)
-    projectedScale: number;
+    opacity: number;
+    // (undocumented)
+    reveal: number;
     // (undocumented)
     role: StackedDeckRole;
     // (undocumented)
-    rotateY: number;
+    rotate: number;
+    // (undocumented)
+    scale: number;
     // (undocumented)
     shadowStrength: number;
+    // (undocumented)
+    stackDepth: number;
     // (undocumented)
     translateX: number;
     // (undocumented)
     translateY: number;
-    // (undocumented)
-    veil: number;
-    // (undocumented)
-    virtualZ: number;
     // (undocumented)
     visible: boolean;
 }
@@ -643,9 +649,7 @@ export interface ResolveStackedDeckFrameOptions {
     // (undocumented)
     readonly itemCount: number;
     // (undocumented)
-    readonly physicalIndex: number;
-    // (undocumented)
-    readonly previousOwnerIndex?: number;
+    readonly transition: StackedDeckTransition;
     // (undocumented)
     readonly tuning: StackedDeckTuning;
 }
@@ -800,15 +804,19 @@ export interface SpringConfiguration {
 // @public (undocumented)
 export interface StackedDeckFrame {
     // (undocumented)
-    readonly ownerIndex: number;
+    readonly direction: -1 | 0 | 1;
     // (undocumented)
-    readonly pairFraction: number;
+    readonly fromIndex: number;
     // (undocumented)
-    readonly pairStartIndex: number;
-    // (undocumented)
-    readonly physicalIndex: number;
+    readonly phase: StackedDeckTransitionPhase;
     // (undocumented)
     readonly poses: readonly StackedDeckPose[];
+    // (undocumented)
+    readonly progress: number;
+    // (undocumented)
+    readonly settledIndex: number;
+    // (undocumented)
+    readonly toIndex: number;
 }
 
 // @public (undocumented)
@@ -818,21 +826,23 @@ export interface StackedDeckPose {
     // (undocumented)
     readonly layer: number;
     // (undocumented)
-    readonly projectedScale: number;
+    readonly opacity: number;
+    // (undocumented)
+    readonly reveal: number;
     // (undocumented)
     readonly role: StackedDeckRole;
     // (undocumented)
-    readonly rotateY: number;
+    readonly rotate: number;
+    // (undocumented)
+    readonly scale: number;
     // (undocumented)
     readonly shadowStrength: number;
+    // (undocumented)
+    readonly stackDepth: number;
     // (undocumented)
     readonly translateX: number;
     // (undocumented)
     readonly translateY: number;
-    // (undocumented)
-    readonly veil: number;
-    // (undocumented)
-    readonly virtualZ: number;
     // (undocumented)
     readonly visible: boolean;
 }
@@ -841,44 +851,61 @@ export interface StackedDeckPose {
 export type StackedDeckProfile = "compact" | "medium" | "wide";
 
 // @public (undocumented)
-export type StackedDeckRole = "foreground" | "incoming" | "outgoing" | "rear";
+export type StackedDeckRole = "top" | "incoming" | "outgoing" | "backing" | "hidden";
+
+// @public (undocumented)
+export interface StackedDeckTransition {
+    // (undocumented)
+    readonly direction: -1 | 0 | 1;
+    // (undocumented)
+    readonly fromIndex: number;
+    // (undocumented)
+    readonly phase: StackedDeckTransitionPhase;
+    // (undocumented)
+    readonly progress: number;
+    // (undocumented)
+    readonly settledIndex: number;
+    // (undocumented)
+    readonly toIndex: number;
+}
+
+// @public (undocumented)
+export type StackedDeckTransitionPhase = "idle" | "peel" | "handoff" | "settle";
 
 // @public (undocumented)
 export interface StackedDeckTuning {
+    // (undocumented)
+    readonly backingOffsetX: number;
+    // (undocumented)
+    readonly backingOffsetY: number;
+    // (undocumented)
+    readonly backingRotate: number;
+    // (undocumented)
+    readonly backingScaleStep: number;
     // (undocumented)
     readonly cardHeight: number;
     // (undocumented)
     readonly cardWidth: number;
     // (undocumented)
-    readonly handoffBackward: number;
+    readonly forwardConcealStart: number;
     // (undocumented)
-    readonly handoffForward: number;
+    readonly forwardPeelX: number;
     // (undocumented)
-    readonly hideAfter: number;
+    readonly forwardPeelY: number;
+    // (undocumented)
+    readonly forwardRotate: number;
+    // (undocumented)
+    readonly maximumBackingLayers: number;
     // (undocumented)
     readonly motionPitch: number;
     // (undocumented)
-    readonly perspective: number;
-    // (undocumented)
     readonly profile: StackedDeckProfile;
     // (undocumented)
-    readonly sideLift: number;
+    readonly reverseExcursionX: number;
     // (undocumented)
-    readonly sideProjectedX: number;
+    readonly reverseExcursionY: number;
     // (undocumented)
-    readonly sideRotateY: number;
-    // (undocumented)
-    readonly sideVeil: number;
-    // (undocumented)
-    readonly sideVirtualZ: number;
-    // (undocumented)
-    readonly stackStrideX: number;
-    // (undocumented)
-    readonly stackStrideY: number;
-    // (undocumented)
-    readonly stackStrideZ: number;
-    // (undocumented)
-    readonly stackVeil: number;
+    readonly reverseRotate: number;
 }
 
 // @public (undocumented)

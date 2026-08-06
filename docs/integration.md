@@ -29,10 +29,12 @@ transitions, smooth scrolling, native scroll snap, or another animation library 
 carousel or media-gallery transform.
 
 When an application needs the stacked-deck visual model, it should allocate one
-`MutableStackedDeckFrame`, resolve it from the carousel's live physical index, and render the
-returned poses. `resolveStackedDeckTuning` owns responsive projection and reduced-motion
-tuning. The application must not infer the paint owner from DOM 3D sorting or promote
-`ownerIndex` into route, selection, focus, or announcement state.
+`MutableStackedDeckFrame`, derive an explicit `StackedDeckTransition` from the generic controller,
+and render the returned roles. `resolveStackedDeckTuning` owns responsive pile and reduced-motion
+tuning. The settled index must remain authoritative for route, selection, focus, inspection, and
+announcements until the controller completes. Applications must not derive a horizontal slot or
+paint order from relative item index, and must not promote the transient incoming role into public
+state.
 
 Import the essential component CSS once:
 

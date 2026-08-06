@@ -4,6 +4,7 @@ import {
   createStackedDeckFrame,
   resolveStackedDeckFrame,
   resolveStackedDeckTuning,
+  type StackedDeckTransition,
 } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
 import { MediaGalleryDialog, type FocusReturnOptions } from "@snap-motion/vue/media-gallery";
@@ -39,12 +40,12 @@ import {
   resolveAdjacentCoverflowIndex,
   resolveCoverflowKeyboardAction,
   resolveCoverflowPaginationIndicator,
-  resolveCoverflowVisualIndex,
   resolveSpeedInCards,
   useBoundedCoverflowDriver,
   type CoverflowPaginationIndicatorState,
 } from "./coverflowMotion";
 import { showcaseScreens, type ShowcaseScreenId } from "./showcaseScreens";
+import { StackedDeckTransitionState } from "./stackedDeckTransition";
 
 type ScreenId = ShowcaseScreenId;
 
@@ -57,7 +58,7 @@ const props = defineProps<{
 const screens = showcaseScreens;
 
 const ids = screens.map((screen) => screen.id);
-const coverflowRoot = ref<HTMLElement>();
+const deckRoot = ref<HTMLElement>();
 const viewport = ref<HTMLElement>();
 const track = ref<HTMLElement>();
 const galleryOpen = ref(false);
@@ -149,15 +150,14 @@ const initialIndex = Math.floor(ids.length / 2);
 galleryInitialIndex.value = initialIndex;
 galleryFinalIndex.value = initialIndex;
 const settledSelection = new CoverflowSettledSelection(initialIndex, ids.length);
-const visualIndex = ref(initialIndex);
 const settledIndex = ref(initialIndex);
 const pendingTargetIndex = ref<number | null>(null);
 const focusedPaginationIndex = ref<number | null>(null);
 const liveMessage = ref("");
-const visualId = computed(() => ids[visualIndex.value] ?? ids[initialIndex]!);
 const settledId = computed(() => ids[settledIndex.value] ?? ids[initialIndex]!);
-const visualScreen = computed(() => screens[visualIndex.value] ?? screens[0]!);
 const settledScreen = computed(() => screens[settledIndex.value] ?? screens[0]!);
+const deckTransitionState = new StackedDeckTransitionState(initialIndex, ids.length);
+const deckTransition = shallowRef<StackedDeckTransition>(deckTransitionState.transition);
 
 /** Continuous physical index. It projects motion but never controls the carousel mass. */
 const rawPhysicalIndex = computed(() =>
@@ -173,7 +173,7 @@ const paginationDots = computed(() =>
   screens.map((screen, index) => ({
     id: screen.id,
     title: screen.title,
-    current: index === visualIndex.value,
+    current: index === settledIndex.value,
   })),
 );
 
@@ -181,31 +181,29 @@ watch(
   motion.snapshot,
   (snapshot) => {
     const currentPitch = Math.max(1, pitch.value);
-    const currentPhysicalIndex = clamp(-snapshot.position / currentPitch, 0, ids.length - 1);
     const targetIndex =
       snapshot.target === null ? null : Math.max(0, ids.indexOf(snapshot.target.id));
     const nearestIndex =
       snapshot.active === null ? settledIndex.value : Math.max(0, ids.indexOf(snapshot.active.id));
-    const nextVisualIndex = resolveCoverflowVisualIndex(
-      currentPhysicalIndex,
-      visualIndex.value,
-      ids.length,
-    );
     const announcementIndex = settledSelection.update({
       phase: snapshot.phase,
       targetIndex,
       activeIndex: nearestIndex,
     });
 
-    if (visualIndex.value !== nextVisualIndex) {
-      visualIndex.value = nextVisualIndex;
-    }
     if (settledIndex.value !== settledSelection.settledIndex) {
       settledIndex.value = settledSelection.settledIndex;
     }
     if (pendingTargetIndex.value !== settledSelection.pendingTargetIndex) {
       pendingTargetIndex.value = settledSelection.pendingTargetIndex;
     }
+    deckTransition.value = deckTransitionState.update({
+      controllerPhase: snapshot.phase,
+      itemCount: ids.length,
+      physicalIndex: -snapshot.position / currentPitch,
+      settledIndex: settledSelection.settledIndex,
+      targetIndex,
+    });
     if (announcementIndex !== null) {
       const suppressAnnouncement = announcementIndex === suppressedCarouselAnnouncementIndex;
       suppressedCarouselAnnouncementIndex = undefined;
@@ -251,6 +249,7 @@ function isCardGalleryEligible(index: number): boolean {
 
 interface SlideStyle {
   opacity: number;
+  clipPath: string;
   transformOrigin?: string;
   transform: string;
   zIndex: number;
@@ -267,7 +266,7 @@ watchEffect(() => {
   resolveStackedDeckFrame(
     {
       itemCount: ids.length,
-      physicalIndex: rawPhysicalIndex.value,
+      transition: deckTransition.value,
       tuning,
     },
     stackedFrameOutput,
@@ -286,47 +285,38 @@ const slideStyles = computed(() => {
     const screen = screens[index]!;
     const pose = frame.poses[index]!;
     styles[screen.id] = {
-      opacity: 1,
-      transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.projectedScale.toFixed(5)})`,
+      opacity: pose.opacity,
+      clipPath: `inset(0 ${(100 - pose.reveal * 100).toFixed(3)}% 0 0 round 0.8rem)`,
+      transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
       transformOrigin: "center center",
       zIndex: pose.layer,
       visibility: pose.visible ? "visible" : "hidden",
       pointerEvents: pose.interactive ? "auto" : "none",
       willChange: pose.visible ? "transform" : "auto",
       "--screen-accent": screen.accent,
-      "--deck-edge-offset": `${(Math.sign(pose.rotateY) * -1.5).toFixed(3)}px`,
-      "--deck-occlusion-angle": pose.translateX < 0 ? "90deg" : "270deg",
-      "--deck-rotate-y": `${pose.rotateY.toFixed(3)}deg`,
-      "--deck-shadow-strength": pose.shadowStrength.toFixed(4),
-      "--deck-veil": pose.veil.toFixed(4),
+      "--_deck-shadow-strength": pose.shadowStrength.toFixed(4),
     };
   }
   return styles;
 });
 
 const stageStyle = computed(() => ({
-  "--coverflow-stage-width": `${Math.min(props.stageWidth, 1_280)}px`,
-  "--coverflow-card-width": `${cardWidth.value}px`,
-  "--coverflow-card-height": `${cardHeight.value}px`,
+  "--_deck-stage-width": `${Math.min(props.stageWidth, 1_280)}px`,
+  "--_deck-card-width": `${cardWidth.value}px`,
+  "--_deck-card-height": `${cardHeight.value}px`,
 }));
 
 const paginationIndicator = computed<CoverflowPaginationIndicatorState>(() =>
-  resolveCoverflowPaginationIndicator(
-    physicalIndex.value,
-    motion.velocity.value,
-    pitch.value,
-    ids.length,
-    {
-      position: 0,
-      x: 0,
-      scaleX: 1,
-      stretchRatio: 0,
-      speedInCards: 0,
-      softDirection: 0,
-      leftStretch: 0,
-      rightStretch: 0,
-    },
-  ),
+  resolveCoverflowPaginationIndicator(settledIndex.value, 0, pitch.value, ids.length, {
+    position: 0,
+    x: 0,
+    scaleX: 1,
+    stretchRatio: 0,
+    speedInCards: 0,
+    softDirection: 0,
+    leftStretch: 0,
+    rightStretch: 0,
+  }),
 );
 
 const paginationStyle = computed(() => ({
@@ -359,10 +349,12 @@ const diagnostics = computed<LabDiagnostics>(() => {
     position: motion.position.value,
     physicalIndex: rawPhysicalIndex.value,
     motionPitch: pitch.value,
-    ownerIndex: stackedFrame.value.ownerIndex,
-    pairFraction: stackedFrame.value.pairFraction,
+    transitionDirection: deckTransition.value.direction,
+    transitionFromIndex: deckTransition.value.fromIndex,
+    transitionPhase: deckTransition.value.phase,
+    transitionProgress: deckTransition.value.progress,
+    transitionToIndex: deckTransition.value.toIndex,
     tuningProfile: stackedTuning.value.profile,
-    visualIndex: visualIndex.value,
     settledIndex: settledIndex.value,
     ...(focusedPaginationIndex.value === null
       ? {}
@@ -401,7 +393,7 @@ function goToNext(): boolean {
   return goToIndex(resolveAdjacentCoverflowIndex(keyboardTargetIndex.value, 1, ids.length));
 }
 
-function onCoverflowKeyDown(event: KeyboardEvent) {
+function onDeckKeyDown(event: KeyboardEvent) {
   if (galleryOpen.value) return;
   const action = resolveCoverflowKeyboardAction(event);
   if (!action) return;
@@ -427,7 +419,6 @@ function synchronizeCarouselExactly(index: number): boolean {
     motion.targetId.value === id &&
     Math.abs(motion.position.value - anchorPosition) <= Number.EPSILON * 16 &&
     Math.abs(motion.velocity.value) <= Number.EPSILON * 16 &&
-    visualIndex.value === targetIndex &&
     settledIndex.value === targetIndex;
   if (alreadySynchronized) return true;
 
@@ -437,9 +428,9 @@ function synchronizeCarouselExactly(index: number): boolean {
     ...measureGeometry(),
     activeId: id,
   });
-  visualIndex.value = targetIndex;
   settledIndex.value = targetIndex;
   pendingTargetIndex.value = null;
+  deckTransition.value = deckTransitionState.reset(targetIndex);
   return true;
 }
 
@@ -461,13 +452,13 @@ function releaseMatchesOrigin(gesture: CarouselGesture, event: PointerEvent): bo
   if (!origin) return false;
   const releaseCard =
     event.target instanceof Element
-      ? (event.target.closest<HTMLElement>(".coverflow-card") ?? undefined)
+      ? (event.target.closest<HTMLElement>(".stacked-deck-card") ?? undefined)
       : undefined;
   if (releaseCard) return releaseCard === origin;
   const documentTarget = origin.ownerDocument;
   const hitCards = documentTarget
     .elementsFromPoint(event.clientX, event.clientY)
-    .map((element) => element.closest<HTMLElement>(".coverflow-card"))
+    .map((element) => element.closest<HTMLElement>(".stacked-deck-card"))
     .filter((element): element is HTMLElement => element !== null);
   if (hitCards.some((element) => element === origin)) return true;
   if (hitCards.length > 0) return false;
@@ -481,6 +472,11 @@ function releaseMatchesOrigin(gesture: CarouselGesture, event: PointerEvent): bo
 }
 
 function resolveCompletedCarouselGesture(completed: CarouselGesture, releasedOnOrigin: boolean) {
+  if (completed.cancelled) {
+    const restoreId = settledId.value;
+    motion.moveTo(restoreId, { initialVelocity: 0 });
+    return;
+  }
   const horizontalIntent =
     Math.abs(completed.deltaX) >=
     Math.abs(completed.deltaY) * COVERFLOW_GALLERY_TUNING.horizontalIntentRatio;
@@ -494,7 +490,7 @@ function resolveCompletedCarouselGesture(completed: CarouselGesture, releasedOnO
     releasedOnOrigin,
   });
   if (resolution.action === "swipe") {
-    const root = coverflowRoot.value;
+    const root = deckRoot.value;
     const activeElement = root?.ownerDocument.activeElement;
     if (
       resolution.shouldFocusStage &&
@@ -516,7 +512,7 @@ function resolveCompletedCarouselGesture(completed: CarouselGesture, releasedOnO
   }
 }
 
-function onCoverflowPointerDown(event: PointerEvent) {
+function onDeckPointerDown(event: PointerEvent) {
   if (galleryOpen.value) return;
   if (carouselGesture && !activeCarouselPointers.has(event.pointerId)) {
     carouselGesture.involvedMultiplePointers = true;
@@ -528,17 +524,17 @@ function onCoverflowPointerDown(event: PointerEvent) {
     return;
   }
 
-  const root = coverflowRoot.value;
+  const root = deckRoot.value;
   const activeElement = root?.ownerDocument.activeElement;
   const eventCard =
     event.target instanceof Element
-      ? (event.target.closest<HTMLElement>(".coverflow-card") ?? undefined)
+      ? (event.target.closest<HTMLElement>(".stacked-deck-card") ?? undefined)
       : undefined;
   const originElement =
     eventCard ??
     root?.ownerDocument
       .elementsFromPoint(event.clientX, event.clientY)
-      .map((element) => element.closest<HTMLElement>(".coverflow-card"))
+      .map((element) => element.closest<HTMLElement>(".stacked-deck-card"))
       .find((element): element is HTMLElement => element !== null);
   const originIndex = originElement
     ? screens.findIndex((screen) => screen.id === originElement.dataset.screenId)
@@ -596,7 +592,16 @@ function onCarouselPointerCancel(event: PointerEvent) {
   queueMicrotask(() => resolveCompletedCarouselGesture(gesture, false));
 }
 
-function onCoverflowWheel(event: WheelEvent) {
+function onCarouselLostPointerCapture(event: PointerEvent) {
+  const gesture = carouselGesture;
+  if (!gesture || event.pointerId !== gesture.pointerId) return;
+  activeCarouselPointers.delete(event.pointerId);
+  gesture.cancelled = true;
+  carouselGesture = undefined;
+  queueMicrotask(() => resolveCompletedCarouselGesture(gesture, false));
+}
+
+function onDeckWheel(event: WheelEvent) {
   if (!galleryOpen.value) motion.onWheel(event);
 }
 
@@ -648,21 +653,21 @@ onBeforeUnmount(() => {
 
 <template>
   <section
-    ref="coverflowRoot"
+    ref="deckRoot"
     aria-labelledby="stacked-deck-title"
-    class="coverflow-demo stacked-deck-demo"
-    @keydown="onCoverflowKeyDown"
+    class="stacked-deck-demo"
+    @keydown="onDeckKeyDown"
   >
-    <header class="coverflow-header">
+    <header class="stacked-deck-header">
       <div>
-        <p class="eyebrow">Spatial carousel</p>
+        <p class="eyebrow">Physical carousel</p>
         <h3 id="stacked-deck-title">Stacked deck</h3>
         <p class="lede">
-          One top screen remains authoritative while the next approaches beneath it and takes
-          ownership only after reaching the visual center.
+          One top screen leaves or yields to a card already inside the pile. Selection changes only
+          after the physical exchange settles.
         </p>
       </div>
-      <div class="coverflow-controls">
+      <div class="stacked-deck-controls">
         <button
           aria-label="Previous screen"
           data-testid="stacked-deck-previous"
@@ -692,18 +697,13 @@ onBeforeUnmount(() => {
       ref="viewport"
       aria-label="Product screen stacked deck"
       aria-roledescription="carousel"
-      class="coverflow-viewport"
+      class="stacked-deck-viewport"
       data-testid="stacked-deck-viewport"
       :data-active-id="settledId"
       :data-card-width="cardWidth"
       :data-gallery-open="galleryOpen ? 'true' : 'false'"
       :data-keyboard-target-index="keyboardTargetIndex"
       :data-motion-pitch="pitch"
-      :data-handoff-backward="stackedTuning.handoffBackward"
-      :data-handoff-forward="stackedTuning.handoffForward"
-      :data-owner-index="stackedFrame.ownerIndex"
-      :data-pair-fraction="stackedFrame.pairFraction"
-      :data-pair-start-index="stackedFrame.pairStartIndex"
       :data-pending-index="pendingTargetIndex"
       :data-phase="motion.phase.value"
       :data-physical-index="rawPhysicalIndex"
@@ -712,40 +712,46 @@ onBeforeUnmount(() => {
       :data-settled-index="settledIndex"
       :data-speed-in-cards="speedInCards"
       :data-target-id="motion.targetId.value"
-      :data-visual-id="visualId"
-      :data-visual-index="visualIndex"
+      :data-transition-direction="deckTransition.direction"
+      :data-transition-from-index="deckTransition.fromIndex"
+      :data-transition-phase="deckTransition.phase"
+      :data-transition-progress="deckTransition.progress"
+      :data-transition-to-index="deckTransition.toIndex"
       :style="[stageStyle, motion.surfaceStyle]"
       tabindex="0"
-      @pointerdown="onCoverflowPointerDown"
-      @wheel="onCoverflowWheel"
+      @lostpointercapture="onCarouselLostPointerCapture"
+      @pointerdown="onDeckPointerDown"
+      @wheel="onDeckWheel"
     >
-      <div ref="track" class="coverflow-stage stacked-deck-stage">
+      <div ref="track" class="stacked-deck-stage">
         <article
           v-for="(screen, index) in screens"
           :key="screen.id"
-          :aria-current="screen.id === visualId ? 'true' : undefined"
-          :aria-hidden="slideStyles[screen.id]?.visibility === 'hidden' ? 'true' : undefined"
+          :aria-current="screen.id === settledId ? 'true' : undefined"
+          :aria-hidden="screen.id === settledId ? undefined : 'true'"
           :aria-label="`${screen.title}, ${index + 1} of ${screens.length}`"
           aria-roledescription="slide"
-          class="coverflow-card stacked-deck-card"
+          class="stacked-deck-card"
           :class="[
             `tone-${screen.tone}`,
             `layout-${screen.layout}`,
             {
-              active: screen.id === visualId,
+              active: screen.id === settledId,
               inspectable: isCardGalleryEligible(index),
             },
           ]"
           :data-interactive="stackedPose(index)?.interactive"
           :data-layer="stackedPose(index)?.layer"
-          :data-projected-scale="stackedPose(index)?.projectedScale"
+          :data-opacity="stackedPose(index)?.opacity"
+          :data-reveal="stackedPose(index)?.reveal"
           :data-role="stackedPose(index)?.role"
-          :data-rotate-y="stackedPose(index)?.rotateY"
+          :data-rotate="stackedPose(index)?.rotate"
+          :data-scale="stackedPose(index)?.scale"
           :data-screen-id="screen.id"
           :data-shadow-strength="stackedPose(index)?.shadowStrength"
+          :data-stack-depth="stackedPose(index)?.stackDepth"
           :data-translate-x="stackedPose(index)?.translateX"
-          :data-veil="stackedPose(index)?.veil"
-          :data-virtual-z="stackedPose(index)?.virtualZ"
+          :data-translate-y="stackedPose(index)?.translateY"
           :data-visible="stackedPose(index)?.visible"
           :style="slideStyles[screen.id]"
           @click.prevent
@@ -765,17 +771,17 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="coverflow-meta">
+    <div class="stacked-deck-meta">
       <p>
-        <span class="tabular" data-testid="stacked-deck-counter">{{ visualIndex + 1 }}</span>
+        <span class="tabular" data-testid="stacked-deck-counter">{{ settledIndex + 1 }}</span>
         /
         <span class="tabular">{{ screens.length }}</span>
-        <strong data-testid="stacked-deck-caption">{{ visualScreen.title }}</strong>
+        <strong data-testid="stacked-deck-caption">{{ settledScreen.title }}</strong>
       </p>
       <button
         ref="inspectControl"
         :aria-label="`Inspect ${settledScreen.title} in screen gallery, ${settledIndex + 1} of ${screens.length}`"
-        class="coverflow-inspect"
+        class="stacked-deck-inspect"
         data-testid="stacked-deck-inspect"
         :disabled="!isCardGalleryEligible(settledIndex)"
         type="button"
@@ -801,7 +807,7 @@ onBeforeUnmount(() => {
       >
         <span
           aria-hidden="true"
-          class="coverflow-pagination-indicator"
+          class="stacked-deck-pagination-indicator"
           :data-position="paginationIndicator.position.toFixed(5)"
           :data-scale-x="paginationIndicator.scaleX.toFixed(5)"
           :data-soft-direction="paginationIndicator.softDirection.toFixed(5)"
@@ -843,13 +849,13 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.coverflow-demo {
+.stacked-deck-demo {
   display: grid;
   gap: 1rem;
   min-inline-size: 0;
 }
 
-.coverflow-demo :deep(.snap-motion-media-gallery) {
+.stacked-deck-demo :deep(.snap-motion-media-gallery) {
   --snap-motion-gallery-surface: #11161f;
   --snap-motion-gallery-canvas: #090d13;
   --snap-motion-gallery-text: #eef2f7;
@@ -866,19 +872,19 @@ onBeforeUnmount(() => {
   --snap-motion-gallery-radius: 1rem;
 }
 
-.coverflow-header {
+.stacked-deck-header {
   display: flex;
   align-items: end;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.coverflow-header .eyebrow,
-.coverflow-meta p {
+.stacked-deck-header .eyebrow,
+.stacked-deck-meta p {
   margin: 0;
 }
 
-.coverflow-header .eyebrow {
+.stacked-deck-header .eyebrow {
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 700;
@@ -886,7 +892,7 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
 }
 
-.coverflow-header h3 {
+.stacked-deck-header h3 {
   margin: 0.2rem 0 0.35rem;
   font-size: 1.35rem;
 }
@@ -898,12 +904,12 @@ onBeforeUnmount(() => {
   line-height: 1.45;
 }
 
-.coverflow-controls {
+.stacked-deck-controls {
   display: inline-flex;
   gap: 0.5rem;
 }
 
-.coverflow-controls button,
+.stacked-deck-controls button,
 .dot {
   display: inline-grid;
   place-items: center;
@@ -912,136 +918,91 @@ onBeforeUnmount(() => {
   border-radius: 999px;
 }
 
-.coverflow-viewport {
+.stacked-deck-viewport {
   position: relative;
-  inline-size: min(100%, var(--coverflow-stage-width));
-  min-block-size: calc(var(--coverflow-card-height) + 7rem);
+  inline-size: min(100%, var(--_deck-stage-width));
+  min-block-size: calc(var(--_deck-card-height) + 5.5rem);
   margin-inline: auto;
   border-radius: 1.5rem;
-  background: linear-gradient(180deg, #eef2f7 0%, #e5ebf3 100%);
+  background:
+    radial-gradient(circle at 50% 28%, rgb(255 255 255 / 0.92), transparent 56%),
+    linear-gradient(180deg, #f1f4f8 0%, #e7ecf2 100%);
   overflow: hidden;
-  /* One camera for the whole stage. Every panel receives only its own rigid transform. */
-  perspective: 900px;
-  perspective-origin: 50% 46%;
+  isolation: isolate;
   touch-action: pan-y;
   user-select: none;
   cursor: grab;
 }
 
-.coverflow-viewport:active {
+.stacked-deck-viewport:active {
   cursor: grabbing;
 }
 
-.coverflow-viewport::before {
+.stacked-deck-viewport::before {
   content: "";
   position: absolute;
   inset-inline-start: 50%;
-  inset-block-end: 2.15rem;
-  inline-size: min(64%, 38rem);
-  block-size: 5.25rem;
+  inset-block-end: 1.1rem;
+  inline-size: min(72%, 46rem);
+  block-size: 4.5rem;
   transform: translateX(-50%);
   border-radius: 50%;
   background: radial-gradient(
     ellipse at center,
-    rgb(15 23 42 / 0.13) 0%,
-    rgb(15 23 42 / 0.055) 42%,
+    rgb(15 23 42 / 0.16) 0%,
+    rgb(15 23 42 / 0.06) 46%,
     rgb(15 23 42 / 0) 74%
   );
   pointer-events: none;
 }
 
-.coverflow-stage {
+.stacked-deck-stage {
   position: relative;
   z-index: 1;
   inline-size: 100%;
-  block-size: calc(var(--coverflow-card-height) + 7rem);
-  transform-style: preserve-3d;
+  block-size: calc(var(--_deck-card-height) + 5.5rem);
+  transform-style: flat;
 }
 
-.coverflow-card {
-  --depth: 0;
-  --deep-rail: 0;
-  --center-influence: 1;
-  --kinetic-focus: 0;
-  --settledness: 1;
-  --contact-shadow: 1;
-  --yaw: 0;
-  --sheen: 0;
-  --surface-shade: 0;
-  --sheen-angle: 100deg;
-  --occlusion: 0;
-  --occlusion-angle: 90deg;
-  --edge-offset: 0px;
-  --edge-near: #d4dbe4;
-  --edge-deep: #b9c2ce;
-  --edge-face: var(--edge-near);
-  --surface-darken: 0.06;
-  --surface-highlight: 0.03;
+.stacked-deck-card {
+  --_deck-shadow-strength: 1;
 
   position: absolute;
   inset-block-start: 50%;
   inset-inline-start: 50%;
-  inline-size: var(--coverflow-card-width);
-  block-size: var(--coverflow-card-height);
+  inline-size: var(--_deck-card-width);
+  block-size: var(--_deck-card-height);
   margin: 0;
   border: 0;
   padding: 0;
   background: transparent;
-  transform-style: preserve-3d;
+  transform-style: flat;
   transform-origin: center center;
-  will-change: transform;
   cursor: pointer;
-}
-
-.tone-ink {
-  --edge-near: #536174;
-  --edge-deep: #414d5e;
-  --surface-darken: 0.035;
-  --surface-highlight: 0.025;
 }
 
 .screen-chrome {
   position: relative;
   inline-size: 100%;
   block-size: 100%;
-  border: 1px solid rgb(15 23 42 / 0.14);
-  border-radius: 1.15rem;
+  border: 1px solid rgb(15 23 42 / 0.16);
+  border-radius: 0.8rem;
   overflow: hidden;
   background: #fff;
-  /*
-   * The first layer is the rounded side surface. The second is a fixed-geometry contact shadow
-   * whose opacity is earned by center proximity and settledness. The final narrow, yaw-directed
-   * layer supplies local occlusion where the foreground panel overlaps the rail behind it.
-   */
   box-shadow:
-    var(--edge-offset) 0 0 0 var(--edge-face),
-    0 9px 20px -9px rgb(15 23 42 / calc(0.32 * var(--contact-shadow))),
-    calc(var(--yaw) * -8px) 1px 10px -5px rgb(15 23 42 / calc(0.22 * var(--occlusion)));
+    0 18px 38px -18px rgb(15 23 42 / calc(0.38 * var(--_deck-shadow-strength))),
+    0 4px 10px -6px rgb(15 23 42 / calc(0.32 * var(--_deck-shadow-strength)));
   color: #0f172a;
+  filter: none;
 }
 
-/* Matte incident light, a ten-pixel overlap edge, and a weak neutral deep-rail tint. */
 .screen-chrome::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image:
-    linear-gradient(
-      var(--occlusion-angle),
-      rgb(2 6 23 / calc(0.16 * var(--occlusion))),
-      rgb(2 6 23 / 0) 10px
-    ),
-    linear-gradient(
-      var(--sheen-angle),
-      rgb(255 255 255 / calc(var(--surface-highlight) * var(--sheen))),
-      rgb(255 255 255 / 0) 28%,
-      rgb(2 6 23 / calc(var(--surface-darken) * var(--surface-shade)))
-    ),
-    linear-gradient(
-      rgb(100 116 139 / calc(0.025 * var(--deep-rail))),
-      rgb(100 116 139 / calc(0.025 * var(--deep-rail)))
-    );
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.11), transparent 34%);
 }
 
 .tone-mist .screen-chrome {
@@ -1054,74 +1015,14 @@ onBeforeUnmount(() => {
   border-color: rgb(255 255 255 / 0.08);
 }
 
-.stacked-deck-demo .coverflow-viewport {
-  background:
-    radial-gradient(circle at 50% 28%, rgb(255 255 255 / 0.92), transparent 56%),
-    linear-gradient(180deg, #f1f4f8 0%, #e7ecf2 100%);
-  perspective: none;
-}
-
-.stacked-deck-demo .coverflow-viewport::before {
-  inset-block-end: 1.1rem;
-  inline-size: min(72%, 46rem);
-  block-size: 4.5rem;
-  background: radial-gradient(
-    ellipse at center,
-    rgb(15 23 42 / 0.16) 0%,
-    rgb(15 23 42 / 0.06) 46%,
-    rgb(15 23 42 / 0) 74%
-  );
-}
-
-.stacked-deck-stage,
-.stacked-deck-card {
-  transform-style: flat;
-}
-
-.stacked-deck-card {
-  --deck-edge-offset: 0px;
-  --deck-occlusion-angle: 90deg;
-  --deck-rotate-y: 0deg;
-  --deck-shadow-strength: 1;
-  --deck-veil: 0;
-}
-
-.stacked-deck-card .screen-chrome {
-  border-color: rgb(15 23 42 / 0.16);
-  border-radius: 0.8rem;
-  background: #fff;
-  box-shadow:
-    var(--deck-edge-offset) 0 0 1px rgb(100 116 139 / 0.5),
-    0 18px 38px -18px rgb(15 23 42 / calc(0.38 * var(--deck-shadow-strength))),
-    0 4px 10px -6px rgb(15 23 42 / calc(0.32 * var(--deck-shadow-strength)));
-  filter: none;
-  transform: perspective(1100px) rotateY(var(--deck-rotate-y));
-  transform-origin: center;
-}
-
-.stacked-deck-card[data-role="foreground"] .screen-chrome {
+.stacked-deck-card[data-role="top"] .screen-chrome {
   border-color: rgb(15 23 42 / 0.23);
 }
 
 .stacked-deck-card[data-role="incoming"] .screen-chrome,
 .stacked-deck-card[data-role="outgoing"] .screen-chrome,
-.stacked-deck-card[data-role="rear"] .screen-chrome {
+.stacked-deck-card[data-role="backing"] .screen-chrome {
   border-color: rgb(71 85 105 / 0.16);
-}
-
-.stacked-deck-card .screen-chrome::after {
-  background-image:
-    linear-gradient(
-      var(--deck-occlusion-angle),
-      rgb(15 23 42 / calc(0.12 * var(--deck-veil))),
-      rgb(15 23 42 / 0) 8%,
-      rgb(255 255 255 / calc(0.1 * var(--deck-veil))) 72%,
-      rgb(255 255 255 / 0) 100%
-    ),
-    linear-gradient(
-      rgb(226 232 240 / var(--deck-veil)),
-      rgb(241 245 249 / calc(0.78 * var(--deck-veil)))
-    );
 }
 
 .stacked-screen-image {
@@ -1132,18 +1033,18 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-.coverflow-meta,
+.stacked-deck-meta,
 .dots {
   display: flex;
 }
 
-.coverflow-meta {
+.stacked-deck-meta {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.coverflow-meta p {
+.stacked-deck-meta p {
   display: flex;
   flex: 1 1 auto;
   align-items: baseline;
@@ -1153,7 +1054,7 @@ onBeforeUnmount(() => {
   font-size: 0.9rem;
 }
 
-.coverflow-inspect {
+.stacked-deck-inspect {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -1171,22 +1072,22 @@ onBeforeUnmount(() => {
   font-weight: 650;
 }
 
-.coverflow-inspect:hover:not(:disabled) {
+.stacked-deck-inspect:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--ink) 42%, transparent);
   background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
-.coverflow-inspect:focus-visible {
+.stacked-deck-inspect:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
-.coverflow-inspect:disabled {
+.stacked-deck-inspect:disabled {
   cursor: default;
   opacity: 0.42;
 }
 
-.coverflow-meta strong {
+.stacked-deck-meta strong {
   color: var(--ink);
   font-size: 1rem;
 }
@@ -1223,7 +1124,7 @@ onBeforeUnmount(() => {
   outline-offset: 2px;
 }
 
-.coverflow-pagination-indicator {
+.stacked-deck-pagination-indicator {
   position: absolute;
   z-index: 1;
   inset-block-start: 50%;
@@ -1252,20 +1153,20 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 48rem) {
-  .coverflow-header {
+  .stacked-deck-header {
     align-items: start;
     flex-direction: column;
   }
 
-  .coverflow-meta {
+  .stacked-deck-meta {
     flex-wrap: wrap;
   }
 
-  .coverflow-meta p {
+  .stacked-deck-meta p {
     flex-basis: calc(100% - 4.5rem);
   }
 
-  .coverflow-inspect span {
+  .stacked-deck-inspect span {
     position: absolute;
     inline-size: 1px;
     block-size: 1px;

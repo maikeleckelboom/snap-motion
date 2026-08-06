@@ -16,11 +16,11 @@ controller. It imports neither Vue nor the DOM and has no runtime dependency.
 An anchor combines a stable ID, a physical scalar position, and logical order. Physical positions
 may repeat. Semantic identity is therefore never inferred from a deduplicated number array.
 
-Presentation projection is also framework-neutral. Per-card Coverflow rail resolution and the
-whole-frame stacked-deck resolver both consume scalar position without becoming animation
-authorities. The stacked resolver receives caller-owned output storage and carries only the
-hysteretic paint owner between frames; it does not own motion, targets, semantic selection, or DOM
-state.
+Presentation projection is also framework-neutral. The per-card Coverflow rail resolver consumes a
+scalar position. The whole-frame deck compositor instead consumes explicit settled, outgoing,
+incoming, direction, phase, and progress roles. It mutates caller-owned output storage and owns only
+physical pile geometry and stable paint layers; it does not own motion, targets, semantic selection,
+or DOM state.
 
 The lab keeps the two render systems separate: `CoverflowDemo.vue` owns the Coverflow rail, while
 `StackedDeckDemo.vue` owns whole-frame deck roles, paint layers, hit eligibility, and material
@@ -94,9 +94,10 @@ release velocity are normalized at the adapter boundary, so release policy and s
 one direction-independent implementation. Hidden is an internal final anchor and is always the
 largest canonical position.
 
-For 2.5D presentations, projected depth and DOM paint order are intentionally separate outputs of
-the same frame resolver. Paint ownership can use hysteresis without changing the active target,
-visual caption, settled selection, pagination, focus, or announcement timing.
+For layered presentations, geometry and DOM paint order are intentionally separate outputs of the
+same frame resolver. The deck assigns layers from explicit exchange roles and never flips them at a
+progress threshold. The settled selection remains the sole authority for caption, pagination,
+focus, inspection, and announcement timing until controller settlement.
 
 ## Remeasurement
 
