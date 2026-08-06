@@ -158,6 +158,7 @@ const settledId = computed(() => ids[settledIndex.value] ?? ids[initialIndex]!);
 const settledScreen = computed(() => screens[settledIndex.value] ?? screens[0]!);
 const deckTransitionState = new StackedDeckTransitionState(initialIndex, ids.length);
 const deckTransition = shallowRef<StackedDeckTransition>(deckTransitionState.transition);
+const renderedSubordinateExposure = ref(0);
 
 /** Continuous physical index. It projects motion but never controls the carousel mass. */
 const rawPhysicalIndex = computed(() =>
@@ -202,6 +203,7 @@ watch(
       itemCount: ids.length,
       physicalIndex: -snapshot.position / currentPitch,
       settledIndex: settledSelection.settledIndex,
+      subordinateExposure: renderedSubordinateExposure.value,
       targetIndex,
     });
     if (announcementIndex !== null) {
@@ -248,19 +250,66 @@ function isCardGalleryEligible(index: number): boolean {
 }
 
 interface SlideStyle {
-  opacity: number;
-  clipPath: string;
-  transformOrigin?: string;
-  transform: string;
-  zIndex: number;
-  visibility: "visible" | "hidden";
-  pointerEvents: "auto" | "none";
-  willChange?: "auto" | "transform";
-  [customProperty: `--${string}`]: string;
+  aperture: {
+    clipPath: string;
+  };
+  apertureBoundary: number;
+  apertureExposure: number;
+  rotateY: number;
+  container: {
+    opacity: number;
+    zIndex: number;
+    visibility: "visible" | "hidden";
+  };
+  motion: {
+    pointerEvents: "auto" | "none";
+    transformOrigin: string;
+    transform: string;
+    willChange: "auto" | "transform";
+  };
+  screen: {
+    [customProperty: `--${string}`]: string;
+  };
 }
 
 const stackedFrameOutput = createStackedDeckFrame(ids.length);
 const stackedFrame = shallowRef(stackedFrameOutput);
+
+function resolveApertureMetrics(
+  direction: -1 | 0 | 1,
+  role: string,
+  translateX: number,
+  reveal: number,
+  opacity: number,
+  visible: boolean,
+  reducedMotion: boolean,
+) {
+  const isRetrievedCard = direction === -1 && role === "incoming";
+  const hasClearedPileAperture = reveal >= 0.01;
+  const pileLeft = (stageWidthPx.value - stackedTuning.value.cardWidth) / 2;
+  const maximumRetrievalAngle = reducedMotion ? 52 : 82;
+  const rotateY = isRetrievedCard
+    ? hasClearedPileAperture
+      ? -maximumRetrievalAngle * (1 - reveal)
+      : 0
+    : 0;
+  const boundary = isRetrievedCard && !hasClearedPileAperture ? pileLeft : stageWidthPx.value;
+  const cardLeft = pileLeft + translateX;
+  const projectedWidth = Math.abs(Math.cos((rotateY * Math.PI) / 180));
+  const exposure = isRetrievedCard
+    ? hasClearedPileAperture
+      ? projectedWidth
+      : clamp((boundary - cardLeft) / stackedTuning.value.cardWidth, 0, 1) * projectedWidth
+    : role === "incoming"
+      ? visible
+        ? opacity
+        : 0
+      : visible
+        ? 1
+        : 0;
+  return { boundary, exposure, rotateY };
+}
+
 watchEffect(() => {
   const tuning = motion.reducedMotion.value ? reducedStackedTuning.value : stackedTuning.value;
   resolveStackedDeckFrame(
@@ -271,6 +320,18 @@ watchEffect(() => {
     },
     stackedFrameOutput,
   );
+  const subordinate = stackedFrameOutput.poses[stackedFrameOutput.toIndex];
+  renderedSubordinateExposure.value = subordinate
+    ? resolveApertureMetrics(
+        stackedFrameOutput.direction,
+        subordinate.role,
+        subordinate.translateX,
+        subordinate.reveal,
+        subordinate.opacity,
+        subordinate.visible,
+        motion.reducedMotion.value,
+      ).exposure
+    : 0;
   triggerRef(stackedFrame);
 });
 
@@ -284,17 +345,37 @@ const slideStyles = computed(() => {
   for (let index = 0; index < screens.length; index += 1) {
     const screen = screens[index]!;
     const pose = frame.poses[index]!;
+    const aperture = resolveApertureMetrics(
+      frame.direction,
+      pose.role,
+      pose.translateX,
+      pose.reveal,
+      pose.opacity,
+      pose.visible,
+      motion.reducedMotion.value,
+    );
     styles[screen.id] = {
-      opacity: pose.opacity,
-      clipPath: `inset(0 ${(100 - pose.reveal * 100).toFixed(3)}% 0 0 round 0.8rem)`,
-      transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
-      transformOrigin: "center center",
-      zIndex: pose.layer,
-      visibility: pose.visible ? "visible" : "hidden",
-      pointerEvents: pose.interactive ? "auto" : "none",
-      willChange: pose.visible ? "transform" : "auto",
-      "--screen-accent": screen.accent,
-      "--_deck-shadow-strength": pose.shadowStrength.toFixed(4),
+      aperture: {
+        clipPath: `inset(0 ${Math.max(0, stageWidthPx.value - aperture.boundary).toFixed(3)}px 0 0)`,
+      },
+      apertureBoundary: aperture.boundary,
+      apertureExposure: aperture.exposure,
+      rotateY: aperture.rotateY,
+      container: {
+        opacity: pose.opacity,
+        zIndex: pose.layer,
+        visibility: pose.visible ? "visible" : "hidden",
+      },
+      motion: {
+        pointerEvents: pose.interactive ? "auto" : "none",
+        transform: `perspective(1400px) translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg) rotateY(${aperture.rotateY.toFixed(3)}deg)`,
+        transformOrigin: aperture.rotateY === 0 ? "center center" : "left center",
+        willChange: pose.visible ? "transform" : "auto",
+      },
+      screen: {
+        "--screen-accent": screen.accent,
+        "--_deck-shadow-strength": pose.shadowStrength.toFixed(4),
+      },
     };
   }
   return styles;
@@ -306,8 +387,14 @@ const stageStyle = computed(() => ({
   "--_deck-card-height": `${cardHeight.value}px`,
 }));
 
+const paginationVisualIndex = computed(() => {
+  const transition = deckTransition.value;
+  if (transition.phase === "idle") return transition.settledIndex;
+  return transition.fromIndex + (transition.toIndex - transition.fromIndex) * transition.progress;
+});
+
 const paginationIndicator = computed<CoverflowPaginationIndicatorState>(() =>
-  resolveCoverflowPaginationIndicator(settledIndex.value, 0, pitch.value, ids.length, {
+  resolveCoverflowPaginationIndicator(paginationVisualIndex.value, 0, pitch.value, ids.length, {
     position: 0,
     x: 0,
     scaleX: 1,
@@ -711,6 +798,7 @@ onBeforeUnmount(() => {
       :data-profile="stackedTuning.profile"
       :data-settled-index="settledIndex"
       :data-speed-in-cards="speedInCards"
+      :data-subordinate-exposure="renderedSubordinateExposure"
       :data-target-id="motion.targetId.value"
       :data-transition-direction="deckTransition.direction"
       :data-transition-from-index="deckTransition.fromIndex"
@@ -741,6 +829,9 @@ onBeforeUnmount(() => {
             },
           ]"
           :data-interactive="stackedPose(index)?.interactive"
+          :data-aperture-boundary="slideStyles[screen.id].apertureBoundary"
+          :data-aperture-exposure="slideStyles[screen.id].apertureExposure"
+          :data-rotate-y="slideStyles[screen.id].rotateY"
           :data-layer="stackedPose(index)?.layer"
           :data-opacity="stackedPose(index)?.opacity"
           :data-reveal="stackedPose(index)?.reveal"
@@ -753,19 +844,23 @@ onBeforeUnmount(() => {
           :data-translate-x="stackedPose(index)?.translateX"
           :data-translate-y="stackedPose(index)?.translateY"
           :data-visible="stackedPose(index)?.visible"
-          :style="slideStyles[screen.id]"
+          :style="slideStyles[screen.id].container"
           @click.prevent
         >
-          <div class="screen-chrome">
-            <img
-              alt=""
-              aria-hidden="true"
-              class="stacked-screen-image"
-              draggable="false"
-              :height="screen.height"
-              :src="screen.previewSrc"
-              :width="screen.width"
-            />
+          <div class="stacked-deck-aperture" :style="slideStyles[screen.id].aperture">
+            <div class="stacked-deck-card-motion" :style="slideStyles[screen.id].motion">
+              <div class="screen-chrome" :style="slideStyles[screen.id].screen">
+                <img
+                  alt=""
+                  aria-hidden="true"
+                  class="stacked-screen-image"
+                  draggable="false"
+                  :height="screen.height"
+                  :src="screen.previewSrc"
+                  :width="screen.width"
+                />
+              </div>
+            </div>
           </div>
         </article>
       </div>
@@ -965,6 +1060,22 @@ onBeforeUnmount(() => {
 }
 
 .stacked-deck-card {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.stacked-deck-aperture {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.stacked-deck-card-motion {
   --_deck-shadow-strength: 1;
 
   position: absolute;
@@ -972,12 +1083,9 @@ onBeforeUnmount(() => {
   inset-inline-start: 50%;
   inline-size: var(--_deck-card-width);
   block-size: var(--_deck-card-height);
-  margin: 0;
-  border: 0;
-  padding: 0;
-  background: transparent;
   transform-style: flat;
   transform-origin: center center;
+  backface-visibility: hidden;
   cursor: pointer;
 }
 

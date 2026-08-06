@@ -11,6 +11,7 @@ function input(overrides: Partial<StackedDeckTransitionInput> = {}): StackedDeck
     itemCount: 5,
     physicalIndex: 2,
     settledIndex: 2,
+    subordinateExposure: 0,
     targetIndex: 2,
     ...overrides,
   };
@@ -60,16 +61,44 @@ describe("StackedDeckTransitionState", () => {
       input({ controllerPhase: "dragging", physicalIndex: 2.6, targetIndex: null }),
     );
     const returning = state.update(
-      input({ controllerPhase: "dragging", physicalIndex: 2.1, targetIndex: null }),
+      input({
+        controllerPhase: "dragging",
+        physicalIndex: 2.1,
+        subordinateExposure: 1,
+        targetIndex: null,
+      }),
+    );
+    const crossed = state.update(
+      input({
+        controllerPhase: "dragging",
+        physicalIndex: 1.9,
+        subordinateExposure: 1,
+        targetIndex: null,
+      }),
+    );
+    const concealed = state.update(
+      input({
+        controllerPhase: "dragging",
+        physicalIndex: 1.88,
+        subordinateExposure: 0,
+        targetIndex: null,
+      }),
     );
     const reverse = state.update(
-      input({ controllerPhase: "dragging", physicalIndex: 1.9, targetIndex: null }),
+      input({
+        controllerPhase: "dragging",
+        physicalIndex: 1.78,
+        subordinateExposure: 0.1,
+        targetIndex: null,
+      }),
     );
     expect(forward.progress).toBeCloseTo(0.6);
     expect(returning).toMatchObject({ fromIndex: 2, toIndex: 3, direction: 1 });
     expect(returning.progress).toBeCloseTo(0.1);
+    expect(crossed).toMatchObject({ fromIndex: 2, toIndex: 3, direction: 1, progress: 0 });
+    expect(concealed).toMatchObject({ fromIndex: 2, toIndex: 1, direction: -1, progress: 0 });
     expect(reverse).toMatchObject({ fromIndex: 2, toIndex: 1, direction: -1 });
-    expect(reverse.progress).toBeCloseTo(0.1);
+    expect(reverse.progress).toBeGreaterThan(0);
   });
 
   it("restores the same roles continuously when release or cancellation targets the settled item", () => {
@@ -115,19 +144,79 @@ describe("StackedDeckTransitionState", () => {
       input({ controllerPhase: "settling", physicalIndex: 0.6, settledIndex: 0, targetIndex: 1 }),
     );
     const interrupted = state.update(
-      input({ controllerPhase: "settling", physicalIndex: 0.65, settledIndex: 0, targetIndex: 2 }),
+      input({
+        controllerPhase: "settling",
+        physicalIndex: 0.65,
+        settledIndex: 0,
+        subordinateExposure: 0.72,
+        targetIndex: 2,
+      }),
     );
     const concealing = state.update(
-      input({ controllerPhase: "settling", physicalIndex: 0.82, settledIndex: 0, targetIndex: 2 }),
+      input({
+        controllerPhase: "settling",
+        physicalIndex: 0.82,
+        settledIndex: 0,
+        subordinateExposure: 0.31,
+        targetIndex: 2,
+      }),
+    );
+    const concealed = state.update(
+      input({
+        controllerPhase: "settling",
+        physicalIndex: 0.98,
+        settledIndex: 0,
+        subordinateExposure: 0.08,
+        targetIndex: 2,
+      }),
     );
     const redirected = state.update(
-      input({ controllerPhase: "settling", physicalIndex: 0.98, settledIndex: 0, targetIndex: 2 }),
+      input({
+        controllerPhase: "settling",
+        physicalIndex: 0.99,
+        settledIndex: 0,
+        subordinateExposure: 0,
+        targetIndex: 2,
+      }),
     );
     expect(interrupted).toMatchObject({ fromIndex: 0, toIndex: 1 });
     expect(interrupted.phase).not.toBe("idle");
     expect(concealing.progress).toBeLessThan(interrupted.progress);
+    expect(concealed).toMatchObject({ fromIndex: 0, toIndex: 1, progress: 0 });
     expect(redirected).toMatchObject({ fromIndex: 0, toIndex: 2, direction: 1 });
-    expect(redirected.progress).toBeCloseTo(0.18);
+    expect(redirected.progress).toBe(0);
+  });
+
+  it("does not replace a subordinate identity while rendered exposure remains nonzero", () => {
+    const state = new StackedDeckTransitionState(2, 5);
+    state.update(input({ controllerPhase: "settling", physicalIndex: 2.55, targetIndex: 3 }));
+    const interrupted = state.update(
+      input({
+        controllerPhase: "settling",
+        physicalIndex: 2.6,
+        subordinateExposure: 0.4,
+        targetIndex: 1,
+      }),
+    );
+    const concealed = state.update(
+      input({
+        controllerPhase: "settling",
+        physicalIndex: 2.28,
+        subordinateExposure: 0.02,
+        targetIndex: 1,
+      }),
+    );
+    const redirected = state.update(
+      input({
+        controllerPhase: "settling",
+        physicalIndex: 2.27,
+        subordinateExposure: 0,
+        targetIndex: 1,
+      }),
+    );
+    expect(interrupted.toIndex).toBe(3);
+    expect(concealed).toMatchObject({ toIndex: 3, progress: 0 });
+    expect(redirected).toMatchObject({ toIndex: 1, direction: -1, progress: 0 });
   });
 
   it("commits only when the owner supplies a new settled index at idle", () => {
@@ -148,6 +237,7 @@ describe("StackedDeckTransitionState", () => {
     expect(() => new StackedDeckTransitionState(5, 5)).toThrow(RangeError);
     const state = new StackedDeckTransitionState(0, 5);
     expect(() => state.update(input({ physicalIndex: Number.NaN }))).toThrow(TypeError);
+    expect(() => state.update(input({ subordinateExposure: 1.01 }))).toThrow(RangeError);
     expect(() => state.update(input({ settledIndex: 7 }))).toThrow(RangeError);
   });
 });

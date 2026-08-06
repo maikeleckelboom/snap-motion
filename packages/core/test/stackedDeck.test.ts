@@ -171,6 +171,20 @@ describe("physical stacked deck frame", () => {
     }
   });
 
+  it("keeps forward displacement monotonic without a disproportionate late spike", () => {
+    const displacements = Array.from(
+      { length: 101 },
+      (_, step) => resolveFrame(exchange(2, 3, step / 100)).poses[2]!.translateX,
+    );
+    const increments = displacements.slice(1).map((value, index) => value - displacements[index]!);
+    expect(increments.every((increment) => increment >= 0)).toBe(true);
+    const middlePeak = Math.max(...increments.slice(40, 80));
+    const latePeak = Math.max(...increments.slice(90));
+    expect(latePeak).toBeLessThanOrEqual(middlePeak);
+    expect(displacements[10]! / WIDE_TUNING.forwardPeelX).toBeGreaterThan(0.015);
+    expect(displacements[25]! / WIDE_TUNING.forwardPeelX).toBeGreaterThan(0.09);
+  });
+
   it("conceals the forward outgoing card before the final layer transfer", () => {
     const late = resolveFrame(exchange(2, 3, 0.9995));
     const final = resolveFrame(exchange(2, 3, 1));
@@ -221,6 +235,17 @@ describe("physical stacked deck frame", () => {
       rotate: settled.poses[2]!.rotate,
       stackDepth: 1,
     });
+  });
+
+  it("holds the backward deck aperture at the pile during excursion before lifting it", () => {
+    const early = resolveFrame(exchange(2, 1, 0.2)).poses[1]!;
+    const liftStart = resolveFrame(exchange(2, 1, 0.28)).poses[1]!;
+    const lifted = resolveFrame(exchange(2, 1, 0.65)).poses[1]!;
+    expect(early.translateX).toBeLessThan(0);
+    expect(early.reveal).toBe(0);
+    expect(liftStart.reveal).toBe(0);
+    expect(lifted.reveal).toBeGreaterThan(0);
+    expect(lifted.reveal).toBeLessThan(1);
   });
 
   it("never switches visible exchange layers at a progress threshold", () => {

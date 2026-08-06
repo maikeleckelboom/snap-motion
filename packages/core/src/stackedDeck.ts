@@ -403,7 +403,8 @@ function setForwardPair(
   progress: number,
   tuning: StackedDeckTuning,
 ): void {
-  const outgoingProgress = progress ** 2.8;
+  // Restrained at contact, strongest through the middle, and unit-bounded at release.
+  const outgoingProgress = progress * progress * (2 - progress);
   const incomingProgress = smoothstep(clamp((progress - 0.18) / 0.82, 0, 1));
   setBackingPose(incoming, 1, tuning);
   const backingX = incoming.translateX;
@@ -438,7 +439,7 @@ function setForwardPair(
   incoming.stackDepth = 0;
   incoming.role = "incoming";
   incoming.shadowStrength = mix(backingShadow, 1, incomingProgress);
-  incoming.visible = true;
+  incoming.visible = progress > 0;
   incoming.interactive = false;
 }
 
@@ -485,7 +486,9 @@ function setBackwardPair(
   incoming.scale = mix(excursionScale, 1, returnProgress);
   incoming.rotate = mix(excursionRotate, 0, returnProgress);
   incoming.opacity = 1;
-  incoming.reveal = smoothstep(clamp((progress - 0.1) / 0.72, 0, 1));
+  // This is the aperture lift, not a card-local crop. The presentation keeps the boundary fixed
+  // to the pile until the retrieved card has completed its outward excursion.
+  incoming.reveal = smoothstep(clamp((progress - 0.28) / 0.58, 0, 1));
   incoming.layer = TOP_LAYER;
   incoming.stackDepth = 0;
   incoming.role = "incoming";

@@ -1,8 +1,7 @@
 import type { ControllerPhase, StackedDeckTransition } from "@snap-motion/core";
 
 const DRAG_PROGRESS_LIMIT = 0.88;
-const CONCEALED_PROGRESS = 0.18;
-const DIRECT_RETARGET_LIMIT = 0.24;
+const CONCEALED_PROGRESS = 0;
 const TRANSITION_EPSILON = 0.000_001;
 
 export interface StackedDeckTransitionInput {
@@ -10,6 +9,8 @@ export interface StackedDeckTransitionInput {
   readonly itemCount: number;
   readonly physicalIndex: number;
   readonly settledIndex: number;
+  /** Rendered fraction of the subordinate card that is currently exposed by opacity or aperture. */
+  readonly subordinateExposure: number;
   readonly targetIndex: number | null;
 }
 
@@ -62,6 +63,13 @@ function assertInput(input: StackedDeckTransitionInput): void {
   }
   if (!Number.isFinite(input.physicalIndex)) {
     throw new TypeError("physicalIndex must be finite");
+  }
+  if (
+    !Number.isFinite(input.subordinateExposure) ||
+    input.subordinateExposure < 0 ||
+    input.subordinateExposure > 1
+  ) {
+    throw new RangeError("subordinateExposure must be between zero and one");
   }
   if (
     !Number.isInteger(input.settledIndex) ||
@@ -129,13 +137,16 @@ export class StackedDeckTransitionState {
       requestedTarget !== this.#transition.toIndex &&
       requestedTarget !== this.#pendingTargetIndex
     ) {
-      this.#beginRetarget(input.physicalIndex, requestedTarget);
+      this.#beginRetarget(input.physicalIndex, requestedTarget, input.subordinateExposure);
     }
 
     if (this.#mode === "concealing" && this.#mapping) {
       const concealProgress = mappingProgress(this.#mapping, input.physicalIndex);
       this.#setProgress(concealProgress, input.controllerPhase);
-      if (mappingComplete(this.#mapping, input.physicalIndex)) {
+      if (
+        mappingComplete(this.#mapping, input.physicalIndex) &&
+        input.subordinateExposure <= TRANSITION_EPSILON
+      ) {
         this.#completeConceal(input.physicalIndex);
       }
     } else if (this.#mapping) {
@@ -151,7 +162,9 @@ export class StackedDeckTransitionState {
       const direction = Math.sign(displacement) as -1 | 0 | 1;
       if (direction !== 0 && direction !== this.#transition.direction) {
         const candidate = input.settledIndex + direction;
-        if (candidate >= 0 && candidate < input.itemCount) return this.#start(input, candidate);
+        if (candidate >= 0 && candidate < input.itemCount) {
+          this.#beginRetarget(input.physicalIndex, candidate, input.subordinateExposure);
+        }
       }
     }
 
@@ -221,8 +234,8 @@ export class StackedDeckTransitionState {
     };
   }
 
-  #beginRetarget(physicalIndex: number, targetIndex: number): void {
-    if (this.#transition.progress <= DIRECT_RETARGET_LIMIT) {
+  #beginRetarget(physicalIndex: number, targetIndex: number, subordinateExposure: number): void {
+    if (subordinateExposure <= TRANSITION_EPSILON) {
       this.#transition = {
         ...this.#transition,
         toIndex: targetIndex,

@@ -170,6 +170,11 @@ async function readFrame(page: Page) {
       return {
         ariaCurrent: item.getAttribute("aria-current"),
         ariaHidden: item.getAttribute("aria-hidden"),
+        apertureBoundary: Number(item.dataset.apertureBoundary),
+        apertureExposure: Number(item.dataset.apertureExposure),
+        apertureClipPath: getComputedStyle(
+          item.querySelector<HTMLElement>(".stacked-deck-aperture")!,
+        ).clipPath,
         bottom: box.bottom,
         height: box.height,
         id: item.dataset.screenId ?? "",
@@ -182,6 +187,7 @@ async function readFrame(page: Page) {
         right: box.right,
         role: item.dataset.role ?? "",
         rotate: Number(item.dataset.rotate),
+        rotateY: Number(item.dataset.rotateY),
         scale: Number(item.dataset.scale),
         stackDepth: Number(item.dataset.stackDepth),
         top: box.top,
@@ -190,6 +196,9 @@ async function readFrame(page: Page) {
         visibility: style.visibility,
         visible: item.dataset.visible === "true",
         width: box.width,
+        cardClipPath: getComputedStyle(
+          item.querySelector<HTMLElement>(".stacked-deck-card-motion")!,
+        ).clipPath,
       };
     });
     return {
@@ -202,6 +211,13 @@ async function readFrame(page: Page) {
       direction: Number(element.dataset.transitionDirection),
       fromIndex: Number(element.dataset.transitionFromIndex),
       physicalIndex: Number(element.dataset.physicalIndex),
+      paginationCurrentIndex: [
+        ...document.querySelectorAll<HTMLElement>('[aria-label="Stacked deck screens"] button'),
+      ].findIndex((button) => button.getAttribute("aria-current") === "true"),
+      paginationPosition: Number(
+        document.querySelector<HTMLElement>('[data-testid="stacked-deck-pagination-indicator"]')
+          ?.dataset.position,
+      ),
       poses,
       profile: element.dataset.profile ?? "",
       progress: Number(element.dataset.transitionProgress),
@@ -247,16 +263,24 @@ async function stageScreenshot(page: Page, directory: string, name: string) {
 interface ProgrammaticSample {
   readonly caption: string;
   readonly controllerPhase: string;
+  readonly paginationPosition: number;
   readonly progress: number;
   readonly settledIndex: number;
   readonly transitionPhase: string;
   readonly toIndex: number;
   readonly poses: readonly {
+    readonly apertureExposure: number;
+    readonly bottom: number;
+    readonly height: number;
     readonly id: string;
+    readonly left: number;
     readonly layer: number;
     readonly opacity: number;
+    readonly right: number;
     readonly role: string;
+    readonly top: number;
     readonly translateX: number;
+    readonly width: number;
   }[];
 }
 
@@ -278,17 +302,33 @@ async function installProgrammaticTrace(page: Page) {
           document.querySelector<HTMLElement>('[data-testid="stacked-deck-caption"]')?.innerText ??
           "",
         controllerPhase,
+        paginationPosition: Number(
+          document.querySelector<HTMLElement>('[data-testid="stacked-deck-pagination-indicator"]')
+            ?.dataset.position,
+        ),
         progress: Number(element.dataset.transitionProgress),
         settledIndex: Number(element.dataset.settledIndex),
         transitionPhase: element.dataset.transitionPhase ?? "",
         toIndex: Number(element.dataset.transitionToIndex),
-        poses: [...document.querySelectorAll<HTMLElement>(".stacked-deck-card")].map((item) => ({
-          id: item.dataset.screenId ?? "",
-          layer: Number(item.dataset.layer),
-          opacity: Number(item.dataset.opacity),
-          role: item.dataset.role ?? "",
-          translateX: Number(item.dataset.translateX),
-        })),
+        poses: [...document.querySelectorAll<HTMLElement>(".stacked-deck-card")].map((item) => {
+          const box = item
+            .querySelector<HTMLElement>(".stacked-deck-card-motion")!
+            .getBoundingClientRect();
+          return {
+            apertureExposure: Number(item.dataset.apertureExposure),
+            bottom: box.bottom,
+            height: box.height,
+            id: item.dataset.screenId ?? "",
+            left: box.left,
+            layer: Number(item.dataset.layer),
+            opacity: Number(item.dataset.opacity),
+            right: box.right,
+            role: item.dataset.role ?? "",
+            top: box.top,
+            translateX: Number(item.dataset.translateX),
+            width: box.width,
+          };
+        }),
       });
       remainingFrames -= 1;
       if ((state.started && controllerPhase === "idle") || remainingFrames <= 0) {
@@ -372,9 +412,78 @@ test("idle composition is one semantic top card over a compact pile at every req
   }
 });
 
+test("responsive full and reduced motion preserve the physical exchange topology", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Chromium owns deterministic visual evidence.");
+  const artifactDirectory = resolvePath(
+    process.cwd(),
+    ".artifacts",
+    "physical-deck-responsive-frames",
+    testInfo.project.name,
+  );
+  await mkdir(artifactDirectory, { recursive: true });
+
+  for (const width of [360, 390, 768, 1_024, 1_440]) {
+    await page.setViewportSize({ width, height: width < 600 ? 900 : 1_000 });
+    await page.getByTestId("reduced-motion-mode").selectOption("no-preference");
+
+    const forward = await beginHeldTransition(page, 2);
+    const forwardFrame = await holdPhysicalIndex(page, forward, 2.45);
+    expect(forwardFrame.paginationPosition).toBeCloseTo(2.45, 4);
+    expect(forwardFrame.paginationCurrentIndex).toBe(2);
+    expect(forwardFrame.poses[2]).toMatchObject({ role: "outgoing", layer: 500 });
+    await stageScreenshot(page, artifactDirectory, `${width}-forward-full`);
+    await finishPointer(
+      page,
+      forward.origin,
+      -forward.pitch * 0.45,
+      forward.elapsedMs + 100,
+      "pointercancel",
+    );
+    await expectCarouselAt(viewport(page), "map");
+
+    const backward = await beginHeldTransition(page, 3);
+    const backwardFrame = await holdPhysicalIndex(page, backward, 2.55);
+    const fullRetrieved = backwardFrame.poses[2]!;
+    expect(fullRetrieved).toMatchObject({ role: "incoming", layer: 500, cardClipPath: "none" });
+    expect(fullRetrieved.apertureBoundary).toBeCloseTo(backwardFrame.stageWidth, 3);
+    expect(Math.abs(fullRetrieved.rotateY)).toBeGreaterThan(20);
+    await stageScreenshot(page, artifactDirectory, `${width}-backward-full`);
+    await finishPointer(
+      page,
+      backward.origin,
+      backward.pitch * 0.45,
+      backward.elapsedMs + 100,
+      "pointercancel",
+    );
+    await expectCarouselAt(viewport(page), "team");
+
+    await page.getByTestId("reduced-motion-mode").selectOption("reduce");
+    const reducedBackward = await beginHeldTransition(page, 3);
+    const reducedFrame = await holdPhysicalIndex(page, reducedBackward, 2.55);
+    const reducedRetrieved = reducedFrame.poses[2]!;
+    expect(reducedRetrieved.rotate).toBe(0);
+    expect(Math.abs(reducedRetrieved.rotateY)).toBeGreaterThan(0);
+    expect(Math.abs(reducedRetrieved.rotateY)).toBeLessThan(Math.abs(fullRetrieved.rotateY));
+    expect(reducedRetrieved.apertureBoundary).toBeCloseTo(reducedFrame.stageWidth, 3);
+    await stageScreenshot(page, artifactDirectory, `${width}-backward-reduced`);
+    await finishPointer(
+      page,
+      reducedBackward.origin,
+      reducedBackward.pitch * 0.45,
+      reducedBackward.elapsedMs + 100,
+      "pointercancel",
+    );
+    await expectCarouselAt(viewport(page), "team");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
+  }
+});
+
 test("held forward and backward exchanges preserve explicit roles, layers, and committed metadata", async ({
   page,
 }, testInfo) => {
+  await page.locator(".preset-control select").selectOption("heavy");
   const artifactDirectory = resolvePath(
     process.cwd(),
     ".artifacts",
@@ -385,7 +494,7 @@ test("held forward and backward exchanges preserve explicit roles, layers, and c
 
   const forward = await beginHeldTransition(page, 2);
   let previousOutgoingX = 0;
-  for (const [index, progress] of [0.08, 0.25, 0.5, 0.75, 0.94].entries()) {
+  for (const [index, progress] of [0.1, 0.25, 0.5, 0.75, 0.85, 0.9, 0.97].entries()) {
     const frame = await holdPhysicalIndex(page, forward, 2 + progress);
     const outgoing = frame.poses[2]!;
     const incoming = frame.poses[3]!;
@@ -398,14 +507,19 @@ test("held forward and backward exchanges preserve explicit roles, layers, and c
       settledIndex: 2,
       toIndex: 3,
     });
+    expect(frame.paginationPosition).toBeCloseTo(2 + frame.progress, 4);
+    expect(frame.paginationCurrentIndex).toBe(2);
     expect(outgoing).toMatchObject({ role: "outgoing", layer: 500 });
     expect(incoming).toMatchObject({ role: "incoming", layer: 400 });
-    expect(outgoing.translateX).toBeGreaterThan(previousOutgoingX);
-    if (progress <= 0.5) {
-      expect(outgoing.translateX).toBeLessThan(frame.cardWidth * 0.19);
+    expect(outgoing.translateX).toBeGreaterThanOrEqual(previousOutgoingX);
+    if (progress <= 0.25) {
+      expect(outgoing.translateX).toBeLessThan(frame.cardWidth * 0.16);
+    }
+    if (progress === 0.5) {
+      expect(outgoing.translateX).toBeLessThan(frame.cardWidth * 0.45);
     }
     if (progress >= 0.75) {
-      expect(outgoing.translateX).toBeGreaterThan(frame.cardWidth * 0.45);
+      expect(outgoing.translateX).toBeGreaterThan(frame.cardWidth * 0.75);
       expect(outgoing.scale).toBeLessThan(0.92);
     }
     expect(Math.abs(incoming.translateX)).toBeLessThan(frame.cardWidth * 0.012);
@@ -428,7 +542,9 @@ test("held forward and backward exchanges preserve explicit roles, layers, and c
 
   const reverse = await beginHeldTransition(page, 3);
   let previousReveal = 0;
-  for (const [index, progress] of [0.02, 0.2, 0.42, 0.7, 0.94].entries()) {
+  for (const [index, progress] of [
+    0.05, 0.2, 0.27, 0.28, 0.29, 0.4, 0.65, 0.85, 0.9, 0.97,
+  ].entries()) {
     const frame = await holdPhysicalIndex(page, reverse, 3 - progress);
     const outgoing = frame.poses[3]!;
     const incoming = frame.poses[2]!;
@@ -440,13 +556,22 @@ test("held forward and backward exchanges preserve explicit roles, layers, and c
       settledIndex: 3,
       toIndex: 2,
     });
+    expect(frame.paginationPosition).toBeCloseTo(3 - frame.progress, 4);
+    expect(frame.paginationCurrentIndex).toBe(3);
     expect(incoming).toMatchObject({ role: "incoming", layer: 500 });
     expect(outgoing).toMatchObject({ role: "outgoing", layer: 400, stackDepth: 1 });
     expect(Math.abs(incoming.translateX)).toBeLessThan(frame.cardWidth * 0.15);
-    if (index === 0) {
-      expect(incoming.reveal).toBe(0);
+    expect(incoming.cardClipPath).toBe("none");
+    expect(incoming.apertureClipPath).toContain("inset");
+    if (incoming.reveal < 0.01) {
+      expect(incoming.apertureBoundary).toBeCloseTo((frame.stageWidth - frame.cardWidth) / 2, 3);
+      expect(incoming.apertureExposure).toBeLessThan(0.16);
     } else {
-      expect(incoming.reveal).toBeGreaterThan(previousReveal);
+      expect(incoming.reveal).toBeGreaterThanOrEqual(previousReveal);
+      expect(incoming.apertureBoundary).toBeCloseTo(frame.stageWidth, 3);
+      if (progress < 0.9) {
+        expect(Math.abs(incoming.rotateY)).toBeGreaterThan(0);
+      }
     }
     expect(
       frame.poses.filter((pose) => pose.role === "backing").every((pose) => pose.layer < 400),
@@ -486,6 +611,7 @@ test("button settlement has no layer pop and commits metadata exactly once", asy
       ["early-peel", 0.12],
       ["mid-exchange", 0.5],
       ["late-conceal", 0.9],
+      ["final-active", 0.97],
     ] as const) {
       const captureState = await page.waitForFunction((minimumProgress) => {
         const element = document.querySelector<HTMLElement>(
@@ -530,11 +656,21 @@ test("button settlement has no layer pop and commits metadata exactly once", asy
     settledIndex: 3,
     transitionPhase: "idle",
   });
+  const finalActive = trace.findLast((sample) => sample.controllerPhase !== "idle")!;
+  const firstIdle = trace.at(-1)!;
+  const finalActiveCard = finalActive.poses.find((pose) => pose.id === "team")!;
+  const firstIdleCard = firstIdle.poses.find((pose) => pose.id === "team")!;
+  for (const edge of ["left", "right", "top", "bottom", "width", "height"] as const) {
+    expect(Math.abs(finalActiveCard[edge] - firstIdleCard[edge])).toBeLessThan(0.75);
+  }
+  expect(Math.abs(finalActive.paginationPosition - firstIdle.paginationPosition)).toBeLessThan(
+    0.01,
+  );
   await expect(page.getByTestId("stacked-deck-status")).toHaveText("Team & rollen, 4 of 5");
 
-  const settledBox = await card(page, "team").boundingBox();
+  const settledBox = await card(page, "team").locator(".stacked-deck-card-motion").boundingBox();
   await page.waitForTimeout(100);
-  const stableBox = await card(page, "team").boundingBox();
+  const stableBox = await card(page, "team").locator(".stacked-deck-card-motion").boundingBox();
   expect(stableBox).toEqual(settledBox);
   await expect(stage).toHaveAttribute("data-active-id", "team");
 });
@@ -547,10 +683,16 @@ test("reversal, cancellation, and pointer-capture loss restore the committed ite
   const forward = await holdPhysicalIndex(page, held, 2.58);
   const reversed = await holdPhysicalIndex(page, held, 2.24);
   const crossed = await holdPhysicalIndex(page, held, 1.88);
+  const concealed = await holdPhysicalIndex(page, held, 1.86);
+  const reverse = await holdPhysicalIndex(page, held, 1.78);
   expect(forward.progress).toBeGreaterThan(reversed.progress);
   expect(reversed).toMatchObject({ direction: 1, fromIndex: 2, toIndex: 3 });
-  expect(crossed).toMatchObject({ direction: -1, fromIndex: 2, toIndex: 1 });
-  expect(crossed.progress).toBeGreaterThan(0);
+  expect(crossed).toMatchObject({ direction: 1, fromIndex: 2, toIndex: 3, progress: 0 });
+  expect(crossed.poses[3]!.apertureExposure).toBe(0);
+  expect(concealed).toMatchObject({ direction: -1, fromIndex: 2, toIndex: 1, progress: 0 });
+  expect(concealed.poses[1]!.apertureExposure).toBe(0);
+  expect(reverse.progress).toBeGreaterThan(0);
+  expect(reverse.paginationPosition).toBeCloseTo(2 - reverse.progress, 4);
   await finishPointer(page, held.origin, held.pitch * 0.12, held.elapsedMs + 100, "pointercancel");
   await expectCarouselAt(stage, "map");
   await expect(page.getByTestId("stacked-deck-caption")).toHaveText("Locatie & planning");
@@ -617,13 +759,57 @@ test("a second command and a re-grab resolve from the rendered exchange without 
   expect(active.every((sample) => sample.settledIndex === 2)).toBe(true);
   const redirectedIndex = active.findIndex((sample) => sample.toIndex === 4);
   expect(redirectedIndex).toBeGreaterThan(0);
-  expect(
-    Math.min(...active.slice(redirectedIndex).map((sample) => sample.progress)),
-  ).toBeGreaterThan(0);
+  const beforeRedirect = active[redirectedIndex - 1]!;
+  const redirected = active[redirectedIndex]!;
+  const oldSubordinate = beforeRedirect.poses.find((pose) => pose.id === "team")!;
+  const newSubordinate = redirected.poses.find((pose) => pose.id === "settings")!;
+  expect(beforeRedirect.toIndex).toBe(3);
+  expect(oldSubordinate.apertureExposure).toBe(0);
+  expect(redirected.progress).toBe(0);
+  expect(newSubordinate.apertureExposure).toBe(0);
+  expect(redirected.paginationPosition).toBe(2);
   await expectCarouselAt(stage, "settings");
 
   await pagination(page).nth(2).click();
   await expectCarouselAt(stage, "map");
+
+  await installProgrammaticTrace(page);
+  await page.getByTestId("stacked-deck-next").click();
+  await expect
+    .poll(async () => Number(await stage.getAttribute("data-transition-progress")))
+    .toBeGreaterThan(0.3);
+  await pagination(page).nth(1).click();
+  const reverseRetargetTrace = await readProgrammaticTrace(page);
+  const reverseActive = reverseRetargetTrace.filter((sample) => sample.controllerPhase !== "idle");
+  const reverseRedirectedIndex = reverseActive.findIndex((sample) => sample.toIndex === 1);
+  expect(reverseRedirectedIndex).toBeGreaterThan(0);
+  const beforeReverseRedirect = reverseActive[reverseRedirectedIndex - 1]!;
+  const reverseRedirected = reverseActive[reverseRedirectedIndex]!;
+  expect(beforeReverseRedirect.toIndex).toBe(3);
+  expect(beforeReverseRedirect.poses.find((pose) => pose.id === "team")?.apertureExposure).toBe(0);
+  expect(reverseRedirected.progress).toBe(0);
+  expect(reverseRedirected.poses.find((pose) => pose.id === "project")?.apertureExposure).toBe(0);
+  await expectCarouselAt(stage, "project");
+
+  await pagination(page).nth(2).click();
+  await expectCarouselAt(stage, "map");
+  await installProgrammaticTrace(page);
+  await page.getByTestId("stacked-deck-next").click();
+  await expect
+    .poll(async () => Number(await stage.getAttribute("data-transition-progress")))
+    .toBeGreaterThan(0.3);
+  await page.getByTestId("stacked-deck-previous").click();
+  const cancelledCommandTrace = await readProgrammaticTrace(page);
+  const cancelledActive = cancelledCommandTrace.filter(
+    (sample) => sample.controllerPhase !== "idle",
+  );
+  expect(cancelledActive.every((sample) => sample.settledIndex === 2)).toBe(true);
+  expect(Math.max(...cancelledActive.map((sample) => sample.paginationPosition))).toBeGreaterThan(
+    2.2,
+  );
+  expect(cancelledCommandTrace.at(-1)?.paginationPosition).toBe(2);
+  await expectCarouselAt(stage, "map");
+
   await page.getByTestId("stacked-deck-next").click();
   await expect(stage).toHaveAttribute("data-phase", "settling");
   await expect
@@ -641,9 +827,9 @@ test("a second command and a re-grab resolve from the rendered exchange without 
     const readRenderedExchange = () => ({
       phase: element.dataset.transitionPhase,
       progress: element.dataset.transitionProgress,
-      transforms: Array.from(element.querySelectorAll<HTMLElement>(".stacked-deck-card")).map(
-        (cardElement) => cardElement.style.transform,
-      ),
+      transforms: Array.from(
+        element.querySelectorAll<HTMLElement>(".stacked-deck-card-motion"),
+      ).map((cardElement) => cardElement.style.transform),
     });
     const before = readRenderedExchange();
     const event = new PointerEvent("pointerdown", {
