@@ -2,7 +2,8 @@
 "@snap-motion/core": minor
 ---
 
-Replace the stacked-deck rail projection with an allocation-conscious physical pile compositor.
-The renderer accepts explicit settled, outgoing, incoming, direction, progress, and phase state;
-keeps paint ownership stable through visible overlap; supports distinct forward peel and backward
-retrieval choreography; and preserves responsive and reduced-motion hierarchy.
+Replace the experimental stacked-deck pair compositor with a segment-local direct-manipulation
+projection. The renderer consumes continuous physical index through adjacent visual handoffs,
+supports multi-anchor traversal and reversal without controller resets, and uses one symmetric
+translation-led geometry in both directions. Visual ownership is distinct from final settled
+selection, while responsive render bleed avoids clipping without creating page overflow.

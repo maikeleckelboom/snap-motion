@@ -45,21 +45,23 @@ export interface LabDiagnostics {
   position: number;
   reducedMotion: boolean;
   releaseVelocityCapActive?: boolean;
+  segmentDirection?: number;
+  segmentOriginIndex?: number;
+  segmentPhase?: string;
+  segmentProgress?: number;
+  segmentTargetIndex?: number;
   settledIndex?: number;
   settledness?: number;
+  signedLocalDistance?: number;
   speedInCards?: number;
   targetId?: string;
   targetIndex?: number;
   trackExtent: number;
-  transitionDirection?: number;
-  transitionFromIndex?: number;
-  transitionPhase?: string;
-  transitionProgress?: number;
-  transitionToIndex?: number;
   tuningProfile?: string;
   velocity: number;
   visiblePrimaryExtent?: number;
   visualIndex?: number;
+  visualTopIndex?: number;
   visualViewportPrimaryExtent?: number;
   viewportSize: number;
 }

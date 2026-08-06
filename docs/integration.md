@@ -29,12 +29,18 @@ transitions, smooth scrolling, native scroll snap, or another animation library 
 carousel or media-gallery transform.
 
 When an application needs the stacked-deck visual model, it should allocate one
-`MutableStackedDeckFrame`, derive an explicit `StackedDeckTransition` from the generic controller,
-and render the returned roles. `resolveStackedDeckTuning` owns responsive pile and reduced-motion
-tuning. The settled index must remain authoritative for route, selection, focus, inspection, and
-announcements until the controller completes. Applications must not derive a horizontal slot or
-paint order from relative item index, and must not promote the transient incoming role into public
-state.
+`MutableStackedDeckTraversal` and one `MutableStackedDeckFrame`. Feed every controller snapshot to
+`resolveStackedDeckTraversal` using `physicalIndex = -position / pitch`, then pass that traversal to
+`resolveStackedDeckFrame`. The traversal retains the visual top between snapshots and completes an
+adjacent handoff whenever a full anchor is crossed; it never issues controller commands or resets
+controller motion. `resolveStackedDeckTuning` owns responsive pile and reduced-motion tuning.
+
+Visible caption, counter, and current-card semantics may follow `visualTopIndex` after each completed
+handoff. Route state, durable selection, inspection eligibility, and announcements remain tied to
+the controller's final settled selection. Inspection stays disabled while motion is unstable, and
+the final item is announced once on idle. Applications must not derive horizontal slots or paint
+order from global relative item index, model a multi-anchor movement as one non-adjacent pair, or
+announce intermediate visual tops.
 
 Import the essential component CSS once:
 

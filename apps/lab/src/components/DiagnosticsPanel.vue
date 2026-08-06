@@ -47,24 +47,30 @@ function scalar(value: number) {
         <dt>Paint owner</dt>
         <dd data-testid="owner-index">{{ diagnostics.ownerIndex }}</dd>
       </div>
-      <div v-if="diagnostics.transitionPhase !== undefined">
-        <dt>Deck transition</dt>
-        <dd data-testid="deck-transition-phase">{{ diagnostics.transitionPhase }}</dd>
+      <div v-if="diagnostics.segmentPhase !== undefined">
+        <dt>Deck segment</dt>
+        <dd data-testid="deck-segment-phase">{{ diagnostics.segmentPhase }}</dd>
       </div>
-      <div v-if="diagnostics.transitionProgress !== undefined">
-        <dt>Deck progress</dt>
-        <dd data-testid="deck-transition-progress">
-          {{ scalar(diagnostics.transitionProgress) }}
+      <div v-if="diagnostics.segmentProgress !== undefined">
+        <dt>Segment progress</dt>
+        <dd data-testid="deck-segment-progress">
+          {{ scalar(diagnostics.segmentProgress) }}
         </dd>
       </div>
-      <div v-if="diagnostics.transitionDirection !== undefined">
-        <dt>Deck direction</dt>
-        <dd data-testid="deck-transition-direction">{{ diagnostics.transitionDirection }}</dd>
+      <div v-if="diagnostics.segmentDirection !== undefined">
+        <dt>Segment direction</dt>
+        <dd data-testid="deck-segment-direction">{{ diagnostics.segmentDirection }}</dd>
       </div>
-      <div v-if="diagnostics.transitionFromIndex !== undefined">
-        <dt>Deck exchange</dt>
-        <dd data-testid="deck-transition-indices">
-          {{ diagnostics.transitionFromIndex }} → {{ diagnostics.transitionToIndex }}
+      <div v-if="diagnostics.segmentOriginIndex !== undefined">
+        <dt>Local segment</dt>
+        <dd data-testid="deck-segment-indices">
+          {{ diagnostics.segmentOriginIndex }} → {{ diagnostics.segmentTargetIndex ?? "—" }}
+        </dd>
+      </div>
+      <div v-if="diagnostics.signedLocalDistance !== undefined">
+        <dt>Local distance</dt>
+        <dd data-testid="deck-local-distance">
+          {{ scalar(diagnostics.signedLocalDistance) }}
         </dd>
       </div>
       <div v-if="diagnostics.tuningProfile !== undefined">
@@ -78,6 +84,10 @@ function scalar(value: number) {
       <div v-if="diagnostics.settledIndex !== undefined">
         <dt>Settled index</dt>
         <dd data-testid="settled-index">{{ diagnostics.settledIndex }}</dd>
+      </div>
+      <div v-if="diagnostics.visualTopIndex !== undefined">
+        <dt>Visual top</dt>
+        <dd data-testid="visual-top-index">{{ diagnostics.visualTopIndex }}</dd>
       </div>
       <div>
         <dt>Target</dt>

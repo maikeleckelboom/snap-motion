@@ -164,47 +164,66 @@ constraint, velocity, and settlement mechanics. It does not reuse the rail rende
 assigned a horizontal slot from its index.
 
 `resolveStackedDeckTuning` owns responsive card size, motion pitch, compact backing offsets, and the
-two exchange excursions. `resolveStackedDeckFrame` receives an explicit transition containing the
-settled index, outgoing index, incoming index, direction, phase, and progress. It returns `top`,
-`outgoing`, `incoming`, `backing`, or `hidden` roles. Render order follows those roles and stays
-constant throughout visible overlap; it is never recalculated when progress crosses a scalar
-threshold.
+one-anchor exchange geometry. `resolveStackedDeckTraversal` consumes the controller phase, settled
+index, and continuous physical index. It retains the current visual top, completes every crossed
+anchor in order, and exposes only the residual adjacent segment. `resolveStackedDeckFrame` projects
+that segment into `top`, `target`, `backing`, or `hidden` roles. No active segment can have a
+non-adjacent target.
 
-### Committed state and transient roles
+### Direct screen-space mapping
 
-The settled index is the sole authority for caption, pagination, current-item semantics, focus, and
-inspection. The transition's `fromIndex` remains that settled index until the controller reaches the
-target and becomes idle. `toIndex`, progress, and phase describe only the transient compositor.
-Cancellation therefore reverses the same exchange back to the settled card, while completion
-commits the target exactly once. A re-grab or a second command starts from the rendered physical
-position; it does not reconstruct an idle deck from semantic state.
+Carousel anchors use `position = -index * pitch`, while an LTR pointer drag writes its screen-space
+delta directly into controller position. The deck therefore derives:
 
-### Forward exchange
+```text
+physicalIndex = -controllerPosition / pitch
+signedLocalDistance = physicalIndex - segmentOriginIndex
+topCardX = -signedLocalDistance * motionPitch
+```
 
-The target begins as the first backing card directly beneath the top card. It rises by only the
-existing backing offset and scale. The outgoing card keeps the upper layer for the entire exchange,
-peels laterally with restrained lift and rotation, and accelerates away only after the target is
-established beneath it. The incoming card never travels from a side rail. It is revealed at the pile
-center and becomes the top card only after settlement. The outgoing card becomes transparent only
-after it has left meaningful overlap, then returns to the back of the cyclic pile while fully
-concealed. The two faces never dissolve through one another.
+For this deck `motionPitch` is the same pitch used by the controller, so away from elastic bounds
+`topCardX` equals pointer delta exactly. A left drag produces negative card X from the first
+meaningful movement; a right drag produces positive card X. At an outer bound, the controller's
+existing nonlinear elasticity reduces the physical delta and the same equation projects that
+reduced movement without inventing a target.
 
-### Backward retrieval
+The two directions share this equation and one restrained secondary arc. Rotation, vertical lift,
+scale recession, and shadow attenuation are deterministic functions of local progress. The top
+card remains opaque and above the target until the handoff, so visible metadata cannot lag behind a
+visually dominant target. Reduced motion preserves direct translation and removes the secondary
+arc.
 
-The previous card is retrieved from behind rather than evaluated as a mirrored slot. It begins fully
-clipped, owns one uninterrupted upper exchange layer while visible, emerges around the leading edge
-of the pile, and settles at center. The current card continuously settles onto the first backing
-layer beneath it. Because the retrieved card is concealed at the instant its exchange role is
-assigned, no visible overlap ever changes paint ownership.
+### Segment handoff and reversal
+
+`visualTopIndex` is history-bearing presentation state. While physical index stays within one pitch
+of it, the same card remains on top and the signed residual chooses the adjacent target underneath.
+At a complete pitch the target is already at exact top-card rest geometry and the former top is
+removed from the active frame. Visual ownership then advances one anchor, and any residual physical distance
+immediately opens the next adjacent segment. A programmatic `0 -> 4` controller animation is thus
+rendered as `0 -> 1`, `1 -> 2`, `2 -> 3`, and `3 -> 4` without intermediate `moveTo()` calls or idle
+states.
+
+Reversal uses the same signed residual. Before a handoff, progress simply retraces to zero. After a
+handoff, movement first retraces the new top toward the previously crossed anchor; crossing that
+pitch transfers visual ownership back. Direction can change only through an exact neutral state at
+the current visual anchor. Re-grabbing, wheel input, fast flicks, and programmatic movement all use
+the same controller position and traversal resolver.
 
 ### Visual and accessibility invariants
 
 At rest only one semantic card is current and interactive. Backing instances are hidden from the
 accessibility tree and expose only small translated edges; non-participating cards never cross the
-stage. During an exchange both visual participants remain non-interactive and only the settled card
-retains current-item semantics. Compact, medium, wide, and reduced-motion profiles preserve the
-same role topology and exact settled anchors. Reduced motion removes exchange rotation and shortens
-displacement without creating an alternate state or competing full-size face.
+stage. During motion, visible caption, counter, pagination emphasis, and `aria-current` follow the
+visual top only after a completed handoff. Durable selection remains unchanged until controller idle,
+inspection stays disabled, and the live region announces only the final settled card. At idle the
+visual top and settled index must agree exactly.
+
+The clipped decorative backdrop is a sibling of the card stage, never an ancestor. The viewport and
+stage allow intentional render bleed, while page-level horizontal containment prevents document
+overflow. Responsive card width and pitch keep the dominant part of a one-pitch exchange within the
+stage; a card may approach or leave the screen edge only late in an exchange, never against an
+internal rectangular clip. Compact, medium, wide, and reduced-motion profiles preserve the same
+role topology and exact settled anchors.
 
 ## Responsive remeasurement
 

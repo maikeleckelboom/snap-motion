@@ -8,7 +8,7 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 
 | Entry             |  Bytes | Gzip bytes | Budget bytes / gzip |
 | ----------------- | -----: | ---------: | ------------------: |
-| Core              | 32,981 |      9,286 |      33,000 / 9,500 |
+| Core              | 33,325 |      9,411 |      33,500 / 9,500 |
 | Vue root          | 70,665 |     19,355 |     72,000 / 20,000 |
 | Vue carousel      | 34,698 |      9,918 |     52,000 / 15,000 |
 | Vue sheet         | 41,353 |     11,933 |     42,000 / 12,500 |
@@ -21,11 +21,13 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 items, bounded render windows, simultaneous instances, resize/mutation storms, wheel coalescing,
 reactive publication counts, playback disposal, and listener cleanup.
 
-The physical stacked-deck frame resolver fits under a 33,000-byte raw and 9,500-byte gzip ceiling,
-with 19 raw bytes and 214 gzip bytes of measured headroom. The frame path mutates caller-owned
-poses, performs no DOM measurement, and allocates no arrays or sort keys. The lab explicitly
-invalidates Vue's shallow frame signal after reuse, applies compositor hints only to visible cards,
-and gives hidden cards `will-change: auto` with no pointer input.
+The segment-local stacked-deck traversal and frame resolvers fit under a 33,500-byte raw and
+9,500-byte gzip core ceiling, with 175 raw bytes and 89 gzip bytes of measured headroom. The raw
+ceiling increased by 500 bytes for the public traversal state and its validation; compressed core
+still remains inside the former ceiling. Both hot paths mutate caller-owned storage, perform no DOM
+measurement, and allocate no arrays or sort keys. The lab explicitly invalidates Vue's shallow
+signals after reuse, applies compositor hints only to visible cards, and gives hidden cards
+`will-change: auto` with no pointer input.
 
 The Vue root, sheet, and raw CSS ceilings increased narrowly for the four-side descriptors,
 dimension-complete measurement policy, side-change remapping, fixed-width horizontal structure,

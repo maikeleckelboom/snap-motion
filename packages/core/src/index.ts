@@ -47,20 +47,24 @@ export type {
 } from "./coverflow";
 export {
   createStackedDeckFrame,
+  createStackedDeckTraversal,
   resolveStackedDeckFrame,
+  resolveStackedDeckTraversal,
   resolveStackedDeckTuning,
 } from "./stackedDeck";
 export type {
   MutableStackedDeckFrame,
   MutableStackedDeckPose,
+  MutableStackedDeckTraversal,
   ResolveStackedDeckFrameOptions,
+  ResolveStackedDeckTraversalOptions,
   ResolveStackedDeckTuningOptions,
   StackedDeckFrame,
   StackedDeckPose,
   StackedDeckProfile,
   StackedDeckRole,
-  StackedDeckTransition,
-  StackedDeckTransitionPhase,
+  StackedDeckTraversal,
+  StackedDeckTraversalPhase,
   StackedDeckTuning,
 } from "./stackedDeck";
 export { SnapController } from "./controller";

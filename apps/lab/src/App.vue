@@ -39,7 +39,7 @@ const demos = [
     label: "Stacked deck",
     shortLabel: "Deck",
     description:
-      "A compact pile exchanges one committed top screen through explicit physical roles.",
+      "A compact pile promotes each adjacent screen crossed by continuous physical motion.",
     component: StackedDeckDemo,
   },
   {

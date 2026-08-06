@@ -2,9 +2,11 @@
 import {
   createCoverflowGeometry,
   createStackedDeckFrame,
+  createStackedDeckTraversal,
   resolveStackedDeckFrame,
+  resolveStackedDeckTraversal,
   resolveStackedDeckTuning,
-  type StackedDeckTransition,
+  type StackedDeckTraversal,
 } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
 import { MediaGalleryDialog, type FocusReturnOptions } from "@snap-motion/vue/media-gallery";
@@ -45,7 +47,6 @@ import {
   type CoverflowPaginationIndicatorState,
 } from "./coverflowMotion";
 import { showcaseScreens, type ShowcaseScreenId } from "./showcaseScreens";
-import { StackedDeckTransitionState } from "./stackedDeckTransition";
 
 type ScreenId = ShowcaseScreenId;
 
@@ -155,10 +156,11 @@ const pendingTargetIndex = ref<number | null>(null);
 const focusedPaginationIndex = ref<number | null>(null);
 const liveMessage = ref("");
 const settledId = computed(() => ids[settledIndex.value] ?? ids[initialIndex]!);
-const settledScreen = computed(() => screens[settledIndex.value] ?? screens[0]!);
-const deckTransitionState = new StackedDeckTransitionState(initialIndex, ids.length);
-const deckTransition = shallowRef<StackedDeckTransition>(deckTransitionState.transition);
-const renderedSubordinateExposure = ref(0);
+const deckTraversalOutput = createStackedDeckTraversal(initialIndex, ids.length);
+const deckTraversal = shallowRef<StackedDeckTraversal>(deckTraversalOutput);
+const visualTopIndex = computed(() => deckTraversal.value.visualTopIndex);
+const visualTopId = computed(() => ids[visualTopIndex.value] ?? settledId.value);
+const visualTopScreen = computed(() => screens[visualTopIndex.value] ?? screens[0]!);
 
 /** Continuous physical index. It projects motion but never controls the carousel mass. */
 const rawPhysicalIndex = computed(() =>
@@ -174,7 +176,7 @@ const paginationDots = computed(() =>
   screens.map((screen, index) => ({
     id: screen.id,
     title: screen.title,
-    current: index === settledIndex.value,
+    current: index === visualTopIndex.value,
   })),
 );
 
@@ -198,14 +200,16 @@ watch(
     if (pendingTargetIndex.value !== settledSelection.pendingTargetIndex) {
       pendingTargetIndex.value = settledSelection.pendingTargetIndex;
     }
-    deckTransition.value = deckTransitionState.update({
-      controllerPhase: snapshot.phase,
-      itemCount: ids.length,
-      physicalIndex: -snapshot.position / currentPitch,
-      settledIndex: settledSelection.settledIndex,
-      subordinateExposure: renderedSubordinateExposure.value,
-      targetIndex,
-    });
+    resolveStackedDeckTraversal(
+      {
+        controllerPhase: snapshot.phase,
+        itemCount: ids.length,
+        physicalIndex: -snapshot.position / currentPitch,
+        settledIndex: settledSelection.settledIndex,
+      },
+      deckTraversalOutput,
+    );
+    triggerRef(deckTraversal);
     if (announcementIndex !== null) {
       const suppressAnnouncement = announcementIndex === suppressedCarouselAnnouncementIndex;
       suppressedCarouselAnnouncementIndex = undefined;
@@ -250,12 +254,6 @@ function isCardGalleryEligible(index: number): boolean {
 }
 
 interface SlideStyle {
-  aperture: {
-    clipPath: string;
-  };
-  apertureBoundary: number;
-  apertureExposure: number;
-  rotateY: number;
   container: {
     opacity: number;
     zIndex: number;
@@ -275,63 +273,16 @@ interface SlideStyle {
 const stackedFrameOutput = createStackedDeckFrame(ids.length);
 const stackedFrame = shallowRef(stackedFrameOutput);
 
-function resolveApertureMetrics(
-  direction: -1 | 0 | 1,
-  role: string,
-  translateX: number,
-  reveal: number,
-  opacity: number,
-  visible: boolean,
-  reducedMotion: boolean,
-) {
-  const isRetrievedCard = direction === -1 && role === "incoming";
-  const hasClearedPileAperture = reveal >= 0.01;
-  const pileLeft = (stageWidthPx.value - stackedTuning.value.cardWidth) / 2;
-  const maximumRetrievalAngle = reducedMotion ? 52 : 82;
-  const rotateY = isRetrievedCard
-    ? hasClearedPileAperture
-      ? -maximumRetrievalAngle * (1 - reveal)
-      : 0
-    : 0;
-  const boundary = isRetrievedCard && !hasClearedPileAperture ? pileLeft : stageWidthPx.value;
-  const cardLeft = pileLeft + translateX;
-  const projectedWidth = Math.abs(Math.cos((rotateY * Math.PI) / 180));
-  const exposure = isRetrievedCard
-    ? hasClearedPileAperture
-      ? projectedWidth
-      : clamp((boundary - cardLeft) / stackedTuning.value.cardWidth, 0, 1) * projectedWidth
-    : role === "incoming"
-      ? visible
-        ? opacity
-        : 0
-      : visible
-        ? 1
-        : 0;
-  return { boundary, exposure, rotateY };
-}
-
 watchEffect(() => {
   const tuning = motion.reducedMotion.value ? reducedStackedTuning.value : stackedTuning.value;
   resolveStackedDeckFrame(
     {
       itemCount: ids.length,
-      transition: deckTransition.value,
+      traversal: deckTraversal.value,
       tuning,
     },
     stackedFrameOutput,
   );
-  const subordinate = stackedFrameOutput.poses[stackedFrameOutput.toIndex];
-  renderedSubordinateExposure.value = subordinate
-    ? resolveApertureMetrics(
-        stackedFrameOutput.direction,
-        subordinate.role,
-        subordinate.translateX,
-        subordinate.reveal,
-        subordinate.opacity,
-        subordinate.visible,
-        motion.reducedMotion.value,
-      ).exposure
-    : 0;
   triggerRef(stackedFrame);
 });
 
@@ -345,22 +296,7 @@ const slideStyles = computed(() => {
   for (let index = 0; index < screens.length; index += 1) {
     const screen = screens[index]!;
     const pose = frame.poses[index]!;
-    const aperture = resolveApertureMetrics(
-      frame.direction,
-      pose.role,
-      pose.translateX,
-      pose.reveal,
-      pose.opacity,
-      pose.visible,
-      motion.reducedMotion.value,
-    );
     styles[screen.id] = {
-      aperture: {
-        clipPath: `inset(0 ${Math.max(0, stageWidthPx.value - aperture.boundary).toFixed(3)}px 0 0)`,
-      },
-      apertureBoundary: aperture.boundary,
-      apertureExposure: aperture.exposure,
-      rotateY: aperture.rotateY,
       container: {
         opacity: pose.opacity,
         zIndex: pose.layer,
@@ -368,8 +304,8 @@ const slideStyles = computed(() => {
       },
       motion: {
         pointerEvents: pose.interactive ? "auto" : "none",
-        transform: `perspective(1400px) translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg) rotateY(${aperture.rotateY.toFixed(3)}deg)`,
-        transformOrigin: aperture.rotateY === 0 ? "center center" : "left center",
+        transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
+        transformOrigin: "center center",
         willChange: pose.visible ? "transform" : "auto",
       },
       screen: {
@@ -388,9 +324,8 @@ const stageStyle = computed(() => ({
 }));
 
 const paginationVisualIndex = computed(() => {
-  const transition = deckTransition.value;
-  if (transition.phase === "idle") return transition.settledIndex;
-  return transition.fromIndex + (transition.toIndex - transition.fromIndex) * transition.progress;
+  const traversal = deckTraversal.value;
+  return clamp(traversal.visualTopIndex + traversal.signedLocalDistance, 0, ids.length - 1);
 });
 
 const paginationIndicator = computed<CoverflowPaginationIndicatorState>(() =>
@@ -436,13 +371,17 @@ const diagnostics = computed<LabDiagnostics>(() => {
     position: motion.position.value,
     physicalIndex: rawPhysicalIndex.value,
     motionPitch: pitch.value,
-    transitionDirection: deckTransition.value.direction,
-    transitionFromIndex: deckTransition.value.fromIndex,
-    transitionPhase: deckTransition.value.phase,
-    transitionProgress: deckTransition.value.progress,
-    transitionToIndex: deckTransition.value.toIndex,
+    segmentDirection: deckTraversal.value.direction,
+    segmentOriginIndex: deckTraversal.value.segmentOriginIndex,
+    segmentPhase: deckTraversal.value.phase,
+    segmentProgress: deckTraversal.value.localProgress,
+    ...(deckTraversal.value.segmentTargetIndex === null
+      ? {}
+      : { segmentTargetIndex: deckTraversal.value.segmentTargetIndex }),
+    signedLocalDistance: deckTraversal.value.signedLocalDistance,
     tuningProfile: stackedTuning.value.profile,
     settledIndex: settledIndex.value,
+    visualTopIndex: visualTopIndex.value,
     ...(focusedPaginationIndex.value === null
       ? {}
       : { focusedPaginationIndex: focusedPaginationIndex.value }),
@@ -506,7 +445,8 @@ function synchronizeCarouselExactly(index: number): boolean {
     motion.targetId.value === id &&
     Math.abs(motion.position.value - anchorPosition) <= Number.EPSILON * 16 &&
     Math.abs(motion.velocity.value) <= Number.EPSILON * 16 &&
-    settledIndex.value === targetIndex;
+    settledIndex.value === targetIndex &&
+    visualTopIndex.value === targetIndex;
   if (alreadySynchronized) return true;
 
   motion.interrupt();
@@ -517,7 +457,16 @@ function synchronizeCarouselExactly(index: number): boolean {
   });
   settledIndex.value = targetIndex;
   pendingTargetIndex.value = null;
-  deckTransition.value = deckTransitionState.reset(targetIndex);
+  resolveStackedDeckTraversal(
+    {
+      controllerPhase: "idle",
+      itemCount: ids.length,
+      physicalIndex: targetIndex,
+      settledIndex: targetIndex,
+    },
+    deckTraversalOutput,
+  );
+  triggerRef(deckTraversal);
   return true;
 }
 
@@ -747,11 +696,10 @@ onBeforeUnmount(() => {
   >
     <header class="stacked-deck-header">
       <div>
-        <p class="eyebrow">Physical carousel</p>
         <h3 id="stacked-deck-title">Stacked deck</h3>
         <p class="lede">
-          One top screen leaves or yields to a card already inside the pile. Selection changes only
-          after the physical exchange settles.
+          Drag the top screen. Each crossed position promotes the adjacent screen; selection commits
+          after settlement.
         </p>
       </div>
       <div class="stacked-deck-controls">
@@ -786,7 +734,7 @@ onBeforeUnmount(() => {
       aria-roledescription="carousel"
       class="stacked-deck-viewport"
       data-testid="stacked-deck-viewport"
-      :data-active-id="settledId"
+      :data-active-id="visualTopId"
       :data-card-width="cardWidth"
       :data-gallery-open="galleryOpen ? 'true' : 'false'"
       :data-keyboard-target-index="keyboardTargetIndex"
@@ -796,27 +744,30 @@ onBeforeUnmount(() => {
       :data-physical-index="rawPhysicalIndex"
       :data-position="motion.position.value"
       :data-profile="stackedTuning.profile"
+      :data-segment-direction="deckTraversal.direction"
+      :data-segment-origin-index="deckTraversal.segmentOriginIndex"
+      :data-segment-phase="deckTraversal.phase"
+      :data-segment-progress="deckTraversal.localProgress"
+      :data-segment-target-index="deckTraversal.segmentTargetIndex"
       :data-settled-index="settledIndex"
+      :data-settled-id="settledId"
+      :data-signed-local-distance="deckTraversal.signedLocalDistance"
       :data-speed-in-cards="speedInCards"
-      :data-subordinate-exposure="renderedSubordinateExposure"
       :data-target-id="motion.targetId.value"
-      :data-transition-direction="deckTransition.direction"
-      :data-transition-from-index="deckTransition.fromIndex"
-      :data-transition-phase="deckTransition.phase"
-      :data-transition-progress="deckTransition.progress"
-      :data-transition-to-index="deckTransition.toIndex"
+      :data-visual-top-index="visualTopIndex"
       :style="[stageStyle, motion.surfaceStyle]"
       tabindex="0"
       @lostpointercapture="onCarouselLostPointerCapture"
       @pointerdown="onDeckPointerDown"
       @wheel="onDeckWheel"
     >
+      <div aria-hidden="true" class="stacked-deck-backdrop" />
       <div ref="track" class="stacked-deck-stage">
         <article
           v-for="(screen, index) in screens"
           :key="screen.id"
-          :aria-current="screen.id === settledId ? 'true' : undefined"
-          :aria-hidden="screen.id === settledId ? undefined : 'true'"
+          :aria-current="screen.id === visualTopId ? 'true' : undefined"
+          :aria-hidden="screen.id === visualTopId ? undefined : 'true'"
           :aria-label="`${screen.title}, ${index + 1} of ${screens.length}`"
           aria-roledescription="slide"
           class="stacked-deck-card"
@@ -824,17 +775,13 @@ onBeforeUnmount(() => {
             `tone-${screen.tone}`,
             `layout-${screen.layout}`,
             {
-              active: screen.id === settledId,
+              active: screen.id === visualTopId,
               inspectable: isCardGalleryEligible(index),
             },
           ]"
           :data-interactive="stackedPose(index)?.interactive"
-          :data-aperture-boundary="slideStyles[screen.id].apertureBoundary"
-          :data-aperture-exposure="slideStyles[screen.id].apertureExposure"
-          :data-rotate-y="slideStyles[screen.id].rotateY"
           :data-layer="stackedPose(index)?.layer"
           :data-opacity="stackedPose(index)?.opacity"
-          :data-reveal="stackedPose(index)?.reveal"
           :data-role="stackedPose(index)?.role"
           :data-rotate="stackedPose(index)?.rotate"
           :data-scale="stackedPose(index)?.scale"
@@ -847,19 +794,17 @@ onBeforeUnmount(() => {
           :style="slideStyles[screen.id].container"
           @click.prevent
         >
-          <div class="stacked-deck-aperture" :style="slideStyles[screen.id].aperture">
-            <div class="stacked-deck-card-motion" :style="slideStyles[screen.id].motion">
-              <div class="screen-chrome" :style="slideStyles[screen.id].screen">
-                <img
-                  alt=""
-                  aria-hidden="true"
-                  class="stacked-screen-image"
-                  draggable="false"
-                  :height="screen.height"
-                  :src="screen.previewSrc"
-                  :width="screen.width"
-                />
-              </div>
+          <div class="stacked-deck-card-motion" :style="slideStyles[screen.id].motion">
+            <div class="screen-chrome" :style="slideStyles[screen.id].screen">
+              <img
+                alt=""
+                aria-hidden="true"
+                class="stacked-screen-image"
+                draggable="false"
+                :height="screen.height"
+                :src="screen.previewSrc"
+                :width="screen.width"
+              />
             </div>
           </div>
         </article>
@@ -868,19 +813,19 @@ onBeforeUnmount(() => {
 
     <div class="stacked-deck-meta">
       <p>
-        <span class="tabular" data-testid="stacked-deck-counter">{{ settledIndex + 1 }}</span>
+        <span class="tabular" data-testid="stacked-deck-counter">{{ visualTopIndex + 1 }}</span>
         /
         <span class="tabular">{{ screens.length }}</span>
-        <strong data-testid="stacked-deck-caption">{{ settledScreen.title }}</strong>
+        <strong data-testid="stacked-deck-caption">{{ visualTopScreen.title }}</strong>
       </p>
       <button
         ref="inspectControl"
-        :aria-label="`Inspect ${settledScreen.title} in screen gallery, ${settledIndex + 1} of ${screens.length}`"
+        :aria-label="`Inspect ${visualTopScreen.title} in screen gallery, ${visualTopIndex + 1} of ${screens.length}`"
         class="stacked-deck-inspect"
         data-testid="stacked-deck-inspect"
-        :disabled="!isCardGalleryEligible(settledIndex)"
+        :disabled="!isCardGalleryEligible(visualTopIndex)"
         type="button"
-        @click="openGallery(settledIndex)"
+        @click="openGallery(visualTopIndex)"
       >
         <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
           <path
@@ -945,9 +890,15 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .stacked-deck-demo {
+  position: relative;
   display: grid;
   gap: 1rem;
   min-inline-size: 0;
+}
+
+:global(html:has(.stacked-deck-demo)),
+:global(body:has(.stacked-deck-demo)) {
+  overflow-x: clip;
 }
 
 .stacked-deck-demo :deep(.snap-motion-media-gallery) {
@@ -974,17 +925,8 @@ onBeforeUnmount(() => {
   gap: 1rem;
 }
 
-.stacked-deck-header .eyebrow,
 .stacked-deck-meta p {
   margin: 0;
-}
-
-.stacked-deck-header .eyebrow {
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .stacked-deck-header h3 {
@@ -1018,11 +960,7 @@ onBeforeUnmount(() => {
   inline-size: min(100%, var(--_deck-stage-width));
   min-block-size: calc(var(--_deck-card-height) + 5.5rem);
   margin-inline: auto;
-  border-radius: 1.5rem;
-  background:
-    radial-gradient(circle at 50% 28%, rgb(255 255 255 / 0.92), transparent 56%),
-    linear-gradient(180deg, #f1f4f8 0%, #e7ecf2 100%);
-  overflow: hidden;
+  overflow: visible;
   isolation: isolate;
   touch-action: pan-y;
   user-select: none;
@@ -1033,7 +971,19 @@ onBeforeUnmount(() => {
   cursor: grabbing;
 }
 
-.stacked-deck-viewport::before {
+.stacked-deck-backdrop {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at 50% 28%, rgb(255 255 255 / 0.92), transparent 56%),
+    linear-gradient(180deg, #f1f4f8 0%, #e7ecf2 100%);
+  pointer-events: none;
+}
+
+.stacked-deck-backdrop::before {
   content: "";
   position: absolute;
   inset-inline-start: 50%;
@@ -1067,12 +1017,6 @@ onBeforeUnmount(() => {
   padding: 0;
   background: transparent;
   pointer-events: none;
-}
-
-.stacked-deck-aperture {
-  position: absolute;
-  inset: 0;
-  overflow: visible;
 }
 
 .stacked-deck-card-motion {
@@ -1127,8 +1071,7 @@ onBeforeUnmount(() => {
   border-color: rgb(15 23 42 / 0.23);
 }
 
-.stacked-deck-card[data-role="incoming"] .screen-chrome,
-.stacked-deck-card[data-role="outgoing"] .screen-chrome,
+.stacked-deck-card[data-role="target"] .screen-chrome,
 .stacked-deck-card[data-role="backing"] .screen-chrome {
   border-color: rgb(71 85 105 / 0.16);
 }

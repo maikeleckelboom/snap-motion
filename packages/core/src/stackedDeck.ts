@@ -1,16 +1,42 @@
 import { assertFiniteNumber, assertNonNegative } from "./bounds";
+import type { ControllerPhase } from "./types";
 
 export type StackedDeckProfile = "compact" | "medium" | "wide";
-export type StackedDeckRole = "top" | "incoming" | "outgoing" | "backing" | "hidden";
-export type StackedDeckTransitionPhase = "idle" | "peel" | "handoff" | "settle";
+export type StackedDeckRole = "top" | "target" | "backing" | "hidden";
+export type StackedDeckTraversalPhase = "idle" | "neutral" | "traversing" | "elastic";
 
-export interface StackedDeckTransition {
+/**
+ * Presentation state for the one-anchor segment containing the controller's continuous position.
+ * Selection remains controller-owned; visualTopIndex advances only after a complete local pitch.
+ */
+export interface StackedDeckTraversal {
   readonly settledIndex: number;
-  readonly fromIndex: number;
-  readonly toIndex: number;
+  readonly visualTopIndex: number;
+  readonly segmentOriginIndex: number;
+  readonly segmentTargetIndex: number | null;
   readonly direction: -1 | 0 | 1;
-  readonly progress: number;
-  readonly phase: StackedDeckTransitionPhase;
+  readonly signedLocalDistance: number;
+  readonly localProgress: number;
+  readonly phase: StackedDeckTraversalPhase;
+}
+
+/** Mutable storage for allocation-free traversal resolution. */
+export interface MutableStackedDeckTraversal {
+  settledIndex: number;
+  visualTopIndex: number;
+  segmentOriginIndex: number;
+  segmentTargetIndex: number | null;
+  direction: -1 | 0 | 1;
+  signedLocalDistance: number;
+  localProgress: number;
+  phase: StackedDeckTraversalPhase;
+}
+
+export interface ResolveStackedDeckTraversalOptions {
+  readonly controllerPhase: ControllerPhase;
+  readonly itemCount: number;
+  readonly physicalIndex: number;
+  readonly settledIndex: number;
 }
 
 export interface ResolveStackedDeckTuningOptions {
@@ -29,13 +55,9 @@ export interface StackedDeckTuning {
   readonly backingOffsetY: number;
   readonly backingScaleStep: number;
   readonly backingRotate: number;
-  readonly forwardPeelX: number;
-  readonly forwardPeelY: number;
-  readonly forwardRotate: number;
-  readonly forwardConcealStart: number;
-  readonly reverseExcursionX: number;
-  readonly reverseExcursionY: number;
-  readonly reverseRotate: number;
+  readonly topTravelY: number;
+  readonly topRotate: number;
+  readonly topScaleReduction: number;
 }
 
 export interface StackedDeckPose {
@@ -44,7 +66,6 @@ export interface StackedDeckPose {
   readonly scale: number;
   readonly rotate: number;
   readonly opacity: number;
-  readonly reveal: number;
   readonly layer: number;
   readonly stackDepth: number;
   readonly role: StackedDeckRole;
@@ -60,7 +81,6 @@ export interface MutableStackedDeckPose {
   scale: number;
   rotate: number;
   opacity: number;
-  reveal: number;
   layer: number;
   stackDepth: number;
   role: StackedDeckRole;
@@ -69,30 +89,18 @@ export interface MutableStackedDeckPose {
   interactive: boolean;
 }
 
-export interface StackedDeckFrame {
-  readonly settledIndex: number;
-  readonly fromIndex: number;
-  readonly toIndex: number;
-  readonly direction: -1 | 0 | 1;
-  readonly progress: number;
-  readonly phase: StackedDeckTransitionPhase;
+export interface StackedDeckFrame extends StackedDeckTraversal {
   readonly poses: readonly StackedDeckPose[];
 }
 
 /** Caller-owned storage mutated by {@link resolveStackedDeckFrame}. */
-export interface MutableStackedDeckFrame {
-  settledIndex: number;
-  fromIndex: number;
-  toIndex: number;
-  direction: -1 | 0 | 1;
-  progress: number;
-  phase: StackedDeckTransitionPhase;
+export interface MutableStackedDeckFrame extends MutableStackedDeckTraversal {
   poses: MutableStackedDeckPose[];
 }
 
 export interface ResolveStackedDeckFrameOptions {
   readonly itemCount: number;
-  readonly transition: StackedDeckTransition;
+  readonly traversal: StackedDeckTraversal;
   readonly tuning: StackedDeckTuning;
 }
 
@@ -102,22 +110,19 @@ interface ProfileValues {
   readonly motionPitchRatio: number;
   readonly backingOffsetXRatio: number;
   readonly backingOffsetYRatio: number;
-  readonly forwardPeelXRatio: number;
-  readonly forwardPeelYRatio: number;
-  readonly reverseExcursionXRatio: number;
-  readonly reverseExcursionYRatio: number;
+  readonly topTravelYRatio: number;
 }
 
 const SCREEN_ASPECT_RATIO = 1.6;
 const MAXIMUM_BACKING_LAYERS = 3;
 const BACKING_SCALE_STEP = 0.012;
-const BACKING_ROTATE = 0.42;
-const FORWARD_ROTATE = -6;
-const REVERSE_ROTATE = -3.4;
-const FORWARD_CONCEAL_START = 0.94;
+const BACKING_ROTATE = 0.38;
+const TOP_ROTATE = 2.2;
+const TOP_SCALE_REDUCTION = 0.025;
 const TOP_LAYER = 500;
-const EXCHANGE_UNDER_LAYER = 400;
+const TARGET_LAYER = 400;
 const BACKING_LAYER_STEP = 100;
+const TRAVERSAL_EPSILON = 0.000_001;
 const TUNING_NUMBER_KEYS = [
   "cardWidth",
   "cardHeight",
@@ -127,13 +132,9 @@ const TUNING_NUMBER_KEYS = [
   "backingOffsetY",
   "backingScaleStep",
   "backingRotate",
-  "forwardPeelX",
-  "forwardPeelY",
-  "forwardRotate",
-  "forwardConcealStart",
-  "reverseExcursionX",
-  "reverseExcursionY",
-  "reverseRotate",
+  "topTravelY",
+  "topRotate",
+  "topScaleReduction",
 ] as const;
 
 const PROFILE_VALUES: Record<StackedDeckProfile, ProfileValues> = {
@@ -143,32 +144,23 @@ const PROFILE_VALUES: Record<StackedDeckProfile, ProfileValues> = {
     motionPitchRatio: 0.42,
     backingOffsetXRatio: 0.009,
     backingOffsetYRatio: 0.018,
-    forwardPeelXRatio: 1.16,
-    forwardPeelYRatio: -0.075,
-    reverseExcursionXRatio: -0.14,
-    reverseExcursionYRatio: -0.045,
+    topTravelYRatio: 0.018,
   },
   medium: {
-    cardWidthRatio: 0.74,
-    cardWidthMax: 600,
-    motionPitchRatio: 0.4,
+    cardWidthRatio: 0.62,
+    cardWidthMax: 520,
+    motionPitchRatio: 0.32,
     backingOffsetXRatio: 0.01,
     backingOffsetYRatio: 0.019,
-    forwardPeelXRatio: 1.14,
-    forwardPeelYRatio: -0.065,
-    reverseExcursionXRatio: -0.13,
-    reverseExcursionYRatio: -0.04,
+    topTravelYRatio: 0.016,
   },
   compact: {
-    cardWidthRatio: 0.9,
-    cardWidthMax: 420,
-    motionPitchRatio: 0.38,
+    cardWidthRatio: 0.6,
+    cardWidthMax: 300,
+    motionPitchRatio: 0.55,
     backingOffsetXRatio: 0.011,
     backingOffsetYRatio: 0.02,
-    forwardPeelXRatio: 1.1,
-    forwardPeelYRatio: -0.055,
-    reverseExcursionXRatio: -0.11,
-    reverseExcursionYRatio: -0.035,
+    topTravelYRatio: 0.014,
   },
 };
 
@@ -190,13 +182,20 @@ function assertItemCount(itemCount: number): void {
   if (!Number.isInteger(itemCount)) throw new RangeError("itemCount must be an integer");
 }
 
+function assertIndex(index: number, itemCount: number, name: string): void {
+  assertFiniteNumber(index, name);
+  if (!Number.isInteger(index) || index < 0 || index >= itemCount) {
+    throw new RangeError(`${name} must identify an item`);
+  }
+}
+
 function profileForWidth(stageWidth: number): StackedDeckProfile {
   if (stageWidth >= 960) return "wide";
   if (stageWidth >= 600) return "medium";
   return "compact";
 }
 
-/** Pure responsive tuning for the physical deck compositor. */
+/** Pure responsive tuning for the direct-manipulation deck compositor. */
 export function resolveStackedDeckTuning(
   options: ResolveStackedDeckTuningOptions,
 ): StackedDeckTuning {
@@ -213,12 +212,11 @@ export function resolveStackedDeckTuning(
   const cardWidth = Math.round(
     clamp(
       Math.min(options.stageWidth * values.cardWidthRatio, heightLimitedWidth),
-      Math.min(240, options.stageWidth),
+      Math.min(160, options.stageWidth),
       values.cardWidthMax,
     ),
   );
   const cardHeight = Math.round(cardWidth / SCREEN_ASPECT_RATIO);
-  const displacementMultiplier = reducedMotion ? 0.45 : 1;
 
   return {
     profile,
@@ -230,14 +228,99 @@ export function resolveStackedDeckTuning(
     backingOffsetY: cardHeight * values.backingOffsetYRatio,
     backingScaleStep: BACKING_SCALE_STEP,
     backingRotate: reducedMotion ? 0 : BACKING_ROTATE,
-    forwardPeelX: cardWidth * values.forwardPeelXRatio * displacementMultiplier,
-    forwardPeelY: cardHeight * values.forwardPeelYRatio * displacementMultiplier,
-    forwardRotate: reducedMotion ? 0 : FORWARD_ROTATE,
-    forwardConcealStart: FORWARD_CONCEAL_START,
-    reverseExcursionX: cardWidth * values.reverseExcursionXRatio * displacementMultiplier,
-    reverseExcursionY: cardHeight * values.reverseExcursionYRatio * displacementMultiplier,
-    reverseRotate: reducedMotion ? 0 : REVERSE_ROTATE,
+    topTravelY: reducedMotion ? 0 : cardHeight * values.topTravelYRatio,
+    topRotate: reducedMotion ? 0 : TOP_ROTATE,
+    topScaleReduction: reducedMotion ? 0 : TOP_SCALE_REDUCTION,
   };
+}
+
+/** Creates traversal storage whose visual owner initially agrees with controller selection. */
+export function createStackedDeckTraversal(
+  initialIndex: number,
+  itemCount: number,
+): MutableStackedDeckTraversal {
+  assertItemCount(itemCount);
+  if (itemCount === 0) {
+    if (initialIndex !== -1) throw new RangeError("empty deck initialIndex must be -1");
+  } else {
+    assertIndex(initialIndex, itemCount, "initialIndex");
+  }
+  return {
+    settledIndex: initialIndex,
+    visualTopIndex: initialIndex,
+    segmentOriginIndex: initialIndex,
+    segmentTargetIndex: null,
+    direction: 0,
+    signedLocalDistance: 0,
+    localProgress: 0,
+    phase: "idle",
+  };
+}
+
+function resetTraversal(
+  output: MutableStackedDeckTraversal,
+  settledIndex: number,
+): MutableStackedDeckTraversal {
+  output.settledIndex = settledIndex;
+  output.visualTopIndex = settledIndex;
+  output.segmentOriginIndex = settledIndex;
+  output.segmentTargetIndex = null;
+  output.direction = 0;
+  output.signedLocalDistance = 0;
+  output.localProgress = 0;
+  output.phase = "idle";
+  return output;
+}
+
+/**
+ * Consumes continuous physical index without changing controller state. Each complete pitch moves
+ * visual ownership to the crossed anchor; residual travel immediately becomes the next segment.
+ */
+export function resolveStackedDeckTraversal(
+  options: ResolveStackedDeckTraversalOptions,
+  output: MutableStackedDeckTraversal,
+): StackedDeckTraversal {
+  assertItemCount(options.itemCount);
+  assertFiniteNumber(options.physicalIndex, "physicalIndex");
+  if (options.itemCount === 0) return resetTraversal(output, -1);
+  assertIndex(options.settledIndex, options.itemCount, "settledIndex");
+  if (options.controllerPhase === "idle") {
+    return resetTraversal(output, options.settledIndex);
+  }
+
+  if (output.visualTopIndex < 0 || output.visualTopIndex >= options.itemCount) {
+    resetTraversal(output, options.settledIndex);
+  }
+
+  let visualTopIndex = output.visualTopIndex;
+  while (
+    visualTopIndex < options.itemCount - 1 &&
+    options.physicalIndex - visualTopIndex >= 1 - TRAVERSAL_EPSILON
+  ) {
+    visualTopIndex += 1;
+  }
+  while (visualTopIndex > 0 && options.physicalIndex - visualTopIndex <= -1 + TRAVERSAL_EPSILON) {
+    visualTopIndex -= 1;
+  }
+
+  const rawLocalDistance = options.physicalIndex - visualTopIndex;
+  const signedLocalDistance =
+    Math.abs(rawLocalDistance) <= TRAVERSAL_EPSILON ? 0 : rawLocalDistance;
+  const direction = Math.sign(signedLocalDistance) as -1 | 0 | 1;
+  const candidate = visualTopIndex + direction;
+  const segmentTargetIndex =
+    direction !== 0 && candidate >= 0 && candidate < options.itemCount ? candidate : null;
+
+  output.settledIndex = options.settledIndex;
+  output.visualTopIndex = visualTopIndex;
+  output.segmentOriginIndex = visualTopIndex;
+  output.segmentTargetIndex = segmentTargetIndex;
+  output.direction = direction;
+  output.signedLocalDistance = signedLocalDistance;
+  output.localProgress = clamp(Math.abs(signedLocalDistance), 0, 1);
+  output.phase =
+    direction === 0 ? "neutral" : segmentTargetIndex === null ? "elastic" : "traversing";
+  return output;
 }
 
 function validateTuning(tuning: StackedDeckTuning): void {
@@ -251,59 +334,55 @@ function validateTuning(tuning: StackedDeckTuning): void {
   if (!Number.isInteger(tuning.maximumBackingLayers) || tuning.maximumBackingLayers < 1) {
     throw new RangeError("invalid deck layers");
   }
-  if (
-    tuning.backingScaleStep < 0 ||
-    tuning.forwardConcealStart <= 0 ||
-    tuning.forwardConcealStart >= 1
-  ) {
+  if (tuning.backingScaleStep < 0 || tuning.topScaleReduction < 0) {
     throw new RangeError("invalid deck tuning");
   }
 }
 
-function validateTransition(transition: StackedDeckTransition, itemCount: number): void {
-  assertFiniteNumber(transition.settledIndex, "settledIndex");
-  assertFiniteNumber(transition.fromIndex, "fromIndex");
-  assertFiniteNumber(transition.toIndex, "toIndex");
-  assertFiniteNumber(transition.progress, "progress");
-  if (
-    !Number.isInteger(transition.settledIndex) ||
-    !Number.isInteger(transition.fromIndex) ||
-    !Number.isInteger(transition.toIndex)
-  ) {
-    throw new RangeError("invalid deck indices");
+function validateTraversal(traversal: StackedDeckTraversal, itemCount: number): void {
+  assertFiniteNumber(traversal.signedLocalDistance, "signedLocalDistance");
+  assertFiniteNumber(traversal.localProgress, "localProgress");
+  if (itemCount === 0) return;
+  assertIndex(traversal.settledIndex, itemCount, "settledIndex");
+  assertIndex(traversal.visualTopIndex, itemCount, "visualTopIndex");
+  assertIndex(traversal.segmentOriginIndex, itemCount, "segmentOriginIndex");
+  if (traversal.segmentOriginIndex !== traversal.visualTopIndex) {
+    throw new RangeError("segment origin must be the visual top");
   }
-  if (
-    itemCount > 0 &&
-    (transition.settledIndex < 0 ||
-      transition.settledIndex >= itemCount ||
-      transition.fromIndex < 0 ||
-      transition.fromIndex >= itemCount ||
-      transition.toIndex < 0 ||
-      transition.toIndex >= itemCount)
-  ) {
-    throw new RangeError("deck index out of range");
+  if (traversal.localProgress < 0 || traversal.localProgress > 1) {
+    throw new RangeError("invalid local progress");
   }
-  if (transition.progress < 0 || transition.progress > 1) {
-    throw new RangeError("invalid deck progress");
-  }
-  if (transition.phase === "idle") {
+  if (traversal.phase === "idle" || traversal.phase === "neutral") {
     if (
-      transition.direction !== 0 ||
-      transition.progress !== 0 ||
-      transition.fromIndex !== transition.settledIndex ||
-      transition.toIndex !== transition.settledIndex
+      traversal.direction !== 0 ||
+      traversal.segmentTargetIndex !== null ||
+      traversal.signedLocalDistance !== 0 ||
+      traversal.localProgress !== 0
     ) {
-      throw new RangeError("invalid idle deck transition");
+      throw new RangeError("invalid neutral deck traversal");
+    }
+    if (traversal.phase === "idle" && traversal.visualTopIndex !== traversal.settledIndex) {
+      throw new RangeError("idle visual top must equal settled selection");
     }
     return;
   }
   if (
-    transition.direction === 0 ||
-    transition.fromIndex !== transition.settledIndex ||
-    transition.toIndex === transition.fromIndex ||
-    Math.sign(transition.toIndex - transition.fromIndex) !== transition.direction
+    traversal.direction === 0 ||
+    Math.sign(traversal.signedLocalDistance) !== traversal.direction ||
+    Math.abs(traversal.localProgress - clamp(Math.abs(traversal.signedLocalDistance), 0, 1)) >
+      TRAVERSAL_EPSILON
   ) {
-    throw new RangeError("invalid active deck transition");
+    throw new RangeError("invalid active deck traversal");
+  }
+  if (traversal.phase === "traversing") {
+    if (
+      traversal.segmentTargetIndex === null ||
+      traversal.segmentTargetIndex - traversal.segmentOriginIndex !== traversal.direction
+    ) {
+      throw new RangeError("active deck segment must be adjacent");
+    }
+  } else if (traversal.segmentTargetIndex !== null) {
+    throw new RangeError("elastic traversal cannot invent a target");
   }
 }
 
@@ -314,7 +393,6 @@ function createPose(): MutableStackedDeckPose {
     scale: 1,
     rotate: 0,
     opacity: 0,
-    reveal: 1,
     layer: 0,
     stackDepth: 0,
     role: "hidden",
@@ -329,12 +407,7 @@ export function createStackedDeckFrame(itemCount: number): MutableStackedDeckFra
   assertItemCount(itemCount);
   const initialIndex = itemCount === 0 ? -1 : 0;
   return {
-    settledIndex: initialIndex,
-    fromIndex: initialIndex,
-    toIndex: initialIndex,
-    direction: 0,
-    progress: 0,
-    phase: "idle",
+    ...createStackedDeckTraversal(initialIndex, itemCount),
     poses: Array.from({ length: itemCount }, createPose),
   };
 }
@@ -345,7 +418,6 @@ function resetPose(pose: MutableStackedDeckPose): void {
   pose.scale = 1;
   pose.rotate = 0;
   pose.opacity = 0;
-  pose.reveal = 1;
   pose.layer = 0;
   pose.stackDepth = 0;
   pose.role = "hidden";
@@ -361,15 +433,15 @@ function convergedBackingDistance(depth: number): number {
 function setBackingPose(
   pose: MutableStackedDeckPose,
   depth: number,
+  direction: -1 | 1,
   tuning: StackedDeckTuning,
 ): void {
   const distance = convergedBackingDistance(depth);
-  pose.translateX = tuning.backingOffsetX * distance;
+  pose.translateX = direction * tuning.backingOffsetX * distance;
   pose.translateY = tuning.backingOffsetY * distance;
   pose.scale = 1 - tuning.backingScaleStep * depth;
-  pose.rotate = (depth % 2 === 0 ? -0.55 : 1) * tuning.backingRotate;
+  pose.rotate = direction * (depth % 2 === 0 ? -0.55 : 1) * tuning.backingRotate;
   pose.opacity = 1;
-  pose.reveal = 1;
   pose.layer = TOP_LAYER - depth * BACKING_LAYER_STEP;
   pose.stackDepth = depth;
   pose.role = "backing";
@@ -378,131 +450,82 @@ function setBackingPose(
   pose.interactive = false;
 }
 
-function cyclicDepth(index: number, topIndex: number, itemCount: number): number {
-  return (index - topIndex + itemCount) % itemCount;
-}
-
-function setTopPose(pose: MutableStackedDeckPose): void {
+function setTopPose(pose: MutableStackedDeckPose, interactive: boolean): void {
   pose.translateX = 0;
   pose.translateY = 0;
   pose.scale = 1;
   pose.rotate = 0;
   pose.opacity = 1;
-  pose.reveal = 1;
   pose.layer = TOP_LAYER;
   pose.stackDepth = 0;
   pose.role = "top";
   pose.shadowStrength = 1;
   pose.visible = true;
-  pose.interactive = true;
+  pose.interactive = interactive;
 }
 
-function setForwardPair(
-  outgoing: MutableStackedDeckPose,
-  incoming: MutableStackedDeckPose,
-  progress: number,
-  tuning: StackedDeckTuning,
-): void {
-  // Restrained at contact, strongest through the middle, and unit-bounded at release.
-  const outgoingProgress = progress * progress * (2 - progress);
-  const incomingProgress = smoothstep(clamp((progress - 0.18) / 0.82, 0, 1));
-  setBackingPose(incoming, 1, tuning);
-  const backingX = incoming.translateX;
-  const backingY = incoming.translateY;
-  const backingScale = incoming.scale;
-  const backingRotate = incoming.rotate;
-  const backingShadow = incoming.shadowStrength;
-
-  outgoing.translateX = tuning.forwardPeelX * outgoingProgress;
-  outgoing.translateY = tuning.forwardPeelY * Math.sin(progress * Math.PI * 0.82);
-  outgoing.scale = 1 - 0.12 * smoothstep(progress);
-  outgoing.rotate = tuning.forwardRotate * smoothstep(progress);
-  outgoing.opacity =
-    progress <= tuning.forwardConcealStart
-      ? 1
-      : 1 - smoothstep((progress - tuning.forwardConcealStart) / (1 - tuning.forwardConcealStart));
-  outgoing.reveal = 1;
-  outgoing.layer = TOP_LAYER;
-  outgoing.stackDepth = 0;
-  outgoing.role = "outgoing";
-  outgoing.shadowStrength = 1 - 0.42 * smoothstep(progress);
-  outgoing.visible = outgoing.opacity > 0.001;
-  outgoing.interactive = false;
-
-  incoming.translateX = mix(backingX, 0, incomingProgress);
-  incoming.translateY = mix(backingY, 0, incomingProgress);
-  incoming.scale = mix(backingScale, 1, incomingProgress);
-  incoming.rotate = mix(backingRotate, 0, incomingProgress);
-  incoming.opacity = 1;
-  incoming.reveal = 1;
-  incoming.layer = EXCHANGE_UNDER_LAYER;
-  incoming.stackDepth = 0;
-  incoming.role = "incoming";
-  incoming.shadowStrength = mix(backingShadow, 1, incomingProgress);
-  incoming.visible = progress > 0;
-  incoming.interactive = false;
+function cyclicDepth(
+  index: number,
+  originIndex: number,
+  direction: -1 | 1,
+  itemCount: number,
+): number {
+  return direction === 1
+    ? (index - originIndex + itemCount) % itemCount
+    : (originIndex - index + itemCount) % itemCount;
 }
 
-function setBackwardPair(
-  outgoing: MutableStackedDeckPose,
-  incoming: MutableStackedDeckPose,
-  progress: number,
+function setTraversalPair(
+  top: MutableStackedDeckPose,
+  target: MutableStackedDeckPose,
+  traversal: StackedDeckTraversal,
   tuning: StackedDeckTuning,
 ): void {
-  const settlement = smoothstep(progress);
-  setBackingPose(outgoing, 1, tuning);
-  const currentX = outgoing.translateX;
-  const currentY = outgoing.translateY;
-  const currentScale = outgoing.scale;
-  const currentRotate = outgoing.rotate;
-  const currentShadow = outgoing.shadowStrength;
-  setBackingPose(incoming, tuning.maximumBackingLayers, tuning);
-  const retrievedX = incoming.translateX;
-  const retrievedY = incoming.translateY;
-  const retrievedScale = incoming.scale;
-  const retrievedRotate = incoming.rotate;
+  const progress = traversal.localProgress;
+  const shaped = smoothstep(progress);
+  const arc = Math.sin(progress * Math.PI);
+  const direction = traversal.direction as -1 | 1;
 
-  outgoing.translateX = mix(0, currentX, settlement);
-  outgoing.translateY = mix(0, currentY, settlement);
-  outgoing.scale = mix(1, currentScale, settlement);
-  outgoing.rotate = mix(0, currentRotate, settlement);
-  outgoing.opacity = 1;
-  outgoing.reveal = 1;
-  outgoing.layer = EXCHANGE_UNDER_LAYER;
-  outgoing.stackDepth = 1;
-  outgoing.role = "outgoing";
-  outgoing.shadowStrength = mix(1, currentShadow, settlement);
-  outgoing.visible = true;
-  outgoing.interactive = false;
+  top.translateX = -traversal.signedLocalDistance * tuning.motionPitch;
+  top.translateY = -tuning.topTravelY * arc;
+  top.scale = 1 - tuning.topScaleReduction * arc;
+  top.rotate = -direction * tuning.topRotate * arc;
+  top.opacity = progress < 1 ? 1 : 0;
+  top.layer = TOP_LAYER;
+  top.stackDepth = 0;
+  top.role = "top";
+  top.shadowStrength = 1 - 0.45 * shaped;
+  top.visible = progress < 1;
+  top.interactive = false;
 
-  const excursionProgress = smoothstep(clamp(progress / 0.25, 0, 1));
-  const returnProgress = smoothstep(clamp((progress - 0.25) / 0.75, 0, 1));
-  const excursionX = mix(retrievedX, tuning.reverseExcursionX, excursionProgress);
-  const excursionY = mix(retrievedY, tuning.reverseExcursionY, excursionProgress);
-  const excursionScale = mix(retrievedScale, 0.982, excursionProgress);
-  const excursionRotate = mix(retrievedRotate, tuning.reverseRotate, excursionProgress);
-  incoming.translateX = mix(excursionX, 0, returnProgress);
-  incoming.translateY = mix(excursionY, 0, returnProgress);
-  incoming.scale = mix(excursionScale, 1, returnProgress);
-  incoming.rotate = mix(excursionRotate, 0, returnProgress);
-  incoming.opacity = 1;
-  // This is the aperture lift, not a card-local crop. The presentation keeps the boundary fixed
-  // to the pile until the retrieved card has completed its outward excursion.
-  incoming.reveal = smoothstep(clamp((progress - 0.28) / 0.58, 0, 1));
-  incoming.layer = TOP_LAYER;
-  incoming.stackDepth = 0;
-  incoming.role = "incoming";
-  incoming.shadowStrength = mix(0.64, 1, settlement);
-  incoming.visible = progress > 0;
-  incoming.interactive = false;
+  target.translateX = direction * tuning.backingOffsetX * (1 - shaped);
+  target.translateY = tuning.backingOffsetY * (1 - shaped);
+  target.scale = mix(1 - tuning.backingScaleStep, 1, shaped);
+  target.rotate = direction * tuning.backingRotate * (1 - shaped);
+  target.opacity = 1;
+  target.layer = TARGET_LAYER;
+  target.stackDepth = 1;
+  target.role = "target";
+  target.shadowStrength = mix(0.6, 1, shaped);
+  target.visible = progress > 0;
+  target.interactive = false;
+}
+
+function copyTraversal(output: MutableStackedDeckFrame, traversal: StackedDeckTraversal): void {
+  output.settledIndex = traversal.settledIndex;
+  output.visualTopIndex = traversal.visualTopIndex;
+  output.segmentOriginIndex = traversal.segmentOriginIndex;
+  output.segmentTargetIndex = traversal.segmentTargetIndex;
+  output.direction = traversal.direction;
+  output.signedLocalDistance = traversal.signedLocalDistance;
+  output.localProgress = traversal.localProgress;
+  output.phase = traversal.phase;
 }
 
 /**
- * Resolves a compact physical pile from explicit exchange roles. No item receives a horizontal
- * carousel slot. At rest one top card covers a bounded backing stack. During a forward exchange
- * the outgoing card remains above the centered incoming card until it is visually concealed.
- * During a backward exchange the retrieved card owns one uninterrupted upper layer, but begins
- * fully clipped while it still belongs behind the pile.
+ * Resolves one compact pile from the active local segment. The visual top follows controller
+ * displacement exactly in screen space; the adjacent target stays underneath and reaches the
+ * precise top-card rest geometry before ownership crosses to it.
  */
 export function resolveStackedDeckFrame(
   options: ResolveStackedDeckFrameOptions,
@@ -510,51 +533,38 @@ export function resolveStackedDeckFrame(
 ): StackedDeckFrame {
   assertItemCount(options.itemCount);
   validateTuning(options.tuning);
-  validateTransition(options.transition, options.itemCount);
+  validateTraversal(options.traversal, options.itemCount);
   if (output.poses.length !== options.itemCount) {
     throw new RangeError("invalid deck output size");
   }
 
-  const transition = options.transition;
-  output.settledIndex = transition.settledIndex;
-  output.fromIndex = transition.fromIndex;
-  output.toIndex = transition.toIndex;
-  output.direction = transition.direction;
-  output.progress = transition.progress;
-  output.phase = transition.phase;
-
+  copyTraversal(output, options.traversal);
   for (const pose of output.poses) resetPose(pose);
   if (options.itemCount === 0) return output;
 
-  if (transition.phase === "idle") {
-    setTopPose(output.poses[transition.settledIndex]!);
-    for (let index = 0; index < output.poses.length; index += 1) {
-      if (index === transition.settledIndex) continue;
-      const depth = cyclicDepth(index, transition.settledIndex, options.itemCount);
-      if (depth > 0 && depth <= options.tuning.maximumBackingLayers) {
-        setBackingPose(output.poses[index]!, depth, options.tuning);
-      }
+  const traversal = options.traversal;
+  const top = output.poses[traversal.visualTopIndex]!;
+  setTopPose(top, traversal.phase === "idle");
+
+  const pileDirection = traversal.direction === 0 ? 1 : traversal.direction;
+  const pileOrigin = traversal.segmentTargetIndex ?? traversal.visualTopIndex;
+  for (let index = 0; index < output.poses.length; index += 1) {
+    if (index === traversal.visualTopIndex || index === traversal.segmentTargetIndex) continue;
+    const depth = cyclicDepth(index, pileOrigin, pileDirection, options.itemCount);
+    const backingDepth = depth + (traversal.segmentTargetIndex === null ? 0 : 1);
+    if (backingDepth > 0 && backingDepth <= options.tuning.maximumBackingLayers) {
+      setBackingPose(output.poses[index]!, backingDepth, pileDirection, options.tuning);
     }
+  }
+
+  if (traversal.phase === "elastic") {
+    top.translateX = -traversal.signedLocalDistance * options.tuning.motionPitch;
+    top.interactive = false;
     return output;
   }
 
-  const backingTopIndex = transition.direction === 1 ? transition.fromIndex : transition.toIndex;
-  for (let index = 0; index < output.poses.length; index += 1) {
-    if (index === transition.fromIndex || index === transition.toIndex) continue;
-    const depth = cyclicDepth(index, backingTopIndex, options.itemCount);
-    if (depth > 0 && depth <= options.tuning.maximumBackingLayers) {
-      setBackingPose(output.poses[index]!, depth, options.tuning);
-      output.poses[index]!.layer -= BACKING_LAYER_STEP;
-    }
+  if (traversal.phase === "traversing" && traversal.segmentTargetIndex !== null) {
+    setTraversalPair(top, output.poses[traversal.segmentTargetIndex]!, traversal, options.tuning);
   }
-
-  const outgoing = output.poses[transition.fromIndex]!;
-  const incoming = output.poses[transition.toIndex]!;
-  if (transition.direction === 1) {
-    setForwardPair(outgoing, incoming, transition.progress, options.tuning);
-  } else {
-    setBackwardPair(outgoing, incoming, transition.progress, options.tuning);
-  }
-
   return output;
 }

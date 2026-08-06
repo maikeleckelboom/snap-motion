@@ -17,15 +17,15 @@ An anchor combines a stable ID, a physical scalar position, and logical order. P
 may repeat. Semantic identity is therefore never inferred from a deduplicated number array.
 
 Presentation projection is also framework-neutral. The per-card Coverflow rail resolver consumes a
-scalar position. The whole-frame deck compositor instead consumes explicit settled, outgoing,
-incoming, direction, phase, and progress roles. It mutates caller-owned output storage and owns only
-physical pile geometry and stable paint layers; it does not own motion, targets, semantic selection,
-or DOM state.
+scalar position. The whole-frame deck compositor consumes that position as a continuous physical
+index, advances visual ownership at each crossed anchor, and projects only the active adjacent
+segment. It mutates caller-owned traversal and frame storage and owns only physical pile geometry
+and paint layers; it does not own motion, targets, final selection, or DOM state.
 
 The lab keeps the two render systems separate: `CoverflowDemo.vue` owns the Coverflow rail, while
-`StackedDeckDemo.vue` owns whole-frame deck roles, paint layers, hit eligibility, and material
-treatment. They share the Yoot screen catalog and established motion helpers, not a parameterized
-renderer.
+`StackedDeckDemo.vue` owns segment-local deck traversal, whole-frame roles, paint layers, hit
+eligibility, and material treatment. They share the Yoot screen catalog and established motion
+helpers, not a parameterized renderer.
 
 The controller has three public phases: `idle`, `dragging`, and `settling`. Every input interrupts
 the current playback before acting. There is no queue and no animation-event ownership handoff.

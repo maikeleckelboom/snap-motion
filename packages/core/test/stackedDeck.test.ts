@@ -2,44 +2,64 @@ import { describe, expect, it } from "vitest";
 
 import {
   createStackedDeckFrame,
+  createStackedDeckTraversal,
   resolveStackedDeckFrame,
+  resolveStackedDeckTraversal,
   resolveStackedDeckTuning,
   type MutableStackedDeckFrame,
-  type StackedDeckTransition,
+  type MutableStackedDeckTraversal,
+  type StackedDeckTraversal,
   type StackedDeckTuning,
 } from "../src";
 
 const WIDE_TUNING = resolveStackedDeckTuning({ stageWidth: 1_120, stageHeight: 620 });
 
-function idle(settledIndex: number): StackedDeckTransition {
+function traversal(overrides: Partial<StackedDeckTraversal> = {}): StackedDeckTraversal {
   return {
-    settledIndex,
-    fromIndex: settledIndex,
-    toIndex: settledIndex,
+    settledIndex: 2,
+    visualTopIndex: 2,
+    segmentOriginIndex: 2,
+    segmentTargetIndex: null,
     direction: 0,
-    progress: 0,
+    signedLocalDistance: 0,
+    localProgress: 0,
     phase: "idle",
+    ...overrides,
   };
 }
 
-function exchange(fromIndex: number, toIndex: number, progress: number): StackedDeckTransition {
-  return {
-    settledIndex: fromIndex,
-    fromIndex,
-    toIndex,
-    direction: Math.sign(toIndex - fromIndex) as -1 | 1,
-    progress,
-    phase: progress < 0.34 ? "peel" : progress < 0.78 ? "handoff" : "settle",
-  };
+function segment(originIndex: number, direction: -1 | 1, progress: number): StackedDeckTraversal {
+  return traversal({
+    settledIndex: originIndex,
+    visualTopIndex: originIndex,
+    segmentOriginIndex: originIndex,
+    segmentTargetIndex: originIndex + direction,
+    direction,
+    signedLocalDistance: direction * progress,
+    localProgress: progress,
+    phase: "traversing",
+  });
 }
 
 function resolveFrame(
-  transition: StackedDeckTransition = idle(2),
+  activeTraversal: StackedDeckTraversal = traversal(),
   itemCount = 5,
   tuning: StackedDeckTuning = WIDE_TUNING,
   output: MutableStackedDeckFrame = createStackedDeckFrame(itemCount),
 ) {
-  return resolveStackedDeckFrame({ itemCount, transition, tuning }, output);
+  return resolveStackedDeckFrame({ itemCount, traversal: activeTraversal, tuning }, output);
+}
+
+function resolveTraversal(
+  output: MutableStackedDeckTraversal,
+  physicalIndex: number,
+  controllerPhase: "idle" | "dragging" | "settling" = "dragging",
+  settledIndex = output.settledIndex,
+) {
+  return resolveStackedDeckTraversal(
+    { controllerPhase, itemCount: 5, physicalIndex, settledIndex },
+    output,
+  );
 }
 
 function frameIsFinite(frame: ReturnType<typeof resolveFrame>) {
@@ -50,7 +70,6 @@ function frameIsFinite(frame: ReturnType<typeof resolveFrame>) {
       pose.scale,
       pose.rotate,
       pose.opacity,
-      pose.reveal,
       pose.layer,
       pose.stackDepth,
       pose.shadowStrength,
@@ -58,7 +77,7 @@ function frameIsFinite(frame: ReturnType<typeof resolveFrame>) {
   );
 }
 
-describe("physical stacked deck tuning", () => {
+describe("stacked deck tuning", () => {
   it("selects deliberate compact, medium, and wide profiles at exact boundaries", () => {
     expect(resolveStackedDeckTuning({ stageWidth: 599.999, stageHeight: 500 }).profile).toBe(
       "compact",
@@ -70,252 +89,278 @@ describe("physical stacked deck tuning", () => {
     expect(resolveStackedDeckTuning({ stageWidth: 960, stageHeight: 600 }).profile).toBe("wide");
   });
 
-  it("keeps the card responsive while the backing offsets remain restrained", () => {
-    const wide = resolveStackedDeckTuning({ stageWidth: 1_120, stageHeight: 620 });
-    const medium = resolveStackedDeckTuning({ stageWidth: 768, stageHeight: 520 });
+  it("keeps narrow cards inside a bleed-capable physical envelope", () => {
     const compact = resolveStackedDeckTuning({ stageWidth: 360, stageHeight: 420 });
+    const medium = resolveStackedDeckTuning({ stageWidth: 768, stageHeight: 520 });
+    const wide = resolveStackedDeckTuning({ stageWidth: 1_120, stageHeight: 620 });
+    expect(compact.cardWidth / 360).toBeCloseTo(0.6, 2);
+    expect(medium.cardWidth / 768).toBeCloseTo(0.62, 2);
     expect(wide.cardWidth / 1_120).toBeCloseTo(0.61, 2);
-    expect(medium.cardWidth / 768).toBeCloseTo(0.74, 2);
-    expect(compact.cardWidth / 360).toBeCloseTo(0.9, 2);
-    for (const tuning of [wide, medium, compact]) {
+    expect(compact.motionPitch).toBeGreaterThan(compact.cardWidth * 0.5);
+    expect(medium.motionPitch).toBeGreaterThan(compact.motionPitch);
+    expect(wide.motionPitch).toBeGreaterThan(medium.motionPitch);
+    for (const tuning of [compact, medium, wide]) {
       expect(tuning.backingOffsetX / tuning.cardWidth).toBeLessThan(0.012);
-      expect(tuning.backingOffsetY / tuning.cardHeight).toBeLessThanOrEqual(0.020_000_001);
       expect(tuning.maximumBackingLayers).toBe(3);
     }
   });
 
-  it("removes rotation and compresses displacement under reduced motion", () => {
-    const full = resolveStackedDeckTuning({ stageWidth: 1_120, stageHeight: 620 });
+  it("keeps direct translation while removing secondary motion in reduced motion", () => {
     const reduced = resolveStackedDeckTuning({
       stageWidth: 1_120,
       stageHeight: 620,
       reducedMotion: true,
     });
+    expect(reduced.motionPitch).toBe(WIDE_TUNING.motionPitch);
     expect(reduced.backingRotate).toBe(0);
-    expect(reduced.forwardRotate).toBe(0);
-    expect(reduced.reverseRotate).toBe(0);
-    expect(reduced.forwardPeelX).toBeLessThan(full.forwardPeelX);
-    expect(Math.abs(reduced.reverseExcursionX)).toBeLessThan(Math.abs(full.reverseExcursionX));
-    expect(
-      resolveFrame(exchange(2, 3, 0.6), 5, reduced).poses.every((pose) => pose.rotate === 0),
-    ).toBe(true);
+    expect(reduced.topRotate).toBe(0);
+    expect(reduced.topTravelY).toBe(0);
+    expect(reduced.topScaleReduction).toBe(0);
+    const frame = resolveFrame(segment(2, 1, 0.6), 5, reduced);
+    expect(frame.poses[2]!.translateX).toBeCloseTo(-reduced.motionPitch * 0.6);
+    expect(frame.poses.every((pose) => pose.rotate === 0)).toBe(true);
   });
 });
 
-describe("physical stacked deck frame", () => {
-  it("rests as one top card over a compact, one-sided backing pile", () => {
-    const frame = resolveFrame(idle(2));
-    expect(frame).toMatchObject({
-      settledIndex: 2,
-      fromIndex: 2,
-      toIndex: 2,
+describe("segment-local stacked deck traversal", () => {
+  it("maps either signed side of the visual top onto one adjacent segment", () => {
+    const state = createStackedDeckTraversal(2, 5);
+    const forward = resolveTraversal(state, 2.4);
+    expect(forward).toMatchObject({
+      visualTopIndex: 2,
+      segmentOriginIndex: 2,
+      segmentTargetIndex: 3,
+      direction: 1,
+      phase: "traversing",
+    });
+    expect(forward.signedLocalDistance).toBeCloseTo(0.4);
+    expect(forward.localProgress).toBeCloseTo(0.4);
+    expect(resolveTraversal(state, 2)).toMatchObject({
+      visualTopIndex: 2,
+      segmentTargetIndex: null,
       direction: 0,
-      progress: 0,
+      phase: "neutral",
+    });
+    const reverse = resolveTraversal(state, 1.6);
+    expect(reverse).toMatchObject({
+      visualTopIndex: 2,
+      segmentOriginIndex: 2,
+      segmentTargetIndex: 1,
+      direction: -1,
+    });
+    expect(reverse.signedLocalDistance).toBeCloseTo(-0.4);
+    expect(reverse.localProgress).toBeCloseTo(0.4);
+  });
+
+  it("hands visual ownership across every crossed anchor without an idle reset", () => {
+    const state = createStackedDeckTraversal(0, 5);
+    const samples = [0.2, 0.8, 1, 1.35, 1.9, 2.05, 2.8, 3.1, 3.9, 4].map((position) => ({
+      position,
+      traversal: { ...resolveTraversal(state, position, "settling", 0) },
+    }));
+    const visualTops = samples
+      .map((sample) => sample.traversal.visualTopIndex)
+      .filter((value, index, values) => index === 0 || value !== values[index - 1]);
+    expect(visualTops).toEqual([0, 1, 2, 3, 4]);
+    expect(samples.every((sample) => sample.traversal.phase !== "idle")).toBe(true);
+    expect(
+      samples.every(
+        ({ traversal: sample }) =>
+          sample.segmentTargetIndex === null ||
+          Math.abs(sample.segmentTargetIndex - sample.segmentOriginIndex) === 1,
+      ),
+    ).toBe(true);
+  });
+
+  it("reverses a partial segment through the exact neutral origin", () => {
+    const state = createStackedDeckTraversal(2, 5);
+    const forward = { ...resolveTraversal(state, 2.6) };
+    const retraced = { ...resolveTraversal(state, 2.2) };
+    const neutral = { ...resolveTraversal(state, 2) };
+    const reverse = { ...resolveTraversal(state, 1.8) };
+    expect(forward).toMatchObject({ segmentOriginIndex: 2, segmentTargetIndex: 3, direction: 1 });
+    expect(retraced).toMatchObject({ segmentOriginIndex: 2, segmentTargetIndex: 3, direction: 1 });
+    expect(retraced.localProgress).toBeLessThan(forward.localProgress);
+    expect(neutral).toMatchObject({
+      visualTopIndex: 2,
+      segmentTargetIndex: null,
+      direction: 0,
+      localProgress: 0,
+      phase: "neutral",
+    });
+    expect(reverse).toMatchObject({ segmentOriginIndex: 2, segmentTargetIndex: 1, direction: -1 });
+  });
+
+  it("unwinds completed handoffs in physical order", () => {
+    const state = createStackedDeckTraversal(2, 5);
+    const positions = [2.7, 3.15, 3.7, 3.2, 3, 2.75, 2.1, 2, 1.8];
+    const samples = positions.map((position) => ({ ...resolveTraversal(state, position) }));
+    expect(samples.map((sample) => sample.visualTopIndex)).toEqual([2, 3, 3, 3, 3, 3, 3, 2, 2]);
+    expect(samples[2]).toMatchObject({ segmentOriginIndex: 3, segmentTargetIndex: 4 });
+    expect(samples[4]).toMatchObject({ visualTopIndex: 3, phase: "neutral" });
+    expect(samples[5]).toMatchObject({ segmentOriginIndex: 3, segmentTargetIndex: 2 });
+    expect(samples[7]).toMatchObject({ visualTopIndex: 2, phase: "neutral" });
+    expect(samples[8]).toMatchObject({ segmentOriginIndex: 2, segmentTargetIndex: 1 });
+  });
+
+  it("retains edge elasticity without inventing a target", () => {
+    const first = createStackedDeckTraversal(0, 5);
+    expect(resolveTraversal(first, -0.25)).toMatchObject({
+      visualTopIndex: 0,
+      segmentTargetIndex: null,
+      direction: -1,
+      signedLocalDistance: -0.25,
+      phase: "elastic",
+    });
+    const last = createStackedDeckTraversal(4, 5);
+    expect(resolveTraversal(last, 4.2, "dragging", 4)).toMatchObject({
+      visualTopIndex: 4,
+      segmentTargetIndex: null,
+      direction: 1,
+      phase: "elastic",
+    });
+  });
+
+  it("makes settled selection authoritative only when the controller becomes idle", () => {
+    const state = createStackedDeckTraversal(0, 5);
+    resolveTraversal(state, 3.6, "settling", 0);
+    expect(state).toMatchObject({ settledIndex: 0, visualTopIndex: 3 });
+    resolveTraversal(state, 4, "idle", 4);
+    expect(state).toMatchObject({
+      settledIndex: 4,
+      visualTopIndex: 4,
       phase: "idle",
     });
+  });
+});
+
+describe("symmetric stacked deck frame", () => {
+  it("rests as one top card over a compact pile with hidden nonparticipants", () => {
+    const frame = resolveFrame();
     expect(frame.poses.filter((pose) => pose.role === "top")).toHaveLength(1);
     expect(frame.poses.filter((pose) => pose.role === "backing")).toHaveLength(3);
     expect(frame.poses.filter((pose) => pose.role === "hidden")).toHaveLength(1);
+    expect(frame.poses[3]).toMatchObject({ role: "backing", stackDepth: 1 });
     expect(frame.poses[2]).toMatchObject({
       translateX: 0,
       translateY: 0,
       scale: 1,
       rotate: 0,
       opacity: 1,
-      reveal: 1,
       layer: 500,
       role: "top",
       interactive: true,
       visible: true,
     });
-    const backing = frame.poses.filter((pose) => pose.role === "backing");
-    expect(backing.every((pose) => pose.translateX > 0 && pose.translateY > 0)).toBe(true);
-    expect(Math.max(...backing.map((pose) => pose.translateX))).toBeLessThan(
-      WIDE_TUNING.cardWidth * 0.03,
-    );
-    expect(frame.poses.filter((pose) => pose.interactive)).toHaveLength(1);
   });
 
-  it("does not assign every item a horizontal carousel slot", () => {
-    const frame = resolveFrame(idle(0), 9);
-    const visible = frame.poses.filter((pose) => pose.visible);
-    expect(visible).toHaveLength(4);
-    expect(visible.every((pose) => Math.abs(pose.translateX) < WIDE_TUNING.cardWidth * 0.03)).toBe(
-      true,
-    );
-    expect(frame.poses.filter((pose) => pose.role === "hidden")).toHaveLength(5);
+  it("maps local physical distance to opposite screen-space translation exactly", () => {
+    for (const progress of [0.1, 0.25, 0.5, 0.75, 0.99]) {
+      const forward = resolveFrame(segment(2, 1, progress));
+      const backward = resolveFrame(segment(2, -1, progress));
+      expect(forward.poses[2]!.translateX).toBeCloseTo(-WIDE_TUNING.motionPitch * progress);
+      expect(backward.poses[2]!.translateX).toBeCloseTo(WIDE_TUNING.motionPitch * progress);
+      expect(forward.poses[2]!.translateX).toBeCloseTo(-backward.poses[2]!.translateX);
+      expect(forward.poses[2]!.translateY).toBeCloseTo(backward.poses[2]!.translateY);
+      expect(forward.poses[2]!.rotate).toBeCloseTo(-backward.poses[2]!.rotate);
+    }
   });
 
-  it("uses explicit outgoing and incoming roles for a forward reveal", () => {
-    for (const progress of [0, 0.2, 0.5, 0.8, 0.99]) {
-      const frame = resolveFrame(exchange(2, 3, progress));
-      const outgoing = frame.poses[2]!;
-      const incoming = frame.poses[3]!;
-      expect(outgoing.role).toBe("outgoing");
-      expect(incoming.role).toBe("incoming");
-      expect(outgoing.layer).toBe(500);
-      expect(incoming.layer).toBe(400);
-      expect(Math.abs(incoming.translateX)).toBeLessThan(WIDE_TUNING.cardWidth * 0.012);
-      expect(
-        progress === 0 ||
-          Math.abs(outgoing.translateX) >
-            Math.abs(incoming.translateX - WIDE_TUNING.backingOffsetX),
-      ).toBe(true);
+  it("puts only the adjacent target beneath the top and never creates a rail", () => {
+    for (const direction of [-1, 1] as const) {
+      const frame = resolveFrame(segment(2, direction, 0.55), 9);
+      expect(frame.poses[2]).toMatchObject({ role: "top", layer: 500 });
+      expect(frame.poses[2 + direction]).toMatchObject({ role: "target", layer: 400 });
+      expect(frame.poses.filter((pose) => pose.visible)).toHaveLength(4);
       expect(
         frame.poses
-          .filter((_, index) => index !== 2 && index !== 3)
-          .every(
-            (pose) => !pose.visible || Math.abs(pose.translateX) < WIDE_TUNING.cardWidth * 0.03,
-          ),
+          .filter((pose) => pose.role === "backing" || pose.role === "target")
+          .every((pose) => Math.abs(pose.translateX) < WIDE_TUNING.cardWidth * 0.03),
       ).toBe(true);
+      expect(frame.poses.filter((pose) => pose.interactive)).toHaveLength(0);
     }
   });
 
-  it("keeps forward displacement monotonic without a disproportionate late spike", () => {
-    const displacements = Array.from(
-      { length: 101 },
-      (_, step) => resolveFrame(exchange(2, 3, step / 100)).poses[2]!.translateX,
+  it("keeps the visual top authoritative until the exact handoff boundary", () => {
+    const frame = resolveFrame(segment(2, 1, 0.999));
+    expect(frame.visualTopIndex).toBe(2);
+    expect(frame.poses[2]).toMatchObject({ role: "top", opacity: 1, visible: true, layer: 500 });
+    expect(frame.poses[3]).toMatchObject({ role: "target", opacity: 1, visible: true, layer: 400 });
+  });
+
+  it("starts a forward target at the first backing card geometry", () => {
+    const rest = resolveFrame();
+    const start = resolveFrame(segment(2, 1, 0.0001));
+    for (const key of ["translateX", "translateY", "scale", "rotate"] as const) {
+      expect(start.poses[3]![key]).toBeCloseTo(rest.poses[3]![key], 5);
+    }
+    expect(rest.poses[3]).toMatchObject({ role: "backing", stackDepth: 1 });
+    expect(start.poses[3]).toMatchObject({ role: "target", stackDepth: 1 });
+  });
+
+  it("arrives at exact target rest geometry before a handoff", () => {
+    const final = resolveFrame(segment(2, 1, 1));
+    const target = final.poses[3]!;
+    expect(target).toMatchObject({
+      translateX: 0,
+      translateY: 0,
+      scale: 1,
+      rotate: 0,
+      opacity: 1,
+      role: "target",
+    });
+    expect(final.poses[2]).toMatchObject({ opacity: 0, visible: false });
+    const settled = resolveFrame(
+      traversal({ settledIndex: 3, visualTopIndex: 3, segmentOriginIndex: 3 }),
     );
-    const increments = displacements.slice(1).map((value, index) => value - displacements[index]!);
-    expect(increments.every((increment) => increment >= 0)).toBe(true);
-    const middlePeak = Math.max(...increments.slice(40, 80));
-    const latePeak = Math.max(...increments.slice(90));
-    expect(latePeak).toBeLessThanOrEqual(middlePeak);
-    expect(displacements[10]! / WIDE_TUNING.forwardPeelX).toBeGreaterThan(0.015);
-    expect(displacements[25]! / WIDE_TUNING.forwardPeelX).toBeGreaterThan(0.09);
+    for (const key of ["translateX", "translateY", "scale", "rotate", "opacity"] as const) {
+      expect(target[key]).toBe(settled.poses[3]![key]);
+    }
   });
 
-  it("conceals the forward outgoing card before the final layer transfer", () => {
-    const late = resolveFrame(exchange(2, 3, 0.9995));
-    const final = resolveFrame(exchange(2, 3, 1));
-    expect(late.poses[2]!.layer).toBe(500);
-    expect(late.poses[3]!.layer).toBe(400);
-    expect(late.poses[2]!.opacity).toBeLessThan(0.001);
-    expect(late.poses[2]!.reveal).toBe(1);
-    expect(final.poses[2]!.visible).toBe(false);
-    const settled = resolveFrame(idle(3));
-    expect(final.poses[3]).toMatchObject({
-      translateX: settled.poses[3]!.translateX,
-      translateY: settled.poses[3]!.translateY,
-      scale: settled.poses[3]!.scale,
-      rotate: settled.poses[3]!.rotate,
-      opacity: settled.poses[3]!.opacity,
-      reveal: settled.poses[3]!.reveal,
+  it("projects elastic edge movement from the same signed mapping", () => {
+    const edge = traversal({
+      settledIndex: 0,
+      visualTopIndex: 0,
+      segmentOriginIndex: 0,
+      direction: -1,
+      signedLocalDistance: -0.25,
+      localProgress: 0.25,
+      phase: "elastic",
     });
+    const frame = resolveFrame(edge);
+    expect(frame.segmentTargetIndex).toBeNull();
+    expect(frame.poses[0]!.translateX).toBeCloseTo(WIDE_TUNING.motionPitch * 0.25);
+    expect(frame.poses.filter((pose) => pose.role === "target")).toHaveLength(0);
   });
 
-  it("retrieves the previous card on one continuous upper layer", () => {
-    let previousReveal = 0;
-    for (const progress of [0, 0.001, 0.2, 0.42, 0.7, 0.99, 1]) {
-      const frame = resolveFrame(exchange(2, 1, progress));
-      const outgoing = frame.poses[2]!;
-      const incoming = frame.poses[1]!;
-      expect(outgoing.role).toBe("outgoing");
-      expect(incoming.role).toBe("incoming");
-      expect(incoming.layer).toBe(500);
-      expect(outgoing.layer).toBe(400);
-      expect(incoming.reveal).toBeGreaterThanOrEqual(previousReveal);
-      previousReveal = incoming.reveal;
-    }
-    const concealedStart = resolveFrame(exchange(2, 1, 0));
-    expect(concealedStart.poses[1]).toMatchObject({ opacity: 1, reveal: 0, visible: false });
-    const settled = resolveFrame(idle(1));
-    const final = resolveFrame(exchange(2, 1, 1));
-    expect(final.poses[1]).toMatchObject({
-      translateX: settled.poses[1]!.translateX,
-      translateY: settled.poses[1]!.translateY,
-      scale: settled.poses[1]!.scale,
-      rotate: settled.poses[1]!.rotate,
-      reveal: 1,
-    });
-    expect(final.poses[2]).toMatchObject({
-      translateX: settled.poses[2]!.translateX,
-      translateY: settled.poses[2]!.translateY,
-      scale: settled.poses[2]!.scale,
-      rotate: settled.poses[2]!.rotate,
-      stackDepth: 1,
-    });
-  });
-
-  it("holds the backward deck aperture at the pile during excursion before lifting it", () => {
-    const early = resolveFrame(exchange(2, 1, 0.2)).poses[1]!;
-    const liftStart = resolveFrame(exchange(2, 1, 0.28)).poses[1]!;
-    const lifted = resolveFrame(exchange(2, 1, 0.65)).poses[1]!;
-    expect(early.translateX).toBeLessThan(0);
-    expect(early.reveal).toBe(0);
-    expect(liftStart.reveal).toBe(0);
-    expect(lifted.reveal).toBeGreaterThan(0);
-    expect(lifted.reveal).toBeLessThan(1);
-  });
-
-  it("never switches visible exchange layers at a progress threshold", () => {
-    for (const direction of [1, -1] as const) {
-      const toIndex = 2 + direction;
-      const layerPairs = [];
-      for (let step = 1; step < 100; step += 1) {
-        const frame = resolveFrame(exchange(2, toIndex, step / 100));
-        layerPairs.push([frame.poses[2]!.layer, frame.poses[toIndex]!.layer]);
-      }
-      expect(new Set(layerPairs.map((layers) => layers.join(":"))).size).toBe(1);
-    }
-  });
-
-  it("keeps backing cards compact and non-participating during either exchange", () => {
-    for (const transition of [exchange(2, 3, 0.55), exchange(2, 1, 0.55)]) {
-      const frame = resolveFrame(transition, 9);
-      const pileLayers = frame.poses.filter(
-        (pose) =>
-          pose.role === "backing" ||
-          (transition.direction === 1 ? pose.role === "incoming" : pose.role === "outgoing"),
-      );
-      expect(pileLayers).toHaveLength(3);
-      expect(
-        pileLayers.every(
-          (pose) => pose.translateX > 0 && pose.translateX < WIDE_TUNING.cardWidth * 0.03,
-        ),
-      ).toBe(true);
-      expect(pileLayers.every((pose) => !pose.interactive)).toBe(true);
-    }
-  });
-
-  it("keeps every value finite across complete forward and backward exchanges", () => {
-    for (let step = 0; step <= 200; step += 1) {
-      expect(frameIsFinite(resolveFrame(exchange(2, 3, step / 200)))).toBe(true);
-      expect(frameIsFinite(resolveFrame(exchange(2, 1, step / 200)))).toBe(true);
-    }
-  });
-
-  it("handles empty and single-item frames", () => {
-    const empty = resolveFrame(idle(-1), 0);
-    expect(empty).toMatchObject({ settledIndex: -1, poses: [] });
-    const single = resolveFrame(idle(0), 1);
-    expect(single.poses).toHaveLength(1);
-    expect(single.poses[0]).toMatchObject({ role: "top", interactive: true });
-    expect(frameIsFinite(single)).toBe(true);
-  });
-
-  it("reuses caller storage without mutating tuning input", () => {
-    const tuningSnapshot = structuredClone(WIDE_TUNING);
+  it("keeps every value finite and reuses caller storage", () => {
     const output = createStackedDeckFrame(5);
     const poseIdentities = [...output.poses];
-    expect(resolveFrame(exchange(1, 2, 0.25), 5, WIDE_TUNING, output)).toBe(output);
-    expect(resolveFrame(exchange(1, 2, 0.75), 5, WIDE_TUNING, output)).toBe(output);
+    for (let step = 1; step <= 200; step += 1) {
+      expect(frameIsFinite(resolveFrame(segment(2, 1, step / 200), 5, WIDE_TUNING, output))).toBe(
+        true,
+      );
+      expect(frameIsFinite(resolveFrame(segment(2, -1, step / 200), 5, WIDE_TUNING, output))).toBe(
+        true,
+      );
+    }
     expect(output.poses.every((pose, index) => pose === poseIdentities[index])).toBe(true);
-    expect(WIDE_TUNING).toEqual(tuningSnapshot);
   });
 
-  it("rejects invalid frame, transition, and tuning inputs", () => {
-    expect(() => createStackedDeckFrame(1.5)).toThrow(RangeError);
-    expect(() =>
-      resolveFrame({ ...exchange(0, 1, 0.5), progress: Number.POSITIVE_INFINITY }),
-    ).toThrow(TypeError);
-    expect(() =>
-      resolveStackedDeckFrame(
-        { itemCount: 5, transition: idle(2), tuning: WIDE_TUNING },
-        createStackedDeckFrame(4),
-      ),
-    ).toThrow(RangeError);
-    expect(() => resolveFrame({ ...idle(2), direction: 1 })).toThrow(RangeError);
-    expect(() => resolveFrame({ ...exchange(2, 3, 0.5), direction: -1 })).toThrow(RangeError);
+  it("handles empty and single-item frames and rejects invalid segments", () => {
+    const emptyTraversal = createStackedDeckTraversal(-1, 0);
+    const empty = resolveFrame(emptyTraversal, 0);
+    expect(empty).toMatchObject({ visualTopIndex: -1, poses: [] });
+    const singleTraversal = createStackedDeckTraversal(0, 1);
+    const single = resolveFrame(singleTraversal, 1);
+    expect(single.poses[0]).toMatchObject({ role: "top", interactive: true });
+    expect(() => createStackedDeckTraversal(1, 1)).toThrow(RangeError);
+    expect(() => resolveFrame({ ...segment(2, 1, 0.5), segmentTargetIndex: 4 })).toThrow(
+      RangeError,
+    );
+    expect(() => resolveFrame({ ...segment(2, 1, 0.5), signedLocalDistance: Number.NaN })).toThrow(
+      TypeError,
+    );
   });
 });
