@@ -38,7 +38,7 @@ const demos = [
     id: "stacked-deck" as const,
     label: "Stacked deck",
     shortLabel: "Deck",
-    description: "Tight settled overlap with a controlled foreground passing corridor.",
+    description: "A dominant top screen reveals the next screen beneath a concealed handoff.",
     component: StackedDeckDemo,
   },
   {

@@ -43,10 +43,6 @@ function scalar(value: number) {
         <dt>Pair fraction</dt>
         <dd data-testid="pair-fraction">{{ scalar(diagnostics.pairFraction) }}</dd>
       </div>
-      <div v-if="diagnostics.passingLane !== undefined">
-        <dt>Passing lane</dt>
-        <dd data-testid="passing-lane">{{ scalar(diagnostics.passingLane) }}</dd>
-      </div>
       <div v-if="diagnostics.ownerIndex !== undefined">
         <dt>Paint owner</dt>
         <dd data-testid="owner-index">{{ diagnostics.ownerIndex }}</dd>

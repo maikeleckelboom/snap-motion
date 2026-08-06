@@ -38,7 +38,6 @@ export interface LabDiagnostics {
   motionPitch?: number;
   ownerIndex?: number;
   pairFraction?: number;
-  passingLane?: number;
   phase: string;
   physicalTransform?: number;
   physicalIndex?: number;
