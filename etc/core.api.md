@@ -243,7 +243,7 @@ export function createFixedStageGeometry<Id extends SemanticId>(options: {
 export function createPagedGridGeometry<ItemId extends SemanticId>(options: PagedGridGeometryOptions<ItemId>): PagedGridGeometry;
 
 // @public
-export function createStackedCoverflowFrame(itemCount: number): MutableStackedCoverflowFrame;
+export function createStackedDeckFrame(itemCount: number): MutableStackedDeckFrame;
 
 // @public (undocumented)
 export function createSymmetricElasticity(boundary: ElasticBoundaryOptions): ElasticityOptions;
@@ -487,7 +487,7 @@ export interface MotionPreset {
 export type MotionPresetName = "tight" | "balanced" | "heavy" | "loose";
 
 // @public
-export interface MutableStackedCoverflowFrame {
+export interface MutableStackedDeckFrame {
     // (undocumented)
     ownerIndex: number;
     // (undocumented)
@@ -495,17 +495,13 @@ export interface MutableStackedCoverflowFrame {
     // (undocumented)
     pairStartIndex: number;
     // (undocumented)
-    passingLane: number;
-    // (undocumented)
     physicalIndex: number;
     // (undocumented)
-    poses: MutableStackedCoverflowPose[];
+    poses: MutableStackedDeckPose[];
 }
 
 // @public
-export interface MutableStackedCoverflowPose {
-    // (undocumented)
-    blur: number;
+export interface MutableStackedDeckPose {
     // (undocumented)
     interactive: boolean;
     // (undocumented)
@@ -513,7 +509,11 @@ export interface MutableStackedCoverflowPose {
     // (undocumented)
     projectedScale: number;
     // (undocumented)
+    role: StackedDeckRole;
+    // (undocumented)
     rotateY: number;
+    // (undocumented)
+    shadowStrength: number;
     // (undocumented)
     translateX: number;
     // (undocumented)
@@ -636,10 +636,10 @@ export function resolveProgrammaticTarget<Id extends SemanticId>(input: Programm
 export function resolveReleaseTarget<Id extends SemanticId>(input: ReleaseTargetInput<Id>): SnapAnchor<Id> | null;
 
 // @public
-export function resolveStackedCoverflowFrame(options: ResolveStackedCoverflowFrameOptions, output: MutableStackedCoverflowFrame): StackedCoverflowFrame;
+export function resolveStackedDeckFrame(options: ResolveStackedDeckFrameOptions, output: MutableStackedDeckFrame): StackedDeckFrame;
 
 // @public (undocumented)
-export interface ResolveStackedCoverflowFrameOptions {
+export interface ResolveStackedDeckFrameOptions {
     // (undocumented)
     readonly itemCount: number;
     // (undocumented)
@@ -647,14 +647,14 @@ export interface ResolveStackedCoverflowFrameOptions {
     // (undocumented)
     readonly previousOwnerIndex?: number;
     // (undocumented)
-    readonly tuning: StackedCoverflowTuning;
+    readonly tuning: StackedDeckTuning;
 }
 
 // @public
-export function resolveStackedCoverflowTuning(options: ResolveStackedCoverflowTuningOptions): StackedCoverflowTuning;
+export function resolveStackedDeckTuning(options: ResolveStackedDeckTuningOptions): StackedDeckTuning;
 
 // @public (undocumented)
-export interface ResolveStackedCoverflowTuningOptions {
+export interface ResolveStackedDeckTuningOptions {
     // (undocumented)
     readonly reducedMotion?: boolean;
     // (undocumented)
@@ -798,7 +798,7 @@ export interface SpringConfiguration {
 }
 
 // @public (undocumented)
-export interface StackedCoverflowFrame {
+export interface StackedDeckFrame {
     // (undocumented)
     readonly ownerIndex: number;
     // (undocumented)
@@ -806,17 +806,13 @@ export interface StackedCoverflowFrame {
     // (undocumented)
     readonly pairStartIndex: number;
     // (undocumented)
-    readonly passingLane: number;
-    // (undocumented)
     readonly physicalIndex: number;
     // (undocumented)
-    readonly poses: readonly StackedCoverflowPose[];
+    readonly poses: readonly StackedDeckPose[];
 }
 
 // @public (undocumented)
-export interface StackedCoverflowPose {
-    // (undocumented)
-    readonly blur: number;
+export interface StackedDeckPose {
     // (undocumented)
     readonly interactive: boolean;
     // (undocumented)
@@ -824,7 +820,11 @@ export interface StackedCoverflowPose {
     // (undocumented)
     readonly projectedScale: number;
     // (undocumented)
+    readonly role: StackedDeckRole;
+    // (undocumented)
     readonly rotateY: number;
+    // (undocumented)
+    readonly shadowStrength: number;
     // (undocumented)
     readonly translateX: number;
     // (undocumented)
@@ -838,34 +838,29 @@ export interface StackedCoverflowPose {
 }
 
 // @public (undocumented)
-export type StackedCoverflowProfile = "compact" | "medium" | "wide";
+export type StackedDeckProfile = "compact" | "medium" | "wide";
 
 // @public (undocumented)
-export interface StackedCoverflowTuning {
+export type StackedDeckRole = "foreground" | "incoming" | "outgoing" | "rear";
+
+// @public (undocumented)
+export interface StackedDeckTuning {
     // (undocumented)
     readonly cardHeight: number;
     // (undocumented)
     readonly cardWidth: number;
     // (undocumented)
-    readonly handoffLower: number;
+    readonly handoffBackward: number;
     // (undocumented)
-    readonly handoffUpper: number;
+    readonly handoffForward: number;
     // (undocumented)
     readonly hideAfter: number;
     // (undocumented)
     readonly motionPitch: number;
     // (undocumented)
-    readonly passingRecess: number;
-    // (undocumented)
-    readonly passingRotateY: number;
-    // (undocumented)
-    readonly passingX: number;
-    // (undocumented)
     readonly perspective: number;
     // (undocumented)
-    readonly profile: StackedCoverflowProfile;
-    // (undocumented)
-    readonly sideBlur: number;
+    readonly profile: StackedDeckProfile;
     // (undocumented)
     readonly sideLift: number;
     // (undocumented)

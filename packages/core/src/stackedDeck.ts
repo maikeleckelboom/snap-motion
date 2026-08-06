@@ -1,15 +1,16 @@
 import { assertFiniteNumber, assertNonNegative } from "./bounds";
 
-export type StackedCoverflowProfile = "compact" | "medium" | "wide";
+export type StackedDeckProfile = "compact" | "medium" | "wide";
+export type StackedDeckRole = "foreground" | "incoming" | "outgoing" | "rear";
 
-export interface ResolveStackedCoverflowTuningOptions {
+export interface ResolveStackedDeckTuningOptions {
   readonly stageWidth: number;
   readonly stageHeight: number;
   readonly reducedMotion?: boolean;
 }
 
-export interface StackedCoverflowTuning {
-  readonly profile: StackedCoverflowProfile;
+export interface StackedDeckTuning {
+  readonly profile: StackedDeckProfile;
   readonly perspective: number;
   readonly cardWidth: number;
   readonly cardHeight: number;
@@ -18,73 +19,69 @@ export interface StackedCoverflowTuning {
   readonly sideRotateY: number;
   readonly sideLift: number;
   readonly sideVirtualZ: number;
-  readonly passingX: number;
-  readonly passingRotateY: number;
-  readonly passingRecess: number;
   readonly stackStrideX: number;
   readonly stackStrideY: number;
   readonly stackStrideZ: number;
   readonly sideVeil: number;
   readonly stackVeil: number;
-  readonly sideBlur: number;
   readonly hideAfter: number;
-  readonly handoffLower: number;
-  readonly handoffUpper: number;
+  readonly handoffBackward: number;
+  readonly handoffForward: number;
 }
 
-export interface StackedCoverflowPose {
+export interface StackedDeckPose {
   readonly translateX: number;
   readonly translateY: number;
   readonly projectedScale: number;
   readonly rotateY: number;
   readonly virtualZ: number;
   readonly layer: number;
+  readonly role: StackedDeckRole;
   readonly veil: number;
-  readonly blur: number;
+  readonly shadowStrength: number;
   readonly visible: boolean;
   readonly interactive: boolean;
 }
 
 /** Explicit mutable storage for allocation-free frame resolution. */
-export interface MutableStackedCoverflowPose {
+export interface MutableStackedDeckPose {
   translateX: number;
   translateY: number;
   projectedScale: number;
   rotateY: number;
   virtualZ: number;
   layer: number;
+  role: StackedDeckRole;
   veil: number;
-  blur: number;
+  shadowStrength: number;
   visible: boolean;
   interactive: boolean;
 }
 
-export interface StackedCoverflowFrame {
+export interface StackedDeckFrame {
   readonly physicalIndex: number;
   readonly pairStartIndex: number;
   readonly pairFraction: number;
-  readonly passingLane: number;
   readonly ownerIndex: number;
-  readonly poses: readonly StackedCoverflowPose[];
+  readonly poses: readonly StackedDeckPose[];
 }
 
 /**
- * Caller-owned storage mutated by {@link resolveStackedCoverflowFrame}. Allocate once, then retain
- * its `ownerIndex` between frames so the paint handoff keeps its hysteresis state.
+ * Caller-owned storage mutated by {@link resolveStackedDeckFrame}. Retain the frame between
+ * resolutions so `ownerIndex` supplies the narrow paint-ownership hysteresis state.
  */
-export interface MutableStackedCoverflowFrame {
+export interface MutableStackedDeckFrame {
   physicalIndex: number;
   pairStartIndex: number;
   pairFraction: number;
-  passingLane: number;
   ownerIndex: number;
-  poses: MutableStackedCoverflowPose[];
+  poses: MutableStackedDeckPose[];
 }
 
-export interface ResolveStackedCoverflowFrameOptions {
+export interface ResolveStackedDeckFrameOptions {
   readonly physicalIndex: number;
   readonly itemCount: number;
-  readonly tuning: StackedCoverflowTuning;
+  readonly tuning: StackedDeckTuning;
   readonly previousOwnerIndex?: number;
 }
 
@@ -95,9 +92,6 @@ interface ProfileValues {
   readonly sideRotateY: number;
   readonly sideLiftRatio: number;
   readonly sideVirtualZ: number;
-  readonly passingXRatio: number;
-  readonly passingRotateY: number;
-  readonly passingRecess: number;
   readonly stackStrideXRatio: number;
   readonly stackStrideYRatio: number;
   readonly stackStrideZ: number;
@@ -108,12 +102,16 @@ interface ProfileValues {
 
 const PERSPECTIVE = 900;
 const SCREEN_ASPECT_RATIO = 1.6;
-const HANDOFF_LOWER = 0.46;
-const HANDOFF_UPPER = 0.54;
+const HANDOFF_BACKWARD = 0.62;
+const HANDOFF_FORWARD = 0.66;
+const HANDOFF_CENTER = (HANDOFF_BACKWARD + HANDOFF_FORWARD) / 2;
 const FAR_STACK_CONVERGENCE = 0.62;
-const PASSING_LANE_MAXIMUM_SLOPE = 3.08;
+const OUTGOING_X_EXPONENT = 2.3;
+const INCOMING_X_EXPONENT = 1.85;
+const OUTGOING_DEPTH_AT_HANDOFF = 0.14;
+const INCOMING_DEPTH_AT_HANDOFF = 0.16;
 
-const PROFILE_VALUES: Record<StackedCoverflowProfile, ProfileValues> = {
+const PROFILE_VALUES: Record<StackedDeckProfile, ProfileValues> = {
   wide: {
     cardWidthRatio: 0.6,
     cardWidthMax: 680,
@@ -121,9 +119,6 @@ const PROFILE_VALUES: Record<StackedCoverflowProfile, ProfileValues> = {
     sideRotateY: 12,
     sideLiftRatio: -0.07,
     sideVirtualZ: -300,
-    passingXRatio: 0.105,
-    passingRotateY: 5,
-    passingRecess: 30,
     stackStrideXRatio: 0.055,
     stackStrideYRatio: -0.014,
     stackStrideZ: -60,
@@ -138,9 +133,6 @@ const PROFILE_VALUES: Record<StackedCoverflowProfile, ProfileValues> = {
     sideRotateY: 10,
     sideLiftRatio: -0.055,
     sideVirtualZ: -285,
-    passingXRatio: 0.085,
-    passingRotateY: 4,
-    passingRecess: 24,
     stackStrideXRatio: 0.045,
     stackStrideYRatio: -0.012,
     stackStrideZ: -54,
@@ -155,9 +147,6 @@ const PROFILE_VALUES: Record<StackedCoverflowProfile, ProfileValues> = {
     sideRotateY: 6,
     sideLiftRatio: -0.035,
     sideVirtualZ: -220,
-    passingXRatio: 0.05,
-    passingRotateY: 2.5,
-    passingRecess: 14,
     stackStrideXRatio: 0.032,
     stackStrideYRatio: -0.008,
     stackStrideZ: -42,
@@ -171,27 +160,25 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function smoothstep(t: number): number {
-  return t * t * (3 - 2 * t);
+function smoothstep(value: number): number {
+  return value * value * (3 - 2 * value);
 }
 
 function assertItemCount(itemCount: number): void {
   assertNonNegative(itemCount, "itemCount");
-  if (!Number.isInteger(itemCount)) {
-    throw new RangeError("itemCount must be an integer");
-  }
+  if (!Number.isInteger(itemCount)) throw new RangeError("itemCount must be an integer");
 }
 
-function profileForWidth(stageWidth: number): StackedCoverflowProfile {
+function profileForWidth(stageWidth: number): StackedDeckProfile {
   if (stageWidth >= 960) return "wide";
   if (stageWidth >= 600) return "medium";
   return "compact";
 }
 
-/** Pure responsive tuning for the deterministic stacked compositor. */
-export function resolveStackedCoverflowTuning(
-  options: ResolveStackedCoverflowTuningOptions,
-): StackedCoverflowTuning {
+/** Pure responsive tuning for the deterministic stacked-deck compositor. */
+export function resolveStackedDeckTuning(
+  options: ResolveStackedDeckTuningOptions,
+): StackedDeckTuning {
   assertFiniteNumber(options.stageWidth, "stageWidth");
   assertFiniteNumber(options.stageHeight, "stageHeight");
   if (options.stageWidth <= 0 || options.stageHeight <= 0) {
@@ -200,6 +187,7 @@ export function resolveStackedCoverflowTuning(
 
   const profile = profileForWidth(options.stageWidth);
   const values = PROFILE_VALUES[profile];
+  const reducedMotion = options.reducedMotion ?? false;
   const heightLimitedWidth = options.stageHeight * SCREEN_ASPECT_RATIO * 0.92;
   const cardWidth = Math.round(
     clamp(
@@ -209,8 +197,6 @@ export function resolveStackedCoverflowTuning(
     ),
   );
   const cardHeight = Math.round(cardWidth / SCREEN_ASPECT_RATIO);
-  const reducedMotion = options.reducedMotion ?? false;
-  const sideVirtualZ = reducedMotion ? Math.max(values.sideVirtualZ, -120) : values.sideVirtualZ;
   const sideProjectedX = Math.round(cardWidth * values.sideProjectedXRatio);
 
   return {
@@ -221,24 +207,20 @@ export function resolveStackedCoverflowTuning(
     motionPitch: Math.max(1, sideProjectedX),
     sideProjectedX,
     sideRotateY: reducedMotion ? 0 : values.sideRotateY,
-    sideLift: values.sideLiftRatio * cardHeight * (reducedMotion ? 0.5 : 1),
-    sideVirtualZ,
-    passingX: reducedMotion ? 0 : values.passingXRatio * cardWidth,
-    passingRotateY: reducedMotion ? 0 : values.passingRotateY,
-    passingRecess: reducedMotion ? 0 : values.passingRecess,
-    stackStrideX: values.stackStrideXRatio * cardWidth,
-    stackStrideY: values.stackStrideYRatio * cardHeight * (reducedMotion ? 0.5 : 1),
-    stackStrideZ: reducedMotion ? Math.max(values.stackStrideZ, -24) : values.stackStrideZ,
-    sideVeil: reducedMotion ? Math.min(values.sideVeil, 0.24) : values.sideVeil,
+    sideLift: values.sideLiftRatio * cardHeight * (reducedMotion ? 0.35 : 1),
+    sideVirtualZ: reducedMotion ? Math.max(values.sideVirtualZ, -108) : values.sideVirtualZ,
+    stackStrideX: values.stackStrideXRatio * cardWidth * (reducedMotion ? 0.7 : 1),
+    stackStrideY: values.stackStrideYRatio * cardHeight * (reducedMotion ? 0.35 : 1),
+    stackStrideZ: reducedMotion ? Math.max(values.stackStrideZ, -20) : values.stackStrideZ,
+    sideVeil: reducedMotion ? Math.min(values.sideVeil, 0.22) : values.sideVeil,
     stackVeil: values.stackVeil,
-    sideBlur: 0,
     hideAfter: values.hideAfter,
-    handoffLower: HANDOFF_LOWER,
-    handoffUpper: HANDOFF_UPPER,
+    handoffBackward: HANDOFF_BACKWARD,
+    handoffForward: HANDOFF_FORWARD,
   };
 }
 
-function validateTuning(tuning: StackedCoverflowTuning): void {
+function validateTuning(tuning: StackedDeckTuning): void {
   if (tuning.profile !== "compact" && tuning.profile !== "medium" && tuning.profile !== "wide") {
     throw new RangeError("tuning.profile must be compact, medium, or wide");
   }
@@ -254,46 +236,30 @@ function validateTuning(tuning: StackedCoverflowTuning): void {
   assertFiniteNumber(tuning.sideRotateY, "sideRotateY");
   assertFiniteNumber(tuning.sideLift, "sideLift");
   assertFiniteNumber(tuning.sideVirtualZ, "sideVirtualZ");
-  assertFiniteNumber(tuning.passingX, "passingX");
-  assertFiniteNumber(tuning.passingRotateY, "passingRotateY");
-  assertFiniteNumber(tuning.passingRecess, "passingRecess");
   assertFiniteNumber(tuning.stackStrideX, "stackStrideX");
   assertFiniteNumber(tuning.stackStrideY, "stackStrideY");
   assertFiniteNumber(tuning.stackStrideZ, "stackStrideZ");
   assertFiniteNumber(tuning.sideVeil, "sideVeil");
   assertFiniteNumber(tuning.stackVeil, "stackVeil");
-  assertFiniteNumber(tuning.sideBlur, "sideBlur");
   assertFiniteNumber(tuning.hideAfter, "hideAfter");
-  assertFiniteNumber(tuning.handoffLower, "handoffLower");
-  assertFiniteNumber(tuning.handoffUpper, "handoffUpper");
-
-  if (
-    tuning.sideProjectedX < 0 ||
-    tuning.passingX < 0 ||
-    tuning.passingRecess < 0 ||
-    tuning.sideBlur < 0 ||
-    tuning.hideAfter <= 0
-  ) {
-    throw new RangeError("stacked coverflow distances, blur, and visibility must be non-negative");
+  assertFiniteNumber(tuning.handoffBackward, "handoffBackward");
+  assertFiniteNumber(tuning.handoffForward, "handoffForward");
+  if (tuning.sideProjectedX < 0 || tuning.hideAfter <= 0) {
+    throw new RangeError("stacked deck distances and visibility must be non-negative");
   }
   if (tuning.sideVeil < 0 || tuning.sideVeil > 1 || tuning.stackVeil < 0 || tuning.stackVeil > 1) {
-    throw new RangeError("stacked coverflow veil strengths must be in [0, 1]");
+    throw new RangeError("stacked deck veil strengths must be in [0, 1]");
   }
   if (
-    tuning.handoffLower <= 0 ||
-    tuning.handoffLower >= 0.5 ||
-    tuning.handoffUpper <= 0.5 ||
-    tuning.handoffUpper >= 1 ||
-    tuning.handoffLower >= tuning.handoffUpper
+    tuning.handoffBackward <= 0.5 ||
+    tuning.handoffForward >= 1 ||
+    tuning.handoffBackward >= tuning.handoffForward
   ) {
-    throw new RangeError("stacked coverflow handoff thresholds must straddle 0.5");
-  }
-  if (tuning.passingX * PASSING_LANE_MAXIMUM_SLOPE > tuning.sideProjectedX + 1e-9) {
-    throw new RangeError("passingX is too large to preserve monotonic horizontal travel");
+    throw new RangeError("stacked deck handoff thresholds must form a late, ordered band");
   }
 }
 
-function createPose(): MutableStackedCoverflowPose {
+function createPose(): MutableStackedDeckPose {
   return {
     translateX: 0,
     translateY: 0,
@@ -301,21 +267,21 @@ function createPose(): MutableStackedCoverflowPose {
     rotateY: 0,
     virtualZ: 0,
     layer: 0,
+    role: "rear",
     veil: 0,
-    blur: 0,
+    shadowStrength: 1,
     visible: false,
     interactive: false,
   };
 }
 
-/** Creates reusable storage for {@link resolveStackedCoverflowFrame}. */
-export function createStackedCoverflowFrame(itemCount: number): MutableStackedCoverflowFrame {
+/** Creates reusable storage for {@link resolveStackedDeckFrame}. */
+export function createStackedDeckFrame(itemCount: number): MutableStackedDeckFrame {
   assertItemCount(itemCount);
   return {
     physicalIndex: 0,
     pairStartIndex: itemCount === 0 ? -1 : 0,
     pairFraction: 0,
-    passingLane: 0,
     ownerIndex: itemCount === 0 ? -1 : 0,
     poses: Array.from({ length: itemCount }, createPose),
   };
@@ -331,11 +297,12 @@ function convergedStackDistance(distance: number): number {
 }
 
 function resolveBasePose(
-  pose: MutableStackedCoverflowPose,
+  pose: MutableStackedDeckPose,
   relativeIndex: number,
-  tuning: StackedCoverflowTuning,
+  tuning: StackedDeckTuning,
 ): void {
   const magnitude = Math.abs(relativeIndex);
+  pose.role = "rear";
   if (magnitude === 0) {
     pose.translateX = 0;
     pose.translateY = 0;
@@ -343,10 +310,11 @@ function resolveBasePose(
     pose.virtualZ = 0;
     pose.projectedScale = 1;
     pose.veil = 0;
-    pose.blur = 0;
+    pose.shadowStrength = 1;
     return;
   }
-  const direction = relativeIndex === 0 ? 0 : Math.sign(relativeIndex);
+
+  const direction = Math.sign(relativeIndex);
   if (magnitude <= 1) {
     const shaped = smoothstep(magnitude);
     pose.translateX = direction * tuning.sideProjectedX * magnitude;
@@ -354,7 +322,7 @@ function resolveBasePose(
     pose.rotateY = -direction * tuning.sideRotateY * shaped;
     pose.virtualZ = tuning.sideVirtualZ * shaped;
     pose.veil = tuning.sideVeil * shaped;
-    pose.blur = tuning.sideBlur * shaped;
+    pose.shadowStrength = 1 - shaped * 0.56;
   } else {
     const stackDistance = magnitude - 1;
     const convergedDistance = convergedStackDistance(stackDistance);
@@ -363,36 +331,60 @@ function resolveBasePose(
     pose.rotateY = -direction * tuning.sideRotateY;
     pose.virtualZ = tuning.sideVirtualZ + tuning.stackStrideZ * stackDistance;
     pose.veil = clamp(tuning.sideVeil + tuning.stackVeil * convergedDistance, 0, 0.82);
-    pose.blur = tuning.sideBlur;
+    pose.shadowStrength = 0.36;
   }
   pose.projectedScale = projectedScale(tuning.perspective, pose.virtualZ);
 }
 
-function resolvePairDepthFraction(t: number, tuning: StackedCoverflowTuning): number {
-  if (t < tuning.handoffLower) {
-    return smoothstep(t / tuning.handoffLower) * 0.5;
+function resolveOutgoingDepth(pairFraction: number): number {
+  if (pairFraction <= HANDOFF_CENTER) {
+    const progress = smoothstep(pairFraction / HANDOFF_CENTER);
+    return OUTGOING_DEPTH_AT_HANDOFF * progress;
   }
-  if (t <= tuning.handoffUpper) return 0.5;
-  return 0.5 + smoothstep((t - tuning.handoffUpper) / (1 - tuning.handoffUpper)) * 0.5;
+  const progress = smoothstep((pairFraction - HANDOFF_CENTER) / (1 - HANDOFF_CENTER));
+  return OUTGOING_DEPTH_AT_HANDOFF + (1 - OUTGOING_DEPTH_AT_HANDOFF) * progress;
+}
+
+function resolveIncomingDepth(pairFraction: number): number {
+  if (pairFraction <= HANDOFF_CENTER) {
+    const progress = smoothstep(pairFraction / HANDOFF_CENTER);
+    return 1 - (1 - INCOMING_DEPTH_AT_HANDOFF) * progress;
+  }
+  const progress = smoothstep((pairFraction - HANDOFF_CENTER) / (1 - HANDOFF_CENTER));
+  return INCOMING_DEPTH_AT_HANDOFF * (1 - progress);
+}
+
+function resolveOutgoingShadow(pairFraction: number): number {
+  if (pairFraction <= HANDOFF_CENTER) {
+    return 1 - 0.38 * smoothstep(pairFraction / HANDOFF_CENTER);
+  }
+  return 0.62 - 0.18 * smoothstep((pairFraction - HANDOFF_CENTER) / (1 - HANDOFF_CENTER));
+}
+
+function resolveIncomingShadow(pairFraction: number): number {
+  if (pairFraction <= HANDOFF_CENTER) {
+    return 0.44 + 0.18 * smoothstep(pairFraction / HANDOFF_CENTER);
+  }
+  return 0.62 + 0.38 * smoothstep((pairFraction - HANDOFF_CENTER) / (1 - HANDOFF_CENTER));
 }
 
 function resolvePairPose(
-  pose: MutableStackedCoverflowPose,
-  depthFraction: number,
-  direction: -1 | 1,
+  pose: MutableStackedDeckPose,
   translateX: number,
-  lane: number,
-  tuning: StackedCoverflowTuning,
+  depthFraction: number,
+  rotateY: number,
+  shadowStrength: number,
+  tuning: StackedDeckTuning,
 ): void {
   pose.translateX = translateX === 0 ? 0 : translateX;
   pose.translateY = tuning.sideLift * depthFraction;
   if (pose.translateY === 0) pose.translateY = 0;
-  pose.rotateY = -direction * (tuning.sideRotateY * depthFraction + tuning.passingRotateY * lane);
-  pose.virtualZ = tuning.sideVirtualZ * depthFraction - tuning.passingRecess * lane;
+  pose.rotateY = rotateY === 0 ? 0 : rotateY;
+  pose.virtualZ = tuning.sideVirtualZ * depthFraction;
   if (pose.virtualZ === 0) pose.virtualZ = 0;
   pose.projectedScale = projectedScale(tuning.perspective, pose.virtualZ);
   pose.veil = tuning.sideVeil * depthFraction;
-  pose.blur = tuning.sideBlur * depthFraction;
+  pose.shadowStrength = shadowStrength;
 }
 
 function resolveOwnerIndex(
@@ -401,31 +393,34 @@ function resolveOwnerIndex(
   pairFraction: number,
   previousOwnerIndex: number,
   itemCount: number,
-  tuning: StackedCoverflowTuning,
+  tuning: StackedDeckTuning,
 ): number {
   if (itemCount === 0) return -1;
   const maximumIndex = itemCount - 1;
   if (physicalIndex <= 0) return 0;
   if (physicalIndex >= maximumIndex) return maximumIndex;
-
   const nextIndex = pairStartIndex + 1;
+  if (pairFraction === 0) return pairStartIndex;
+  if (pairFraction === 1) return nextIndex;
   if (previousOwnerIndex <= pairStartIndex) {
-    return pairFraction >= tuning.handoffUpper ? nextIndex : pairStartIndex;
+    return pairFraction >= tuning.handoffForward ? nextIndex : pairStartIndex;
   }
   if (previousOwnerIndex >= nextIndex) {
-    return pairFraction <= tuning.handoffLower ? pairStartIndex : nextIndex;
+    return pairFraction <= tuning.handoffBackward ? pairStartIndex : nextIndex;
   }
-  return pairFraction < 0.5 ? pairStartIndex : nextIndex;
+  return pairFraction < HANDOFF_CENTER ? pairStartIndex : nextIndex;
 }
 
 /**
- * Resolves the complete visible deck against one live physical index. The caller-provided output
- * is mutated in place; no arrays, poses, or sort keys are allocated on the frame path.
+ * Resolves the whole physical deck against one live scalar index. The active pair follows an
+ * asymmetric top-card shuffle: the outgoing card yields space slowly while the incoming card
+ * approaches center beneath it. Only the integer paint layer changes discretely, inside heavy
+ * overlap after both material paths have converged near the handoff.
  */
-export function resolveStackedCoverflowFrame(
-  options: ResolveStackedCoverflowFrameOptions,
-  output: MutableStackedCoverflowFrame,
-): StackedCoverflowFrame {
+export function resolveStackedDeckFrame(
+  options: ResolveStackedDeckFrameOptions,
+  output: MutableStackedDeckFrame,
+): StackedDeckFrame {
   assertFiniteNumber(options.physicalIndex, "physicalIndex");
   assertItemCount(options.itemCount);
   validateTuning(options.tuning);
@@ -451,8 +446,11 @@ export function resolveStackedCoverflowFrame(
   const pairFraction =
     options.itemCount <= 1 ? 0 : clamp(clampedPhysicalIndex - pairStartIndex, 0, 1);
   const inRangeTransition =
-    options.itemCount > 1 && options.physicalIndex >= 0 && options.physicalIndex <= maximumIndex;
-  const passingLane = inRangeTransition ? 16 * pairFraction ** 2 * (1 - pairFraction) ** 2 : 0;
+    options.itemCount > 1 &&
+    options.physicalIndex >= 0 &&
+    options.physicalIndex <= maximumIndex &&
+    pairFraction > 0 &&
+    pairFraction < 1;
   const ownerIndex = resolveOwnerIndex(
     options.physicalIndex,
     Math.max(0, pairStartIndex),
@@ -465,47 +463,54 @@ export function resolveStackedCoverflowFrame(
   output.physicalIndex = options.physicalIndex;
   output.pairStartIndex = pairStartIndex;
   output.pairFraction = pairFraction;
-  output.passingLane = passingLane;
   output.ownerIndex = ownerIndex;
+
+  let outgoingDepth = 0;
+  let incomingDepth = 0;
+  let outgoingShadow = 1;
+  let incomingShadow = 1;
+  if (inRangeTransition) {
+    outgoingDepth = resolveOutgoingDepth(pairFraction);
+    incomingDepth = resolveIncomingDepth(pairFraction);
+    outgoingShadow = resolveOutgoingShadow(pairFraction);
+    incomingShadow = resolveIncomingShadow(pairFraction);
+  }
 
   for (let index = 0; index < output.poses.length; index += 1) {
     const pose = output.poses[index]!;
     const relativeIndex = index - options.physicalIndex;
     resolveBasePose(pose, relativeIndex, options.tuning);
 
-    if (
-      inRangeTransition &&
-      pairStartIndex >= 0 &&
-      (index === pairStartIndex || index === pairStartIndex + 1)
-    ) {
-      const pairDepthFraction = resolvePairDepthFraction(pairFraction, options.tuning);
-      if (index === pairStartIndex) {
-        resolvePairPose(
-          pose,
-          pairDepthFraction,
-          -1,
-          -options.tuning.sideProjectedX * pairFraction - options.tuning.passingX * passingLane,
-          passingLane,
-          options.tuning,
-        );
-      } else {
-        resolvePairPose(
-          pose,
-          1 - pairDepthFraction,
-          1,
-          options.tuning.sideProjectedX * (1 - pairFraction) +
-            options.tuning.passingX * passingLane,
-          passingLane,
-          options.tuning,
-        );
-      }
+    if (inRangeTransition && index === pairStartIndex) {
+      resolvePairPose(
+        pose,
+        -options.tuning.sideProjectedX * pairFraction ** OUTGOING_X_EXPONENT,
+        outgoingDepth,
+        options.tuning.sideRotateY * pairFraction ** 2,
+        outgoingShadow,
+        options.tuning,
+      );
+      pose.role = ownerIndex === index ? "foreground" : "outgoing";
+    } else if (inRangeTransition && index === pairStartIndex + 1) {
+      resolvePairPose(
+        pose,
+        options.tuning.sideProjectedX * (1 - pairFraction) ** INCOMING_X_EXPONENT,
+        incomingDepth,
+        -options.tuning.sideRotateY * (1 - pairFraction) ** 1.55,
+        incomingShadow,
+        options.tuning,
+      );
+      pose.role = ownerIndex === index ? "foreground" : "incoming";
+    } else if (index === ownerIndex) {
+      pose.role = "foreground";
     }
 
     const magnitude = Math.abs(relativeIndex);
     pose.visible = magnitude <= options.tuning.hideAfter;
     pose.interactive = pose.visible && (index === ownerIndex || magnitude <= 1.001);
     const ownerDistance = Math.abs(index - ownerIndex);
-    pose.layer = 1_000 + (options.itemCount - ownerDistance) * 2 - (index > ownerIndex ? 1 : 0);
+    const layerBase = 1_000 + (options.itemCount - ownerDistance) * 3;
+    pose.layer = layerBase + (index === ownerIndex ? 2 : index < ownerIndex ? 1 : 0);
   }
 
   return output;

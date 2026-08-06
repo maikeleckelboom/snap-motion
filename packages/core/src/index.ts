@@ -46,20 +46,21 @@ export type {
   CoverflowProgressOptions,
 } from "./coverflow";
 export {
-  createStackedCoverflowFrame,
-  resolveStackedCoverflowFrame,
-  resolveStackedCoverflowTuning,
-} from "./stackedCoverflow";
+  createStackedDeckFrame,
+  resolveStackedDeckFrame,
+  resolveStackedDeckTuning,
+} from "./stackedDeck";
 export type {
-  MutableStackedCoverflowFrame,
-  MutableStackedCoverflowPose,
-  ResolveStackedCoverflowFrameOptions,
-  ResolveStackedCoverflowTuningOptions,
-  StackedCoverflowFrame,
-  StackedCoverflowPose,
-  StackedCoverflowProfile,
-  StackedCoverflowTuning,
-} from "./stackedCoverflow";
+  MutableStackedDeckFrame,
+  MutableStackedDeckPose,
+  ResolveStackedDeckFrameOptions,
+  ResolveStackedDeckTuningOptions,
+  StackedDeckFrame,
+  StackedDeckPose,
+  StackedDeckProfile,
+  StackedDeckRole,
+  StackedDeckTuning,
+} from "./stackedDeck";
 export { SnapController } from "./controller";
 export type { ControllerListener, SnapControllerOptions } from "./controller";
 export { applyElasticity, createSymmetricElasticity, nonlinearElasticDistance } from "./elastic";
