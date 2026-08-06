@@ -1,3 +1,6 @@
+import { mkdir } from "node:fs/promises";
+import { resolve as resolvePath } from "node:path";
+
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
@@ -10,6 +13,7 @@ import {
 } from "./helpers";
 
 const POINTER_ID = 617;
+test.describe.configure({ timeout: 45_000 });
 const existingResizeObserverWarning =
   /ResizeObserver loop completed with undelivered notifications\./;
 const collectedPageErrors = new WeakMap<Page, string[]>();
@@ -117,11 +121,34 @@ async function endPointer(page: Page, origin: PointerOrigin, deltaX: number, ela
   );
 }
 
+async function cancelPointer(page: Page, origin: PointerOrigin, deltaX: number, elapsedMs: number) {
+  await page.evaluate(
+    ({ deltaX: moveX, elapsedMs: elapsed, origin: start }) => {
+      const event = new PointerEvent("pointercancel", {
+        bubbles: true,
+        button: 0,
+        buttons: 0,
+        cancelable: true,
+        clientX: start.x + moveX,
+        clientY: start.y,
+        isPrimary: true,
+        pointerId: start.pointerId,
+        pointerType: start.pointerType,
+      });
+      Object.defineProperty(event, "timeStamp", { value: start.timestamp + elapsed });
+      window.dispatchEvent(event);
+    },
+    { deltaX, elapsedMs, origin },
+  );
+}
+
 async function readFrame(page: Page) {
   return viewport(page).evaluate((element) => {
+    const stageBox = element.getBoundingClientRect();
     const cards = [...document.querySelectorAll<HTMLElement>(".stacked-deck-card")];
     const poses = cards.map((item) => {
-      const box = item.getBoundingClientRect();
+      const surface = item.querySelector<HTMLElement>(".screen-chrome")!;
+      const box = surface.getBoundingClientRect();
       return {
         id: item.dataset.screenId ?? "",
         interactive: item.dataset.interactive === "true",
@@ -129,20 +156,92 @@ async function readFrame(page: Page) {
         left: box.left,
         projectedScale: Number(item.dataset.projectedScale),
         right: box.right,
+        role: item.dataset.role ?? "",
         rotateY: Number(item.dataset.rotateY),
+        shadowStrength: Number(item.dataset.shadowStrength),
         translateX: Number(item.dataset.translateX),
         veil: Number(item.dataset.veil),
+        virtualZ: Number(item.dataset.virtualZ),
         visible: item.dataset.visible === "true",
         width: box.width,
       };
     });
     return {
+      cardWidth: Number(element.dataset.cardWidth),
+      handoffBackward: Number(element.dataset.handoffBackward),
+      handoffForward: Number(element.dataset.handoffForward),
       ownerIndex: Number(element.dataset.ownerIndex),
       pairFraction: Number(element.dataset.pairFraction),
-      passingLane: Number(element.dataset.passingLane),
+      pairStartIndex: Number(element.dataset.pairStartIndex),
       physicalIndex: Number(element.dataset.physicalIndex),
       poses,
+      stageCenterX: stageBox.left + stageBox.width / 2,
     };
+  });
+}
+
+interface HeldTransition {
+  elapsedMs: number;
+  readonly origin: PointerOrigin;
+  readonly pitch: number;
+  readonly startIndex: number;
+}
+
+async function beginHeldTransition(page: Page, startIndex: number): Promise<HeldTransition> {
+  const stage = viewport(page);
+  await pagination(page).nth(startIndex).click();
+  await expectCarouselAt(stage, ["templates", "project", "map", "team", "settings"][startIndex]!);
+  return {
+    elapsedMs: 0,
+    origin: await beginPointer(stage),
+    pitch: await motionPitch(stage),
+    startIndex,
+  };
+}
+
+async function holdPhysicalIndex(page: Page, held: HeldTransition, physicalIndex: number) {
+  held.elapsedMs += 100;
+  await movePointer(
+    page,
+    held.origin,
+    (held.startIndex - physicalIndex) * held.pitch,
+    held.elapsedMs,
+  );
+  const frame = await readFrame(page);
+  expect(frame.physicalIndex).toBeCloseTo(physicalIndex, 3);
+  return frame;
+}
+
+function activePair(frame: Awaited<ReturnType<typeof readFrame>>) {
+  return [frame.poses[frame.pairStartIndex]!, frame.poses[frame.pairStartIndex + 1]!] as const;
+}
+
+function visibleOverlapRatio(frame: Awaited<ReturnType<typeof readFrame>>) {
+  const [outgoing, incoming] = activePair(frame);
+  const intersection = Math.max(
+    0,
+    Math.min(outgoing.right, incoming.right) - Math.max(outgoing.left, incoming.left),
+  );
+  return intersection / Math.min(outgoing.width, incoming.width);
+}
+
+async function stageScreenshot(page: Page, directory: string, name: string) {
+  const box = await viewport(page).boundingBox();
+  if (!box) throw new Error("Stacked deck viewport is not rendered for screenshot capture.");
+  await page.screenshot({
+    animations: "disabled",
+    clip: box,
+    path: resolvePath(directory, `${name}.png`),
+  });
+}
+
+async function paintedCardAtStageCenter(page: Page) {
+  return viewport(page).evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return document
+      .elementsFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+      .map((hit) => hit.closest<HTMLElement>(".stacked-deck-card")?.dataset.screenId)
+      .find(Boolean);
   });
 }
 
@@ -307,60 +406,140 @@ test("settled desktop, tablet, phone, and reduced-motion frames meet the deck co
   expect(reduced.poses.every((pose) => pose.rotateY === 0)).toBe(true);
   expect(new Set(reduced.poses.map((pose) => pose.layer)).size).toBe(reduced.poses.length);
   await expect(card(page, "map").locator(".screen-chrome")).toHaveCSS("filter", "none");
+
+  const reducedPitch = await motionPitch(stage);
+  const reducedOrigin = await beginPointer(stage);
+  await movePointer(page, reducedOrigin, -reducedPitch * 0.4, 120);
+  const reducedHeld = await readFrame(page);
+  expect(reducedHeld.physicalIndex).toBeCloseTo(2.4, 3);
+  expect(reducedHeld.poses.every((pose) => pose.rotateY === 0)).toBe(true);
+  expect(visibleOverlapRatio(reducedHeld)).toBeGreaterThanOrEqual(0.45);
+  await cancelPointer(page, reducedOrigin, -reducedPitch * 0.4, 240);
+  await expect(stage).not.toHaveAttribute("data-phase", "dragging");
+  await expect(page.getByTestId("snap-motion-media-gallery")).not.toBeVisible();
 });
 
-test("passing corridor and hysteretic paint ownership retrace through both reversals", async ({
+test("asymmetric top-card shuffle holds overlap, visual center, and hysteretic ownership", async ({
   page,
 }) => {
   const stage = viewport(page);
-  await pagination(page).first().click();
-  await expectCarouselAt(stage, "templates");
-  const pitch = await motionPitch(stage);
-  const origin = await beginPointer(stage);
+  const held = await beginHeldTransition(page, 0);
+  const initial = await readFrame(page);
+  const preHandoff = initial.handoffForward - 0.005;
+  const postHandoff = initial.handoffForward + 0.005;
 
-  const samples = [
-    { fraction: 0.45, owner: 0 },
-    { fraction: 0.49, owner: 0 },
-    { fraction: 0.51, owner: 0 },
-    { fraction: 0.55, owner: 1 },
-    { fraction: 0.51, owner: 1 },
-    { fraction: 0.49, owner: 1 },
-    { fraction: 0.45, owner: 0 },
-  ] as const;
-
-  for (let index = 0; index < samples.length; index += 1) {
-    const sample = samples[index]!;
-    await movePointer(page, origin, -pitch * sample.fraction, 100 + index * 100);
-    await expect(stage).toHaveAttribute("data-owner-index", String(sample.owner));
-    const frame = await readFrame(page);
-    expect(frame.physicalIndex).toBeCloseTo(sample.fraction, 3);
+  for (const physicalIndex of [0.2, 0.4, preHandoff]) {
+    const frame = await holdPhysicalIndex(page, held, physicalIndex);
+    const [outgoing, incoming] = activePair(frame);
+    expect(frame.ownerIndex).toBe(0);
+    expect(outgoing.role).toBe("foreground");
+    expect(incoming.role).toBe("incoming");
+    expect(outgoing.projectedScale).toBeGreaterThan(incoming.projectedScale);
+    expect(outgoing.virtualZ).toBeGreaterThan(incoming.virtualZ);
+    expect(outgoing.veil).toBeLessThan(incoming.veil);
+    expect(visibleOverlapRatio(frame)).toBeGreaterThanOrEqual(0.45);
+    expect(
+      Math.min(Math.abs(outgoing.translateX), Math.abs(incoming.translateX)),
+    ).toBeLessThanOrEqual(frame.cardWidth * 0.12);
+    expect(incoming.translateX - outgoing.translateX).toBeLessThanOrEqual(held.pitch + 0.5);
     expect(new Set(frame.poses.map((pose) => pose.layer)).size).toBe(frame.poses.length);
     expect(frame.poses[frame.ownerIndex]!.layer).toBe(
       Math.max(...frame.poses.map((pose) => pose.layer)),
     );
   }
+  expect(await paintedCardAtStageCenter(page)).toBe("templates");
 
-  await movePointer(page, origin, -pitch * 0.5, 900);
-  const midpoint = await readFrame(page);
-  expect(midpoint.pairFraction).toBeCloseTo(0.5, 3);
-  expect(midpoint.passingLane).toBeCloseTo(1, 3);
-  expect(midpoint.poses[0]!.projectedScale).toBeCloseTo(midpoint.poses[1]!.projectedScale, 5);
-  expect(midpoint.poses[1]!.left).toBeLessThan(midpoint.poses[0]!.right);
-  expect(midpoint.poses[1]!.translateX - midpoint.poses[0]!.translateX).toBeGreaterThan(pitch);
+  const after = await holdPhysicalIndex(page, held, postHandoff);
+  const [outgoingAfter, incomingAfter] = activePair(after);
+  expect(after.ownerIndex).toBe(1);
+  expect(outgoingAfter.role).toBe("outgoing");
+  expect(incomingAfter.role).toBe("foreground");
+  expect(visibleOverlapRatio(after)).toBeGreaterThanOrEqual(0.45);
+  expect(await paintedCardAtStageCenter(page)).toBe("project");
 
-  await movePointer(page, origin, -pitch * 0.62, 1_000);
-  await endPointer(page, origin, -pitch * 0.62, 1_100);
+  for (const physicalIndex of [initial.handoffForward - 0.01, initial.handoffBackward + 0.01]) {
+    const reversed = await holdPhysicalIndex(page, held, physicalIndex);
+    expect(reversed.ownerIndex).toBe(1);
+  }
+  const reversedPastBand = await holdPhysicalIndex(page, held, initial.handoffBackward - 0.005);
+  expect(reversedPastBand.ownerIndex).toBe(0);
+
+  await holdPhysicalIndex(page, held, 0.7);
+  await endPointer(page, held.origin, -held.pitch * 0.7, held.elapsedMs + 100);
   await expectCarouselAt(stage, "project");
-  await expect(stage).toHaveAttribute("data-passing-lane", "0");
+  const settled = await readFrame(page);
+  expect(settled.poses[1]).toMatchObject({
+    role: "foreground",
+    projectedScale: 1,
+    translateX: 0,
+    veil: 0,
+    virtualZ: 0,
+  });
+});
 
-  const reverseOrigin = await beginPointer(stage);
-  await movePointer(page, reverseOrigin, pitch * 0.45, 100);
-  await expect(stage).toHaveAttribute("data-owner-index", "1");
-  await movePointer(page, reverseOrigin, pitch * 0.55, 200);
-  await expect(stage).toHaveAttribute("data-owner-index", "0");
-  await movePointer(page, reverseOrigin, pitch * 0.62, 300);
-  await endPointer(page, reverseOrigin, pitch * 0.62, 400);
-  await expectCarouselAt(stage, "templates");
+test("held forward and reverse frames remain a top-card shuffle", async ({ page }, testInfo) => {
+  const captureVisuals = testInfo.project.name === "chromium";
+  const artifactDirectory = resolvePath(
+    process.cwd(),
+    ".artifacts",
+    "stacked-deck-held-frames",
+    testInfo.project.name,
+  );
+  await mkdir(artifactDirectory, { recursive: true });
+  if (captureVisuals) await stageScreenshot(page, artifactDirectory, "settled-wide");
+  const forward = await beginHeldTransition(page, 0);
+  const thresholds = await readFrame(page);
+  const forwardPositions = [
+    0,
+    0.2,
+    0.4,
+    thresholds.handoffForward - 0.005,
+    thresholds.handoffForward + 0.005,
+    0.7,
+    0.85,
+    1,
+  ];
+
+  for (const position of forwardPositions) {
+    const frame = await holdPhysicalIndex(page, forward, position);
+    const [outgoing, incoming] = activePair(frame);
+    expect(visibleOverlapRatio(frame)).toBeGreaterThanOrEqual(0.45);
+    expect(
+      Math.min(Math.abs(outgoing.translateX), Math.abs(incoming.translateX)),
+    ).toBeLessThanOrEqual(frame.cardWidth * 0.12);
+    expect(incoming.translateX - outgoing.translateX).toBeLessThanOrEqual(forward.pitch + 0.5);
+    if (captureVisuals) {
+      await stageScreenshot(page, artifactDirectory, `forward-${position.toFixed(3)}`);
+    }
+  }
+  await endPointer(page, forward.origin, -forward.pitch, forward.elapsedMs + 100);
+  await expectCarouselAt(viewport(page), "project");
+
+  const reverse = await beginHeldTransition(page, 1);
+  const reversePositions = [
+    1,
+    0.85,
+    0.7,
+    thresholds.handoffBackward + 0.005,
+    thresholds.handoffBackward - 0.005,
+    0.4,
+    0.2,
+    0,
+  ];
+  for (const position of reversePositions) {
+    const frame = await holdPhysicalIndex(page, reverse, position);
+    const [outgoing, incoming] = activePair(frame);
+    expect(visibleOverlapRatio(frame)).toBeGreaterThanOrEqual(0.45);
+    expect(
+      Math.min(Math.abs(outgoing.translateX), Math.abs(incoming.translateX)),
+    ).toBeLessThanOrEqual(frame.cardWidth * 0.12);
+    expect(incoming.translateX - outgoing.translateX).toBeLessThanOrEqual(reverse.pitch + 0.5);
+    if (captureVisuals) {
+      await stageScreenshot(page, artifactDirectory, `reverse-${position.toFixed(3)}`);
+    }
+  }
+  await endPointer(page, reverse.origin, reverse.pitch, reverse.elapsedMs + 100);
+  await expectCarouselAt(viewport(page), "templates");
 });
 
 test("fast traversal and re-grab preserve bounded catch-up with unique layers", async ({
@@ -420,6 +599,7 @@ test("interrupted wheel springs, keyboard, and pagination stay synchronized", as
     "3.00000",
   );
   await expect(pagination(page).nth(3)).toHaveAttribute("aria-current", "true");
+  await expect(page.getByTestId("stacked-deck-status")).toHaveText("Team & rollen, 4 of 5");
 });
 
 test("exposed strips select, covered regions reject input, and gallery close synchronizes exactly", async ({
@@ -500,5 +680,6 @@ test("touch, pen, and elastic boundaries preserve direct manipulation and exact 
   await movePointer(page, endOrigin, -120, 100);
   expect(Number(await stage.getAttribute("data-physical-index"))).toBeGreaterThan(4);
   await endPointer(page, endOrigin, -120, 200);
-  await expectCarouselAt(stage, "settings");
+  await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 15_000 });
+  await expect(stage).toHaveAttribute("data-active-id", "settings");
 });
