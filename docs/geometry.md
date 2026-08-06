@@ -160,47 +160,63 @@ and cannot make incoherent geometry look like anything.
 
 Stacked deck is a separate presentation topology, not a tighter configuration of the Coverflow
 rail. It reuses `createCoverflowGeometry`, `useCarouselMotion`, and one live physical position, but
-projects the complete card set through `resolveStackedCoverflowFrame`. The rail resolver remains
+projects the complete card set through `resolveStackedDeckFrame`. The rail resolver remains
 unchanged: its steep side rails need a permanent clearing, while the deck deliberately keeps large
 screens closely overlapped at rest.
 
-`resolveStackedCoverflowTuning` is the single responsive source for card size, projected side
-position, virtual depth, yaw, far-stack convergence, visibility, material strength, and the passing
-excursion. The wide profile settles the center near 60% of the stage width and projects immediate
-neighbors near 75% of that apparent size. Medium and compact profiles enlarge the center relative
-to the stage, narrow the exposed strips, reduce yaw and excursion, and hide far cards sooner.
+`resolveStackedDeckTuning` is the single responsive source for card size, projected side position,
+virtual depth, yaw, far-stack convergence, visibility, material strength, and ownership thresholds.
+The wide profile settles the center near 60% of the stage width, exposes about 30% of each immediate
+neighbor, and projects those neighbors near 75% of the center size. Medium and compact profiles
+enlarge the center relative to the stage, narrow the exposed strips, reduce yaw, and hide far cards
+sooner.
 
-### Tight rest, open pass, tight rest
+### Asymmetric top-card shuffle
 
-For a pair fraction `t`, the resolver derives a bounded passing envelope:
+For a forward step from item `i` to `i + 1`, the active pair uses different monotonic paths:
 
 ```text
-lane = 16 × t² × (1 - t)²
+outgoingX = -sideProjectedX × t^2.3
+incomingX =  sideProjectedX × (1 - t)^1.85
 ```
 
-The lane is zero at both anchors, peaks at the midpoint, and has zero endpoint velocity. It moves
-the outgoing and incoming cards slightly apart while their base horizontal travel remains
-monotonic. The cards retain overlap throughout: the excursion reveals two independent screen edges
-without recreating either the rail's empty corridor or a folded-sheet intersection. Reversal and
-re-grab simply retrace the same scalar frame; no card owns a CSS transition or delayed timeline.
+The outgoing card yields the center slowly while the incoming card approaches quickly underneath
+it. Their center separation never exceeds the normal settled side offset, and at least one active
+card remains within 12% of a card width from visual center. The pair remains heavily overlapped;
+there is no midpoint lane, empty center, or equal side-by-side standoff.
+
+Depth, scale, lift, veil, yaw, and contact shadow use continuous but deliberately unequal curves.
+Before handoff the outgoing card stays close to foreground depth and the incoming card remains
+visibly subordinate. Near handoff both paths converge without an equal-depth plateau. After
+handoff the incoming card completes its exact center pose while the outgoing card recedes quickly
+into the opposite stack. Reverse drag evaluates the same functions from the same physical index, so
+re-grab and reversal never reconstruct motion from semantic state.
+
+Every pose names its visual role: `foreground`, `incoming`, `outgoing`, or `rear`. The role is not
+inferred from signed X, and it does not replace semantic selection, pagination, focus, or settled
+announcement state.
 
 ### Virtual depth is not paint order
 
 Virtual Z determines projected scale, lift, veil, and local surface treatment. DOM paint order is a
-separate explicit integer layer contract. `ownerIndex` crosses once through a symmetric
-`handoffLower`/`handoffUpper` hysteresis band, so repeated reversal near the midpoint cannot chatter.
-Every pose receives a globally unique layer, including during multi-item frame jumps. Paint owner,
-live visual selection, settled semantic selection, and announcement ownership remain independent.
+separate explicit integer layer contract. Forward ownership changes at `0.66`, only after the
+incoming screen is close to center; reverse ownership changes at `0.62`. This narrow late
+hysteresis band prevents layer chatter without holding the pair at equal depth. Every pose receives
+a globally unique layer, including during multi-item frame jumps. Paint owner, live visual
+selection, settled semantic selection, and announcement ownership remain independent.
 
 The outer card owns projected X/Y, projected scale, visibility, pointer eligibility, and z-index.
 The inner screen surface owns its modest yaw, border edge, contact shadow, directional occlusion,
-and neutral veil. The transform carrier stays fully opaque and filter-free. Only actually exposed
-adjacent cards are interactive; the foreground card naturally intercepts covered neighbor regions,
-and far or hidden cards have neither pointer eligibility nor a compositor hint.
+and neutral veil. The transform carrier stays fully opaque and filter-free. The lab deliberately
+uses a flat outer compositor with explicit integer layers, then applies restrained local perspective
+only to the inner yaw surface. This prevents browser 3D sorting from overruling the resolver while
+preserving a physical edge cue. Only exposed adjacent cards are interactive; the foreground card
+naturally intercepts covered neighbor regions, and far or hidden cards have neither pointer
+eligibility nor a compositor hint.
 
-Reduced motion keeps the same exact anchors and layering but flattens yaw, removes the passing
-excursion and blur, softens depth/lift, and retains direct manipulation. It does not collapse the
-cards into an unordered flat overlap.
+Reduced motion keeps the same exact anchors, overlap, and deterministic ownership. It removes yaw,
+softens depth, lift, and rear-stack excursion, avoids blur, and retains direct manipulation. It does
+not collapse the deck into two equally prominent flat cards.
 
 ## Responsive remeasurement
 

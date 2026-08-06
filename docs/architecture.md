@@ -22,6 +22,11 @@ authorities. The stacked resolver receives caller-owned output storage and carri
 hysteretic paint owner between frames; it does not own motion, targets, semantic selection, or DOM
 state.
 
+The lab keeps the two render systems separate: `CoverflowDemo.vue` owns the Coverflow rail, while
+`StackedDeckDemo.vue` owns whole-frame deck roles, paint layers, hit eligibility, and material
+treatment. They share the Yoot screen catalog and established motion helpers, not a parameterized
+renderer.
+
 The controller has three public phases: `idle`, `dragging`, and `settling`. Every input interrupts
 the current playback before acting. There is no queue and no animation-event ownership handoff.
 The controller tracks rendered position and velocity from driver updates, guards callbacks with a

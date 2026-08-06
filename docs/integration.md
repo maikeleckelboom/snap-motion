@@ -29,8 +29,8 @@ transitions, smooth scrolling, native scroll snap, or another animation library 
 carousel or media-gallery transform.
 
 When an application needs the stacked-deck visual model, it should allocate one
-`MutableStackedCoverflowFrame`, resolve it from the carousel's live physical index, and render the
-returned poses. `resolveStackedCoverflowTuning` owns responsive projection and reduced-motion
+`MutableStackedDeckFrame`, resolve it from the carousel's live physical index, and render the
+returned poses. `resolveStackedDeckTuning` owns responsive projection and reduced-motion
 tuning. The application must not infer the paint owner from DOM 3D sorting or promote
 `ownerIndex` into route, selection, focus, or announcement state.
 
