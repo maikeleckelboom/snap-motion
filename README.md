@@ -19,6 +19,10 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
+`pnpm dev` starts the lab Vite server directly and resolves the workspace packages from source, so
+package edits hot-reload without a build step. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+serve-only boundary that keeps build and release validation on the distributable artifacts.
+
 Import the minimal structural stylesheet once in an application entry:
 
 ```ts
