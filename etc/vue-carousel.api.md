@@ -250,7 +250,7 @@ export interface VariableWidthCenteredCarouselGeometryOptions {
 
 // Warnings were encountered during analysis:
 //
-// src/carousel/use-carousel-motion.ts:203:10 - (ae-forgotten-export) The symbol "PointerIntent" needs to be exported by the entry point index.d.ts
+// src/carousel/use-carousel-motion.ts:208:10 - (ae-forgotten-export) The symbol "PointerIntent" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

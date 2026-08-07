@@ -66,6 +66,7 @@ export type {
   StackedDeckProfile,
   StackedDeckRole,
   StackedDeckTraversal,
+  StackedDeckTraversalBounds,
   StackedDeckTraversalPhase,
   StackedDeckTuning,
 } from "./stackedDeck";
@@ -98,6 +99,7 @@ export type {
 export type {
   ControllerConfiguration,
   ControllerConfigurationUpdate,
+  ControllerDragOptions,
   ControllerMeasurement,
   ControllerMoveByOptions,
   ControllerMoveOptions,

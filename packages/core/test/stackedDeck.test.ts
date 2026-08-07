@@ -65,6 +65,29 @@ function resolveTraversal(
   );
 }
 
+/** Resolves inside the one-anchor envelope a stacked-deck interaction transaction opens. */
+function resolveBounded(
+  output: MutableStackedDeckTraversal,
+  physicalIndex: number,
+  originIndex: number,
+  controllerPhase: "idle" | "dragging" | "settling" = "dragging",
+  settledIndex = output.settledIndex,
+) {
+  return resolveStackedDeckTraversal(
+    {
+      controllerPhase,
+      itemCount: 5,
+      physicalIndex,
+      settledIndex,
+      traversalBounds: {
+        minIndex: Math.max(0, originIndex - 1),
+        maxIndex: Math.min(4, originIndex + 1),
+      },
+    },
+    output,
+  );
+}
+
 function span(pose: StackedDeckPose, tuning: StackedDeckTuning) {
   const half = (tuning.cardWidth * pose.scale) / 2;
   return { left: pose.translateX - half, right: pose.translateX + half, width: half * 2 };
@@ -263,7 +286,9 @@ describe("segment-local stacked deck traversal", () => {
     expect(reverse.localProgress).toBeCloseTo(0.4);
   });
 
-  it("hands visual ownership across every crossed anchor without an idle reset", () => {
+  // The projection primitive itself stays multi-anchor capable: the one-card contract belongs to
+  // the presentation, which supplies the envelope its interaction transaction began with.
+  it("hands visual ownership across every crossed anchor when no envelope is supplied", () => {
     const state = createStackedDeckTraversal(0, 5);
     const samples = [0.2, 0.8, 1, 1.35, 1.9, 2.05, 2.8, 3.1, 3.9, 4].map((position) => ({
       position,
@@ -330,6 +355,72 @@ describe("segment-local stacked deck traversal", () => {
       direction: 1,
       phase: "elastic",
     });
+  });
+
+  it("stops promoting at the envelope and renders the remainder as elastic overdrag", () => {
+    const state = createStackedDeckTraversal(2, 5);
+    const samples = [2.4, 3, 3.2, 5, 40].map((position) => ({
+      position,
+      ...resolveBounded(state, position, 2),
+    }));
+    expect(samples.map((sample) => sample.visualTopIndex)).toEqual([2, 3, 3, 3, 3]);
+    expect(samples[0]).toMatchObject({ segmentTargetIndex: 3, phase: "traversing" });
+    expect(samples[1]).toMatchObject({ segmentTargetIndex: null, phase: "neutral" });
+    for (const sample of samples.slice(2)) {
+      // No second same-direction segment, no invented target, and the top card keeps translating.
+      expect(sample).toMatchObject({ segmentTargetIndex: null, phase: "elastic", direction: 1 });
+      expect(sample.signedLocalDistance).toBeGreaterThan(0);
+    }
+    const overdrag = resolveFrame({ ...samples.at(-1)! });
+    expect(overdrag.poses.filter((pose) => pose.visible)).toHaveLength(1);
+    expect(overdrag.poses[3]).toMatchObject({ role: "top", opacity: 1 });
+  });
+
+  it("keeps reversal free across the whole envelope in either direction", () => {
+    const state = createStackedDeckTraversal(2, 5);
+    const positions = [2.5, 9, 2.5, 2, 1.5, -9];
+    const samples = positions.map((position) => ({ ...resolveBounded(state, position, 2) }));
+    expect(samples.map((sample) => sample.visualTopIndex)).toEqual([2, 3, 3, 2, 2, 1]);
+    expect(samples[0]).toMatchObject({ segmentOriginIndex: 2, segmentTargetIndex: 3 });
+    expect(samples[2]).toMatchObject({ segmentOriginIndex: 3, segmentTargetIndex: 2 });
+    expect(samples[3]).toMatchObject({ phase: "neutral", visualTopIndex: 2 });
+    expect(samples[4]).toMatchObject({ segmentOriginIndex: 2, segmentTargetIndex: 1 });
+    expect(samples[5]).toMatchObject({ visualTopIndex: 1, phase: "elastic" });
+    // Nothing in a single transaction may ever leave the origin's adjacent envelope.
+    expect(samples.every((sample) => Math.abs(sample.visualTopIndex - 2) <= 1)).toBe(true);
+  });
+
+  it("clamps the envelope to the deck and rejects an inverted one", () => {
+    const state = createStackedDeckTraversal(0, 5);
+    expect(resolveBounded(state, -5, 0)).toMatchObject({
+      visualTopIndex: 0,
+      segmentTargetIndex: null,
+      phase: "elastic",
+    });
+    expect(() =>
+      resolveStackedDeckTraversal(
+        {
+          controllerPhase: "dragging",
+          itemCount: 5,
+          physicalIndex: 2,
+          settledIndex: 2,
+          traversalBounds: { minIndex: 3, maxIndex: 1 },
+        },
+        state,
+      ),
+    ).toThrow(RangeError);
+    expect(() =>
+      resolveStackedDeckTraversal(
+        {
+          controllerPhase: "dragging",
+          itemCount: 5,
+          physicalIndex: 2,
+          settledIndex: 2,
+          traversalBounds: { minIndex: 0, maxIndex: 5 },
+        },
+        state,
+      ),
+    ).toThrow(RangeError);
   });
 
   it("makes settled selection authoritative only when the controller becomes idle", () => {

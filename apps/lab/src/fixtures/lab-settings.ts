@@ -40,6 +40,20 @@ export function carouselReleaseFromSettings(settings: LabPhysicsSettings) {
   };
 }
 
+/**
+ * The stacked deck is a physical card transaction, not a rail: one interaction may exchange exactly
+ * one adjacent screen. That is a presentation policy, so the deck fixes its own effective skip and
+ * the shared Maximum skip control keeps governing every other surface unchanged.
+ */
+export const STACKED_DECK_MAX_ANCHOR_SKIP = 1;
+
+export function stackedDeckReleaseFromSettings(settings: LabPhysicsSettings) {
+  return {
+    ...carouselReleaseFromSettings(settings),
+    maxAnchorSkip: STACKED_DECK_MAX_ANCHOR_SKIP,
+  };
+}
+
 export function symmetricElasticityFromSettings(settings: LabPhysicsSettings) {
   const boundary = {
     resistance: settings.elasticResistance,

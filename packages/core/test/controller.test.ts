@@ -90,6 +90,65 @@ describe("SnapController", () => {
     expect(controller.position).toBe(-100);
   });
 
+  it("measures the drag envelope and the release cap from an explicit gesture origin", () => {
+    // The nearest anchor is "c", but the gesture declares "b" as the anchor it started from.
+    const { controller } = createController({
+      initialTargetId: "c",
+      initialPosition: -160,
+      releasePolicy: { maxAnchorSkip: 1 },
+    });
+
+    controller.beginDrag({ originId: "b" });
+    controller.dragTo(-10_000);
+    expect(controller.position).toBe(-200);
+    controller.dragTo(10_000);
+    expect(controller.position).toBeGreaterThan(0);
+    expect(controller.position).toBeLessThan(10_000);
+    controller.dragTo(-180);
+    // Even a violent fling cannot resolve further than one anchor from the declared origin.
+    expect(controller.release(-100_000)?.id).toBe("c");
+
+    // An unknown origin falls back to the controller's own active anchor.
+    const { controller: unknownOrigin } = createController({
+      initialTargetId: "b",
+      releasePolicy: { maxAnchorSkip: 1 },
+    });
+    unknownOrigin.beginDrag({ originId: "missing" as TestId });
+    unknownOrigin.dragTo(-10_000);
+    expect(unknownOrigin.position).toBe(-200);
+  });
+
+  it("resists rather than clamps interior envelope limits when configured", () => {
+    const { controller } = createController({
+      initialTargetId: "b",
+      releasePolicy: { maxAnchorSkip: 1 },
+      dragEnvelopeElasticity: { min: { resistance: 2, maxDistance: 30 }, max: false },
+    });
+    expect(controller.configuration.dragEnvelopeElasticity).toEqual({
+      min: { resistance: 2, maxDistance: 30 },
+      max: false,
+    });
+
+    controller.beginDrag();
+    controller.dragTo(-10_000);
+    // Bounded resistance past the envelope instead of a dead stop, and never a whole extra anchor.
+    expect(controller.position).toBeLessThan(-200);
+    expect(controller.position).toBeGreaterThan(-230);
+    controller.dragTo(-205);
+    expect(controller.position).toBeGreaterThan(-205);
+    expect(controller.position).toBeLessThan(-200);
+    controller.dragTo(-150);
+    expect(controller.position).toBe(-150);
+    // Envelope sides that coincide with the physical bound stay on the bound's own elasticity.
+    controller.dragTo(10_000);
+    expect(controller.position).toBeGreaterThan(0);
+    expect(controller.position).toBeLessThan(10_000);
+
+    controller.configure({ dragEnvelopeElasticity: {} });
+    controller.dragTo(-10_000);
+    expect(controller.position).toBe(-200);
+  });
+
   it("selects a release target and passes measured px/s velocity to the driver", () => {
     const onComplete = vi.fn<NonNullable<SnapControllerOptions<TestId>["onComplete"]>>();
     const { controller, driver } = createController({ onComplete });

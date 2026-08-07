@@ -1,6 +1,6 @@
 import type { AnimationDriver, AnimationPlaybackControls } from "./animation-driver";
 import { assertFiniteNumber, assertNonNegative, clampToBounds, createBounds } from "./bounds";
-import { applyElasticity, validateElasticityOptions } from "./elastic";
+import { applyElasticity, applyEnvelopeElasticity, validateElasticityOptions } from "./elastic";
 import { tightPreset } from "./presets";
 import {
   clampAnchorsToBounds,
@@ -13,6 +13,7 @@ import {
 import type {
   ControllerConfiguration,
   ControllerConfigurationUpdate,
+  ControllerDragOptions,
   ControllerMeasurement,
   ControllerMoveByOptions,
   ControllerMoveOptions,
@@ -42,6 +43,7 @@ export interface SnapControllerOptions<Id extends SemanticId = SemanticId> {
   readonly spring?: SpringConfiguration;
   readonly releasePolicy?: Partial<ReleaseTargetPolicy>;
   readonly elasticity?: ElasticityOptions;
+  readonly dragEnvelopeElasticity?: ElasticityOptions;
   readonly programmaticImpulse?: number;
   readonly reducedMotion?: boolean;
   readonly onChange?: ControllerListener<Id>;
@@ -91,6 +93,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
   #spring: SpringConfiguration;
   #releasePolicy: ReleaseTargetPolicy;
   #elasticity: ElasticityOptions;
+  #dragEnvelopeElasticity: ElasticityOptions;
   #programmaticImpulse: number;
   #phase: ControllerSnapshot<Id>["phase"] = "idle";
   #position: number;
@@ -111,6 +114,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     this.#spring = { ...(options.spring ?? tightPreset.spring) };
     this.#releasePolicy = { ...tightPreset.release, ...options.releasePolicy };
     this.#elasticity = cloneElasticity(options.elasticity ?? tightPreset.elasticity);
+    this.#dragEnvelopeElasticity = cloneElasticity(options.dragEnvelopeElasticity ?? {});
     this.#programmaticImpulse = options.programmaticImpulse ?? tightPreset.programmaticImpulse;
     this.#reducedMotion = options.reducedMotion ?? false;
     this.#onChange = options.onChange;
@@ -119,6 +123,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     validateSpring(this.#spring);
     validateReleaseTargetPolicy(this.#releasePolicy);
     validateElasticityOptions(this.#elasticity);
+    validateElasticityOptions(this.#dragEnvelopeElasticity);
     assertNonNegative(this.#programmaticImpulse, "programmaticImpulse");
 
     if (options.initialPosition !== undefined) {
@@ -148,6 +153,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
       spring: { ...this.#spring },
       releasePolicy: { ...this.#releasePolicy },
       elasticity: cloneElasticity(this.#elasticity),
+      dragEnvelopeElasticity: cloneElasticity(this.#dragEnvelopeElasticity),
       programmaticImpulse: this.#programmaticImpulse,
     };
   }
@@ -195,11 +201,16 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     const nextReleasePolicy = { ...this.#releasePolicy, ...update.releasePolicy };
     const nextElasticity =
       update.elasticity === undefined ? this.#elasticity : cloneElasticity(update.elasticity);
+    const nextDragEnvelopeElasticity =
+      update.dragEnvelopeElasticity === undefined
+        ? this.#dragEnvelopeElasticity
+        : cloneElasticity(update.dragEnvelopeElasticity);
     const nextProgrammaticImpulse = update.programmaticImpulse ?? this.#programmaticImpulse;
 
     validateSpring(nextSpring);
     validateReleaseTargetPolicy(nextReleasePolicy);
     validateElasticityOptions(nextElasticity);
+    validateElasticityOptions(nextDragEnvelopeElasticity);
     assertNonNegative(nextProgrammaticImpulse, "programmaticImpulse");
 
     const springChanged = update.spring !== undefined;
@@ -209,6 +220,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     this.#spring = nextSpring;
     this.#releasePolicy = nextReleasePolicy;
     this.#elasticity = nextElasticity;
+    this.#dragEnvelopeElasticity = nextDragEnvelopeElasticity;
     this.#programmaticImpulse = nextProgrammaticImpulse;
 
     if (settlingTarget) {
@@ -219,13 +231,17 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     }
   }
 
-  beginDrag(): void {
+  beginDrag(options: ControllerDragOptions<Id> = {}): void {
     this.#assertUsable();
     this.#stopPlayback();
     this.#phase = "dragging";
     this.#velocity = 0;
     this.#dragStartPosition = this.#position;
-    this.#dragAnchorId = this.#active?.id ?? this.#target?.id ?? null;
+    this.#dragAnchorId =
+      findAnchorById(this.#anchors, options.originId)?.id ??
+      this.#active?.id ??
+      this.#target?.id ??
+      null;
     this.#target = null;
     this.#emit();
   }
@@ -461,21 +477,23 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     );
     const firstPosition = this.#anchors[firstIndex]?.position ?? this.#bounds.min;
     const lastPosition = this.#anchors[lastIndex]?.position ?? this.#bounds.max;
-    const localBounds = createBounds(
+    const envelope = createBounds(
       Math.min(firstPosition, lastPosition),
       Math.max(firstPosition, lastPosition),
     );
 
-    // Interior release limits are hard paint boundaries: a one-step carousel may reveal
-    // either adjacent item, but never pixels from the item beyond it. Physical gallery
-    // edges retain the configured elasticity so edge resistance still feels native.
-    let locallyConstrained = rawPosition;
-    if (localBounds.min > this.#bounds.min) {
-      locallyConstrained = Math.max(localBounds.min, locallyConstrained);
-    }
-    if (localBounds.max < this.#bounds.max) {
-      locallyConstrained = Math.min(localBounds.max, locallyConstrained);
-    }
+    // The drag envelope is the interaction's own limit: a one-step carousel may reveal either
+    // adjacent item, but never pixels from the item beyond it. By default those interior limits are
+    // hard paint boundaries; `dragEnvelopeElasticity` turns them into bounded resistance instead.
+    // Physical gallery edges are excluded here and retain the configured bound elasticity below, so
+    // edge resistance still feels native and is never applied twice.
+    const locallyConstrained = applyEnvelopeElasticity(
+      rawPosition,
+      envelope,
+      this.#dragEnvelopeElasticity,
+      envelope.min > this.#bounds.min,
+      envelope.max < this.#bounds.max,
+    );
     return applyElasticity(locallyConstrained, this.#bounds, this.#elasticity);
   }
 

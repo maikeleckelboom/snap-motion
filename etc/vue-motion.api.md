@@ -69,6 +69,7 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<SnapContro
     pointerIntent?: "horizontal" | "immediate";
     // (undocumented)
     reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
+    resolveDragOrigin?: () => Id | undefined;
     // (undocumented)
     resolveReleaseTarget?: (context: {
         controller: SnapController<Id>;

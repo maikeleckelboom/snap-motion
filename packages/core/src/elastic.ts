@@ -31,29 +31,44 @@ export function nonlinearElasticDistance(
   return (maxDistance * distance) / (distance + maxDistance * resistance);
 }
 
+/**
+ * Constrains a position to an envelope, resisting rather than clamping wherever the matching
+ * boundary is configured. A disabled side passes straight through, which lets a temporary
+ * interaction envelope resist only its interior limits while the physical bounds keep their own.
+ */
+export function applyEnvelopeElasticity(
+  position: number,
+  envelope: ScalarBounds,
+  elasticity: ElasticityOptions = {},
+  activeMin = true,
+  activeMax = true,
+): number {
+  assertFiniteNumber(position, "position");
+  const validEnvelope = createBounds(envelope.min, envelope.max);
+
+  if (activeMin && position < validEnvelope.min) {
+    const boundary = validateBoundary(elasticity.min, "elasticity.min");
+    return boundary === false
+      ? validEnvelope.min
+      : validEnvelope.min - nonlinearElasticDistance(validEnvelope.min - position, boundary);
+  }
+
+  if (activeMax && position > validEnvelope.max) {
+    const boundary = validateBoundary(elasticity.max, "elasticity.max");
+    return boundary === false
+      ? validEnvelope.max
+      : validEnvelope.max + nonlinearElasticDistance(position - validEnvelope.max, boundary);
+  }
+
+  return position;
+}
+
 export function applyElasticity(
   position: number,
   bounds: ScalarBounds,
   elasticity: ElasticityOptions = {},
 ): number {
-  assertFiniteNumber(position, "position");
-  const validBounds = createBounds(bounds.min, bounds.max);
-
-  if (position < validBounds.min) {
-    const boundary = validateBoundary(elasticity.min, "elasticity.min");
-    return boundary === false
-      ? validBounds.min
-      : validBounds.min - nonlinearElasticDistance(validBounds.min - position, boundary);
-  }
-
-  if (position > validBounds.max) {
-    const boundary = validateBoundary(elasticity.max, "elasticity.max");
-    return boundary === false
-      ? validBounds.max
-      : validBounds.max + nonlinearElasticDistance(position - validBounds.max, boundary);
-  }
-
-  return position;
+  return applyEnvelopeElasticity(position, bounds, elasticity);
 }
 
 export function validateElasticityOptions(elasticity: ElasticityOptions): void {

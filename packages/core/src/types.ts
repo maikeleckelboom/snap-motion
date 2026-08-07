@@ -73,6 +73,16 @@ export interface ControllerMeasurement<Id extends SemanticId = SemanticId> {
   readonly activeId?: Id;
 }
 
+export interface ControllerDragOptions<Id extends SemanticId = SemanticId> {
+  /**
+   * Anchor the gesture is measured from. It defines the temporary drag envelope and the base the
+   * release target is capped against. Defaults to the current active anchor, which is what a plain
+   * carousel wants; presentations that keep visual authority on a different anchor than the nearest
+   * one pass it explicitly so rendered and controller position cannot diverge.
+   */
+  readonly originId?: Id;
+}
+
 export interface ControllerMoveOptions {
   readonly initialVelocity?: number;
 }
@@ -85,6 +95,13 @@ export interface ControllerConfiguration {
   readonly spring: SpringConfiguration;
   readonly releasePolicy: ReleaseTargetPolicy;
   readonly elasticity: ElasticityOptions;
+  /**
+   * Resistance applied at the interior limits of a gesture's temporary drag envelope, the range
+   * `maxAnchorSkip` anchors either side of the drag origin. The default `{}` keeps those limits hard
+   * paint boundaries; supplying boundaries turns overdrag past them into bounded resistance instead
+   * of a dead stop. Physical bounds always use {@link ControllerConfiguration.elasticity}.
+   */
+  readonly dragEnvelopeElasticity: ElasticityOptions;
   readonly programmaticImpulse: number;
 }
 
@@ -92,5 +109,6 @@ export interface ControllerConfigurationUpdate {
   readonly spring?: Partial<SpringConfiguration>;
   readonly releasePolicy?: Partial<ReleaseTargetPolicy>;
   readonly elasticity?: ElasticityOptions;
+  readonly dragEnvelopeElasticity?: ElasticityOptions;
   readonly programmaticImpulse?: number;
 }

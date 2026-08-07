@@ -10,7 +10,7 @@ import MediaLightboxDemo from "@/demos/MediaLightboxDemo.vue";
 import PagedGridDemo from "@/demos/PagedGridDemo.vue";
 import SheetDemo from "@/demos/SheetDemo.vue";
 import StackedDeckDemo from "@/demos/StackedDeckDemo.vue";
-import { settingsFromPreset } from "@/fixtures/lab-settings";
+import { settingsFromPreset, STACKED_DECK_MAX_ANCHOR_SKIP } from "@/fixtures/lab-settings";
 import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fixtures/lab-types";
 
 type DemoId = "coverflow" | "stacked-deck" | "gallery-at" | "media" | "grid" | "sheet";
@@ -39,7 +39,7 @@ const demos = [
     label: "Stacked deck",
     shortLabel: "Deck",
     description:
-      "A compact pile promotes each adjacent screen crossed by continuous physical motion.",
+      "A compact pile where one physical interaction exchanges exactly one adjacent screen.",
     component: StackedDeckDemo,
   },
   {
@@ -88,6 +88,14 @@ const reducedMotionOverride = computed<boolean | undefined>(() => {
   }
   return reducedMotionMode.value === "reduce";
 });
+
+const notApplicableControls = computed<Partial<Record<keyof LabPhysicsSettings, string>>>(() =>
+  activeDemoId.value === "stacked-deck"
+    ? {
+        maxAnchorSkip: `Fixed at ${STACKED_DECK_MAX_ANCHOR_SKIP} by the stacked deck: one interaction exchanges one adjacent screen. Other surfaces keep using the stored value.`,
+      }
+    : {},
+);
 
 function applyPreset(name: LabPresetName) {
   preset.value = name;
@@ -170,6 +178,7 @@ function resetPreset() {
       <aside class="lab-inspector" aria-label="Physics inspector">
         <PhysicsControls
           :model-value="settings"
+          :not-applicable="notApplicableControls"
           :preset="preset"
           @reset="resetPreset"
           @update:model-value="settings = $event"

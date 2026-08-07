@@ -8,25 +8,29 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 
 | Entry             |  Bytes | Gzip bytes | Budget bytes / gzip |
 | ----------------- | -----: | ---------: | ------------------: |
-| Core              | 32,787 |      9,340 |      33,000 / 9,500 |
-| Vue root          | 70,665 |     19,355 |     72,000 / 20,000 |
-| Vue carousel      | 34,698 |      9,918 |     52,000 / 15,000 |
-| Vue sheet         | 41,353 |     11,933 |     42,000 / 12,500 |
+| Core              | 33,312 |      9,484 |      33,500 / 9,500 |
+| Vue root          | 70,807 |     19,391 |     72,000 / 20,000 |
+| Vue carousel      | 34,840 |      9,970 |     52,000 / 15,000 |
+| Vue sheet         | 41,433 |     11,968 |     42,000 / 12,500 |
 | Vue dialog        |  6,125 |      2,403 |      10,000 / 3,500 |
 | Vue media gallery | 40,704 |     11,065 |     60,000 / 16,000 |
-| Vue motion        |  7,778 |      2,694 |      16,000 / 5,500 |
+| Vue motion        |  7,858 |      2,721 |      16,000 / 5,500 |
 | Base CSS          | 22,206 |      3,664 |      23,000 / 4,000 |
 
 `pnpm performance:check` covers 60/120-sample drag streams, repeated interruption, 1/20/100/1,000
 items, bounded render windows, simultaneous instances, resize/mutation storms, wheel coalescing,
 reactive publication counts, playback disposal, and listener cleanup.
 
-The segment-local stacked-deck traversal and frame resolvers fit under a 33,000-byte raw and
-9,500-byte gzip core ceiling, with 213 raw bytes and 160 gzip bytes of measured headroom. The raw
-ceiling temporarily rose to 33,500 for the public traversal state and its validation; moving depth
-out of the item poses into one decorative pile resolver returned core below the original ceiling, so
-the temporary allowance is withdrawn. Both hot paths mutate caller-owned storage, perform no DOM
-measurement, and allocate no arrays or sort keys. The lab explicitly invalidates Vue's shallow
+The segment-local stacked-deck traversal and frame resolvers fit under the core ceiling. Both hot
+paths mutate caller-owned storage, perform no DOM measurement, and allocate no arrays or sort keys.
+
+The raw core ceiling is 33,500 bytes. It rose from 33,000 for the interaction-envelope extension
+points: a declared drag origin, the optional envelope elasticity that turns interior drag limits
+into bounded resistance instead of a dead stop, and optional traversal bounds with their validation.
+That is 525 raw and 144 gzip bytes over the previous measurement. The 9,500-byte gzip ceiling did
+not move and still holds with 16 bytes of headroom, so the transferred cost of the addition stays
+inside the budget the repository already accepted. `applyEnvelopeElasticity` takes its active sides
+as scalars rather than an options object, so the per-pointermove constraint path allocates nothing. The lab explicitly invalidates Vue's shallow
 signals after reuse, applies compositor hints only to visible cards, and gives hidden cards
 `will-change: auto` with no pointer input.
 

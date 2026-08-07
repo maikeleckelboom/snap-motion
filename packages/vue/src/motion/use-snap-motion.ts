@@ -23,6 +23,12 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<
   pointerDeltaMultiplier?: () => number;
   onReleaseTargetSelected?: (id: Id | undefined) => void;
   reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
+  /**
+   * Resolves the anchor a new drag is measured from. It is called once when the controller takes
+   * physical ownership, so a presentation may also treat it as the start of an interaction
+   * transaction. Returning `undefined` keeps the controller's own nearest-anchor default.
+   */
+  resolveDragOrigin?: () => Id | undefined;
   resolveReleaseTarget?: (context: {
     controller: SnapController<Id>;
     snapshot: ControllerSnapshot<Id>;
@@ -39,6 +45,7 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     pointerDeltaMultiplier,
     onReleaseTargetSelected,
     reducedMotionOverride,
+    resolveDragOrigin,
     resolveReleaseTarget,
     ...controllerOptions
   } = options;
@@ -72,7 +79,8 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     axis,
     intent: pointerIntent,
     onBegin(sample) {
-      controller.beginDrag();
+      const originId = resolveDragOrigin?.();
+      controller.beginDrag(originId === undefined ? {} : { originId });
       dragOrigin = controller.getSnapshot().position;
       velocityTracker.reset();
       velocityTracker.add(sample.position, sample.time);

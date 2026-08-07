@@ -32,11 +32,24 @@ export interface MutableStackedDeckTraversal {
   phase: StackedDeckTraversalPhase;
 }
 
+/**
+ * Inclusive index range visual authority may occupy. A presentation that limits one interaction to
+ * a single adjacent exchange passes the envelope its interaction began with; the projection then
+ * stops promoting at the limit and renders any remaining physical travel as elastic overdrag rather
+ * than opening a second same-direction segment.
+ */
+export interface StackedDeckTraversalBounds {
+  readonly minIndex: number;
+  readonly maxIndex: number;
+}
+
 export interface ResolveStackedDeckTraversalOptions {
   readonly controllerPhase: ControllerPhase;
   readonly itemCount: number;
   readonly physicalIndex: number;
   readonly settledIndex: number;
+  /** Defaults to the whole deck, which keeps the projection free to complete every crossed anchor. */
+  readonly traversalBounds?: StackedDeckTraversalBounds;
 }
 
 export interface ResolveStackedDeckTuningOptions {
@@ -340,8 +353,9 @@ function resetTraversal(
 }
 
 /**
- * Consumes continuous physical index without changing controller state. Each complete pitch moves
- * visual ownership to the crossed anchor; residual travel immediately becomes the next segment.
+ * Consumes continuous physical index without changing controller state. Each complete pitch inside
+ * the traversal bounds moves visual ownership to the crossed anchor; residual travel immediately
+ * becomes the next segment, or elastic overdrag once the bounds are reached.
  */
 export function resolveStackedDeckTraversal(
   options: ResolveStackedDeckTraversalOptions,
@@ -351,6 +365,16 @@ export function resolveStackedDeckTraversal(
   assertFiniteNumber(options.physicalIndex, "physicalIndex");
   if (options.itemCount === 0) return resetTraversal(output, -1);
   assertIndex(options.settledIndex, options.itemCount, "settledIndex");
+  const envelope = options.traversalBounds;
+  let minIndex = 0;
+  let maxIndex = options.itemCount - 1;
+  if (envelope !== undefined) {
+    assertIndex(envelope.minIndex, options.itemCount, "minIndex");
+    assertIndex(envelope.maxIndex, options.itemCount, "maxIndex");
+    if (envelope.minIndex > envelope.maxIndex) throw new RangeError("invalid traversal bounds");
+    minIndex = envelope.minIndex;
+    maxIndex = envelope.maxIndex;
+  }
   if (options.controllerPhase === "idle") {
     return resetTraversal(output, options.settledIndex);
   }
@@ -359,14 +383,17 @@ export function resolveStackedDeckTraversal(
     resetTraversal(output, options.settledIndex);
   }
 
-  let visualTopIndex = output.visualTopIndex;
+  let visualTopIndex = clamp(output.visualTopIndex, minIndex, maxIndex);
   while (
-    visualTopIndex < options.itemCount - 1 &&
+    visualTopIndex < maxIndex &&
     options.physicalIndex - visualTopIndex >= 1 - TRAVERSAL_EPSILON
   ) {
     visualTopIndex += 1;
   }
-  while (visualTopIndex > 0 && options.physicalIndex - visualTopIndex <= -1 + TRAVERSAL_EPSILON) {
+  while (
+    visualTopIndex > minIndex &&
+    options.physicalIndex - visualTopIndex <= -1 + TRAVERSAL_EPSILON
+  ) {
     visualTopIndex -= 1;
   }
 
@@ -376,7 +403,7 @@ export function resolveStackedDeckTraversal(
   const direction = Math.sign(signedLocalDistance) as -1 | 0 | 1;
   const candidate = visualTopIndex + direction;
   const segmentTargetIndex =
-    direction !== 0 && candidate >= 0 && candidate < options.itemCount ? candidate : null;
+    direction !== 0 && candidate >= minIndex && candidate <= maxIndex ? candidate : null;
 
   output.settledIndex = options.settledIndex;
   output.visualTopIndex = visualTopIndex;

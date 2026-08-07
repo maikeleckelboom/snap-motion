@@ -33,6 +33,8 @@ export interface LabDiagnostics {
   keyboardTargetIndex?: number;
   kineticFocus?: number;
   maxAnchorSkip?: number;
+  /** The surface fixes its own effective skip, so the shared control does not govern it. */
+  maxAnchorSkipFixed?: boolean;
   maximumBodyScrollOffset?: number;
   measuredChromeBlockExtent?: number;
   motionPitch?: number;

@@ -99,6 +99,105 @@ describe("useCarouselMotion", () => {
     wrapper.unmount();
   });
 
+  it("measures a pointer drag and a coalesced wheel burst from the declared drag origin", async () => {
+    vi.useFakeTimers();
+    const driver = new ManualAnimationDriver();
+    const viewport = ref<HTMLElement>();
+    const reducedMotionOverride = ref<boolean | undefined>(true);
+    const origin = ref<"a" | "b" | "c" | "d">("b");
+    const resolveDragOrigin = vi.fn<() => "a" | "b" | "c" | "d">(() => origin.value);
+    let motion: ReturnType<typeof useCarouselMotion<"a" | "b" | "c" | "d">> | undefined;
+    const anchors = [
+      { id: "a" as const, order: 0, position: 0 },
+      { id: "b" as const, order: 1, position: -100 },
+      { id: "c" as const, order: 2, position: -200 },
+      { id: "d" as const, order: 3, position: -300 },
+    ];
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          motion = useCarouselMotion<"a" | "b" | "c" | "d">({
+            anchors,
+            bounds: { min: -300, max: 0 },
+            driver,
+            initialTargetId: "a",
+            measure: () => ({ anchors, bounds: { min: -300, max: 0 } }),
+            reducedMotionOverride,
+            releasePolicy: {
+              projectionSeconds: 0.18,
+              flingVelocity: 500,
+              maxAnchorSkip: 1,
+              forwardSign: -1,
+            },
+            resolveDragOrigin,
+            viewport,
+            wheelSettleDelay: 90,
+          });
+          return () =>
+            h("div", {
+              ref: viewport,
+              onPointerdown: motion?.onPointerDown,
+              onWheel: motion?.onWheel,
+            });
+        },
+      }),
+    );
+    await nextTick();
+
+    // A long burst is one drag: it opens one origin and cannot walk past that origin's envelope.
+    // The controller's own anchor is "a" here, so stopping at "c" proves the declared origin won.
+    for (let step = 0; step < 12; step += 1) {
+      wrapper.element.dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 120 }),
+      );
+    }
+    expect(resolveDragOrigin).toHaveBeenCalledTimes(1);
+    expect(motion?.position.value).toBe(-200);
+    vi.advanceTimersByTime(90);
+    await nextTick();
+    expect(motion?.activeId.value).toBe("c");
+
+    wrapper.element.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        button: 0,
+        buttons: 1,
+        cancelable: true,
+        clientX: 0,
+        isPrimary: true,
+        pointerId: 57,
+        pointerType: "mouse",
+      }),
+    );
+    expect(resolveDragOrigin).toHaveBeenCalledTimes(2);
+    window.dispatchEvent(
+      new PointerEvent("pointermove", {
+        bubbles: true,
+        buttons: 1,
+        cancelable: true,
+        clientX: 4_000,
+        isPrimary: true,
+        pointerId: 57,
+        pointerType: "mouse",
+      }),
+    );
+    // The declared origin is still "b", so a violent drag resolves to "a" even though the
+    // controller's nearest anchor when the gesture began was "c".
+    expect(motion?.position.value).toBeGreaterThan(-100);
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 4_000,
+        isPrimary: true,
+        pointerId: 57,
+        pointerType: "mouse",
+      }),
+    );
+    expect(motion?.activeId.value).toBe("a");
+    wrapper.unmount();
+  });
+
   it("accumulates normalized wheel deltas before one semantic settle", async () => {
     vi.useFakeTimers();
     const driver = new ManualAnimationDriver();

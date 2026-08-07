@@ -83,8 +83,13 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
     disabled: () => motion.isDragging.value,
     onDelta(delta) {
       if (!wheelActive) {
-        wheelOriginId = motion.snapshot.value.target?.id ?? motion.snapshot.value.active?.id;
-        motion.controller.beginDrag();
+        // One coalesced burst is one drag, so it resolves its origin exactly like a pointer gesture
+        // and receives the same drag envelope.
+        wheelOriginId =
+          snapOptions.resolveDragOrigin?.() ??
+          motion.snapshot.value.target?.id ??
+          motion.snapshot.value.active?.id;
+        motion.controller.beginDrag(wheelOriginId === undefined ? {} : { originId: wheelOriginId });
         wheelActive = true;
         wheelRawPosition = motion.position.value;
       }

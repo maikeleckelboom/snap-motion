@@ -71,6 +71,7 @@ export function clampToBounds(position: number, bounds: ScalarBounds): number;
 
 // @public (undocumented)
 export interface ControllerConfiguration {
+    readonly dragEnvelopeElasticity: ElasticityOptions;
     // (undocumented)
     readonly elasticity: ElasticityOptions;
     // (undocumented)
@@ -84,6 +85,8 @@ export interface ControllerConfiguration {
 // @public (undocumented)
 export interface ControllerConfigurationUpdate {
     // (undocumented)
+    readonly dragEnvelopeElasticity?: ElasticityOptions;
+    // (undocumented)
     readonly elasticity?: ElasticityOptions;
     // (undocumented)
     readonly programmaticImpulse?: number;
@@ -91,6 +94,11 @@ export interface ControllerConfigurationUpdate {
     readonly releasePolicy?: Partial<ReleaseTargetPolicy>;
     // (undocumented)
     readonly spring?: Partial<SpringConfiguration>;
+}
+
+// @public (undocumented)
+export interface ControllerDragOptions<Id extends SemanticId = SemanticId> {
+    readonly originId?: Id;
 }
 
 // @public (undocumented)
@@ -677,6 +685,7 @@ export interface ResolveStackedDeckTraversalOptions {
     readonly physicalIndex: number;
     // (undocumented)
     readonly settledIndex: number;
+    readonly traversalBounds?: StackedDeckTraversalBounds;
 }
 
 // @public
@@ -737,7 +746,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     // (undocumented)
     get activeAnchor(): SnapAnchor<Id> | null;
     // (undocumented)
-    beginDrag(): void;
+    beginDrag(options?: ControllerDragOptions<Id>): void;
     // (undocumented)
     get configuration(): ControllerConfiguration;
     // (undocumented)
@@ -784,6 +793,8 @@ export interface SnapControllerOptions<Id extends SemanticId = SemanticId> {
     readonly anchors: readonly SnapAnchor<Id>[];
     // (undocumented)
     readonly bounds: ScalarBounds;
+    // (undocumented)
+    readonly dragEnvelopeElasticity?: ElasticityOptions;
     // (undocumented)
     readonly driver: AnimationDriver;
     // (undocumented)
@@ -898,6 +909,14 @@ export interface StackedDeckTraversal {
     readonly signedLocalDistance: number;
     // (undocumented)
     readonly visualTopIndex: number;
+}
+
+// @public
+export interface StackedDeckTraversalBounds {
+    // (undocumented)
+    readonly maxIndex: number;
+    // (undocumented)
+    readonly minIndex: number;
 }
 
 // @public (undocumented)

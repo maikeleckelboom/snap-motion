@@ -137,7 +137,10 @@ function scalar(value: number) {
       </div>
       <div v-if="diagnostics.maxAnchorSkip !== undefined">
         <dt>Maximum skip</dt>
-        <dd>{{ diagnostics.maxAnchorSkip }}</dd>
+        <dd data-testid="max-anchor-skip">
+          {{ diagnostics.maxAnchorSkip
+          }}{{ diagnostics.maxAnchorSkipFixed ? " (fixed by this surface)" : "" }}
+        </dd>
       </div>
       <div>
         <dt>Bounds</dt>

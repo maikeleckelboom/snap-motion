@@ -165,10 +165,44 @@ assigned a horizontal slot from its index.
 
 `resolveStackedDeckTuning` owns responsive card size, motion pitch, compact backing offsets, and the
 one-anchor exchange geometry. `resolveStackedDeckTraversal` consumes the controller phase, settled
-index, and continuous physical index. It retains the current visual top, completes every crossed
-anchor in order, and exposes only the residual adjacent segment. `resolveStackedDeckFrame` projects
-that segment into `top`, `target`, `backing`, or `hidden` roles. No active segment can have a
-non-adjacent target.
+index, continuous physical index, and an optional `traversalBounds` envelope. It retains the current
+visual top, completes every crossed anchor in order inside that envelope, and exposes only the
+residual adjacent segment. `resolveStackedDeckFrame` projects that segment into `top`, `target`,
+`backing`, or `hidden` roles. No active segment can have a non-adjacent target.
+
+### One card per interaction
+
+The deck is a physical card transaction, not a rail. **One interaction may resolve at most one
+adjacent item away from where that interaction began**, however far or however violently the user
+drags. That is a presentation requirement of this deck, not a limitation of Snap Motion: the
+projection primitive stays multi-anchor capable when no envelope is passed, and generic carousel and
+Coverflow motion keep the repository default `maxAnchorSkip = 2`.
+
+An interaction transaction opens when the controller takes physical ownership — a pointer drag, or
+the first delta of a coalesced wheel burst — or when a relative command is issued. It closes only
+once that movement has fully settled. Its origin is the visual top at that moment, and the deck
+enforces the envelope at three levels that must agree:
+
+- `SnapController.beginDrag({ originId })` measures the temporary drag envelope and the release cap
+  from the declared origin instead of the nearest anchor, so a re-grab between the midpoint and the
+  handoff boundary cannot let controller state run ahead of the card the user can see.
+- `releasePolicy.maxAnchorSkip = 1` bounds both the rendered drag and `resolveReleaseTarget`, so
+  `abs(releaseTargetIndex - originIndex) <= 1` regardless of release velocity.
+- `traversalBounds` stops the projection promoting past the envelope. Remaining physical travel
+  renders as the existing `elastic` phase: the top card keeps translating with bounded resistance,
+  no second target appears, and no second visual top is promoted.
+
+Overdrag past the adjacent anchor is resisted rather than clamped. `dragEnvelopeElasticity` applies
+the deck's own elasticity at the interior envelope limits, so a two-thousand-pixel drag still feels
+alive and settles back to the adjacent target or the origin. Interior limits stay hard paint
+boundaries for every consumer that does not configure it.
+
+Relative commands are one throw each: a second Previous/Next or Arrow command arriving while the
+first is still settling is ignored rather than retargeted, so two taps can never become one two-card
+animation. Absolute navigation names a destination and is not a throw at all — a non-adjacent
+pagination, `Home`, `End`, or gallery synchronization request selects its destination directly and
+announces it truthfully instead of animating through every intermediate card. Adjacent absolute
+destinations still use the normal one-card transaction.
 
 ### Direct screen-space mapping
 
@@ -198,10 +232,11 @@ arc.
 `visualTopIndex` is history-bearing presentation state. While physical index stays within one pitch
 of it, the same card remains on top and the signed residual chooses the adjacent target underneath.
 At a complete pitch the target is already at exact top-card rest geometry and the former top is
-removed from the active frame. Visual ownership then advances one anchor, and any residual physical distance
-immediately opens the next adjacent segment. A programmatic `0 -> 4` controller animation is thus
-rendered as `0 -> 1`, `1 -> 2`, `2 -> 3`, and `3 -> 4` without intermediate `moveTo()` calls or idle
-states.
+removed from the active frame. Visual ownership then advances one anchor, and any residual physical
+distance immediately opens the next adjacent segment — or, once the interaction envelope is reached,
+becomes elastic overdrag instead. A controller animation that legitimately spans several anchors is
+still rendered as a sequence of adjacent handoffs without intermediate `moveTo()` calls or idle
+states; the stacked deck simply never issues one from a user interaction.
 
 Reversal uses the same signed residual. Before a handoff, progress simply retraces to zero. After a
 handoff, movement first retraces the new top toward the previously crossed anchor; crossing that

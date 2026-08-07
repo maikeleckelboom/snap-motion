@@ -8,6 +8,7 @@ import {
   resolveStackedDeckTraversal,
   resolveStackedDeckTuning,
   type StackedDeckTraversal,
+  type StackedDeckTraversalBounds,
 } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
 import { MediaGalleryDialog, type FocusReturnOptions } from "@snap-motion/vue/media-gallery";
@@ -25,8 +26,9 @@ import {
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
 import {
-  carouselReleaseFromSettings,
   springFromSettings,
+  STACKED_DECK_MAX_ANCHOR_SKIP,
+  stackedDeckReleaseFromSettings,
   symmetricElasticityFromSettings,
 } from "@/fixtures/lab-settings";
 import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
@@ -133,19 +135,83 @@ function measureGeometry() {
 
 const initialGeometry = measureGeometry();
 const driver = useBoundedCoverflowDriver(() => pitch.value);
+
+/**
+ * One interaction transaction. It opens when the controller takes physical ownership or when a
+ * relative command is issued, and closes only once that movement has fully settled. Its origin is
+ * the visual top at that moment, which is the only card the user can see themselves acting on.
+ */
+interface DeckTransaction {
+  readonly originIndex: number;
+}
+
+const deckTransaction = shallowRef<DeckTransaction | null>(null);
+
+/**
+ * Opens a transaction and reports the anchor the controller must measure the drag from. Passing the
+ * visual top rather than the nearest anchor keeps the drag envelope, the release cap, and the
+ * rendered card on the same origin during a re-grab, so no controller state can run ahead of paint.
+ */
+function beginDeckTransaction(): ScreenId {
+  const originIndex = visualTopIndex.value;
+  deckTransaction.value = { originIndex };
+  return ids[originIndex]!;
+}
+
 const motion = useCarouselMotion({
   anchors: initialGeometry.anchors,
   bounds: initialGeometry.bounds,
   driver,
+  dragEnvelopeElasticity: symmetricElasticityFromSettings(props.settings),
   elasticity: symmetricElasticityFromSettings(props.settings),
   initialTargetId: ids[Math.floor(ids.length / 2)]!,
   measure: measureGeometry,
   programmaticImpulse: props.settings.programmaticImpulse,
   reducedMotionOverride: reducedOverride,
-  releasePolicy: carouselReleaseFromSettings(props.settings),
+  releasePolicy: stackedDeckReleaseFromSettings(props.settings),
+  resolveDragOrigin: beginDeckTransaction,
   spring: springFromSettings(props.settings),
   track,
   viewport,
+});
+
+/** True while one transaction still owns the deck, from ownership through complete settlement. */
+const deckBusy = computed(
+  () =>
+    deckTransaction.value !== null ||
+    motion.isDragging.value ||
+    motion.pointerOwned.value ||
+    motion.isWheeling.value,
+);
+
+watch(
+  () =>
+    [
+      motion.phase.value,
+      motion.pointerOwned.value,
+      motion.isDragging.value,
+      motion.isWheeling.value,
+    ] as const,
+  ([phase, pointerOwned, dragging, wheeling]) => {
+    if (phase === "idle" && !pointerOwned && !dragging && !wheeling) {
+      deckTransaction.value = null;
+    }
+  },
+  { flush: "sync" },
+);
+
+/**
+ * The envelope one transaction may resolve inside. Outside a transaction the projection is free, so
+ * the primitive itself keeps its generic multi-anchor capability.
+ */
+const deckTraversalBounds = computed<StackedDeckTraversalBounds | undefined>(() => {
+  const transaction = deckTransaction.value;
+  if (transaction === null) return undefined;
+  const lastIndex = ids.length - 1;
+  return {
+    minIndex: clamp(transaction.originIndex - STACKED_DECK_MAX_ANCHOR_SKIP, 0, lastIndex),
+    maxIndex: clamp(transaction.originIndex + STACKED_DECK_MAX_ANCHOR_SKIP, 0, lastIndex),
+  };
 });
 
 const initialIndex = Math.floor(ids.length / 2);
@@ -201,12 +267,14 @@ watch(
     if (pendingTargetIndex.value !== settledSelection.pendingTargetIndex) {
       pendingTargetIndex.value = settledSelection.pendingTargetIndex;
     }
+    const traversalBounds = deckTraversalBounds.value;
     resolveStackedDeckTraversal(
       {
         controllerPhase: snapshot.phase,
         itemCount: ids.length,
         physicalIndex: -snapshot.position / currentPitch,
         settledIndex: settledSelection.settledIndex,
+        ...(traversalBounds === undefined ? {} : { traversalBounds }),
       },
       deckTraversalOutput,
     );
@@ -374,8 +442,8 @@ const keyboardTargetIndex = computed(() => {
   const index = ids.indexOf(semanticId);
   return index < 0 ? settledIndex.value : index;
 });
-const canGoPrevious = computed(() => keyboardTargetIndex.value > 0);
-const canGoNext = computed(() => keyboardTargetIndex.value < ids.length - 1);
+const canGoPrevious = computed(() => visualTopIndex.value > 0);
+const canGoNext = computed(() => visualTopIndex.value < ids.length - 1);
 
 const diagnostics = computed<LabDiagnostics>(() => {
   const geometry = measureGeometry();
@@ -407,7 +475,8 @@ const diagnostics = computed<LabDiagnostics>(() => {
     indicatorX: paginationIndicator.value.x,
     indicatorScale: paginationIndicator.value.scaleX,
     keyboardTargetIndex: keyboardTargetIndex.value,
-    maxAnchorSkip: props.settings.maxAnchorSkip,
+    maxAnchorSkip: STACKED_DECK_MAX_ANCHOR_SKIP,
+    maxAnchorSkipFixed: true,
     releaseVelocityCapActive:
       motion.phase.value === "settling" &&
       speedInCards.value >= COVERFLOW_MOTION_TUNING.maximumFreeVelocity - 0.05,
@@ -421,21 +490,45 @@ const diagnostics = computed<LabDiagnostics>(() => {
   };
 });
 
-function goToIndex(index: number): boolean {
-  if (galleryOpen.value || motion.isDragging.value || motion.pointerOwned.value) return false;
-  const targetIndex = clamp(index, 0, ids.length - 1);
+/**
+ * One relative command is one physical throw of the top card. A second command arriving while the
+ * first is still settling is ignored rather than retargeted, because retargeting would turn two
+ * taps into a single continuous two-card animation.
+ */
+function requestRelative(direction: -1 | 1): boolean {
+  if (galleryOpen.value || deckBusy.value) return false;
+  const originIndex = visualTopIndex.value;
+  const targetIndex = resolveAdjacentCoverflowIndex(originIndex, direction, ids.length);
   const id = ids[targetIndex];
-  if (!id || targetIndex === keyboardTargetIndex.value) return false;
+  if (!id || targetIndex === originIndex) return false;
+  deckTransaction.value = { originIndex };
   motion.moveTo(id);
   return true;
 }
 
+/**
+ * Absolute navigation names a destination; it is not a throw. An adjacent destination may still use
+ * the normal one-card transaction, but anything further synchronizes directly instead of animating
+ * through every intermediate card.
+ */
+function requestAbsolute(index: number): boolean {
+  if (galleryOpen.value) return false;
+  const targetIndex = clamp(index, 0, ids.length - 1);
+  const originIndex = visualTopIndex.value;
+  const distance = targetIndex - originIndex;
+  if (distance === 0 && !deckBusy.value) return false;
+  if (!deckBusy.value && Math.abs(distance) === 1) {
+    return requestRelative(distance as -1 | 1);
+  }
+  return synchronizeCarouselExactly(targetIndex, { announce: true });
+}
+
 function goToPrevious(): boolean {
-  return goToIndex(resolveAdjacentCoverflowIndex(keyboardTargetIndex.value, -1, ids.length));
+  return requestRelative(-1);
 }
 
 function goToNext(): boolean {
-  return goToIndex(resolveAdjacentCoverflowIndex(keyboardTargetIndex.value, 1, ids.length));
+  return requestRelative(1);
 }
 
 function onDeckKeyDown(event: KeyboardEvent) {
@@ -449,11 +542,11 @@ function onDeckKeyDown(event: KeyboardEvent) {
   } else if (action === "next") {
     goToNext();
   } else {
-    goToIndex(action === "home" ? 0 : ids.length - 1);
+    requestAbsolute(action === "home" ? 0 : ids.length - 1);
   }
 }
 
-function synchronizeCarouselExactly(index: number): boolean {
+function synchronizeCarouselExactly(index: number, options: { announce?: boolean } = {}): boolean {
   const targetIndex = clamp(index, 0, ids.length - 1);
   const id = ids[targetIndex];
   const anchorPosition = id ? anchorsById.value.get(id) : undefined;
@@ -469,7 +562,8 @@ function synchronizeCarouselExactly(index: number): boolean {
   if (alreadySynchronized) return true;
 
   motion.interrupt();
-  suppressedCarouselAnnouncementIndex = targetIndex;
+  deckTransaction.value = null;
+  if (options.announce !== true) suppressedCarouselAnnouncementIndex = targetIndex;
   motion.controller.remeasure({
     ...measureGeometry(),
     activeId: id,
@@ -562,7 +656,7 @@ function resolveCompletedCarouselGesture(completed: CarouselGesture, releasedOnO
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
     selectionFrame = requestAnimationFrame(() => {
       selectionFrame = undefined;
-      goToIndex(originIndex);
+      requestAbsolute(originIndex);
     });
   }
 }
@@ -656,8 +750,15 @@ function onCarouselLostPointerCapture(event: PointerEvent) {
   queueMicrotask(() => resolveCompletedCarouselGesture(gesture, false));
 }
 
+/**
+ * Wheel ownership follows the coalescing lifecycle, not raw events: the first delta of a burst opens
+ * one transaction and every later delta inside it shares the same envelope. Deltas arriving while a
+ * previous transaction is still settling are ignored, so a burst can never chain into a second card.
+ */
 function onDeckWheel(event: WheelEvent) {
-  if (!galleryOpen.value) motion.onWheel(event);
+  if (galleryOpen.value) return;
+  if (!motion.isWheeling.value && deckBusy.value) return;
+  motion.onWheel(event);
 }
 
 function onGalleryRequestClose(finalIndex: number) {
@@ -683,9 +784,10 @@ watch(
   () => props.settings,
   (settings) => {
     motion.configure({
+      dragEnvelopeElasticity: symmetricElasticityFromSettings(settings),
       elasticity: symmetricElasticityFromSettings(settings),
       programmaticImpulse: settings.programmaticImpulse,
-      releasePolicy: carouselReleaseFromSettings(settings),
+      releasePolicy: stackedDeckReleaseFromSettings(settings),
       spring: springFromSettings(settings),
     });
   },
@@ -717,8 +819,9 @@ onBeforeUnmount(() => {
       <div>
         <h3 id="stacked-deck-title">Stacked deck</h3>
         <p class="lede">
-          Drag the top screen. Each crossed position promotes the adjacent screen; selection commits
-          after settlement.
+          Drag the top screen to reveal one adjacent screen. Every gesture, flick, or wheel burst is
+          one physical card transaction: it resolves at most one screen away from where it began, no
+          matter how far it travels. Selection commits after settlement.
         </p>
       </div>
       <div class="stacked-deck-controls">
@@ -756,7 +859,10 @@ onBeforeUnmount(() => {
       :data-active-id="visualTopId"
       :data-card-width="cardWidth"
       :data-gallery-open="galleryOpen ? 'true' : 'false'"
+      :data-interaction-busy="deckBusy ? 'true' : 'false'"
+      :data-interaction-origin-index="deckTransaction?.originIndex ?? -1"
       :data-keyboard-target-index="keyboardTargetIndex"
+      :data-max-anchor-skip="STACKED_DECK_MAX_ANCHOR_SKIP"
       :data-motion-pitch="pitch"
       :data-pending-index="pendingTargetIndex"
       :data-phase="motion.phase.value"
@@ -890,7 +996,7 @@ onBeforeUnmount(() => {
           :disabled="galleryOpen"
           type="button"
           @blur="onPaginationBlur(index)"
-          @click="goToIndex(index)"
+          @click="requestAbsolute(index)"
           @focus="onPaginationFocus(index)"
         >
           <span aria-hidden="true" class="dot-indicator" />
