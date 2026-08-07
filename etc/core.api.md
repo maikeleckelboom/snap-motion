@@ -512,8 +512,6 @@ export interface MutableStackedDeckPose {
     // (undocumented)
     shadowStrength: number;
     // (undocumented)
-    stackDepth: number;
-    // (undocumented)
     translateX: number;
     // (undocumented)
     translateY: number;
@@ -662,6 +660,9 @@ export interface ResolveStackedDeckFrameOptions {
     // (undocumented)
     readonly tuning: StackedDeckTuning;
 }
+
+// @public
+export function resolveStackedDeckPile(tuning: StackedDeckTuning): readonly StackedDeckPilePose[];
 
 // @public
 export function resolveStackedDeckTraversal(options: ResolveStackedDeckTraversalOptions, output: MutableStackedDeckTraversal): StackedDeckTraversal;
@@ -831,6 +832,24 @@ export interface StackedDeckFrame extends StackedDeckTraversal {
     readonly poses: readonly StackedDeckPose[];
 }
 
+// @public
+export interface StackedDeckPilePose {
+    // (undocumented)
+    readonly depth: number;
+    // (undocumented)
+    readonly layer: number;
+    // (undocumented)
+    readonly rotate: number;
+    // (undocumented)
+    readonly scale: number;
+    // (undocumented)
+    readonly shadowStrength: number;
+    // (undocumented)
+    readonly translateX: number;
+    // (undocumented)
+    readonly translateY: number;
+}
+
 // @public (undocumented)
 export interface StackedDeckPose {
     // (undocumented)
@@ -848,8 +867,6 @@ export interface StackedDeckPose {
     // (undocumented)
     readonly shadowStrength: number;
     // (undocumented)
-    readonly stackDepth: number;
-    // (undocumented)
     readonly translateX: number;
     // (undocumented)
     readonly translateY: number;
@@ -861,7 +878,7 @@ export interface StackedDeckPose {
 export type StackedDeckProfile = "compact" | "medium" | "wide";
 
 // @public (undocumented)
-export type StackedDeckRole = "top" | "target" | "backing" | "hidden";
+export type StackedDeckRole = "top" | "target" | "hidden";
 
 // @public
 export interface StackedDeckTraversal {
@@ -889,29 +906,29 @@ export type StackedDeckTraversalPhase = "idle" | "neutral" | "traversing" | "ela
 // @public (undocumented)
 export interface StackedDeckTuning {
     // (undocumented)
-    readonly backingOffsetX: number;
-    // (undocumented)
-    readonly backingOffsetY: number;
-    // (undocumented)
-    readonly backingRotate: number;
-    // (undocumented)
-    readonly backingScaleStep: number;
-    // (undocumented)
     readonly cardHeight: number;
     // (undocumented)
     readonly cardWidth: number;
     // (undocumented)
-    readonly maximumBackingLayers: number;
-    // (undocumented)
     readonly motionPitch: number;
     // (undocumented)
+    readonly pileLayers: number;
+    // (undocumented)
+    readonly pileOffsetX: number;
+    // (undocumented)
+    readonly pileOffsetY: number;
+    // (undocumented)
+    readonly pileRotate: number;
+    // (undocumented)
+    readonly pileScaleStep: number;
+    // (undocumented)
     readonly profile: StackedDeckProfile;
+    // (undocumented)
+    readonly topDropY: number;
     // (undocumented)
     readonly topRotate: number;
     // (undocumented)
     readonly topScaleReduction: number;
-    // (undocumented)
-    readonly topTravelY: number;
 }
 
 // @public (undocumented)

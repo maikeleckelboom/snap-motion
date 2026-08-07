@@ -8,7 +8,7 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 
 | Entry             |  Bytes | Gzip bytes | Budget bytes / gzip |
 | ----------------- | -----: | ---------: | ------------------: |
-| Core              | 33,325 |      9,411 |      33,500 / 9,500 |
+| Core              | 32,787 |      9,340 |      33,000 / 9,500 |
 | Vue root          | 70,665 |     19,355 |     72,000 / 20,000 |
 | Vue carousel      | 34,698 |      9,918 |     52,000 / 15,000 |
 | Vue sheet         | 41,353 |     11,933 |     42,000 / 12,500 |
@@ -21,10 +21,11 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 items, bounded render windows, simultaneous instances, resize/mutation storms, wheel coalescing,
 reactive publication counts, playback disposal, and listener cleanup.
 
-The segment-local stacked-deck traversal and frame resolvers fit under a 33,500-byte raw and
-9,500-byte gzip core ceiling, with 175 raw bytes and 89 gzip bytes of measured headroom. The raw
-ceiling increased by 500 bytes for the public traversal state and its validation; compressed core
-still remains inside the former ceiling. Both hot paths mutate caller-owned storage, perform no DOM
+The segment-local stacked-deck traversal and frame resolvers fit under a 33,000-byte raw and
+9,500-byte gzip core ceiling, with 213 raw bytes and 160 gzip bytes of measured headroom. The raw
+ceiling temporarily rose to 33,500 for the public traversal state and its validation; moving depth
+out of the item poses into one decorative pile resolver returned core below the original ceiling, so
+the temporary allowance is withdrawn. Both hot paths mutate caller-owned storage, perform no DOM
 measurement, and allocate no arrays or sort keys. The lab explicitly invalidates Vue's shallow
 signals after reuse, applies compositor hints only to visible cards, and gives hidden cards
 `will-change: auto` with no pointer input.

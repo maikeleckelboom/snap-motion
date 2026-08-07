@@ -49,6 +49,7 @@ export {
   createStackedDeckFrame,
   createStackedDeckTraversal,
   resolveStackedDeckFrame,
+  resolveStackedDeckPile,
   resolveStackedDeckTraversal,
   resolveStackedDeckTuning,
 } from "./stackedDeck";
@@ -60,6 +61,7 @@ export type {
   ResolveStackedDeckTraversalOptions,
   ResolveStackedDeckTuningOptions,
   StackedDeckFrame,
+  StackedDeckPilePose,
   StackedDeckPose,
   StackedDeckProfile,
   StackedDeckRole,

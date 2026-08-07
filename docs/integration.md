@@ -33,7 +33,17 @@ When an application needs the stacked-deck visual model, it should allocate one
 `resolveStackedDeckTraversal` using `physicalIndex = -position / pitch`, then pass that traversal to
 `resolveStackedDeckFrame`. The traversal retains the visual top between snapshots and completes an
 adjacent handoff whenever a full anchor is crossed; it never issues controller commands or resets
-controller motion. `resolveStackedDeckTuning` owns responsive pile and reduced-motion tuning.
+controller motion. `resolveStackedDeckTuning` owns responsive pitch and reduced-motion tuning.
+
+A frame only ever exposes content-bearing roles: the manipulated top and one adjacent target. Depth
+belongs to `resolveStackedDeckPile`, which is a pure function of tuning, so backing layers carry no
+item identity and no gesture direction, segment change, or reversal can mirror or reorder them.
+Render those layers as inert `aria-hidden` surfaces behind the cards. One motion pitch spans most of
+a card width, so visual authority has already migrated to the target before an anchor crossing
+transfers ownership: the outgoing card translates one-to-one with the pointer while its scale,
+rotation, drop, shadow, and opacity fall monotonically to a fully dissolved handoff pose, and the
+target rises from the first pile slot to exact top rest geometry. Applications must not reintroduce
+a midpoint arc that returns an outgoing card toward neutral before it loses ownership.
 
 Visible caption, counter, and current-card semantics may follow `visualTopIndex` after each completed
 handoff. Route state, durable selection, inspection eligibility, and announcements remain tied to

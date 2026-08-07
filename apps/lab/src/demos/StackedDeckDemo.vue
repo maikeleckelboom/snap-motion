@@ -4,6 +4,7 @@ import {
   createStackedDeckFrame,
   createStackedDeckTraversal,
   resolveStackedDeckFrame,
+  resolveStackedDeckPile,
   resolveStackedDeckTraversal,
   resolveStackedDeckTuning,
   type StackedDeckTraversal,
@@ -272,14 +273,32 @@ interface SlideStyle {
 
 const stackedFrameOutput = createStackedDeckFrame(ids.length);
 const stackedFrame = shallowRef(stackedFrameOutput);
+const activeTuning = computed(() =>
+  motion.reducedMotion.value ? reducedStackedTuning.value : stackedTuning.value,
+);
+
+/**
+ * Deterministic decorative depth. The pile carries no item identity, so neither gesture direction
+ * nor the active segment can mirror, reorder, or re-identify a layer.
+ */
+const pileLayers = computed(() =>
+  resolveStackedDeckPile(activeTuning.value).map((pose) => ({
+    depth: pose.depth,
+    layer: pose.layer,
+    style: {
+      transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
+      zIndex: pose.layer,
+      "--_deck-shadow-strength": pose.shadowStrength.toFixed(4),
+    },
+  })),
+);
 
 watchEffect(() => {
-  const tuning = motion.reducedMotion.value ? reducedStackedTuning.value : stackedTuning.value;
   resolveStackedDeckFrame(
     {
       itemCount: ids.length,
       traversal: deckTraversal.value,
-      tuning,
+      tuning: activeTuning.value,
     },
     stackedFrameOutput,
   );
@@ -763,6 +782,15 @@ onBeforeUnmount(() => {
     >
       <div aria-hidden="true" class="stacked-deck-backdrop" />
       <div ref="track" class="stacked-deck-stage">
+        <div
+          v-for="layer in pileLayers"
+          :key="`pile-${layer.depth}`"
+          aria-hidden="true"
+          class="stacked-deck-pile-layer"
+          :data-pile-depth="layer.depth"
+          :data-pile-layer="layer.layer"
+          :style="layer.style"
+        />
         <article
           v-for="(screen, index) in screens"
           :key="screen.id"
@@ -787,7 +815,6 @@ onBeforeUnmount(() => {
           :data-scale="stackedPose(index)?.scale"
           :data-screen-id="screen.id"
           :data-shadow-strength="stackedPose(index)?.shadowStrength"
-          :data-stack-depth="stackedPose(index)?.stackDepth"
           :data-translate-x="stackedPose(index)?.translateX"
           :data-translate-y="stackedPose(index)?.translateY"
           :data-visible="stackedPose(index)?.visible"
@@ -1019,6 +1046,26 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
+/* Decorative depth only. These layers never carry item identity, content, or semantics. */
+.stacked-deck-pile-layer {
+  --_deck-shadow-strength: 1;
+
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: var(--_deck-card-width);
+  block-size: var(--_deck-card-height);
+  transform-origin: center center;
+  border: 1px solid rgb(71 85 105 / 0.16);
+  border-radius: 0.8rem;
+  background: linear-gradient(158deg, #fdfefe 0%, #eef1f6 62%, #e4e9f0 100%);
+  box-shadow:
+    0 18px 38px -18px rgb(15 23 42 / calc(0.38 * var(--_deck-shadow-strength))),
+    0 4px 10px -6px rgb(15 23 42 / calc(0.32 * var(--_deck-shadow-strength)));
+  backface-visibility: hidden;
+  pointer-events: none;
+}
+
 .stacked-deck-card-motion {
   --_deck-shadow-strength: 1;
 
@@ -1071,8 +1118,7 @@ onBeforeUnmount(() => {
   border-color: rgb(15 23 42 / 0.23);
 }
 
-.stacked-deck-card[data-role="target"] .screen-chrome,
-.stacked-deck-card[data-role="backing"] .screen-chrome {
+.stacked-deck-card[data-role="target"] .screen-chrome {
   border-color: rgb(71 85 105 / 0.16);
 }
 

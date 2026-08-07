@@ -185,7 +185,7 @@ async function readFrame(page: Page) {
         role: item.dataset.role ?? "",
         rotate: Number(item.dataset.rotate),
         scale: Number(item.dataset.scale),
-        stackDepth: Number(item.dataset.stackDepth),
+        shadowStrength: Number(item.dataset.shadowStrength),
         top: box.top,
         translateX: Number(item.dataset.translateX),
         translateY: Number(item.dataset.translateY),
@@ -194,6 +194,20 @@ async function readFrame(page: Page) {
         width: box.width,
       };
     });
+    const pile = [...document.querySelectorAll<HTMLElement>(".stacked-deck-pile-layer")].map(
+      (item) => {
+        const box = item.getBoundingClientRect();
+        return {
+          depth: Number(item.dataset.pileDepth),
+          layer: Number(item.dataset.pileLayer),
+          left: Number(box.left.toFixed(3)),
+          right: Number(box.right.toFixed(3)),
+          top: Number(box.top.toFixed(3)),
+          bottom: Number(box.bottom.toFixed(3)),
+          ariaHidden: item.getAttribute("aria-hidden"),
+        };
+      },
+    );
     const targetAttribute = element.getAttribute("data-segment-target-index");
     return {
       caption:
@@ -218,15 +232,39 @@ async function readFrame(page: Page) {
       stageTop: stageBox.top,
       stageWidth: stageBox.width,
       visualTopIndex: Number(element.dataset.visualTopIndex),
+      pile,
       poses,
     };
   });
 }
 
-function topPose(frame: Awaited<ReturnType<typeof readFrame>>) {
+type DeckFrame = Awaited<ReturnType<typeof readFrame>>;
+
+function topPose(frame: DeckFrame) {
   const pose = frame.poses.find((candidate) => candidate.role === "top");
   if (!pose) throw new Error("Deck frame has no visual top card.");
   return pose;
+}
+
+/**
+ * Rendered dominance of the active exchange, measured from real boxes rather than pose numbers.
+ * `targetVisibility` is the share of the target shown at full strength; `outgoingDominance` is the
+ * outgoing card's remaining rendered weight.
+ */
+function dominance(frame: DeckFrame) {
+  const outgoing = topPose(frame);
+  const target = frame.poses.find((candidate) => candidate.role === "target");
+  if (!target) throw new Error("Deck frame has no adjacent target.");
+  const overlap = Math.max(
+    0,
+    Math.min(outgoing.right, target.right) - Math.max(outgoing.left, target.left),
+  );
+  const exposed = 1 - overlap / target.width;
+  return {
+    exposed,
+    targetVisibility: 1 - (1 - exposed) * outgoing.opacity,
+    outgoingDominance: outgoing.opacity * outgoing.scale * outgoing.scale,
+  };
 }
 
 function assertLocalSegment(frame: Awaited<ReturnType<typeof readFrame>>) {
@@ -248,11 +286,17 @@ interface TraversalSample {
   readonly visualTopIndex: number;
   readonly poses: readonly {
     readonly id: string;
+    readonly layer: number;
     readonly opacity: number;
     readonly role: string;
+    readonly rotate: number;
+    readonly scale: number;
     readonly translateX: number;
+    readonly translateY: number;
     readonly visible: boolean;
   }[];
+  readonly pile: readonly number[];
+  readonly cardWidth: number;
 }
 
 async function installTraversalTrace(page: Page) {
@@ -273,6 +317,7 @@ async function installTraversalTrace(page: Page) {
         caption:
           document.querySelector<HTMLElement>('[data-testid="stacked-deck-caption"]')?.innerText ??
           "",
+        cardWidth: Number(element.dataset.cardWidth),
         controllerPhase,
         direction: Number(element.dataset.segmentDirection),
         physicalIndex: Number(element.dataset.physicalIndex),
@@ -284,11 +329,25 @@ async function installTraversalTrace(page: Page) {
         visualTopIndex: Number(element.dataset.visualTopIndex),
         poses: [...document.querySelectorAll<HTMLElement>(".stacked-deck-card")].map((item) => ({
           id: item.dataset.screenId ?? "",
+          layer: Number(item.dataset.layer),
           opacity: Number(item.dataset.opacity),
           role: item.dataset.role ?? "",
+          rotate: Number(item.dataset.rotate),
+          scale: Number(item.dataset.scale),
           translateX: Number(item.dataset.translateX),
+          translateY: Number(item.dataset.translateY),
           visible: item.dataset.visible === "true",
         })),
+        pile: [...document.querySelectorAll<HTMLElement>(".stacked-deck-pile-layer")].flatMap(
+          (item) => {
+            const box = item.getBoundingClientRect();
+            return [
+              Number(box.left.toFixed(2)),
+              Number(box.top.toFixed(2)),
+              Number(box.width.toFixed(2)),
+            ];
+          },
+        ),
       });
       remainingFrames -= 1;
       if ((state.started && controllerPhase === "idle") || remainingFrames <= 0) {
@@ -347,17 +406,95 @@ function expectSequentialTraversal(
   ).toBe(true);
   expect(active.every((sample) => sample.segmentPhase !== "idle")).toBe(true);
   expect(uniqueInOrder(traversal.map((sample) => sample.visualTopIndex))).toEqual(expectedTops);
-  expect(active.every((sample) => sample.poses.filter((pose) => pose.visible).length <= 4)).toBe(
+  // Only the manipulated top and one adjacent target may ever bear content.
+  expect(active.every((sample) => sample.poses.filter((pose) => pose.visible).length <= 2)).toBe(
     true,
   );
   expect(
     active.every((sample) =>
-      sample.poses.every(
-        (pose) =>
-          !pose.visible || pose.role === "top" || pose.role === "target" || pose.role === "backing",
-      ),
+      sample.poses.every((pose) => !pose.visible || pose.role === "top" || pose.role === "target"),
     ),
   ).toBe(true);
+  // The decorative pile is a persistent object: it cannot move, mirror, or reorder mid-traversal.
+  const pileSignatures = new Set(trace.map((sample) => JSON.stringify(sample.pile)));
+  expect(pileSignatures.size).toBe(1);
+}
+
+/**
+ * Every handoff in a real rendered trace must confirm a hierarchy the eye already reads.
+ *
+ * Structural continuity is asserted at every crossing. The perceptual dominance relationship is
+ * asserted on crossings whose sampling gap is one the renderer can actually produce: the default
+ * release policy caps travel near a fifth of a pitch per frame, so a wider gap only appears when
+ * the harness itself starves requestAnimationFrame under parallel load.
+ */
+const RENDERABLE_STEP = 0.35;
+
+function expectContinuousHandoffs(trace: readonly TraversalSample[]) {
+  const crossings: {
+    step: number;
+    exposed: number;
+    vacatedOpacity: number;
+    targetVisibility: number;
+    outgoingDominance: number;
+    scaleJump: number;
+    rotateAround: number;
+  }[] = [];
+  for (let index = 1; index < trace.length; index += 1) {
+    const before = trace[index - 1]!;
+    const after = trace[index]!;
+    if (before.controllerPhase === "idle" && after.controllerPhase === "idle") continue;
+    if (before.visualTopIndex === after.visualTopIndex) continue;
+    const vacated = before.poses[before.visualTopIndex]!;
+    const promotedBefore = before.poses[after.visualTopIndex]!;
+    const promotedAfter = after.poses[after.visualTopIndex]!;
+    expect(vacated.role).toBe("top");
+    expect(promotedBefore.role).toBe("target");
+    expect(promotedBefore.opacity).toBe(1);
+    expect(after.poses[before.visualTopIndex]!.visible).toBe(false);
+    expect(promotedAfter.layer).toBeGreaterThan(promotedBefore.layer);
+    const half = (extent: { scale: number; translateX: number }) =>
+      (before.cardWidth * extent.scale) / 2;
+    const overlap = Math.max(
+      0,
+      Math.min(
+        vacated.translateX + half(vacated),
+        promotedBefore.translateX + half(promotedBefore),
+      ) -
+        Math.max(
+          vacated.translateX - half(vacated),
+          promotedBefore.translateX - half(promotedBefore),
+        ),
+    );
+    const exposed = 1 - overlap / (half(promotedBefore) * 2);
+    crossings.push({
+      step: Math.abs(after.physicalIndex - before.physicalIndex),
+      exposed,
+      vacatedOpacity: vacated.opacity,
+      targetVisibility: 1 - (1 - exposed) * vacated.opacity,
+      outgoingDominance: vacated.opacity * vacated.scale * vacated.scale,
+      scaleJump: Math.abs(promotedAfter.scale - promotedBefore.scale),
+      rotateAround: Math.max(Math.abs(promotedBefore.rotate), Math.abs(promotedAfter.rotate)),
+    });
+  }
+  expect(crossings.length).toBeGreaterThan(0);
+  const rotationRange = Math.max(
+    ...trace.flatMap((sample) => sample.poses.map((pose) => Math.abs(pose.rotate))),
+  );
+  expect(rotationRange).toBeGreaterThan(1);
+  const renderable = crossings.filter((crossing) => crossing.step <= RENDERABLE_STEP);
+  expect(renderable.length).toBeGreaterThan(0);
+  for (const crossing of renderable) {
+    // Authority has already migrated: the target reads as the top before ownership moves.
+    expect(crossing.targetVisibility).toBeGreaterThan(crossing.outgoingDominance * 1.5);
+    // The vacated card is never a normal foreground card at the moment it loses ownership.
+    expect(crossing.vacatedOpacity).toBeLessThan(0.6);
+    expect(crossing.exposed).toBeGreaterThan(0.55);
+    expect(crossing.scaleJump).toBeLessThan(0.02);
+    // The promoted card passes through neutral rotation; it cannot snap back from a tilt.
+    expect(crossing.rotateAround).toBeLessThan(rotationRange * 0.25);
+  }
+  return crossings;
 }
 
 async function expectNoInternalCardClip(page: Page) {
@@ -456,6 +593,110 @@ test("real pointer movement maps 1:1 to the visual top in both directions", asyn
   await expectCarouselAt(stage, "map");
 });
 
+test("visual authority migrates to the target before ownership changes", async ({ page }) => {
+  const stage = viewport(page);
+  for (const direction of [1, -1] as const) {
+    const held = await beginHeldTraversal(page, 2);
+    const cardWidth = Number(await stage.getAttribute("data-card-width"));
+    // A full pitch must clear most of a card width; the rejected build handed over near 0.4.
+    expect(held.pitch / cardWidth).toBeGreaterThan(0.75);
+    expect(held.pitch / cardWidth).toBeLessThan(0.95);
+
+    const readings = [];
+    for (const progress of [0.1, 0.25, 0.5, 0.7, 0.85, 0.95]) {
+      const frame = await holdPhysicalIndex(page, held, 2 + direction * progress);
+      expect(frame.visualTopIndex).toBe(2);
+      readings.push({ progress, ...dominance(frame) });
+    }
+
+    const early = readings[0]!;
+    expect(early.outgoingDominance).toBeGreaterThan(early.targetVisibility * 3);
+    const late = readings.at(-2)!;
+    expect(late.targetVisibility).toBeGreaterThan(late.outgoingDominance * 3);
+    const final = readings.at(-1)!;
+    expect(final.outgoingDominance).toBeLessThan(0.05);
+    expect(final.exposed).toBeGreaterThan(0.75);
+
+    for (let index = 1; index < readings.length; index += 1) {
+      expect(readings[index]!.targetVisibility).toBeGreaterThan(
+        readings[index - 1]!.targetVisibility,
+      );
+      expect(readings[index]!.outgoingDominance).toBeLessThan(
+        readings[index - 1]!.outgoingDominance,
+      );
+    }
+    // No sampled instant may show two full-strength competing faces.
+    expect(
+      readings.every(
+        (reading) => Math.min(reading.targetVisibility, reading.outgoingDominance) < 0.75,
+      ),
+    ).toBe(true);
+    const crossing = readings.findIndex(
+      (reading) => reading.targetVisibility >= reading.outgoingDominance,
+    );
+    expect(crossing).toBeGreaterThan(0);
+    expect(readings[crossing]!.progress).toBeLessThan(0.8);
+
+    await finishPointer(
+      page,
+      held.origin,
+      -direction * held.pitch * 0.95,
+      held.elapsedMs + 100,
+      "pointercancel",
+    );
+    await expectCarouselAt(stage, "map");
+  }
+});
+
+test("the pile is a persistent object that gesture direction cannot flip", async ({ page }) => {
+  const stage = viewport(page);
+  await pagination(page).nth(2).click();
+  await expectCarouselAt(stage, "map");
+  const idle = await readFrame(page);
+  expect(idle.pile).toHaveLength(3);
+  expect(idle.pile.every((layer) => layer.ariaHidden === "true")).toBe(true);
+  expect(idle.poses.filter((pose) => pose.visible)).toHaveLength(1);
+  for (let index = 1; index < idle.pile.length; index += 1) {
+    expect(idle.pile[index]!.left).toBeGreaterThan(idle.pile[index - 1]!.left);
+    expect(idle.pile[index]!.right).toBeGreaterThan(idle.pile[index - 1]!.right);
+    expect(idle.pile[index]!.layer).toBeLessThan(idle.pile[index - 1]!.layer);
+  }
+
+  const geometry: Record<string, unknown>[] = [];
+  const targets: { id: string; translateX: number; translateY: number; scale: number }[] = [];
+  for (const direction of [-1, 1] as const) {
+    const held = await beginHeldTraversal(page, 2);
+    const frame = await holdPhysicalIndex(page, held, 2 + direction * 0.12);
+    geometry.push(...frame.pile);
+    const target = frame.poses.find((pose) => pose.role === "target")!;
+    targets.push({
+      id: target.id,
+      translateX: target.translateX,
+      translateY: target.translateY,
+      scale: target.scale,
+    });
+    await finishPointer(
+      page,
+      held.origin,
+      -direction * held.pitch * 0.12,
+      held.elapsedMs + 100,
+      "pointercancel",
+    );
+    await expectCarouselAt(stage, "map");
+  }
+
+  const left = geometry.slice(0, 3);
+  const right = geometry.slice(3);
+  expect(left).toEqual(idle.pile);
+  expect(right).toEqual(idle.pile);
+  // Only the target's identity may change with direction; its pose comes from the same slot.
+  expect(targets[0]!.id).not.toBe(targets[1]!.id);
+  expect(targets[0]!.translateX).toBeCloseTo(targets[1]!.translateX, 6);
+  expect(targets[0]!.translateY).toBeCloseTo(targets[1]!.translateY, 6);
+  expect(targets[0]!.scale).toBeCloseTo(targets[1]!.scale, 6);
+  expect(targets[0]!.translateX).toBeGreaterThan(0);
+});
+
 test("the default release policy permits a two-card flick and renders both handoffs", async ({
   page,
 }) => {
@@ -474,6 +715,7 @@ test("the default release policy permits a two-card flick and renders both hando
   });
   const trace = await readTraversalTrace(page);
   expectSequentialTraversal(trace, [0, 1, 2]);
+  expect(expectContinuousHandoffs(trace)).toHaveLength(2);
   expect(
     trace
       .filter((sample) => sample.controllerPhase !== "idle")
@@ -499,9 +741,11 @@ test("one continuous wheel burst crosses adjacent visual segments without a rail
     const samples: Array<{
       origin: number;
       phase: string | undefined;
+      pile: number[];
       target: number | null;
       visualTop: number;
       visibleCount: number;
+      cards: { id: string; role: string; visible: boolean; layer: number; opacity: number }[];
     }> = [];
     for (let step = 0; step < 10; step += 1) {
       element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX }));
@@ -509,6 +753,12 @@ test("one continuous wheel burst crosses adjacent visual segments without a rail
       samples.push({
         origin: Number(element.dataset.segmentOriginIndex),
         phase: element.dataset.phase,
+        pile: [...element.querySelectorAll<HTMLElement>(".stacked-deck-pile-layer")].flatMap(
+          (layer) => {
+            const box = layer.getBoundingClientRect();
+            return [Number(box.left.toFixed(2)), Number(box.top.toFixed(2))];
+          },
+        ),
         target:
           element.dataset.segmentTargetIndex === undefined
             ? null
@@ -517,6 +767,13 @@ test("one continuous wheel burst crosses adjacent visual segments without a rail
         visibleCount: [...element.querySelectorAll<HTMLElement>(".stacked-deck-card")].filter(
           (card) => getComputedStyle(card).visibility === "visible",
         ).length,
+        cards: [...element.querySelectorAll<HTMLElement>(".stacked-deck-card")].map((card) => ({
+          id: card.dataset.screenId ?? "",
+          role: card.dataset.role ?? "",
+          visible: card.dataset.visible === "true",
+          layer: Number(card.dataset.layer),
+          opacity: Number(card.dataset.opacity),
+        })),
       });
     }
     return samples;
@@ -528,7 +785,25 @@ test("one continuous wheel burst crosses adjacent visual segments without a rail
       (sample) => sample.target === null || Math.abs(sample.target - sample.origin) === 1,
     ),
   ).toBe(true);
-  expect(wheelSamples.every((sample) => sample.visibleCount <= 4)).toBe(true);
+  expect(wheelSamples.every((sample) => sample.visibleCount <= 2)).toBe(true);
+  // Wheel traversal uses the same projection: one pile, one top, one adjacent target, no rail.
+  expect(new Set(wheelSamples.map((sample) => JSON.stringify(sample.pile))).size).toBe(1);
+  expect(
+    wheelSamples.every((sample) =>
+      sample.cards.every((card) => !card.visible || card.role === "top" || card.role === "target"),
+    ),
+  ).toBe(true);
+  for (let index = 1; index < wheelSamples.length; index += 1) {
+    const before = wheelSamples[index - 1]!;
+    const after = wheelSamples[index]!;
+    if (before.visualTop === after.visualTop) continue;
+    expect(before.cards[after.visualTop]!.role).toBe("target");
+    expect(before.cards[after.visualTop]!.opacity).toBe(1);
+    expect(after.cards[before.visualTop]!.visible).toBe(false);
+    expect(after.cards[after.visualTop]!.layer).toBeGreaterThan(
+      before.cards[after.visualTop]!.layer,
+    );
+  }
   await expectCarouselAt(stage, "map");
   expect(await readFrame(page)).toMatchObject({
     controllerPhase: "idle",
@@ -547,6 +822,7 @@ test("programmatic first-to-last movement traverses four adjacent deck segments"
   await pagination(page).last().click();
   const trace = await readTraversalTrace(page);
   expectSequentialTraversal(trace, [0, 1, 2, 3, 4]);
+  expect(expectContinuousHandoffs(trace)).toHaveLength(4);
   const active = trace.filter((sample) => sample.controllerPhase !== "idle");
   expect(active.every((sample) => sample.controllerPhase === "settling")).toBe(true);
   expect(active.every((sample) => sample.settledIndex === 0)).toBe(true);
@@ -706,10 +982,26 @@ test("cancel, lost capture, edge elasticity, and reduced motion restore coherent
   const reducedFrame = await holdPhysicalIndex(page, reduced, 2.55);
   expect(topPose(reducedFrame).translateX).toBeCloseTo(-reduced.pitch * 0.55, 2);
   expect(reducedFrame.poses.every((pose) => pose.rotate === 0)).toBe(true);
+  expect(topPose(reducedFrame)).toMatchObject({ translateY: 0, scale: 1 });
+  // Ownership still has to migrate, and depth still has to read as a pile.
+  expect(topPose(reducedFrame).opacity).toBeLessThan(1);
+  expect(reducedFrame.poses.find((pose) => pose.role === "target")!.scale).toBeLessThan(1);
+  expect(reducedFrame.pile).toHaveLength(3);
+
+  // Reduced motion keeps the full traversal topology: a held drag still crosses two anchors.
+  const reducedSecond = await holdPhysicalIndex(page, reduced, 3.6);
+  expect(reducedSecond).toMatchObject({
+    visualTopIndex: 3,
+    segmentOriginIndex: 3,
+    segmentTargetIndex: 4,
+  });
+  expect(reducedSecond.pile).toEqual(reducedFrame.pile);
+  const reducedThird = await holdPhysicalIndex(page, reduced, 4);
+  expect(reducedThird.visualTopIndex).toBe(4);
   await finishPointer(
     page,
     reduced.origin,
-    -reduced.pitch * 0.55,
+    -reduced.pitch * 2,
     reduced.elapsedMs + 100,
     "pointercancel",
   );
@@ -732,16 +1024,23 @@ test("responsive bleed surface avoids internal clipping and page overflow", asyn
 
     for (const direction of [-1, 1] as const) {
       const held = await beginHeldTraversal(page, 2);
-      const dominant = await holdPhysicalIndex(page, held, 2 + direction * 0.65);
+      // While the outgoing card is still opaque and dominant it stays on screen.
+      const dominant = await holdPhysicalIndex(page, held, 2 + direction * 0.35);
       const dominantTop = topPose(dominant);
+      expect(dominantTop.opacity).toBe(1);
       expect(dominantTop.left).toBeGreaterThanOrEqual(-0.75);
       expect(dominantTop.right).toBeLessThanOrEqual(width + 0.75);
+
+      // Late in the segment the outgoing card may bleed past the physical browser edge, but only
+      // once it is already subordinate, and the target must stay wholly inside the stage.
       const late = await holdPhysicalIndex(page, held, 2 + direction * 0.96);
       const lateTop = topPose(late);
       const target = late.poses.find((pose) => pose.role === "target")!;
-      expect(lateTop).toMatchObject({ opacity: 1, role: "top", visible: true });
+      expect(lateTop.opacity).toBe(0);
+      expect(dominance(late).exposed).toBeGreaterThan(0.75);
       expect(target.left).toBeGreaterThanOrEqual(late.stageLeft - 0.75);
       expect(target.right).toBeLessThanOrEqual(late.stageRight + 0.75);
+      expect(late.pile).toEqual(dominant.pile);
       await expectNoInternalCardClip(page);
       await finishPointer(
         page,
@@ -769,9 +1068,14 @@ test("visual metadata follows completed handoffs while settlement announces once
 }) => {
   const stage = viewport(page);
   const held = await beginHeldTraversal(page, 2);
+  const midway = await holdPhysicalIndex(page, held, 2.4);
+  expect(midway).toMatchObject({ caption: TITLES[2], counter: "3", visualTopIndex: 2 });
+  expect(topPose(midway)).toMatchObject({ id: "map", opacity: 1, role: "top" });
   const before = await holdPhysicalIndex(page, held, 2.92);
   expect(before).toMatchObject({ caption: TITLES[2], counter: "3", visualTopIndex: 2 });
-  expect(topPose(before)).toMatchObject({ id: "map", opacity: 1, role: "top" });
+  // Visual authority already belongs to the target while the counter still names the owner.
+  expect(topPose(before)).toMatchObject({ id: "map", opacity: 0, role: "top", visible: false });
+  expect(dominance(before).targetVisibility).toBeGreaterThan(0.95);
   await expect(page.getByTestId("stacked-deck-inspect")).toBeDisabled();
   const after = await holdPhysicalIndex(page, held, 3.08);
   expect(after).toMatchObject({ caption: TITLES[3], counter: "4", visualTopIndex: 3 });
