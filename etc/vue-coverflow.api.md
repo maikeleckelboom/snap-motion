@@ -5,12 +5,13 @@
 ```ts
 
 import { ComputedRef } from 'vue';
-import { ControllerConfigurationUpdate } from '@snap-motion/core';
-import { ControllerMoveByOptions } from '@snap-motion/core';
-import { ControllerMoveOptions } from '@snap-motion/core';
-import { ControllerPhase } from '@snap-motion/core';
-import { ControllerSnapshot } from '@snap-motion/core';
+import type { ControllerConfigurationUpdate } from '@snap-motion/core';
+import type { ControllerMoveByOptions } from '@snap-motion/core';
+import type { ControllerMoveOptions } from '@snap-motion/core';
+import type { ControllerPhase } from '@snap-motion/core';
+import type { ControllerSnapshot } from '@snap-motion/core';
 import { CoverflowModel } from '@snap-motion/core';
+import { CoverflowModelState } from '@snap-motion/core';
 import { CoverflowTuning } from '@snap-motion/core';
 import { ElasticityOptions } from '@snap-motion/core';
 import { MaybeRefOrGetter } from 'vue';
@@ -23,10 +24,77 @@ import type { SemanticId } from '@snap-motion/core';
 import { ShallowRef } from 'vue';
 import { ShallowUnwrapRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
-import { SnapController } from '@snap-motion/core';
-import { SnapDirection } from '@snap-motion/core';
+import type { SnapController } from '@snap-motion/core';
+import type { SnapDirection } from '@snap-motion/core';
 import { SpringConfiguration } from '@snap-motion/core';
 import { VNode } from 'vue';
+
+// @public
+export interface CarouselMotion<Id extends string> {
+    // (undocumented)
+    readonly activeId: ComputedRef<Id | undefined>;
+    // (undocumented)
+    readonly canNext: ComputedRef<boolean>;
+    // (undocumented)
+    readonly canPrevious: ComputedRef<boolean>;
+    // (undocumented)
+    configure(update: ControllerConfigurationUpdate): void;
+    // (undocumented)
+    readonly controller: SnapController<Id>;
+    readonly direction: ComputedRef<"ltr" | "rtl">;
+    // (undocumented)
+    interrupt(): void;
+    // (undocumented)
+    readonly isAnimating: ComputedRef<boolean>;
+    // (undocumented)
+    readonly isDragging: Ref<boolean>;
+    // (undocumented)
+    readonly isWheeling: Ref<boolean>;
+    // (undocumented)
+    moveBy(direction: SnapDirection, options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    moveTo(id: Id, options?: ControllerMoveOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    next(options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    onKeyDown(event: KeyboardEvent): void;
+    // (undocumented)
+    onNativeDragStart(event: DragEvent): void;
+    // (undocumented)
+    onPointerDown(event: PointerEvent): void;
+    // (undocumented)
+    onWheel(event: WheelEvent): void;
+    // (undocumented)
+    readonly phase: ComputedRef<ControllerPhase>;
+    // (undocumented)
+    readonly pointerIntent: Ref<PointerIntent>;
+    // (undocumented)
+    readonly pointerOwned: Ref<boolean>;
+    // (undocumented)
+    readonly position: ComputedRef<number>;
+    // (undocumented)
+    previous(options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    readonly reducedMotion: ComputedRef<boolean>;
+    // (undocumented)
+    remeasure(): SnapAnchor<Id> | null;
+    resolveDirection(): "ltr" | "rtl";
+    // (undocumented)
+    readonly snapshot: ShallowRef<ControllerSnapshot<Id>>;
+    // (undocumented)
+    readonly surfaceStyle: {
+        readonly touchAction: string;
+    };
+    // (undocumented)
+    readonly targetId: ComputedRef<Id | undefined>;
+    // (undocumented)
+    readonly trackStyle: ComputedRef<{
+        transform: string;
+        willChange: string;
+    }>;
+    // (undocumented)
+    readonly velocity: ComputedRef<number>;
+}
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
 //
@@ -84,45 +152,40 @@ export interface CoverflowHandle<Id extends string> {
     readonly canNext: boolean;
     // (undocumented)
     readonly canPrevious: boolean;
-    readonly commandIndex: number;
     readonly compositing: boolean;
     readonly diagnostics: SurfaceMotionDiagnostics<Id>;
     // (undocumented)
     isInspectEligible(index: number): boolean;
-    // (undocumented)
-    next(reason?: NavigationReason): boolean;
+    next(): boolean;
     onKeyDown(event: KeyboardEvent): void;
     // (undocumented)
     readonly paginationIndicator: PaginationIndicatorState;
-    // (undocumented)
-    readonly pendingTargetIndex: number | null;
     // (undocumented)
     readonly physicalIndex: number;
     // (undocumented)
     readonly pitch: number;
     readonly presentations: readonly CoverflowCardPresentation[];
-    // (undocumented)
-    previous(reason?: NavigationReason): boolean;
-    requestId(id: Id, reason?: NavigationReason): boolean;
+    previous(): boolean;
+    requestId(id: Id): boolean;
     // (undocumented)
     readonly root: HTMLElement | undefined;
     readonly settledId: Id | undefined;
     // (undocumented)
-    readonly settledIndex: number;
-    // (undocumented)
     readonly speedInCards: number;
+    readonly state: CoverflowModelState;
     synchronizeId(id: Id, announce?: boolean): boolean;
     // (undocumented)
     readonly tuning: CoverflowTuning;
     readonly visualId: Id | undefined;
-    // (undocumented)
-    readonly visualIndex: number;
 }
 
 export { CoverflowTuning }
 
+// @public
+export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "programmatic" | "route";
+
 // @public (undocumented)
-export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "route";
+export type PointerIntent = "horizontal" | "pending" | "vertical";
 
 // @public
 export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {
@@ -146,83 +209,11 @@ export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {
 }
 
 // @public
-export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotionOptions<Id>): {
-    anchorsById: ComputedRef<Map<string, number>>;
-    applyControlledId: (id: Id) => boolean;
-    commandIndex: ComputedRef<number>;
-    canNext: ComputedRef<boolean>;
-    canPrevious: ComputedRef<boolean>;
-    compositing: ComputedRef<boolean>;
-    diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
-    isInspectEligible: (index: number) => boolean;
-    liveIndex: ComputedRef<number>;
-    model: CoverflowModel<Id>;
-    motion: {
-        canNext: ComputedRef<boolean>;
-        canPrevious: ComputedRef<boolean>;
-        direction: ComputedRef<"ltr" | "rtl">;
-        resolveDirection: () => "ltr" | "rtl";
-        isWheeling: Ref<boolean, boolean>;
-        interrupt: () => void;
-        moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-        moveTo: (id: Id, options?: ControllerMoveOptions | undefined) => SnapAnchor<Id> | null;
-        next: (options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-        onKeyDown: (event: KeyboardEvent) => void;
-        onPointerDown: (event: PointerEvent) => void;
-        onWheel: (event: WheelEvent) => void;
-        previous: (options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-        remeasure: () => SnapAnchor<Id> | null;
-        surfaceStyle: {
-            touchAction: string;
-        };
-        trackStyle: ComputedRef<    {
-        transform: string;
-        willChange: string;
-        }>;
-        activeId: ComputedRef<Id | undefined>;
-        configure: (update: ControllerConfigurationUpdate) => void;
-        controller: SnapController<Id>;
-        isAnimating: ComputedRef<boolean>;
-        isDragging: Ref<boolean, boolean>;
-        onNativeDragStart: (event: DragEvent) => void;
-        phase: ComputedRef<ControllerPhase>;
-        pointerIntent: Ref<PointerIntent, PointerIntent>;
-        pointerOwned: Ref<boolean, boolean>;
-        position: ComputedRef<number>;
-        reducedMotion: ComputedRef<boolean>;
-        snapshot: ShallowRef<ControllerSnapshot<Id>, ControllerSnapshot<Id>>;
-        targetId: ComputedRef<Id | undefined>;
-        velocity: ComputedRef<number>;
-    };
-    next: (reason?: NavigationReason) => boolean;
-    onClick: (event: MouseEvent) => void;
-    onKeyDown: (event: KeyboardEvent) => void;
-    onLostPointerCapture: (event: PointerEvent) => void;
-    onPointerDown: (event: PointerEvent) => void;
-    onWheel: (event: WheelEvent) => void;
-    owned: ComputedRef<boolean>;
-    paginationIndicator: ComputedRef<PaginationIndicatorState>;
-    pendingTargetIndex: ComputedRef<number | null>;
-    physicalIndex: ComputedRef<number>;
-    pitch: ComputedRef<number>;
-    presentations: ComputedRef<readonly CoverflowCardPresentation[]>;
-    previous: (reason?: NavigationReason) => boolean;
-    remeasure: () => SnapAnchor<Id> | null;
-    requestId: (id: Id, reason?: NavigationReason) => boolean;
-    settledId: ComputedRef<Id | undefined>;
-    settledIndex: ComputedRef<number>;
-    speedInCards: ComputedRef<number>;
-    stageWidth: ComputedRef<number>;
-    statusIndex: ComputedRef<number | null>;
-    synchronizeId: (id: Id, announce?: boolean) => boolean;
-    synchronizeIndex: (index: number, announce?: boolean) => boolean;
-    tuning: ComputedRef<CoverflowTuning>;
-    visualId: ComputedRef<Id | undefined>;
-    visualIndex: ComputedRef<number>;
-};
+export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotionOptions<Id>): UseCoverflowMotionReturn<Id>;
 
 // @public (undocumented)
 export interface UseCoverflowMotionOptions<Id extends string> {
+    readonly controlledId?: MaybeRefOrGetter<Id | undefined>;
     readonly disabled?: () => boolean;
     // (undocumented)
     readonly elasticity?: MaybeRefOrGetter<ElasticityOptions | undefined>;
@@ -248,12 +239,54 @@ export interface UseCoverflowMotionOptions<Id extends string> {
     readonly viewport: Ref<HTMLElement | undefined>;
 }
 
-// @public (undocumented)
-export type UseCoverflowMotionReturn<Id extends string> = ReturnType<typeof useCoverflowMotion<Id>>;
-
-// Warnings were encountered during analysis:
-//
-// src/coverflow/use-coverflow-motion.ts:252:12 - (ae-forgotten-export) The symbol "PointerIntent" needs to be exported by the entry point index.d.ts
+// @public
+export interface UseCoverflowMotionReturn<Id extends string> {
+    readonly anchorsById: ComputedRef<Map<Id, number>>;
+    // (undocumented)
+    readonly canNext: ComputedRef<boolean>;
+    // (undocumented)
+    readonly canPrevious: ComputedRef<boolean>;
+    readonly compositing: ComputedRef<boolean>;
+    readonly diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
+    // (undocumented)
+    isInspectEligible(index: number): boolean;
+    readonly model: CoverflowModel<Id>;
+    readonly motion: CarouselMotion<Id>;
+    next(): boolean;
+    // (undocumented)
+    onClick(event: MouseEvent): void;
+    // (undocumented)
+    onKeyDown(event: KeyboardEvent): void;
+    // (undocumented)
+    onLostPointerCapture(event: PointerEvent): void;
+    // (undocumented)
+    onPointerDown(event: PointerEvent): void;
+    // (undocumented)
+    onWheel(event: WheelEvent): void;
+    readonly owned: ComputedRef<boolean>;
+    // (undocumented)
+    readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
+    // (undocumented)
+    readonly physicalIndex: ComputedRef<number>;
+    // (undocumented)
+    readonly pitch: ComputedRef<number>;
+    readonly presentations: ComputedRef<readonly CoverflowCardPresentation[]>;
+    previous(): boolean;
+    // (undocumented)
+    remeasure(): SnapAnchor<Id> | null;
+    requestId(id: Id): boolean;
+    readonly settledId: ComputedRef<Id | undefined>;
+    // (undocumented)
+    readonly speedInCards: ComputedRef<number>;
+    // (undocumented)
+    readonly stageWidth: ComputedRef<number>;
+    readonly state: ShallowRef<CoverflowModelState>;
+    readonly statusIndex: ComputedRef<number | null>;
+    synchronizeId(id: Id, announce?: boolean): boolean;
+    // (undocumented)
+    readonly tuning: ComputedRef<CoverflowTuning>;
+    readonly visualId: ComputedRef<Id | undefined>;
+}
 
 // (No @packageDocumentation comment for this package)
 

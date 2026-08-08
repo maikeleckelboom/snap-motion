@@ -11,7 +11,7 @@ reconfigured with `reconfigure(nextIds)`. Adding, removing, replacing, reorderin
 repopulating items are all defined operations that preserve the item the surface was on, rather than
 leaving model and frame sizes stale or letting indexes and IDs name different cards. An index or ID
 the collection does not contain is refused instead of clamped, so an unknown ID can no longer
-resolve to item zero. `OrderedIdCollection` and `resolvePreservedIndex` are public.
+resolve to item zero.
 
 **Zero-config decks behave like the product.** `STACKED_DECK_INTERIOR_ELASTICITY` is the deck's own
 default for interior overdrag, so `<StackedDeck :items="items">` resists past the adjacent screen
@@ -22,8 +22,8 @@ resistance without weakening the one-card invariant.
 is `disabled` or physically held, under an explicit interruption policy, and is never echoed back as
 a user-originated `update:activeId` / `requestActiveId`.
 
-**Navigation reasons tell the truth.** `requestActiveId` reports `previous`, `next`, `keyboard`,
-`drag`, `wheel`, or `picker` instead of labelling every settled change a drag.
+**Navigation reasons tell the truth.** `requestActiveId` reports the reason a selection changed
+instead of labelling every settled change a drag.
 
 **Input agrees with itself.** Pointer, wheel, and keyboard now resolve writing direction through one
 shared directional policy, so the three surfaces cannot drift under RTL. Interactive descendants of

@@ -241,9 +241,7 @@ export class CoverflowModel<Id extends SemanticId = SemanticId> {
     }): CoverflowCommand;
     // (undocumented)
     get state(): CoverflowModelState;
-    synchronize(index: number, options?: {
-        readonly announce?: boolean;
-    }): number;
+    synchronize(index: number, options?: SettledSelectionAdoption): number;
     // (undocumented)
     update(input: CoverflowSnapshotInput): CoverflowModelState;
 }
@@ -265,7 +263,6 @@ export interface CoverflowModelState {
     readonly commandIndex: number;
     // (undocumented)
     readonly pendingTargetIndex: number | null;
-    // (undocumented)
     readonly physicalIndex: number;
     // (undocumented)
     readonly settledIndex: number;
@@ -755,21 +752,6 @@ export function nonlinearElasticDistance(distance: number, boundary: ElasticBoun
 // @public (undocumented)
 export function normalizeBounds(min: number, max: number): ScalarBounds;
 
-// @public
-export class OrderedIdCollection<Id extends SemanticId> {
-    constructor(ids: readonly Id[], name?: string);
-    // (undocumented)
-    at(index: number): Id | undefined;
-    contains(index: number): boolean;
-    // (undocumented)
-    get ids(): readonly Id[];
-    indexOf(id: Id): number;
-    replace(ids: readonly Id[], name?: string): void;
-    resolveInitialIndex(id: Id | undefined, name?: string): number;
-    // (undocumented)
-    get size(): number;
-}
-
 // @public (undocumented)
 export interface PagedGridGeometry extends CarouselGeometry<SemanticId> {
     // (undocumented)
@@ -923,9 +905,6 @@ export function resolveHystereticIndex(physicalIndex: number, currentIndex: numb
 // @public
 export function resolvePaginationIndicator(physicalIndex: number, velocityPxPerSecond: number, cardPitchPx: number, itemCount: number, output: PaginationIndicatorState): PaginationIndicatorState;
 
-// @public
-export function resolvePreservedIndex<Id extends SemanticId>(collection: OrderedIdCollection<Id>, previousId: Id | undefined, previousIndex: number): number;
-
 // @public (undocumented)
 export function resolveProgrammaticTarget<Id extends SemanticId>(input: ProgrammaticTargetInput<Id>): SnapAnchor<Id> | null;
 
@@ -1047,11 +1026,17 @@ export interface SettledOnAnchorInput {
 // @public
 export class SettledSelection {
     constructor(initialIndex: number, itemCount: number);
+    adopt(index: number, options?: SettledSelectionAdoption): number | null;
     // (undocumented)
     pendingTargetIndex: number | null;
     // (undocumented)
     settledIndex: number;
     update(input: SettledSelectionUpdate): number | null;
+}
+
+// @public (undocumented)
+export interface SettledSelectionAdoption {
+    readonly announce?: boolean | undefined;
 }
 
 // @public (undocumented)
@@ -1250,9 +1235,7 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
     resolveRelativeCommand(direction: -1 | 1, context: Pick<StackedDeckCommandContext, "owned">): StackedDeckCommand;
     // (undocumented)
     get state(): StackedDeckModelState;
-    synchronize(index: number, options?: {
-        readonly announce?: boolean;
-    }): number;
+    synchronize(index: number, options?: SettledSelectionAdoption): number;
     get traversalBounds(): StackedDeckTraversalBounds | undefined;
     update(input: StackedDeckSnapshotInput): StackedDeckModelState;
 }
@@ -1281,7 +1264,6 @@ export interface StackedDeckModelState {
     readonly pendingTargetIndex: number | null;
     // (undocumented)
     readonly settledIndex: number;
-    // (undocumented)
     readonly traversal: StackedDeckTraversal;
     // (undocumented)
     readonly visualTopIndex: number;
@@ -1332,6 +1314,9 @@ export interface StackedDeckPose {
 
 // @public (undocumented)
 export type StackedDeckProfile = "compact" | "medium" | "wide";
+
+// @public
+export type StackedDeckReleasePolicy = Partial<Omit<ReleaseTargetPolicy, "maxAnchorSkip">>;
 
 // @public (undocumented)
 export type StackedDeckRole = "top" | "target" | "hidden";

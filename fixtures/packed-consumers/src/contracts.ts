@@ -1,7 +1,6 @@
 import {
   CoverflowModel,
-  OrderedIdCollection,
-  resolvePreservedIndex,
+  SettledSelection,
   SnapController,
   STACKED_DECK_ANCHOR_SKIP,
   STACKED_DECK_INTERIOR_ELASTICITY,
@@ -9,6 +8,7 @@ import {
   createFixedStageGeometry,
   resolveCoverflowTuning,
   type AnimationDriver,
+  type StackedDeckReleasePolicy,
 } from "@snap-motion/core";
 import { Sheet as RootSheet } from "@snap-motion/vue";
 import {
@@ -154,11 +154,22 @@ void deckModel.resolveAbsoluteCommand(deckModel.indexOf("outcome"), {
 void deckModel.reconfigure(["outcome", "system"]);
 const railModel = new CoverflowModel({ ids: [...screenIds] });
 void railModel.resolveRelativeCommand(1, { owned: false });
-void new OrderedIdCollection(screenIds).indexOf("system");
-void resolvePreservedIndex(new OrderedIdCollection(screenIds), "system", 1);
+// Direct adoption of a semantic destination, as one atomic operation on the durable selection.
+void new SettledSelection(0, screenIds.length).adopt(1, { announce: true });
 void STACKED_DECK_INTERIOR_ELASTICITY;
 void resolveCoverflowTuning({ stageWidth: 1_120 });
 void STACKED_DECK_ANCHOR_SKIP;
+
+// The deck states its one-card invariant in the type system: the anchor skip it fixes is simply
+// not a thing a consumer can pass, rather than a value it accepts and silently overwrites.
+const deckRelease: StackedDeckReleasePolicy = { flingVelocity: 320, projectionSeconds: 0.12 };
+void deckRelease;
+// @ts-expect-error the deck fixes its own anchor skip, so this is not part of its release policy.
+void h(StackedDeck, { items: screens, releasePolicy: { maxAnchorSkip: 3 } });
+// @ts-expect-error a product method names its own operation; a caller cannot relabel it.
+void deckHandle.value?.next("drag");
+// @ts-expect-error the same holds for an imperative request, which is always `programmatic`.
+void railHandle.value?.requestId("system", "picker");
 
 // @ts-expect-error A stacked deck item must carry the semantic ID it is keyed by.
 void h(StackedDeck, { items: [{ title: "No ID" }] });

@@ -8,22 +8,22 @@ import { AnimationDriver } from '@snap-motion/core';
 import { ComponentOptionsMixin } from 'vue';
 import { ComponentProvideOptions } from 'vue';
 import { ComputedRef } from 'vue';
-import { ControllerConfigurationUpdate } from '@snap-motion/core';
+import type { ControllerConfigurationUpdate } from '@snap-motion/core';
 import { ControllerMeasurement } from '@snap-motion/core';
-import { ControllerMoveByOptions } from '@snap-motion/core';
-import { ControllerMoveOptions } from '@snap-motion/core';
-import { ControllerPhase } from '@snap-motion/core';
+import type { ControllerMoveByOptions } from '@snap-motion/core';
+import type { ControllerMoveOptions } from '@snap-motion/core';
+import type { ControllerPhase } from '@snap-motion/core';
 import { ControllerSnapshot } from '@snap-motion/core';
 import { DefineComponent } from 'vue';
 import { MaybeRefOrGetter } from 'vue';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
-import { ShallowRef } from 'vue';
+import type { ShallowRef } from 'vue';
 import { ShallowUnwrapRef } from 'vue';
-import { SnapAnchor } from '@snap-motion/core';
+import type { SnapAnchor } from '@snap-motion/core';
 import { SnapController } from '@snap-motion/core';
 import { SnapControllerOptions } from '@snap-motion/core';
-import { SnapDirection } from '@snap-motion/core';
+import type { SnapDirection } from '@snap-motion/core';
 import { VNode } from 'vue';
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
@@ -51,6 +51,73 @@ export interface CarouselGeometryStrategy<Id extends string> {
 
 // @public
 export type CarouselKeyboardScope = "auto" | "carousel" | "dialog" | "off";
+
+// @public
+export interface CarouselMotion<Id extends string> {
+    // (undocumented)
+    readonly activeId: ComputedRef<Id | undefined>;
+    // (undocumented)
+    readonly canNext: ComputedRef<boolean>;
+    // (undocumented)
+    readonly canPrevious: ComputedRef<boolean>;
+    // (undocumented)
+    configure(update: ControllerConfigurationUpdate): void;
+    // (undocumented)
+    readonly controller: SnapController<Id>;
+    readonly direction: ComputedRef<"ltr" | "rtl">;
+    // (undocumented)
+    interrupt(): void;
+    // (undocumented)
+    readonly isAnimating: ComputedRef<boolean>;
+    // (undocumented)
+    readonly isDragging: Ref<boolean>;
+    // (undocumented)
+    readonly isWheeling: Ref<boolean>;
+    // (undocumented)
+    moveBy(direction: SnapDirection, options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    moveTo(id: Id, options?: ControllerMoveOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    next(options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    onKeyDown(event: KeyboardEvent): void;
+    // (undocumented)
+    onNativeDragStart(event: DragEvent): void;
+    // (undocumented)
+    onPointerDown(event: PointerEvent): void;
+    // (undocumented)
+    onWheel(event: WheelEvent): void;
+    // (undocumented)
+    readonly phase: ComputedRef<ControllerPhase>;
+    // (undocumented)
+    readonly pointerIntent: Ref<PointerIntent>;
+    // (undocumented)
+    readonly pointerOwned: Ref<boolean>;
+    // (undocumented)
+    readonly position: ComputedRef<number>;
+    // (undocumented)
+    previous(options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    readonly reducedMotion: ComputedRef<boolean>;
+    // (undocumented)
+    remeasure(): SnapAnchor<Id> | null;
+    resolveDirection(): "ltr" | "rtl";
+    // (undocumented)
+    readonly snapshot: ShallowRef<ControllerSnapshot<Id>>;
+    // (undocumented)
+    readonly surfaceStyle: {
+        readonly touchAction: string;
+    };
+    // (undocumented)
+    readonly targetId: ComputedRef<Id | undefined>;
+    // (undocumented)
+    readonly trackStyle: ComputedRef<{
+        transform: string;
+        willChange: string;
+    }>;
+    // (undocumented)
+    readonly velocity: ComputedRef<number>;
+}
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export_2" needs to be exported by the entry point index.d.ts
 //
@@ -142,8 +209,11 @@ export interface FixedStageCarouselGeometryOptions {
     readonly gap?: number;
 }
 
+// @public
+export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "programmatic" | "route";
+
 // @public (undocumented)
-export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "route";
+export type PointerIntent = "horizontal" | "pending" | "vertical";
 
 // @public (undocumented)
 export interface PublicCarouselContext<Id extends string = string> {
@@ -176,46 +246,8 @@ export type SnapMotionDirection = "auto" | "ltr" | "rtl";
 export function useCarouselContext<Id extends string = string>(): PublicCarouselContext<Id>;
 
 // @public (undocumented)
-export function useCarouselMotion<Id extends string>(options: UseCarouselMotionOptions<Id>): {
-    canNext: ComputedRef<boolean>;
-    canPrevious: ComputedRef<boolean>;
-    direction: ComputedRef<"ltr" | "rtl">;
-    resolveDirection: () => "ltr" | "rtl";
-    isWheeling: Ref<boolean, boolean>;
-    interrupt: () => void;
-    moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-    moveTo: (id: Id, options?: ControllerMoveOptions | undefined) => SnapAnchor<Id> | null;
-    next: (options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-    onKeyDown: (event: KeyboardEvent) => void;
-    onPointerDown: (event: PointerEvent) => void;
-    onWheel: (event: WheelEvent) => void;
-    previous: (options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-    remeasure: () => SnapAnchor<Id> | null;
-    surfaceStyle: {
-        touchAction: string;
-    };
-    trackStyle: ComputedRef<    {
-    transform: string;
-    willChange: string;
-    }>;
-    activeId: ComputedRef<Id | undefined>;
-    configure: (update: ControllerConfigurationUpdate) => void;
-    controller: SnapController<Id>;
-    isAnimating: ComputedRef<boolean>;
-    isDragging: Ref<boolean, boolean>;
-    onNativeDragStart: (event: DragEvent) => void;
-    phase: ComputedRef<ControllerPhase>;
-    pointerIntent: Ref<PointerIntent, PointerIntent>;
-    pointerOwned: Ref<boolean, boolean>;
-    position: ComputedRef<number>;
-    reducedMotion: ComputedRef<boolean>;
-    snapshot: ShallowRef<ControllerSnapshot<Id>, ControllerSnapshot<Id>>;
-    targetId: ComputedRef<Id | undefined>;
-    velocity: ComputedRef<number>;
-};
+export function useCarouselMotion<Id extends string>(options: UseCarouselMotionOptions<Id>): CarouselMotion<Id>;
 
-// Warning: (ae-forgotten-export) The symbol "UseSnapMotionOptions" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
 export interface UseCarouselMotionOptions<Id extends string> extends Omit<UseSnapMotionOptions<Id>, "axis" | "pointerIntent"> {
     // (undocumented)
@@ -242,16 +274,37 @@ export function useCarouselWindow<Id extends string>(idsSource: MaybeRefOrGetter
 };
 
 // @public (undocumented)
+export interface UseSnapMotionOptions<Id extends string> extends Omit<SnapControllerOptions<Id>, "driver" | "onChange" | "reducedMotion"> {
+    // (undocumented)
+    axis: "x" | "y" | (() => "x" | "y");
+    // (undocumented)
+    driver?: AnimationDriver;
+    // (undocumented)
+    onChange?: (snapshot: ControllerSnapshot<Id>) => void;
+    // (undocumented)
+    onReleaseTargetSelected?: (id: Id | undefined) => void;
+    // (undocumented)
+    pointerDeltaMultiplier?: () => number;
+    // (undocumented)
+    pointerIntent?: "horizontal" | "immediate";
+    // (undocumented)
+    reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
+    resolveDragOrigin?: () => Id | undefined;
+    // (undocumented)
+    resolveReleaseTarget?: (context: {
+        controller: SnapController<Id>;
+        snapshot: ControllerSnapshot<Id>;
+        velocity: number;
+    }) => Id | undefined;
+}
+
+// @public (undocumented)
 export interface VariableWidthCenteredCarouselGeometryOptions {
     // (undocumented)
     readonly endGutter?: number;
     // (undocumented)
     readonly startGutter?: number;
 }
-
-// Warnings were encountered during analysis:
-//
-// src/carousel/use-carousel-motion.ts:203:10 - (ae-forgotten-export) The symbol "PointerIntent" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

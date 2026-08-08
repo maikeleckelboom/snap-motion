@@ -5,36 +5,106 @@
 ```ts
 
 import { ComputedRef } from 'vue';
-import { ControllerConfigurationUpdate } from '@snap-motion/core';
-import { ControllerMoveByOptions } from '@snap-motion/core';
-import { ControllerMoveOptions } from '@snap-motion/core';
-import { ControllerPhase } from '@snap-motion/core';
-import { ControllerSnapshot } from '@snap-motion/core';
+import type { ControllerConfigurationUpdate } from '@snap-motion/core';
+import type { ControllerMoveByOptions } from '@snap-motion/core';
+import type { ControllerMoveOptions } from '@snap-motion/core';
+import type { ControllerPhase } from '@snap-motion/core';
+import type { ControllerSnapshot } from '@snap-motion/core';
 import { ElasticityOptions } from '@snap-motion/core';
 import { MaybeRefOrGetter } from 'vue';
 import { PaginationIndicatorState } from '@snap-motion/core';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
-import { ReleaseTargetPolicy } from '@snap-motion/core';
 import type { ScalarBounds } from '@snap-motion/core';
 import type { SemanticId } from '@snap-motion/core';
 import { ShallowRef } from 'vue';
 import { ShallowUnwrapRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
-import { SnapController } from '@snap-motion/core';
-import { SnapDirection } from '@snap-motion/core';
+import type { SnapController } from '@snap-motion/core';
+import type { SnapDirection } from '@snap-motion/core';
 import { SpringConfiguration } from '@snap-motion/core';
 import { StackedDeckFrame } from '@snap-motion/core';
 import { StackedDeckModel } from '@snap-motion/core';
 import { StackedDeckModelState } from '@snap-motion/core';
 import { StackedDeckPose } from '@snap-motion/core';
 import { StackedDeckProfile } from '@snap-motion/core';
+import { StackedDeckReleasePolicy } from '@snap-motion/core';
 import { StackedDeckRole } from '@snap-motion/core';
 import { StackedDeckTuning } from '@snap-motion/core';
 import { VNode } from 'vue';
 
+// @public
+export interface CarouselMotion<Id extends string> {
+    // (undocumented)
+    readonly activeId: ComputedRef<Id | undefined>;
+    // (undocumented)
+    readonly canNext: ComputedRef<boolean>;
+    // (undocumented)
+    readonly canPrevious: ComputedRef<boolean>;
+    // (undocumented)
+    configure(update: ControllerConfigurationUpdate): void;
+    // (undocumented)
+    readonly controller: SnapController<Id>;
+    readonly direction: ComputedRef<"ltr" | "rtl">;
+    // (undocumented)
+    interrupt(): void;
+    // (undocumented)
+    readonly isAnimating: ComputedRef<boolean>;
+    // (undocumented)
+    readonly isDragging: Ref<boolean>;
+    // (undocumented)
+    readonly isWheeling: Ref<boolean>;
+    // (undocumented)
+    moveBy(direction: SnapDirection, options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    moveTo(id: Id, options?: ControllerMoveOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    next(options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    onKeyDown(event: KeyboardEvent): void;
+    // (undocumented)
+    onNativeDragStart(event: DragEvent): void;
+    // (undocumented)
+    onPointerDown(event: PointerEvent): void;
+    // (undocumented)
+    onWheel(event: WheelEvent): void;
+    // (undocumented)
+    readonly phase: ComputedRef<ControllerPhase>;
+    // (undocumented)
+    readonly pointerIntent: Ref<PointerIntent>;
+    // (undocumented)
+    readonly pointerOwned: Ref<boolean>;
+    // (undocumented)
+    readonly position: ComputedRef<number>;
+    // (undocumented)
+    previous(options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
+    // (undocumented)
+    readonly reducedMotion: ComputedRef<boolean>;
+    // (undocumented)
+    remeasure(): SnapAnchor<Id> | null;
+    resolveDirection(): "ltr" | "rtl";
+    // (undocumented)
+    readonly snapshot: ShallowRef<ControllerSnapshot<Id>>;
+    // (undocumented)
+    readonly surfaceStyle: {
+        readonly touchAction: string;
+    };
+    // (undocumented)
+    readonly targetId: ComputedRef<Id | undefined>;
+    // (undocumented)
+    readonly trackStyle: ComputedRef<{
+        transform: string;
+        willChange: string;
+    }>;
+    // (undocumented)
+    readonly velocity: ComputedRef<number>;
+}
+
+// @public
+export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "programmatic" | "route";
+
 // @public (undocumented)
-export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "route";
+export type PointerIntent = "horizontal" | "pending" | "vertical";
 
 // Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
 //
@@ -70,8 +140,7 @@ export interface StackedDeckHandle<Id extends string> {
     readonly frame: StackedDeckFrame;
     // (undocumented)
     isInspectEligible(index: number): boolean;
-    // (undocumented)
-    next(reason?: NavigationReason): boolean;
+    next(): boolean;
     onKeyDown(event: KeyboardEvent): void;
     // (undocumented)
     readonly owned: boolean;
@@ -81,15 +150,13 @@ export interface StackedDeckHandle<Id extends string> {
     readonly physicalIndex: number;
     // (undocumented)
     readonly pitch: number;
-    // (undocumented)
-    previous(reason?: NavigationReason): boolean;
-    requestId(id: Id, reason?: NavigationReason): boolean;
+    previous(): boolean;
+    requestId(id: Id): boolean;
     // (undocumented)
     readonly root: HTMLElement | undefined;
     readonly settledId: Id | undefined;
     // (undocumented)
     readonly speedInCards: number;
-    // (undocumented)
     readonly state: StackedDeckModelState;
     synchronizeId(id: Id, announce?: boolean): boolean;
     // (undocumented)
@@ -142,83 +209,11 @@ export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {
 }
 
 // @public
-export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckMotionOptions<Id>): {
-    anchorsById: ComputedRef<Map<string, number>>;
-    atRest: ComputedRef<boolean>;
-    canNext: ComputedRef<boolean>;
-    canPrevious: ComputedRef<boolean>;
-    compositing: ComputedRef<boolean>;
-    currentId: ComputedRef<Id | undefined>;
-    diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
-    frame: ShallowRef<StackedDeckFrame, StackedDeckFrame>;
-    isInspectEligible: (index: number) => boolean;
-    model: StackedDeckModel<Id>;
-    motion: {
-        canNext: ComputedRef<boolean>;
-        canPrevious: ComputedRef<boolean>;
-        direction: ComputedRef<"ltr" | "rtl">;
-        resolveDirection: () => "ltr" | "rtl";
-        isWheeling: Ref<boolean, boolean>;
-        interrupt: () => void;
-        moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-        moveTo: (id: Id, options?: ControllerMoveOptions | undefined) => SnapAnchor<Id> | null;
-        next: (options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-        onKeyDown: (event: KeyboardEvent) => void;
-        onPointerDown: (event: PointerEvent) => void;
-        onWheel: (event: WheelEvent) => void;
-        previous: (options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
-        remeasure: () => SnapAnchor<Id> | null;
-        surfaceStyle: {
-            touchAction: string;
-        };
-        trackStyle: ComputedRef<    {
-        transform: string;
-        willChange: string;
-        }>;
-        activeId: ComputedRef<Id | undefined>;
-        configure: (update: ControllerConfigurationUpdate) => void;
-        controller: SnapController<Id>;
-        isAnimating: ComputedRef<boolean>;
-        isDragging: Ref<boolean, boolean>;
-        onNativeDragStart: (event: DragEvent) => void;
-        phase: ComputedRef<ControllerPhase>;
-        pointerIntent: Ref<PointerIntent, PointerIntent>;
-        pointerOwned: Ref<boolean, boolean>;
-        position: ComputedRef<number>;
-        reducedMotion: ComputedRef<boolean>;
-        snapshot: ShallowRef<ControllerSnapshot<Id>, ControllerSnapshot<Id>>;
-        targetId: ComputedRef<Id | undefined>;
-        velocity: ComputedRef<number>;
-    };
-    next: (reason?: NavigationReason) => boolean;
-    onClick: (event: MouseEvent) => void;
-    onKeyDown: (event: KeyboardEvent) => void;
-    onLostPointerCapture: (event: PointerEvent) => void;
-    onPointerDown: (event: PointerEvent) => void;
-    onWheel: (event: WheelEvent) => void;
-    owned: ComputedRef<boolean>;
-    paginationIndicator: ComputedRef<PaginationIndicatorState>;
-    physicalIndex: ComputedRef<number>;
-    pileLayers: ComputedRef<readonly StackedDeckPileLayer[]>;
-    pitch: ComputedRef<number>;
-    previous: (reason?: NavigationReason) => boolean;
-    remeasure: () => SnapAnchor<Id> | null;
-    applyControlledId: (id: Id) => boolean;
-    requestId: (id: Id, reason?: NavigationReason) => boolean;
-    requestIndex: (index: number, reason?: NavigationReason) => boolean;
-    settledId: ComputedRef<Id | undefined>;
-    speedInCards: ComputedRef<number>;
-    stageWidth: ComputedRef<number>;
-    state: ShallowRef<StackedDeckModelState, StackedDeckModelState>;
-    statusIndex: ComputedRef<number | null>;
-    synchronizeId: (id: Id, announce?: boolean) => boolean;
-    synchronizeIndex: (index: number, announce?: boolean) => boolean;
-    tuning: ComputedRef<StackedDeckTuning>;
-    tuningProfile: ComputedRef<StackedDeckProfile>;
-};
+export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckMotionOptions<Id>): UseStackedDeckMotionReturn<Id>;
 
 // @public (undocumented)
 export interface UseStackedDeckMotionOptions<Id extends string> {
+    readonly controlledId?: MaybeRefOrGetter<Id | undefined>;
     readonly disabled?: () => boolean;
     readonly elasticity?: MaybeRefOrGetter<ElasticityOptions | undefined>;
     // (undocumented)
@@ -231,7 +226,7 @@ export interface UseStackedDeckMotionOptions<Id extends string> {
     readonly programmaticImpulse?: MaybeRefOrGetter<number | undefined>;
     // (undocumented)
     readonly reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
-    readonly releasePolicy?: MaybeRefOrGetter<Partial<ReleaseTargetPolicy> | undefined>;
+    readonly releasePolicy?: MaybeRefOrGetter<StackedDeckReleasePolicy | undefined>;
     readonly root?: Ref<HTMLElement | undefined>;
     // (undocumented)
     readonly spring?: MaybeRefOrGetter<SpringConfiguration | undefined>;
@@ -242,12 +237,61 @@ export interface UseStackedDeckMotionOptions<Id extends string> {
     readonly viewport: Ref<HTMLElement | undefined>;
 }
 
-// @public (undocumented)
-export type UseStackedDeckMotionReturn<Id extends string> = ReturnType<typeof useStackedDeckMotion<Id>>;
-
-// Warnings were encountered during analysis:
-//
-// src/stacked-deck/use-stacked-deck-motion.ts:363:12 - (ae-forgotten-export) The symbol "PointerIntent" needs to be exported by the entry point index.d.ts
+// @public
+export interface UseStackedDeckMotionReturn<Id extends string> {
+    readonly anchorsById: ComputedRef<Map<Id, number>>;
+    readonly atRest: ComputedRef<boolean>;
+    // (undocumented)
+    readonly canNext: ComputedRef<boolean>;
+    // (undocumented)
+    readonly canPrevious: ComputedRef<boolean>;
+    readonly compositing: ComputedRef<boolean>;
+    readonly currentId: ComputedRef<Id | undefined>;
+    readonly diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
+    // (undocumented)
+    readonly frame: ShallowRef<StackedDeckFrame>;
+    // (undocumented)
+    isInspectEligible(index: number): boolean;
+    readonly model: StackedDeckModel<Id>;
+    readonly motion: CarouselMotion<Id>;
+    next(): boolean;
+    // (undocumented)
+    onClick(event: MouseEvent): void;
+    // (undocumented)
+    onKeyDown(event: KeyboardEvent): void;
+    // (undocumented)
+    onLostPointerCapture(event: PointerEvent): void;
+    // (undocumented)
+    onPointerDown(event: PointerEvent): void;
+    // (undocumented)
+    onWheel(event: WheelEvent): void;
+    readonly owned: ComputedRef<boolean>;
+    // (undocumented)
+    readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
+    // (undocumented)
+    readonly physicalIndex: ComputedRef<number>;
+    // (undocumented)
+    readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer[]>;
+    // (undocumented)
+    readonly pitch: ComputedRef<number>;
+    previous(): boolean;
+    // (undocumented)
+    remeasure(): SnapAnchor<Id> | null;
+    requestId(id: Id): boolean;
+    readonly settledId: ComputedRef<Id | undefined>;
+    // (undocumented)
+    readonly speedInCards: ComputedRef<number>;
+    // (undocumented)
+    readonly stageWidth: ComputedRef<number>;
+    // (undocumented)
+    readonly state: ShallowRef<StackedDeckModelState>;
+    readonly statusIndex: ComputedRef<number | null>;
+    synchronizeId(id: Id, announce?: boolean): boolean;
+    // (undocumented)
+    readonly tuning: ComputedRef<StackedDeckTuning>;
+    // (undocumented)
+    readonly tuningProfile: ComputedRef<StackedDeckProfile>;
+}
 
 // (No @packageDocumentation comment for this package)
 

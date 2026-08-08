@@ -92,19 +92,20 @@ the geometry.
 
 Both surfaces share the same shape.
 
-| Prop                                                           | Meaning                                                                            |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `items`                                                        | Domain items. Each must carry the stable `id` it is keyed by.                      |
-| `activeId`                                                     | Durable selection. Controlled when supplied; it changes only at mechanical rest.   |
-| `itemLabel`                                                    | Accessible name of one item. Defaults to the semantic ID.                          |
-| `label` / `labelledby`                                         | Accessible name of the surface.                                                    |
-| `disabled`                                                     | Refuses every **input**. Controlled `activeId` still applies. See below.           |
-| `landmark`                                                     | Publishes the surface as a `region` landmark instead of a labelled `group`.        |
-| `focusScope`                                                   | Region that already counts as holding focus, when controls sit beside the surface. |
-| `stageWidth`                                                   | Fallback width used before the surface has been measured.                          |
-| `spring`, `elasticity`, `releasePolicy`, `programmaticImpulse` | Physics. Watched by value.                                                         |
-| `reducedMotionOverride`                                        | Overrides the system preference.                                                   |
-| `messages`                                                     | Localized strings.                                                                 |
+| Prop                                                           | Meaning                                                                              |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `items`                                                        | Domain items. Each must carry the stable `id` it is keyed by.                        |
+| `activeId`                                                     | Durable selection. Controlled when supplied; it changes only at mechanical rest.     |
+| `itemLabel`                                                    | Accessible name of one item. Defaults to the semantic ID.                            |
+| `label` / `labelledby`                                         | Accessible name of the surface.                                                      |
+| `disabled`                                                     | Refuses every **input**. Controlled `activeId` still applies. See below.             |
+| `landmark`                                                     | Publishes the surface as a `region` landmark instead of a labelled `group`.          |
+| `focusScope`                                                   | Region that already counts as holding focus, when controls sit beside the surface.   |
+| `stageWidth`                                                   | Fallback width used before the surface has been measured.                            |
+| `spring`, `elasticity`, `releasePolicy`, `programmaticImpulse` | Physics. Watched by value.                                                           |
+| `releasePolicy` (deck)                                         | `StackedDeckReleasePolicy`: the generic policy minus the anchor skip the deck fixes. |
+| `reducedMotionOverride`                                        | Overrides the system preference.                                                     |
+| `messages`                                                     | Localized strings.                                                                   |
 
 | Event             | Meaning                                                             |
 | ----------------- | ------------------------------------------------------------------- |
@@ -119,8 +120,13 @@ and `pose`, the rail adds `presentation`.
 
 The exposed instance — typed as `StackedDeckHandle<TId>` or `CoverflowHandle<TId>` — offers
 `previous()`, `next()`, `requestId(id)`, `synchronizeId(id)`, `isInspectEligible(index)`,
-`onKeyDown(event)`, and read-only state including a `diagnostics` snapshot of the surface's motion
-(`phase`, `position`, `velocity`, `activeId`, `targetId`, `anchors`, `bounds`, `reducedMotion`).
+`onKeyDown(event)`, and read-only state including `state` (the surface's whole published semantics)
+and a `diagnostics` snapshot of its motion (`phase`, `position`, `velocity`, `activeId`, `targetId`,
+`anchors`, `bounds`, `reducedMotion`).
+
+`previous()` and `next()` take no arguments. They are semantically fixed operations, not
+parameterised ones: `requestActiveId` exists so an application can trust the reason it is given,
+and a reason a caller chose is not evidence of anything.
 
 The handle deliberately exposes **no controller**. A product surface owns a transaction model — the
 deck's one-card exchange most of all — and a handle that returned the controller would be a
@@ -129,10 +135,24 @@ documented way around it. A renderer that genuinely needs that level of control 
 
 ### Navigation reasons
 
-`requestActiveId` carries why the selection changed, and it tells the truth: `previous`, `next`,
-`keyboard`, `drag`, `wheel`, or `picker` for a tap or an imperative `requestId()`. A change the
-application itself made through `activeId` is **not** re-emitted, so a route can never receive its
-own navigation back as a user request.
+`requestActiveId` carries why the selection changed, and it tells the truth:
+
+| Reason         | What actually happened                                       |
+| -------------- | ------------------------------------------------------------ |
+| `previous`     | `previous()`                                                 |
+| `next`         | `next()`                                                     |
+| `keyboard`     | An Arrow, Home, or End key the surface owned                 |
+| `drag`         | A pointer manipulation the surface **accepted and resolved** |
+| `wheel`        | A wheel burst the surface **accepted and resolved**          |
+| `picker`       | A tap on an item, or a pagination dot                        |
+| `programmatic` | `requestId()` — an imperative request from the application   |
+| `route`        | Authoritative state: `activeId`, or `synchronizeId()`        |
+
+`drag` and `wheel` are claims about movement, not about events. A pointerdown that a nested button
+refuses, a right-click, a vertical page scroll, and a wheel gesture belonging to a descendant all
+reach the surface and none of them renames a settlement that something else caused. A change the
+application itself made through `activeId` or `synchronizeId()` is **not** re-emitted, so a route
+can never receive its own navigation back as a user request.
 
 ### Controlled selection is not input
 
@@ -149,6 +169,11 @@ The surface preserves the **semantic item** it was on wherever that item moved t
 gone it holds the same ordinal position, clamped to what remains. Indexes are never carried across
 a reconfiguration, and an `activeId` or `requestId()` naming an item the collection does not contain
 is refused rather than resolved to item zero.
+
+An empty collection is a supported state with one answer everywhere: ID-valued fields are
+`undefined`, every ordinal on the published `state` is **`-1`**, `canPrevious` and `canNext` are
+false, and every command is refused. No layer substitutes item zero for "no item" — not the model,
+not the composable, not the handle.
 
 ## Requesting versus synchronizing
 
@@ -180,7 +205,10 @@ Both roots are a labelled `group` with `aria-roledescription="carousel"`, or a `
 when `landmark` is set. Each card is a `group` with `aria-roledescription="slide"`, and a card that
 is hidden from assistive technology is also `inert`, so it never leaves focusable content reachable
 by keyboard. Interactive content a consumer puts in a `#card` slot keeps its own clicks, pointer,
-and Arrow keys; only a completed manipulation suppresses the browser click it produced.
+and Arrow keys. Only a manipulation the surface actually **consumed** suppresses the browser click
+it produced — a vertical touch scroll, a tap, a cancelled gesture, and a two-finger gesture all
+leave the following click alone — and that suppression is spent on exactly one click and expires
+rather than waiting for one that never comes.
 
 `will-change` is set on cards only while the surface is being manipulated or is animating, and
 returns to `auto` once it settles.
@@ -219,6 +247,14 @@ Advanced consumers may descend without giving up the product behaviour:
    selection, authority, interaction envelopes, command policy, and announcements, resolved from
    controller snapshots without touching a controller.
 4. `SnapController` — the generic scalar controller, unchanged and still generic.
+
+`useStackedDeckMotion` and `useCoverflowMotion` publish an explicit
+`UseStackedDeckMotionReturn<Id>` / `UseCoverflowMotionReturn<Id>` — a written contract rather than
+whatever the implementation happens to return. Both include `model` and `motion` as the deliberate
+escape hatches; index-only request and synchronization helpers are not part of it, because they are
+how the capability is built rather than what it offers. Controlled selection is an _option_
+(`controlledId`), not a method: it is state arriving from outside, so it is applied even while the
+surface is disabled or held, and is never echoed back.
 
 Below the models sit the primitives they compose: `resolveStackedDeckTraversal`,
 `resolveStackedDeckFrame`, `resolveStackedDeckPile`, `resolveCoverflowPresentation`,

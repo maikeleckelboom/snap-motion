@@ -22,7 +22,7 @@
     "pack:packages": "node scripts/pack-packages.mjs",
     "verify:packages": "node scripts/verify-packages.mjs",
     "size:check": "node scripts/check-size.mjs",
-    "performance:check": "vitest run packages/core/test/performance-budget.test.ts packages/vue/test/performance-budget.test.ts",
+    "performance:check": "vitest run packages/core/test/performance-budget.test.ts packages/core/test/surface-model-performance.test.ts packages/vue/test/performance-budget.test.ts",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release:check": "pnpm api:check && pnpm performance:check && pnpm verify:packages && pnpm size:check",

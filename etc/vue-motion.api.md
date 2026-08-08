@@ -22,8 +22,8 @@ import { SnapDirection } from '@snap-motion/core';
 // @public (undocumented)
 export function createMotionDriver(): AnimationDriver;
 
-// @public (undocumented)
-export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "route";
+// @public
+export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "programmatic" | "route";
 
 // @public (undocumented)
 export type PointerIntent = "horizontal" | "pending" | "vertical";

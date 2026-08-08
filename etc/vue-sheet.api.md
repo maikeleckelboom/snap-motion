@@ -40,8 +40,8 @@ export function defaultSheetOpenSnapId(side: SheetSide): SheetOpenSnapId;
 // @public (undocumented)
 export function getSheetSideDescriptor(side: SheetSide): SheetSideDescriptor;
 
-// @public (undocumented)
-export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "route";
+// @public
+export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "programmatic" | "route";
 
 // @public (undocumented)
 export type PointerIntent = "horizontal" | "pending" | "vertical";
