@@ -15,10 +15,12 @@ import {
 } from "../src/stackedDeck";
 
 const ITEM_COUNT = 5;
+const DECK_IDS = ["a", "b", "c", "d", "e"] as const;
+type DeckId = (typeof DECK_IDS)[number];
 const TUNING = resolveStackedDeckTuning({ stageWidth: 1_120, stageHeight: 620 });
 
 function model(initialIndex = 2) {
-  return new StackedDeckModel({ itemCount: ITEM_COUNT, initialIndex });
+  return new StackedDeckModel<DeckId>({ ids: DECK_IDS, initialId: DECK_IDS[initialIndex]! });
 }
 
 /** One controller snapshot. Anything not stated is what an unattended deck would report. */
@@ -233,16 +235,17 @@ describe("stacked deck announcements", () => {
     expect(deck.update(restAt(0)).announcementIndex).toBe(0);
   });
 
-  it("clamps a synchronization to the deck it has", () => {
+  it("refuses a synchronization to an index that names no card", () => {
     const deck = model();
-    expect(deck.synchronize(99)).toBe(ITEM_COUNT - 1);
-    expect(deck.synchronize(-4)).toBe(0);
+    expect(deck.synchronize(99)).toBe(-1);
+    expect(deck.synchronize(-4)).toBe(-1);
+    expect(deck.state.settledIndex).toBe(2);
   });
 });
 
 describe("empty stacked deck", () => {
   it("resolves nothing rather than inventing an item", () => {
-    const deck = new StackedDeckModel({ itemCount: 0 });
+    const deck = new StackedDeckModel<DeckId>({ ids: [] });
     expect(deck.traversalBounds).toBeUndefined();
     expect(deck.resolveRelativeCommand(1, { owned: false })).toEqual({ kind: "none" });
     expect(deck.resolveAbsoluteCommand(0, { owned: false, atRest: true })).toEqual({

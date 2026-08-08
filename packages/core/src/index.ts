@@ -119,9 +119,11 @@ export type {
   StackedDeckTraversalPhase,
   StackedDeckTuning,
 } from "./stackedDeck";
+export { OrderedIdCollection, resolvePreservedIndex } from "./item-collection";
 export {
   isStackedDeckInspectEligible,
   STACKED_DECK_ANCHOR_SKIP,
+  STACKED_DECK_INTERIOR_ELASTICITY,
   StackedDeckModel,
 } from "./stacked-deck-model";
 export type {

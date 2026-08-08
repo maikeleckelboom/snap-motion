@@ -6,7 +6,8 @@ import {
   type SettledOnAnchorInput,
 } from "../src/coverflow-model";
 
-const ITEM_COUNT = 5;
+const RAIL_IDS = ["a", "b", "c", "d", "e"] as const;
+type RailId = (typeof RAIL_IDS)[number];
 
 const settledOnMap: SettledOnAnchorInput = {
   phase: "idle",
@@ -23,7 +24,7 @@ const settledOnMap: SettledOnAnchorInput = {
 };
 
 function model(initialIndex = 2) {
-  return new CoverflowModel({ itemCount: ITEM_COUNT, initialIndex });
+  return new CoverflowModel<RailId>({ ids: RAIL_IDS, initialId: RAIL_IDS[initialIndex]! });
 }
 
 describe("coverflow rail selection", () => {
@@ -114,10 +115,11 @@ describe("coverflow rail commands", () => {
     ).toBeNull();
   });
 
-  it("clamps a synchronization to the rail it has", () => {
+  it("refuses a synchronization to an index that names no card", () => {
     const rail = model();
-    expect(rail.synchronize(12)).toBe(4);
-    expect(rail.synchronize(-8)).toBe(0);
+    expect(rail.synchronize(12)).toBe(-1);
+    expect(rail.synchronize(-8)).toBe(-1);
+    expect(rail.state.settledIndex).toBe(2);
   });
 });
 
