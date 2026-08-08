@@ -1,8 +1,16 @@
 # Getting started
 
-Snap Motion is currently installed only from a workspace or a reviewed release-candidate tarball.
-It is not on npm. Import the base CSS exactly once; it contains structure and accessibility rules,
-not a product theme.
+The packages remain private until the beta blockers close. A normal external Vue application will
+install only the Vue package; `@snap-motion/core` is its runtime dependency and does not belong in
+the application's manifest unless the application imports core directly:
+
+```sh
+pnpm add @snap-motion/vue@beta
+```
+
+Until publication, use the reviewed `@snap-motion/vue` release-candidate tarball in place of the
+registry specifier. Import the base CSS exactly once; it contains structural and accessibility
+rules, not a product theme.
 
 ```ts
 import "@snap-motion/vue/style.css";
@@ -60,6 +68,7 @@ export default defineNuxtConfig({
 
 Components do not access browser globals during SSR. Keep a route-provided `activeId` stable on
 the server and client; `useCarouselWindow` will include that item in its deterministic SSR window.
+The components render on the server and hydrate normally; do not wrap them in `ClientOnly`.
 
 ## Spatial surfaces
 

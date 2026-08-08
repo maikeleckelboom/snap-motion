@@ -161,6 +161,9 @@ surface is `disabled` or physically held by a pointer, because refusing it would
 disagreeing with the application with nothing to retry it. The interruption policy is explicit:
 while the surface is held or refusing input the destination is adopted exactly, since animating out
 from under a hand is worse than arriving; otherwise the surface's own navigation policy applies.
+The same transaction cancels a pending touch recognizer, an accepted pointer drag, and a coalesced
+wheel burst before reconfiguration. A contact that continues after authoritative state arrives can
+therefore never resolve against the previous collection or selection.
 
 ### Changing items
 
@@ -168,7 +171,10 @@ from under a hand is worse than arriving; otherwise the surface's own navigation
 The surface preserves the **semantic item** it was on wherever that item moved to; if the item is
 gone it holds the same ordinal position, clamped to what remains. Indexes are never carried across
 a reconfiguration, and an `activeId` or `requestId()` naming an item the collection does not contain
-is refused rather than resolved to item zero.
+is never resolved to item zero. An imperative `requestId()` is refused immediately. A controlled
+`activeId` remains authoritative pending state: if that ID appears in a later `items` update, the
+surface applies it without requiring the application to emit the same prop value again. Removal and
+reintroduction follow the same rule, including an `items` and `activeId` change in one Vue update.
 
 An empty collection is a supported state with one answer everywhere: ID-valued fields are
 `undefined`, every ordinal on the published `state` is **`-1`**, `canPrevious` and `canNext` are
@@ -204,11 +210,17 @@ Stable class names: `snap-motion-stacked-deck`, `-stage`, `-card`, `-card-motion
 Both roots are a labelled `group` with `aria-roledescription="carousel"`, or a `region` landmark
 when `landmark` is set. Each card is a `group` with `aria-roledescription="slide"`, and a card that
 is hidden from assistive technology is also `inert`, so it never leaves focusable content reachable
-by keyboard. Interactive content a consumer puts in a `#card` slot keeps its own clicks, pointer,
+by keyboard. A physically visible Coverflow neighbour may still be semantically hidden when it is
+only part of the depth projection; `pointer-events`, `inert`, `aria-hidden`, activation eligibility,
+and focus ownership all follow the same semantic state. If navigation would make a focused card
+non-semantic, focus moves to the surface before inertness is applied. Interactive content a
+consumer puts in a `#card` slot keeps its own clicks, pointer,
 and Arrow keys. Only a manipulation the surface actually **consumed** suppresses the browser click
 it produced — a vertical touch scroll, a tap, a cancelled gesture, and a two-finger gesture all
 leave the following click alone — and that suppression is spent on exactly one click and expires
-rather than waiting for one that never comes.
+rather than waiting for one that never comes. The suppressor also requires the generated click to
+match the drag's origin or release target and release coordinates; a fast unrelated control click
+is not consumed merely because it happened inside a timeout window.
 
 `will-change` is set on cards only while the surface is being manipulated or is animating, and
 returns to `auto` once it settles.

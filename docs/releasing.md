@@ -1,7 +1,10 @@
 # Releasing
 
-No workflow publishes packages. `pnpm release:candidate` runs the full gate and writes private
-tarballs, SHA-256 checksums, and a release manifest under `.artifacts`.
+No workflow publishes packages. `pnpm release:check` is the same authoritative gate as
+`pnpm verify`. From a clean worktree, `pnpm release:candidate` runs that gate and writes private
+tarballs, SHA-256 checksums, and a deterministic manifest under `.artifacts`; the manifest records
+the exact source commit, public repository provenance, package versions/exports/dependencies, and
+the tracked blocker details. Candidate generation never publishes.
 
 Public API changes first run `pnpm api:update` to regenerate the root and capability reports. CI
 uses `pnpm api:check`; package builds create declaration rollups without modifying tracked reports.
@@ -10,8 +13,7 @@ uses `pnpm api:check`; package builds create declaration rollups without modifyi
 
 1. Verify ownership of both intended npm names.
 2. Complete and record every physical assistive-technology row in production certification.
-3. Decide repository visibility; a public repository improves inspectable provenance.
-4. Obtain explicit manual release approval.
+3. Obtain explicit manual release approval.
 
 ## Future staged publication
 

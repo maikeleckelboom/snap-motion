@@ -74,19 +74,19 @@ modules but are no longer package exports.
   `createFixedStageCarouselGeometryStrategy`, `createVariableWidthCenteredCarouselGeometryStrategy`.
 - Types: `CarouselGeometryMeasureContext`, `CarouselGeometryStrategy`, `CarouselKeyboardScope`,
   `CarouselWindowOptions`, `CarouselWindowState`, `FixedStageCarouselGeometryOptions`,
-  `NavigationReason`, `PublicCarouselContext`, `SnapMotionDirection`, `UseCarouselMotionOptions`,
+  `CarouselMotion`, `PublicCarouselContext`, `SnapMotionDirection`, `UseCarouselMotionOptions`,
   `VariableWidthCenteredCarouselGeometryOptions`.
 
 ### `@snap-motion/vue/coverflow`
 
 - Component and composable: `Coverflow`, `useCoverflowMotion`.
 - Types: `CoverflowCardPresentation`, `CoverflowCardState`, `CoverflowHandle`, `CoverflowTuning`,
-  `NavigationReason`, `UseCoverflowMotionOptions`, `UseCoverflowMotionReturn`.
+  `UseCoverflowMotionOptions`, `UseCoverflowMotionReturn`.
 
 ### `@snap-motion/vue/stacked-deck`
 
 - Component and composable: `StackedDeck`, `useStackedDeckMotion`.
-- Types: `NavigationReason`, `StackedDeckCardState`, `StackedDeckHandle`, `StackedDeckPileLayer`,
+- Types: `StackedDeckCardState`, `StackedDeckHandle`, `StackedDeckPileLayer`,
   `StackedDeckPose`, `StackedDeckRole`, `UseStackedDeckMotionOptions`,
   `UseStackedDeckMotionReturn`.
 
@@ -100,8 +100,8 @@ modules but are no longer package exports.
   `toCanonicalSheetDelta`, `toPhysicalSheetPosition`, and `sheetTransform`.
 - Types: `SheetAxis`, `SheetEdge`, `SheetSide`, `SheetSideDescriptor`, `SheetMeasureContext`,
   `SheetOpenSnapId`, `SheetSnapResolver`, `SheetSnapPoint`, `SheetState`, `SheetViewportPolicy`,
-  `ResolvedSheetSnapPoint`, `UseSheetMotionOptions`, `UseSheetMotionReturn`, `CloseReason`,
-  `NavigationReason`, `PointerIntent`, and `SheetNavigationReason`.
+  `ResolvedSheetSnapPoint`, `UseSheetMotionOptions`, `UseSheetMotionReturn`, and
+  `SheetNavigationReason`.
 
 ### `@snap-motion/vue/dialog`
 
@@ -115,7 +115,7 @@ enumeration and focus-target resolution remain internal.
 ### `@snap-motion/vue/motion`
 
 - Runtime: `createMotionDriver`, `useBoundedSpringDriver`, `useSnapMotion`.
-- Types: `NavigationReason`, `PointerIntent`, `UseSnapMotionOptions`.
+- Types: `NavigationReason`, `PointerIntent`, `SurfaceMotionDiagnostics`, `UseSnapMotionOptions`.
 
 ### `@snap-motion/vue/localization`
 
@@ -147,7 +147,10 @@ compatibility facade.
 
 Feature components depend on their own concrete modules and precise internal capabilities.
 Carousel and sheet may depend on motion; all rendered features may depend on localization; sheet
-may depend on the dialog close contract. Internal capabilities cannot depend on a
+may depend on the dialog close contract. Public declarations preserve those owner subpaths instead
+of re-exporting shared types from every feature. API rollups are generated in dependency order, and
+only exact Vue-emitter helper names from generated `.d.vue.ts` files have a forgotten-export
+allowlist; any source-owned forgotten export fails. Internal capabilities cannot depend on a
 feature. Core cannot import Vue, DOM, or another runtime package. Apps and fixtures import package
 entrypoints. A deterministic architecture check enforces these rules and rejects source cycles.
 
