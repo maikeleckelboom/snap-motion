@@ -16,6 +16,8 @@ import {
 
 const WIDE_TUNING = resolveStackedDeckTuning({ stageWidth: 1_120, stageHeight: 620 });
 const SEGMENT_SAMPLES = [0.1, 0.25, 0.5, 0.7, 0.85, 0.95] as const;
+/** Local progress past which the card being replaced starts materialising back into the deck. */
+const OUTGOING_DISSOLVE_START = 0.5;
 
 function traversal(overrides: Partial<StackedDeckTraversal> = {}): StackedDeckTraversal {
   return {
@@ -23,7 +25,7 @@ function traversal(overrides: Partial<StackedDeckTraversal> = {}): StackedDeckTr
     visualTopIndex: 2,
     // The compositor never reads authority, so it defaults to the card that still owns the surface.
     authoritativeIndex: overrides.visualTopIndex ?? 2,
-    segmentOriginIndex: 2,
+    segmentOriginIndex: overrides.visualTopIndex ?? 2,
     segmentTargetIndex: null,
     direction: 0,
     signedLocalDistance: 0,
@@ -217,44 +219,177 @@ describe("stacked deck tuning", () => {
   });
 });
 
-describe("decorative stacked deck pile", () => {
-  it("resolves deterministic depth that no gesture can reorder or mirror", () => {
-    const pile = resolveStackedDeckPile(WIDE_TUNING);
-    expect(pile).toHaveLength(WIDE_TUNING.pileLayers);
-    expect(pile).toEqual(resolveStackedDeckPile(WIDE_TUNING));
-    expect(pile.map((layer) => layer.depth)).toEqual([1, 2, 3]);
-    for (const [index, layer] of pile.entries()) {
-      expect(layer.translateX).toBeGreaterThan(0);
-      expect(layer.translateY).toBeGreaterThan(0);
-      expect(layer.scale).toBeLessThan(1);
-      if (index === 0) continue;
-      const previous = pile[index - 1]!;
-      expect(layer.translateX).toBeGreaterThan(previous.translateX);
-      expect(layer.translateY).toBeGreaterThan(previous.translateY);
-      expect(layer.scale).toBeLessThan(previous.scale);
-      expect(layer.layer).toBeLessThan(previous.layer);
-      expect(layer.shadowStrength).toBeLessThanOrEqual(previous.shadowStrength);
-      // Each deeper layer must still show an exposed edge beyond the one above it.
-      const edge = (candidate: typeof layer) =>
-        candidate.translateX + (WIDE_TUNING.cardWidth * candidate.scale) / 2;
-      expect(edge(layer)).toBeGreaterThan(edge(previous));
+function resolvePile(
+  activeTraversal: StackedDeckTraversal = traversal(),
+  itemCount = 5,
+  tuning: StackedDeckTuning = WIDE_TUNING,
+) {
+  return resolveStackedDeckPile({
+    frame: resolveFrame(activeTraversal, itemCount, tuning),
+    tuning,
+  });
+}
+
+function rounded(value: number) {
+  return Number(value.toFixed(6));
+}
+
+/** Layers arrive in index order, so the mirror of one deck is the other read back to front. */
+function mirrorOf<T>(source: readonly T[], read: (layer: T) => number) {
+  return source.map((_unused, index) => -read(source[source.length - 1 - index]!));
+}
+
+/** Exposed edge of a layer beyond the top card, which is all a compact deck ever shows of it. */
+function exposedEdge(pose: { translateX: number; scale: number }, tuning = WIDE_TUNING) {
+  return Math.abs(pose.translateX) + (tuning.cardWidth * pose.scale) / 2 - tuning.cardWidth / 2;
+}
+
+describe("stacked deck thickness", () => {
+  it("shows one backing card per remaining screen, on the side that screen sits on", () => {
+    // Position is legible from thickness alone: nothing behind the first screen, nothing ahead of
+    // the last, and an even split in the middle. The deck always accounts for every screen exactly
+    // once, whatever its length.
+    for (const [index, slots] of [
+      [0, [1, 2, 3, 4]],
+      [2, [-2, -1, 1, 2]],
+      [4, [-4, -3, -2, -1]],
+    ] as const) {
+      const pile = resolvePile(traversal({ settledIndex: index, visualTopIndex: index }));
+      expect(pile.map((layer) => layer.slot)).toEqual(slots);
+      expect(pile).toHaveLength(4);
     }
-    expect(pile[0]!.translateX + (WIDE_TUNING.cardWidth * pile[0]!.scale) / 2).toBeGreaterThan(
-      WIDE_TUNING.cardWidth / 2,
+    for (const itemCount of [1, 2, 9, 40]) {
+      expect(
+        resolvePile(traversal({ settledIndex: 0, visualTopIndex: 0 }), itemCount),
+      ).toHaveLength(itemCount - 1);
+    }
+  });
+
+  it("places every layer from index order alone, so a reversal cannot mirror the deck", () => {
+    // A layer's slot is `index - centre` and nothing else. Travelling either way from the same
+    // position therefore retraces the same slots rather than flipping the deck around.
+    for (const direction of [1, -1] as const) {
+      for (const progress of SEGMENT_SAMPLES) {
+        const active = segment(2, direction, progress);
+        const centre = 2 + direction * progress;
+        const expected = [0, 1, 2, 3, 4]
+          .filter((index) => index !== active.segmentTargetIndex)
+          .filter((index) => index !== 2 || progress > OUTGOING_DISSOLVE_START)
+          .map((index) => index - centre);
+        expect(resolvePile(active).map((layer) => layer.slot)).toEqual(expected);
+      }
+    }
+    // Mirrored positions produce mirrored slots, from the item ordering being genuinely reversed.
+    const forward = resolvePile(traversal({ settledIndex: 1, visualTopIndex: 1 }));
+    const backward = resolvePile(traversal({ settledIndex: 3, visualTopIndex: 3 }));
+    expect(forward.map((layer) => layer.slot)).toEqual(mirrorOf(backward, (layer) => layer.slot));
+    expect(forward.map((layer) => rounded(layer.translateX))).toEqual(
+      mirrorOf(backward, (layer) => rounded(layer.translateX)),
     );
   });
 
-  it("starts either direction's target from the identical first pile slot", () => {
-    const pile = resolveStackedDeckPile(WIDE_TUNING);
-    const forward = resolveFrame(segment(2, 1, 0.0001)).poses[3]!;
-    const backward = resolveFrame(segment(2, -1, 0.0001)).poses[1]!;
-    for (const key of ["translateX", "translateY", "scale", "rotate"] as const) {
-      expect(forward[key]).toBeCloseTo(pile[0]![key], 3);
-      expect(backward[key]).toBeCloseTo(pile[0]![key], 3);
-      expect(forward[key]).toBeCloseTo(backward[key], 6);
+  it("stays a compact stack of exposed edges rather than a horizontal rail", () => {
+    const pile = resolvePile();
+    for (const layer of pile) {
+      const side = layer.slot < 0 ? -1 : 1;
+      // Every layer leans and offsets outward on its own side, and recedes as it goes.
+      expect(Math.sign(layer.translateX)).toBe(side);
+      expect(Math.sign(layer.rotate)).toBe(side);
+      expect(layer.translateY).toBeGreaterThan(0);
+      expect(layer.scale).toBeLessThan(1);
+      expect(exposedEdge(layer)).toBeGreaterThan(0);
     }
-    expect(forward.layer).toBe(backward.layer);
-    expect(forward.layer).toBeGreaterThan(pile[0]!.layer);
+    // Within a side, depth ordering is strict: each layer shows an edge beyond the one above it.
+    // Layers arrive in index order, so the left side runs outward backwards and the right forwards.
+    for (const side of [-1, 1] as const) {
+      const onSide = pile.filter((layer) => Math.sign(layer.slot) === side);
+      const outward = side < 0 ? onSide.map((_u, index) => onSide.at(-1 - index)!) : onSide;
+      expect(outward.length).toBeGreaterThan(1);
+      for (let index = 1; index < outward.length; index += 1) {
+        expect(exposedEdge(outward[index]!)).toBeGreaterThan(exposedEdge(outward[index - 1]!));
+        expect(outward[index]!.layer).toBeLessThan(outward[index - 1]!.layer);
+      }
+    }
+    // Mirrored slots are exactly as deep as one another: neither side is favoured.
+    const mirroredEdges = pile.map((layer) => {
+      const mirrored = pile.find((other) => other.slot === -layer.slot);
+      return mirrored === undefined ? null : exposedEdge(mirrored) - exposedEdge(layer);
+    });
+    expect(
+      mirroredEdges.every((difference) => difference === null || Math.abs(difference) < 1e-9),
+    ).toBe(true);
+    expect(Math.max(...pile.map((layer) => exposedEdge(layer)))).toBeLessThan(
+      WIDE_TUNING.cardWidth * 0.07,
+    );
+    // The spread converges, so even a very deep deck cannot walk off the stage or invert.
+    const deep = resolvePile(traversal({ settledIndex: 0, visualTopIndex: 0 }), 40);
+    expect(Math.max(...deep.map((layer) => exposedEdge(layer)))).toBeLessThan(
+      WIDE_TUNING.cardWidth * 0.09,
+    );
+    expect(deep.every((layer) => layer.scale > 0.7 && Number.isFinite(layer.translateX))).toBe(
+      true,
+    );
+  });
+
+  it("exchanges a card between sides as one physical event", () => {
+    // The target rises from the nearest slot on its own side; Previous is the exact mirror because
+    // the item ordering is reversed, not because the gesture direction is.
+    for (const direction of [1, -1] as const) {
+      const opening = resolveFrame(segment(2, direction, 0.0001));
+      const target = opening.poses[2 + direction]!;
+      const nearest = resolveStackedDeckPile({
+        frame: resolveFrame(traversal()),
+        tuning: WIDE_TUNING,
+      }).find((layer) => layer.slot === direction)!;
+      for (const key of ["translateX", "translateY", "scale", "rotate"] as const) {
+        expect(target[key]).toBeCloseTo(nearest[key], 3);
+      }
+      expect(target.layer).toBeGreaterThan(nearest.layer);
+
+      // The card being replaced materialises into the nearest slot on the far side on exactly the
+      // envelope its face dissolves on, so the two are one exchange rather than two events.
+      for (const progress of SEGMENT_SAMPLES) {
+        const frame = resolveFrame(segment(2, direction, progress));
+        const vacating = resolvePile(segment(2, direction, progress)).find(
+          (layer) => Math.abs(layer.slot + direction * progress) < 1e-9,
+        );
+        expect(vacating?.opacity ?? 0).toBeCloseTo(1 - frame.poses[2]!.opacity, 6);
+        expect(vacating === undefined ? -direction : Math.sign(vacating.slot)).toBe(-direction);
+      }
+      // A completed exchange leaves exactly the resting geometry of the card it landed on.
+      const landed = resolvePile(segment(2, direction, 0.999999)).map((layer) =>
+        Number(layer.slot.toFixed(3)),
+      );
+      const resting = resolvePile(
+        traversal({ settledIndex: 2 + direction, visualTopIndex: 2 + direction }),
+      ).map((layer) => layer.slot);
+      expect(landed).toEqual(resting);
+    }
+  });
+
+  it("moves every layer continuously across a segment and its reversal", () => {
+    const samples = [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95].flatMap((progress) => [
+      progress,
+      -progress,
+    ]);
+    for (const direction of [1, -1] as const) {
+      let previous: number[] | undefined;
+      for (const progress of [0.02, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.98]) {
+        // Layers arrive in index order, so slots are already ascending.
+        const slots = resolvePile(segment(2, direction, progress)).map((layer) => layer.slot);
+        const steps =
+          previous?.length === slots.length
+            ? slots.map((slot, index) => Math.abs(slot - previous![index]!))
+            : [0];
+        expect(Math.max(...steps)).toBeLessThan(0.15);
+        previous = slots;
+      }
+    }
+    // Travelling either way from the same position lays the deck out as an exact mirror.
+    expect(samples.length).toBeGreaterThan(0);
+    expect(resolvePile(segment(2, 1, 0.3)).map((layer) => rounded(layer.slot))).toEqual(
+      mirrorOf(resolvePile(segment(2, -1, 0.3)), (layer) => rounded(layer.slot)),
+    );
   });
 });
 
@@ -806,6 +941,12 @@ describe("stacked deck handoff continuity", () => {
     expect(() => resolveFrame({ ...segment(2, 1, 0.5), signedLocalDistance: Number.NaN })).toThrow(
       TypeError,
     );
-    expect(() => resolveStackedDeckPile({ ...WIDE_TUNING, pileLayers: 0 })).toThrow(RangeError);
+    // A single-item deck has nothing behind its one card, and an empty one has nothing at all.
+    expect(resolvePile(createStackedDeckTraversal(0, 1), 1)).toEqual([]);
+    expect(resolvePile(segment(0, 1, 0.5), 2)).toEqual([]);
+    expect(() => resolvePile(traversal(), 5, { ...WIDE_TUNING, pileScaleStep: -1 })).toThrow(
+      RangeError,
+    );
+    expect(() => resolvePile({ ...segment(2, 1, 0.5), authoritativeIndex: 0 })).toThrow(RangeError);
   });
 });

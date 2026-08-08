@@ -672,7 +672,14 @@ export interface ResolveStackedDeckFrameOptions {
 }
 
 // @public
-export function resolveStackedDeckPile(tuning: StackedDeckTuning): readonly StackedDeckPilePose[];
+export function resolveStackedDeckPile(options: ResolveStackedDeckPileOptions): readonly StackedDeckPilePose[];
+
+// @public (undocumented)
+export interface ResolveStackedDeckPileOptions {
+    readonly frame: StackedDeckFrame;
+    // (undocumented)
+    readonly tuning: StackedDeckTuning;
+}
 
 // @public
 export function resolveStackedDeckTraversal(options: ResolveStackedDeckTraversalOptions, output: MutableStackedDeckTraversal): StackedDeckTraversal;
@@ -848,15 +855,16 @@ export interface StackedDeckFrame extends StackedDeckTraversal {
 // @public
 export interface StackedDeckPilePose {
     // (undocumented)
-    readonly depth: number;
-    // (undocumented)
     readonly layer: number;
+    // (undocumented)
+    readonly opacity: number;
     // (undocumented)
     readonly rotate: number;
     // (undocumented)
     readonly scale: number;
     // (undocumented)
     readonly shadowStrength: number;
+    readonly slot: number;
     // (undocumented)
     readonly translateX: number;
     // (undocumented)
@@ -934,8 +942,6 @@ export interface StackedDeckTuning {
     readonly cardWidth: number;
     // (undocumented)
     readonly motionPitch: number;
-    // (undocumented)
-    readonly pileLayers: number;
     // (undocumented)
     readonly pileOffsetX: number;
     // (undocumented)

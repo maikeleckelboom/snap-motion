@@ -58,6 +58,7 @@ export type {
   MutableStackedDeckPose,
   MutableStackedDeckTraversal,
   ResolveStackedDeckFrameOptions,
+  ResolveStackedDeckPileOptions,
   ResolveStackedDeckTraversalOptions,
   ResolveStackedDeckTuningOptions,
   StackedDeckFrame,

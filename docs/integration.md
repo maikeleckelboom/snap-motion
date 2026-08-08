@@ -48,8 +48,10 @@ This is a presentation policy: do not lower the generic `maxAnchorSkip`, and do 
 multi-anchor `moveTo()` support — a plain carousel or Coverflow surface keeps both.
 
 A frame only ever exposes content-bearing roles: the manipulated top and one adjacent target. Depth
-belongs to `resolveStackedDeckPile`, which is a pure function of tuning, so backing layers carry no
-item identity and no gesture direction, segment change, or reversal can mirror or reorder them.
+belongs to `resolveStackedDeckPile`, which draws one layer per screen the frame does not already
+draw, on the side that screen's index lies on — so the deck's thickness is the rest of the deck and
+its shape says where in the deck you are. Layers are placed from index ordering alone, so they carry
+no item identity and no gesture direction or reversal can mirror or reorder them.
 Render those layers as inert `aria-hidden` surfaces behind the cards. One motion pitch spans most of
 a card width, so visual authority has already migrated to the target before an anchor crossing
 transfers ownership: the outgoing card translates one-to-one with the pointer while its scale,

@@ -158,8 +158,9 @@ and cannot make incoherent geometry look like anything.
 
 ## Stacked deck
 
-The deck is a physical pile with one authoritative top card and at most three restrained backing
-layers. It reuses `createCoverflowGeometry` and `useCarouselMotion` only for generic scalar gesture,
+The deck is a physical pile with one authoritative card at its centre and one restrained backing
+layer for every screen it is not drawing, fanned to the side that screen's index lies on. It reuses
+`createCoverflowGeometry` and `useCarouselMotion` only for generic scalar gesture,
 constraint, velocity, and settlement mechanics. It does not reuse the rail renderer. No card is
 assigned a horizontal slot from its index.
 
@@ -169,6 +170,37 @@ index, continuous physical index, and an optional `traversalBounds` envelope. It
 visual top, completes every crossed anchor in order inside that envelope, and exposes only the
 residual adjacent segment. `resolveStackedDeckFrame` projects that segment into `top`, `target`,
 `backing`, or `hidden` roles. No active segment can have a non-adjacent target.
+
+### Deck thickness
+
+`resolveStackedDeckPile` draws one backing layer for every screen the frame does not already draw,
+on the side of the current card that screen sits on. The deck is therefore exactly as thick as what
+is left, and its shape says where you are:
+
+```text
+index 0 of 5    │▐▐▐▐        four ahead, none behind
+index 2 of 5  ▌▌│▐▐          an even split
+index 4 of 5  ▌▌▌▌│          none ahead, four behind
+```
+
+Every layer is placed from `index - centre` alone, where `centre` is the continuous position of the
+card at the middle of the deck. The topology is therefore item ordering, not gesture direction: a
+reversal retraces the same slots rather than mirroring the deck, and travelling either way from one
+position lays out an exact mirror of the other.
+
+An exchange is one physical event. The adjacent target rises to centre out of the nearest slot on
+its own side, and the card it replaces materialises into the nearest slot on the far side on exactly
+the envelope its face dissolves on — so a `Next` moves one card from the right stack to the left,
+and `Previous` mirrors it because the ordering genuinely is reversed. Because `centre` is
+continuous, the whole deck slides across by one slot rather than snapping, and a reversal part-way
+through an exchange retraces it.
+
+Slots are a geometric series rather than a straight multiple of one step: the nearest slot is
+exactly one step out — where every target rises from — while the total spread converges, so a deck
+of any length shows exposed edges and depth rather than widening into a horizontal rail.
+
+A layer still carries no item identity. Nothing about it names, reveals, or lets a caller act on the
+screen it accounts for; it only says the deck has one more card that way.
 
 ### One card per interaction
 

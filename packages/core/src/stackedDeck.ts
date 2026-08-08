@@ -64,12 +64,17 @@ export interface ResolveStackedDeckTuningOptions {
   readonly reducedMotion?: boolean;
 }
 
+export interface ResolveStackedDeckPileOptions {
+  /** The frame the pile completes, so the deck's thickness is exactly the screens it does not draw. */
+  readonly frame: StackedDeckFrame;
+  readonly tuning: StackedDeckTuning;
+}
+
 export interface StackedDeckTuning {
   readonly profile: StackedDeckProfile;
   readonly cardWidth: number;
   readonly cardHeight: number;
   readonly motionPitch: number;
-  readonly pileLayers: number;
   readonly pileOffsetX: number;
   readonly pileOffsetY: number;
   readonly pileScaleStep: number;
@@ -80,15 +85,22 @@ export interface StackedDeckTuning {
 }
 
 /**
- * One decorative depth layer. The pile communicates physical thickness only: it carries no item
- * identity, so neither traversal direction nor segment changes can reorder or mirror it.
+ * One decorative depth layer: one screen still in the deck, on the side of the current card it is
+ * still waiting on. A layer carries no item identity — nothing about it names, reveals, or lets a
+ * caller act on the screen it accounts for — only that the deck has one more card that way.
  */
 export interface StackedDeckPilePose {
-  readonly depth: number;
+  /**
+   * Continuous slot distance from the card at the centre of the deck, signed by which side of it
+   * the screen sits on: negative before, positive after. It is `index - centre` and nothing else,
+   * so a reversal retraces the same slots rather than mirroring the deck.
+   */
+  readonly slot: number;
   readonly translateX: number;
   readonly translateY: number;
   readonly scale: number;
   readonly rotate: number;
+  readonly opacity: number;
   readonly layer: number;
   readonly shadowStrength: number;
 }
@@ -145,15 +157,18 @@ interface ProfileValues {
 }
 
 const SCREEN_ASPECT_RATIO = 1.6;
-const PILE_LAYERS = 3;
+/**
+ * Ratio between successive slot steps. The total spread converges to `1 / (1 - decay)` steps, which
+ * is what keeps a deck of any length an edge-and-depth stack rather than a widening rail.
+ */
+const PILE_SLOT_DECAY = 0.7;
 const PILE_SCALE_STEP = 0.05;
 const PILE_ROTATE = 0.62;
-const PILE_ROTATION_STEPS = [1, -0.62, 0.34];
 const TOP_ROTATE = 4;
 const TOP_SCALE_REDUCTION = 0.11;
 const TOP_LAYER = 500;
 const TARGET_LAYER = 400;
-const PILE_LAYER_STEP = 100;
+const PILE_LAYER_STEP = 10;
 /**
  * Local progress that keeps the outgoing card fully opaque. The pitch clears most of the target
  * before the dissolve begins, so the two faces never share a broad half-transparent overlap.
@@ -181,7 +196,6 @@ const TUNING_NUMBER_KEYS = [
   "cardWidth",
   "cardHeight",
   "motionPitch",
-  "pileLayers",
   "pileOffsetX",
   "pileOffsetY",
   "pileScaleStep",
@@ -234,8 +248,13 @@ function outgoingOpacity(progress: number): number {
   );
 }
 
-function pileRotationStep(depth: number): number {
-  return PILE_ROTATION_STEPS[(depth - 1) % PILE_ROTATION_STEPS.length]!;
+/**
+ * How far out slot `depth` sits, as a multiple of one step. A geometric series rather than a plain
+ * multiple: the first slot is exactly one step out, which is where every target rises from, while a
+ * deck of any length stays a pile that thickens instead of a fan that walks off the stage.
+ */
+function pileSlotSpread(depth: number): number {
+  return (1 - PILE_SLOT_DECAY ** depth) / (1 - PILE_SLOT_DECAY);
 }
 
 function pileShadow(depth: number): number {
@@ -288,7 +307,6 @@ export function resolveStackedDeckTuning(
     cardWidth,
     cardHeight,
     motionPitch: Math.max(1, Math.round(cardWidth * values.motionPitchRatio)),
-    pileLayers: PILE_LAYERS,
     pileOffsetX: cardWidth * values.pileOffsetXRatio,
     pileOffsetY: cardHeight * values.pileOffsetYRatio,
     pileScaleStep: PILE_SCALE_STEP,
@@ -300,23 +318,50 @@ export function resolveStackedDeckTuning(
 }
 
 /**
- * Resolves the deterministic decorative pile. It depends only on tuning, so no gesture direction,
- * segment change, or reversal can mirror, reorder, or re-identify a backing layer.
+ * Resolves the pile: one backing layer for every screen still in the deck, on the side of the
+ * current card it is waiting on. Screens before the current one fan one way, screens after it fan
+ * the other, and the deck is therefore exactly as thick as what is left — four layers behind the
+ * middle of five, all four on one side at either end.
+ *
+ * Every layer is a function of `index - centre` alone, so the topology comes from item ordering and
+ * not from which way the user happens to be dragging: a reversal retraces the same slots instead of
+ * mirroring the deck, and the continuous centre means an exchange slides the whole deck across by
+ * one slot rather than snapping.
+ *
+ * The pile completes a frame rather than standing alone, which is what makes an exchange one event
+ * instead of two. The rising target is drawn by the frame, so it is skipped here; the card it
+ * replaces materialises into its nearest slot on the far side on exactly the envelope its face
+ * dissolves on, because that envelope is read off the frame's own pose rather than recomputed. The
+ * frame has already validated its inputs, so nothing is validated twice either.
+ *
+ * A layer carries no item identity. It only says the deck has one more card that way.
  */
-export function resolveStackedDeckPile(tuning: StackedDeckTuning): readonly StackedDeckPilePose[] {
-  validateTuning(tuning);
-  return Array.from({ length: tuning.pileLayers }, (_unused, offset) => {
-    const depth = offset + 1;
-    return {
-      depth,
-      translateX: tuning.pileOffsetX * depth,
-      translateY: tuning.pileOffsetY * depth,
-      scale: 1 - tuning.pileScaleStep * depth,
-      rotate: tuning.pileRotate * pileRotationStep(depth),
-      layer: TARGET_LAYER - depth * PILE_LAYER_STEP,
-      shadowStrength: pileShadow(depth),
-    };
-  });
+export function resolveStackedDeckPile(
+  options: ResolveStackedDeckPileOptions,
+): readonly StackedDeckPilePose[] {
+  const { frame, tuning } = options;
+  const centre = frame.visualTopIndex + frame.signedLocalDistance;
+  const poses: StackedDeckPilePose[] = [];
+  for (let index = 0; index < frame.poses.length; index += 1) {
+    if (index === frame.segmentTargetIndex) continue;
+    const opacity = index === frame.visualTopIndex ? 1 - frame.poses[index]!.opacity : 1;
+    if (opacity <= 0) continue;
+    const slot = index - centre;
+    const distance = Math.abs(slot);
+    const side = slot < 0 ? -1 : 1;
+    const spread = pileSlotSpread(distance);
+    poses.push({
+      slot,
+      translateX: side * tuning.pileOffsetX * spread,
+      translateY: tuning.pileOffsetY * spread,
+      scale: 1 - tuning.pileScaleStep * spread,
+      rotate: side * tuning.pileRotate * spread,
+      opacity,
+      layer: Math.round(TARGET_LAYER - distance * PILE_LAYER_STEP),
+      shadowStrength: pileShadow(distance),
+    });
+  }
+  return poses;
 }
 
 /** Creates traversal storage whose visual owner initially agrees with controller selection. */
@@ -460,9 +505,6 @@ function validateTuning(tuning: StackedDeckTuning): void {
   if (tuning.cardWidth <= 0 || tuning.cardHeight <= 0 || tuning.motionPitch <= 0) {
     throw new RangeError("invalid deck dimensions");
   }
-  if (!Number.isInteger(tuning.pileLayers) || tuning.pileLayers < 1) {
-    throw new RangeError("invalid deck layers");
-  }
   if (tuning.pileScaleStep < 0 || tuning.topScaleReduction < 0) {
     throw new RangeError("invalid deck tuning");
   }
@@ -594,10 +636,12 @@ function setExchangePair(
   outgoing.visible = opacity > 0;
   outgoing.interactive = false;
 
-  target.translateX = tuning.pileOffsetX * remaining;
+  // The target rises from its own nearest slot, which is the side its index actually lies on: the
+  // next screen comes in from the next side, the previous screen from the previous side.
+  target.translateX = direction * tuning.pileOffsetX * remaining;
   target.translateY = tuning.pileOffsetY * remaining;
   target.scale = 1 - tuning.pileScaleStep * remaining;
-  target.rotate = tuning.pileRotate * PILE_ROTATION_STEPS[0]! * remaining;
+  target.rotate = direction * tuning.pileRotate * remaining;
   target.opacity = 1;
   target.layer = TARGET_LAYER;
   target.role = "target";

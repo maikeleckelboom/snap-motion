@@ -347,20 +347,33 @@ const activeTuning = computed(() =>
 );
 
 /**
- * Deterministic decorative depth. The pile carries no item identity, so neither gesture direction
- * nor the active segment can mirror, reorder, or re-identify a layer.
+ * Deck thickness. One backing layer per screen still in the deck, fanned to the side its index lies
+ * on, so the deck shows both what is behind and what is ahead. Layers are keyed by their rank within
+ * a side rather than by screen, because a layer stands for "one more card that way" and never for a
+ * particular screen — no gesture direction or reversal can mirror, reorder, or re-identify one.
  */
-const pileLayers = computed(() =>
-  resolveStackedDeckPile(activeTuning.value).map((pose) => ({
-    depth: pose.depth,
-    layer: pose.layer,
-    style: {
-      transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
-      zIndex: pose.layer,
-      "--_deck-shadow-strength": pose.shadowStrength.toFixed(4),
+const pileLayers = computed(() => {
+  let before = 0;
+  let after = 0;
+  return resolveStackedDeckPile({ frame: stackedFrame.value, tuning: activeTuning.value }).map(
+    (pose) => {
+      const side = pose.slot < 0 ? -1 : 1;
+      const rank = side < 0 ? (before += 1) : (after += 1);
+      return {
+        key: `${side}:${rank}`,
+        layer: pose.layer,
+        side,
+        slot: Number(pose.slot.toFixed(3)),
+        style: {
+          opacity: pose.opacity,
+          transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
+          zIndex: pose.layer,
+          "--_deck-shadow-strength": pose.shadowStrength.toFixed(4),
+        },
+      };
     },
-  })),
-);
+  );
+});
 
 watchEffect(() => {
   resolveStackedDeckFrame(
@@ -908,11 +921,13 @@ onBeforeUnmount(() => {
       <div ref="track" class="stacked-deck-stage">
         <div
           v-for="layer in pileLayers"
-          :key="`pile-${layer.depth}`"
+          :key="layer.key"
           aria-hidden="true"
           class="stacked-deck-pile-layer"
-          :data-pile-depth="layer.depth"
           :data-pile-layer="layer.layer"
+          :data-pile-opacity="layer.style.opacity"
+          :data-pile-side="layer.side"
+          :data-pile-slot="layer.slot"
           :style="layer.style"
         />
         <article
