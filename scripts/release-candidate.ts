@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 
+import { packedText, readPackedArchive } from "./packedArchive.ts";
+
 const repoRoot = resolve(import.meta.dirname, "..");
 const packageDirectory = resolve(repoRoot, ".artifacts/packages");
 const releaseDirectory = resolve(repoRoot, ".artifacts/release");
@@ -57,12 +59,10 @@ interface ReleasePackage {
 }
 
 const packageManifests = await Promise.all(
-  ["core", "vue"].map(
-    async (directory) =>
-      JSON.parse(
-        await readFile(resolve(repoRoot, `packages/${directory}/package.json`), "utf8"),
-      ) as PackageManifest,
-  ),
+  artifacts.map(async (artifact) => {
+    const entries = await readPackedArchive(resolve(packageDirectory, artifact));
+    return JSON.parse(packedText(entries, "package/package.json")) as PackageManifest;
+  }),
 );
 const packages: ReleasePackage[] = [];
 for (const artifact of artifacts) {
@@ -70,7 +70,7 @@ for (const artifact of artifacts) {
   const manifest = packageManifests.find((candidate) =>
     artifact.startsWith(`${candidate.name.replace("@", "").replace("/", "-")}-`),
   );
-  if (!manifest) throw new Error(`No source package manifest matches ${artifact}.`);
+  if (!manifest) throw new Error(`No packed package manifest matches ${artifact}.`);
   packages.push({
     name: manifest.name,
     version: manifest.version,
