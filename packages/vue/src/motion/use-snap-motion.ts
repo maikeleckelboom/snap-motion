@@ -151,6 +151,7 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     onNativeDragStart: pointer.onNativeDragStart,
     onPointerDown: pointer.onPointerDown,
     phase,
+    pointerInteractionActive: pointer.pointerInteractionActive,
     pointerIntent: pointer.pointerIntent,
     pointerOwned: pointer.pointerOwned,
     position,

@@ -4,6 +4,8 @@ import type {
   ReleaseTargetPolicy,
   SpringConfiguration,
 } from "@snap-motion/core";
+import type { CloseReason, FocusReturnOptions, InitialFocus } from "@snap-motion/vue/dialog";
+import type { SnapMotionMessages } from "@snap-motion/vue/localization";
 import {
   computed,
   nextTick,
@@ -16,19 +18,13 @@ import {
   watch,
 } from "vue";
 
-import type { CloseReason } from "../../dialog/dialog-contracts";
 import {
   captureFocusOpener,
   focusInitial,
   maintainModalTabOrder,
   restoreFocus,
-  type FocusReturnOptions,
-  type InitialFocus,
 } from "../../internal/accessibility/focus";
-import {
-  createEnglishSnapMotionMessages,
-  type SnapMotionMessages,
-} from "../../localization/messages";
+import { createEnglishSnapMotionMessages } from "../../localization/messages";
 import { sheetContextKey, type SheetContext } from "../sheet-context";
 import type { SheetNavigationReason, SheetSide } from "../sheet-contracts";
 import {

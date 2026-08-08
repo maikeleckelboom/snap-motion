@@ -41,7 +41,6 @@ export type {
   CoverflowCardState,
   CoverflowHandle,
   CoverflowTuning,
-  SurfaceMotionDiagnostics,
   UseCoverflowMotionOptions,
   UseCoverflowMotionReturn,
 } from "./coverflow";
@@ -101,4 +100,9 @@ export type { CloseReason, FocusReturnOptions, InitialFocus } from "./dialog";
 export { createEnglishSnapMotionMessages } from "./localization";
 export type { SnapMotionMessages } from "./localization";
 export { createMotionDriver, useBoundedSpringDriver, useSnapMotion } from "./motion";
-export type { NavigationReason, PointerIntent, UseSnapMotionOptions } from "./motion";
+export type {
+  NavigationReason,
+  PointerIntent,
+  SurfaceMotionDiagnostics,
+  UseSnapMotionOptions,
+} from "./motion";

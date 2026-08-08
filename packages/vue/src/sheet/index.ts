@@ -44,6 +44,3 @@ export type {
   UseSheetMotionOptions,
   UseSheetMotionReturn,
 } from "./use-sheet-motion";
-export type { CloseReason } from "../dialog/dialog-contracts";
-export type { PointerIntent } from "../internal/input/pointer-policy";
-export type { NavigationReason } from "../motion/motion-contracts";

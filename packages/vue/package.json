@@ -2,10 +2,13 @@
   "name": "@snap-motion/vue",
   "version": "0.1.0-beta.0",
   "private": true,
-  "description": "Accessible interruptible Vue carousels, modal lightboxes, and multi-edge sheets.",
+  "description": "Accessible interruptible Vue carousel, spatial surface, dialog, gallery, and sheet primitives.",
   "keywords": [
     "accessibility",
     "carousel",
+    "coverflow",
+    "dialog",
+    "gallery",
     "motion",
     "sheet",
     "vue"
@@ -69,7 +72,7 @@
     "./style.css": "./dist/style.css"
   },
   "scripts": {
-    "build": "node ../../scripts/clean-package-dist.mjs && vue-tsc -p tsconfig.build.json --declaration --emitDeclarationOnly && node ../../scripts/prepare-vue-declarations.mjs && vite build && node ../../scripts/run-api-extractor.mjs --mode=rollup --package=vue",
+    "build": "node ../../scripts/clean-package-dist.mjs && vue-tsc -p tsconfig.build.json --declaration --emitDeclarationOnly && node ../../scripts/prepare-vue-declarations.ts && vite build && node ../../scripts/run-api-extractor.mjs --mode=rollup --package=vue",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },

@@ -89,10 +89,17 @@ describe("production carousel components", () => {
 
     expect(wrapper.get(".snap-motion-carousel").attributes("dir")).toBe("rtl");
     expect(wrapper.get(".snap-motion-carousel-track").attributes("dir")).toBe("ltr");
-    expect(wrapper.get(".snap-motion-carousel-slide").attributes("dir")).toBe("rtl");
+    // Content direction is restored by the structural custom-property contract, not stamped on slides.
+    expect(wrapper.get(".snap-motion-carousel-slide").attributes("dir")).toBeUndefined();
+    expect(
+      (wrapper.get(".snap-motion-carousel").element as HTMLElement).style.getPropertyValue(
+        "--snap-motion-content-direction",
+      ),
+    ).toBe("rtl");
   });
 
   it("mirrors arrow keys as soon as the page's own direction changes, without remounting", async () => {
+    document.documentElement.dir = "ltr";
     const wrapper = mount(CarouselRoot, {
       attachTo: document.body,
       props: {
@@ -129,6 +136,9 @@ describe("production carousel components", () => {
     // The page turns around under a carousel that is already mounted. Nothing reactive tracks
     // computed style, so this is exactly the case a memoized direction would get wrong.
     root.style.direction = "rtl";
+    root.dir = "rtl";
+    await Promise.resolve();
+    await nextTick();
     press("ArrowRight");
     await nextTick();
     expect(wrapper.emitted("requestActiveId")?.at(-1)).toEqual(["two", "keyboard"]);
@@ -142,6 +152,7 @@ describe("production carousel components", () => {
       expect(slide.attributes("dir")).toBeUndefined();
     }
     wrapper.unmount();
+    document.documentElement.removeAttribute("dir");
   });
 
   it("navigates from a non-first controlled initial ID", async () => {
@@ -174,6 +185,41 @@ describe("production carousel components", () => {
     await wrapper.get(".snap-motion-carousel-next").trigger("click");
     await nextTick();
     expect(wrapper.emitted("update:activeId")?.at(-1)).toEqual(["three"]);
+  });
+
+  it("reconciles a controlled ID and collection through one atomic watcher", async () => {
+    const wrapper = mount(CarouselRoot, {
+      props: {
+        activeId: "one",
+        ids: ["one", "two"],
+        reducedMotionOverride: true,
+      },
+      slots: {
+        default: () =>
+          h(CarouselViewport, null, {
+            default: () => h(CarouselTrack),
+          }),
+      },
+    });
+    await nextTick();
+
+    await wrapper.setProps({ activeId: "three", ids: ["two", "three"] });
+    await nextTick();
+    await nextTick();
+    expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-active-id")).toBe(
+      "three",
+    );
+    expect(wrapper.emitted("requestActiveId")).toBeUndefined();
+
+    await wrapper.setProps({ ids: ["two"] });
+    await nextTick();
+    await nextTick();
+    await wrapper.setProps({ ids: ["two", "three"] });
+    await nextTick();
+    await nextTick();
+    expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-active-id")).toBe(
+      "three",
+    );
   });
 
   it("moves focus to the viewport before a focused active ID is removed", async () => {

@@ -17,7 +17,7 @@ const active = computed(() => context.activeId.value === props.id);
       ...(active ? { 'aria-current': 'page' as const } : {}),
       ...(label ? { 'aria-label': label } : {}),
     }"
-    @click="context.navigate(id, 'picker')"
+    @click="context.pick(id)"
   >
     <slot :active="active" :id="id">{{ label ?? id }}</slot>
   </button>

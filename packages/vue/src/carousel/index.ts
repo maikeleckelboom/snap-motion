@@ -14,10 +14,6 @@ export type {
   CarouselMotion,
   SnapMotionDirection,
 } from "./carousel-contracts";
-export type { PointerIntent } from "../internal/input/pointer-policy";
-// `UseCarouselMotionOptions` is defined in terms of these, so the entrypoint that publishes it
-// publishes them too rather than leaving a name in its own report that nothing can reach.
-export type { UseSnapMotionOptions } from "../motion/use-snap-motion";
 export {
   createFixedStageCarouselGeometryStrategy,
   createVariableWidthCenteredCarouselGeometryStrategy,
@@ -34,4 +30,3 @@ export { useCarouselContext } from "./use-carousel-context";
 export type { PublicCarouselContext } from "./use-carousel-context";
 export { useCarouselMotion } from "./use-carousel-motion";
 export type { UseCarouselMotionOptions } from "./use-carousel-motion";
-export type { NavigationReason } from "../motion/motion-contracts";

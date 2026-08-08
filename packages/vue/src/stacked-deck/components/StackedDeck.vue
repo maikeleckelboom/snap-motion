@@ -4,13 +4,12 @@ import type {
   SpringConfiguration,
   StackedDeckReleasePolicy,
 } from "@snap-motion/core";
-import { computed, ref } from "vue";
+import type { SnapMotionMessages } from "@snap-motion/vue/localization";
+import type { NavigationReason } from "@snap-motion/vue/motion";
+import { computed, ref, watch } from "vue";
 
-import {
-  createEnglishSnapMotionMessages,
-  type SnapMotionMessages,
-} from "../../localization/messages";
-import type { NavigationReason } from "../../motion/motion-contracts";
+import { preserveFocusBeforeSemanticChange } from "../../internal/accessibility/focus";
+import { createEnglishSnapMotionMessages } from "../../localization/messages";
 import type { StackedDeckCardState } from "../stacked-deck-contracts";
 import { useStackedDeckMotion } from "../use-stacked-deck-motion";
 
@@ -89,7 +88,7 @@ const deck = useStackedDeckMotion<TId>({
   ids,
   controlledId: () => props.activeId,
   disabled: () => props.disabled,
-  initialId: props.activeId ?? props.items[Math.floor(props.items.length / 2)]?.id,
+  initialId: props.items[Math.floor(props.items.length / 2)]?.id,
   reducedMotionOverride,
   root: focusScope,
   stageWidth: () => props.stageWidth,
@@ -130,6 +129,21 @@ const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {
     };
   });
 });
+
+watch(
+  () =>
+    deck.frame.value.poses
+      .map((pose, index) => (pose.interactive ? deck.model.idAt(index) : undefined))
+      .filter((id): id is TId => id !== undefined),
+  (semanticIds) => {
+    const semantic = new Set(semanticIds);
+    preserveFocusBeforeSemanticChange(root.value, (activeElement) => {
+      const card = activeElement.closest<HTMLElement>("[data-snap-motion-stacked-deck-card]");
+      return card !== null && semantic.has((card.dataset.itemId ?? "") as TId);
+    });
+  },
+  { deep: true, flush: "sync" },
+);
 
 const stageStyle = computed(() => ({
   "--snap-motion-deck-stage-width": `${Math.min(props.stageWidth, 1_280)}px`,

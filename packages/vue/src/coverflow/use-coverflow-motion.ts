@@ -18,6 +18,8 @@ import {
   type SnapAnchor,
   type SpringConfiguration,
 } from "@snap-motion/core";
+import type { CarouselMotion } from "@snap-motion/vue/carousel";
+import type { NavigationReason, SurfaceMotionDiagnostics } from "@snap-motion/vue/motion";
 import { useElementSize } from "@vueuse/core";
 import {
   computed,
@@ -33,16 +35,15 @@ import {
   type ShallowRef,
 } from "vue";
 
-import type { CarouselMotion } from "../carousel/carousel-contracts";
 import { useCarouselMotion } from "../carousel/use-carousel-motion";
 import { resolveDirectionalSnapKeyboardAction } from "../internal/input/keyboard-policy";
 import { useSurfaceGesture } from "../internal/input/surface-gesture";
 import {
-  resolveSurfaceDiagnostics,
-  type SurfaceMotionDiagnostics,
-} from "../internal/surface/surface-diagnostics";
+  resolveSurfaceConfiguration,
+  surfaceConfigurationKey,
+} from "../internal/surface/surface-configuration";
+import { resolveSurfaceDiagnostics } from "../internal/surface/surface-diagnostics";
 import { useBoundedSpringDriver } from "../motion/bounded-spring-driver";
-import type { NavigationReason } from "../motion/motion-contracts";
 import type { CoverflowCardPresentation } from "./coverflow-contracts";
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -182,12 +183,17 @@ export function useCoverflowMotion<Id extends string>(
   );
   const pitch = computed(() => tuning.value.pitch);
   const initialIds = ids.value;
+  const controlledAtCreation = toValue(options.controlledId);
+  const requestedInitialId =
+    controlledAtCreation !== undefined && initialIds.includes(controlledAtCreation)
+      ? controlledAtCreation
+      : options.initialId;
   const model = new CoverflowModel<Id>({
     ids: initialIds,
     // An ID the collection does not contain is not a destination, so it cannot be a starting point
     // either. Falling back to the model's own default beats refusing to mount.
-    ...(options.initialId !== undefined && initialIds.includes(options.initialId)
-      ? { initialId: options.initialId }
+    ...(requestedInitialId !== undefined && initialIds.includes(requestedInitialId)
+      ? { initialId: requestedInitialId }
       : {}),
   });
   const initialIndex = model.state.settledIndex;
@@ -217,10 +223,20 @@ export function useCoverflowMotion<Id extends string>(
 
   const initialGeometry = measure();
   const driver = useBoundedSpringDriver(() => pitch.value);
+  function currentConfiguration() {
+    return resolveSurfaceConfiguration({
+      spring: toValue(options.spring),
+      releasePolicy: toValue(options.releasePolicy),
+      elasticity: toValue(options.elasticity),
+      programmaticImpulse: toValue(options.programmaticImpulse),
+    });
+  }
+
   const motion = useCarouselMotion<Id>({
     anchors: initialGeometry.anchors,
     bounds: initialGeometry.bounds,
     driver,
+    ...currentConfiguration(),
     measure,
     track: options.track ?? ref<HTMLElement>(),
     viewport: options.viewport,
@@ -233,16 +249,6 @@ export function useCoverflowMotion<Id extends string>(
     ...(options.reducedMotionOverride === undefined
       ? {}
       : { reducedMotionOverride: options.reducedMotionOverride }),
-    ...(toValue(options.spring) === undefined ? {} : { spring: toValue(options.spring)! }),
-    ...(toValue(options.elasticity) === undefined
-      ? {}
-      : { elasticity: toValue(options.elasticity)! }),
-    ...(toValue(options.releasePolicy) === undefined
-      ? {}
-      : { releasePolicy: toValue(options.releasePolicy)! }),
-    ...(toValue(options.programmaticImpulse) === undefined
-      ? {}
-      : { programmaticImpulse: toValue(options.programmaticImpulse)! }),
   });
 
   const anchorsById = computed(() => {
@@ -307,8 +313,8 @@ export function useCoverflowMotion<Id extends string>(
     ),
   );
   const speedInCards = computed(() => resolveSpeedInCards(motion.velocity.value, pitch.value));
-  const visualId = computed(() => ids.value[state.value.visualIndex]);
-  const settledId = computed(() => ids.value[state.value.settledIndex]);
+  const visualId = computed(() => model.idAt(state.value.visualIndex));
+  const settledId = computed(() => model.idAt(state.value.settledIndex));
 
   function isInspectEligible(index: number): boolean {
     const id = ids.value[index];
@@ -478,7 +484,7 @@ export function useCoverflowMotion<Id extends string>(
       current.settledIndex === index;
     if (alreadySynchronized) return true;
 
-    motion.interrupt();
+    cancelInteractionRecords();
     pendingReason = reason;
     if (model.synchronize(index, { announce }) < 0) return false;
     motion.controller.remeasure({ ...measure(), activeId: id });
@@ -511,10 +517,13 @@ export function useCoverflowMotion<Id extends string>(
     if (disabled()) return;
     const action = resolveDirectionalSnapKeyboardAction(event, motion.resolveDirection());
     if (!action) return;
-    event.preventDefault();
-    if (action === "previous") moveRelative(-1, "keyboard");
-    else if (action === "next") moveRelative(1, "keyboard");
-    else moveToIndex(action === "home" ? 0 : ids.value.length - 1, "keyboard");
+    const accepted =
+      action === "previous"
+        ? moveRelative(-1, "keyboard")
+        : action === "next"
+          ? moveRelative(1, "keyboard")
+          : moveToIndex(action === "home" ? 0 : model.itemCount - 1, "keyboard");
+    if (accepted) event.preventDefault();
   }
 
   function onWheel(event: WheelEvent) {
@@ -530,7 +539,10 @@ export function useCoverflowMotion<Id extends string>(
   const gesture = useSurfaceGesture({
     root,
     itemSelector: "[data-snap-motion-coverflow-card]",
-    resolveIndex: (element) => model.indexOf((element.dataset.itemId ?? "") as Id),
+    resolveIndex(element) {
+      const index = model.indexOf((element.dataset.itemId ?? "") as Id);
+      return presentations.value[index]?.interactive === true ? index : -1;
+    },
     isOpenEligible: isInspectEligible,
     disabled,
     forwardPointerDown: motion.onPointerDown,
@@ -566,24 +578,17 @@ export function useCoverflowMotion<Id extends string>(
     },
   });
 
-  function currentConfiguration() {
-    const spring = toValue(options.spring);
-    const releasePolicy = toValue(options.releasePolicy);
-    const elasticity = toValue(options.elasticity);
-    const programmaticImpulse = toValue(options.programmaticImpulse);
-    return {
-      ...(spring === undefined ? {} : { spring }),
-      ...(releasePolicy === undefined ? {} : { releasePolicy }),
-      ...(elasticity === undefined ? {} : { elasticity }),
-      ...(programmaticImpulse === undefined ? {} : { programmaticImpulse }),
-    };
+  function cancelInteractionRecords() {
+    gesture.cancel();
+    if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+    selectionFrame = undefined;
+    motion.interrupt();
   }
 
-  // Physics is watched by value, not by identity. A consumer that rebuilds its configuration
-  // object on every render is expressing no change at all, and reconfiguring on that would feed
-  // the controller's own snapshot back into the render that produced it.
+  // The key has an explicit fixed field order. Equivalent configuration objects therefore do not
+  // reconfigure the controller, while removing any override reinstalls the complete surface default.
   watch(
-    () => JSON.stringify(currentConfiguration()),
+    () => surfaceConfigurationKey(currentConfiguration()),
     () => motion.configure(currentConfiguration()),
   );
 
@@ -593,40 +598,42 @@ export function useCoverflowMotion<Id extends string>(
    * never end up describing different collections.
    */
   watch(
-    () => toValue(options.ids),
-    (nextIds) => {
-      if (nextIds.length === model.itemCount && nextIds.every((id, i) => model.idAt(i) === id)) {
+    [() => toValue(options.ids), () => toValue(options.controlledId)] as const,
+    ([nextIds, controlledId], priorState) => {
+      const itemsChanged =
+        nextIds.length !== model.itemCount || nextIds.some((id, index) => model.idAt(index) !== id);
+      const controlledChanged = priorState !== undefined && controlledId !== priorState[1];
+      if (!itemsChanged && !controlledChanged) return;
+
+      if (itemsChanged || (controlledChanged && controlledId !== undefined)) {
+        cancelInteractionRecords();
+      }
+
+      if (itemsChanged) {
+        const preservedIndex = model.reconfigure(nextIds);
+        const controlledIndex = controlledId === undefined ? -1 : model.indexOf(controlledId);
+        const finalIndex =
+          controlledIndex >= 0 ? model.synchronize(controlledIndex) : preservedIndex;
+        const finalId = model.idAt(finalIndex);
+        publish(model.state);
+        motion.controller.remeasure({
+          ...measure(),
+          ...(finalId === undefined ? {} : { activeId: finalId }),
+        });
         return;
       }
-      motion.interrupt();
-      const index = model.reconfigure(nextIds);
-      const preservedId = model.idAt(index);
-      publish(model.state);
-      motion.controller.remeasure({
-        ...measure(),
-        ...(preservedId === undefined ? {} : { activeId: preservedId }),
-      });
+
+      if (controlledId !== undefined) applyControlledId(controlledId);
     },
     { deep: true },
   );
 
   watch([pitch, () => toValue(options.stageWidth)], () => void nextTick(motion.remeasure));
 
-  /**
-   * Controlled selection. It is state rather than input, so it deliberately does not share the
-   * user-command admission path, and it is never echoed back as a request.
-   */
-  watch(
-    () => toValue(options.controlledId),
-    (id) => {
-      if (id === undefined || id === model.idAt(state.value.settledIndex)) return;
-      applyControlledId(id);
-    },
-  );
-
   const diagnostics = computed<SurfaceMotionDiagnostics<Id>>(() =>
     resolveSurfaceDiagnostics({
       snapshot: motion.snapshot.value,
+      pointerInteractionActive: motion.pointerInteractionActive.value,
       pointerOwned: motion.pointerOwned.value,
       reducedMotion: motion.reducedMotion.value,
     }),

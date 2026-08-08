@@ -1,4 +1,4 @@
-export type PointerIntent = "horizontal" | "pending" | "vertical";
+import type { PointerIntent } from "../../contracts/motion-contracts";
 
 export interface PointerIntentOptions {
   dominanceRatio?: number;

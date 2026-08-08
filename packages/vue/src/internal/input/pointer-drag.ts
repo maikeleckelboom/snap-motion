@@ -1,10 +1,10 @@
 import { onScopeDispose, ref } from "vue";
 
+import type { PointerIntent } from "../../contracts/motion-contracts";
 import {
   elementOwnsSnapMotionDrag,
   isSupportedPrimaryPointerStart,
   resolvePointerIntent,
-  type PointerIntent,
 } from "./pointer-policy";
 
 export interface PointerDragSample {
@@ -32,6 +32,7 @@ function preventNativeDrag(event: DragEvent) {
 
 export function usePointerDrag(options: PointerDragOptions) {
   const isDragging = ref(false);
+  const pointerInteractionActive = ref(false);
   const pointerIntent = ref<PointerIntent>("pending");
   const pointerOwned = ref(false);
 
@@ -126,6 +127,7 @@ export function usePointerDrag(options: PointerDragOptions) {
     captureTarget = undefined;
     pointerId = undefined;
     isDragging.value = false;
+    pointerInteractionActive.value = false;
     pointerOwned.value = false;
     pointerIntent.value = "pending";
   }
@@ -211,6 +213,7 @@ export function usePointerDrag(options: PointerDragOptions) {
 
     captureTarget = target;
     pointerId = event.pointerId;
+    pointerInteractionActive.value = true;
     activeAxis = currentAxis();
     startPosition = eventPosition(event, activeAxis);
     startX = event.clientX;
@@ -233,6 +236,7 @@ export function usePointerDrag(options: PointerDragOptions) {
     isDragging,
     onNativeDragStart: preventNativeDrag,
     onPointerDown,
+    pointerInteractionActive,
     pointerIntent,
     pointerOwned,
     stop: cleanup,

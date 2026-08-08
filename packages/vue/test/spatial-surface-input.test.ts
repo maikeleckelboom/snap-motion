@@ -248,6 +248,36 @@ describe("right-to-left agreement", () => {
   });
 });
 
+describe("keyboard ownership", () => {
+  it.each([
+    ["deck", mountDeck],
+    ["coverflow", mountRail],
+  ] as const)("prevents only keyboard commands the %s accepts", async (_name, mountSurface) => {
+    const wrapper = mountSurface();
+    await nextTick();
+    const root = wrapper.element as HTMLElement;
+
+    const accepted = keyEvent("ArrowRight");
+    root.dispatchEvent(accepted);
+    expect(accepted.defaultPrevented).toBe(true);
+
+    const end = keyEvent("End");
+    root.dispatchEvent(end);
+    expect(end.defaultPrevented).toBe(true);
+    await nextTick();
+
+    const refusedAtBoundary = keyEvent("ArrowRight");
+    root.dispatchEvent(refusedAtBoundary);
+    expect(refusedAtBoundary.defaultPrevented).toBe(false);
+
+    await wrapper.setProps({ disabled: true });
+    const refusedWhileDisabled = keyEvent("Home");
+    root.dispatchEvent(refusedWhileDisabled);
+    expect(refusedWhileDisabled.defaultPrevented).toBe(false);
+    wrapper.unmount();
+  });
+});
+
 describe("interactive descendant ownership", () => {
   function mountDeckWithControls() {
     return mount(TypedStackedDeck, {
@@ -315,9 +345,15 @@ describe("interactive descendant ownership", () => {
     const root = wrapper.element as HTMLElement;
     pressAndMove(root, -240);
     releaseAt(root, -240);
-    const draggedClick = new MouseEvent("click", { bubbles: true, cancelable: true });
+    // This is a different control, not the compatibility click produced by the drag.
+    const draggedClick = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      clientX: -240,
+      detail: 1,
+    });
     link.dispatchEvent(draggedClick);
-    expect(draggedClick.defaultPrevented).toBe(true);
+    expect(draggedClick.defaultPrevented).toBe(false);
 
     // Suppression is spent on exactly one click, never latched.
     const nextClick = new MouseEvent("click", { bubbles: true, cancelable: true });
@@ -327,8 +363,8 @@ describe("interactive descendant ownership", () => {
   });
 });
 
-function click(element: HTMLElement) {
-  const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+function click(element: HTMLElement, init: MouseEventInit = {}) {
+  const event = new MouseEvent("click", { bubbles: true, cancelable: true, ...init });
   element.dispatchEvent(event);
   return event;
 }
@@ -337,7 +373,13 @@ describe("click suppression follows what the surface consumed", () => {
   function mountDeckWithLink() {
     return mount(TypedStackedDeck, {
       props: { items: screens, label: "Screens", reducedMotionOverride: true },
-      slots: { card: () => h("a", { href: "#detail", class: "card-link" }, "Detail") },
+      slots: {
+        card: () =>
+          h("div", { class: "card-surface" }, [
+            h("span", { class: "card-label" }, "Card"),
+            h("a", { href: "#detail", class: "card-link" }, "Detail"),
+          ]),
+      },
       attachTo: document.body,
     });
   }
@@ -346,12 +388,15 @@ describe("click suppression follows what the surface consumed", () => {
     const wrapper = mountDeckWithLink();
     await nextTick();
     const root = wrapper.element as HTMLElement;
+    const surface = wrapper.get(".card-surface").element as HTMLElement;
     const link = wrapper.get(".card-link").element as HTMLElement;
 
-    pressAndMove(root, -240);
+    pressAndMove(surface, -240);
     releaseAt(root, -240);
-    expect(click(link).defaultPrevented).toBe(true);
-    expect(click(link).defaultPrevented).toBe(false);
+    expect(click(surface, { clientX: -240, detail: 1 }).defaultPrevented).toBe(true);
+    expect(click(surface, { clientX: -240, detail: 1 }).defaultPrevented).toBe(false);
+    // A nearby application control is not correlated to that release and remains usable.
+    expect(click(link, { clientX: -230, detail: 1 }).defaultPrevented).toBe(false);
     wrapper.unmount();
   });
 

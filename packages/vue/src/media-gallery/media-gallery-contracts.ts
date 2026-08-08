@@ -1,4 +1,4 @@
-import type { FocusReturnOptions, InitialFocus } from "../internal/accessibility/focus";
+import type { FocusReturnOptions, InitialFocus } from "@snap-motion/vue/dialog";
 
 export interface MediaGalleryItem {
   readonly id: string;

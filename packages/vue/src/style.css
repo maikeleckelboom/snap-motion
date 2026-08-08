@@ -10,6 +10,11 @@
   white-space: nowrap !important;
 }
 
+/* Keep physical rail coordinates LTR while slide content follows the root's live direction. */
+.snap-motion-carousel-slide {
+  direction: var(--snap-motion-content-direction, ltr);
+}
+
 .snap-motion-dialog {
   max-inline-size: calc(100% - 2rem);
   max-block-size: calc(100% - 2rem);

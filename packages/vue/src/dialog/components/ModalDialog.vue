@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 
+import type { FocusReturnOptions, InitialFocus } from "../../contracts/focus-contracts";
 import {
   captureFocusOpener,
   focusInitial,
   maintainModalTabOrder,
   restoreFocus,
-  type FocusReturnOptions,
-  type InitialFocus,
 } from "../../internal/accessibility/focus";
 import {
   createEnglishSnapMotionMessages,

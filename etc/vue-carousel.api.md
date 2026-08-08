@@ -4,7 +4,6 @@
 
 ```ts
 
-import { AnimationDriver } from '@snap-motion/core';
 import { ComponentOptionsMixin } from 'vue';
 import { ComponentProvideOptions } from 'vue';
 import { ComputedRef } from 'vue';
@@ -13,23 +12,28 @@ import { ControllerMeasurement } from '@snap-motion/core';
 import type { ControllerMoveByOptions } from '@snap-motion/core';
 import type { ControllerMoveOptions } from '@snap-motion/core';
 import type { ControllerPhase } from '@snap-motion/core';
-import { ControllerSnapshot } from '@snap-motion/core';
+import type { ControllerSnapshot } from '@snap-motion/core';
 import { DefineComponent } from 'vue';
 import { MaybeRefOrGetter } from 'vue';
+import type { NavigationReason } from '@snap-motion/vue/motion';
+import type { PointerIntent } from '@snap-motion/vue/motion';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
 import type { ShallowRef } from 'vue';
 import { ShallowUnwrapRef } from 'vue';
 import type { SnapAnchor } from '@snap-motion/core';
-import { SnapController } from '@snap-motion/core';
-import { SnapControllerOptions } from '@snap-motion/core';
+import type { SnapController } from '@snap-motion/core';
 import type { SnapDirection } from '@snap-motion/core';
+import type { SnapMotionMessages } from '@snap-motion/vue/localization';
+import type { UseSnapMotionOptions } from '@snap-motion/vue/motion';
 import { VNode } from 'vue';
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_base" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_Slots" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselActivePosition: typeof __VLS_export;
+export const CarouselActivePosition: __VLS_WithSlots<typeof __VLS_base, __VLS_Slots>;
 
 // @public (undocumented)
 export interface CarouselGeometryMeasureContext<Id extends string> {
@@ -91,6 +95,7 @@ export interface CarouselMotion<Id extends string> {
     readonly phase: ComputedRef<ControllerPhase>;
     // (undocumented)
     readonly pointerIntent: Ref<PointerIntent>;
+    readonly pointerInteractionActive: Ref<boolean>;
     // (undocumented)
     readonly pointerOwned: Ref<boolean>;
     // (undocumented)
@@ -119,55 +124,143 @@ export interface CarouselMotion<Id extends string> {
     readonly velocity: ComputedRef<number>;
 }
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_2" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_2" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_base_2" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_2" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselNext: typeof __VLS_export_2;
+export const CarouselNext: __VLS_WithSlots_2<typeof __VLS_base_2, __VLS_Slots_2>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_3" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_3" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_base_3" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_3" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselPagination: typeof __VLS_export_3;
+export const CarouselPagination: __VLS_WithSlots_3<typeof __VLS_base_3, __VLS_Slots_3>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_4" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselPaginationItem: typeof __VLS_export_4;
+export const CarouselPaginationItem: <Id extends string>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
+    props: PublicProps & __VLS_PrettifyLocal<{
+        id: Id;
+        label?: string;
+    }> & (typeof globalThis extends {
+        __VLS_PROPS_FALLBACK: infer P;
+    } ? P : {});
+    expose: (exposed: {}) => void;
+    attrs: any;
+    slots: {
+        default?: (props: {
+            active: boolean;
+            id: Id;
+        }) => any;
+    };
+    emit: {};
+}>) => VNode & {
+    __ctx?: NonNullable<Awaited<typeof __VLS_setup>>;
+};
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_5" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_4" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_base_4" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_4" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselPrevious: typeof __VLS_export_5;
+export const CarouselPrevious: __VLS_WithSlots_4<typeof __VLS_base_4, __VLS_Slots_4>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_6" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_5" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_base_5" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_5" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselProgress: typeof __VLS_export_6;
+export const CarouselProgress: __VLS_WithSlots_5<typeof __VLS_base_5, __VLS_Slots_5>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_7" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal_2" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselRoot: typeof __VLS_export_7;
+export const CarouselRoot: <Id extends string>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal_2<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
+    props: PublicProps & __VLS_PrettifyLocal_2<{
+        activeId: Id;
+        direction?: SnapMotionDirection;
+        geometryStrategy?: CarouselGeometryStrategy<Id>;
+        ids: readonly Id[];
+        keyboardInstructions?: string;
+        keyboardNavigation?: boolean;
+        keyboardPrimary?: boolean;
+        keyboardScope?: CarouselKeyboardScope;
+        label?: string;
+        labelledby?: string;
+        landmark?: boolean;
+        messages?: Partial<SnapMotionMessages>;
+        reducedMotionOverride?: boolean;
+    } & {
+        "onUpdate:activeId"?: (id: Id) => any;
+        onSettled?: (id: Id) => any;
+        onRequestActiveId?: (id: Id, reason: NavigationReason) => any;
+        onTargetChanged?: (id: Id, reason: NavigationReason) => any;
+    }> & (typeof globalThis extends {
+        __VLS_PROPS_FALLBACK: infer P;
+    } ? P : {});
+    expose: (exposed: ShallowUnwrapRef<    {
+    motion: CarouselMotion<Id>;
+    navigate: (id: Id) => boolean;
+    next: () => boolean;
+    previous: () => boolean;
+    }>) => void;
+    attrs: any;
+    slots: {
+        default?: (props: {}) => any;
+    };
+    emit: {
+        (event: "update:activeId", id: Id): void;
+        (event: "requestActiveId", id: Id, reason: NavigationReason): void;
+        (event: "settled", id: Id): void;
+        (event: "targetChanged", id: Id, reason: NavigationReason): void;
+    };
+}>) => VNode & {
+    __ctx?: NonNullable<Awaited<typeof __VLS_setup>>;
+};
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_8" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal_3" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselSlide: typeof __VLS_export_8;
+export const CarouselSlide: <Id extends string>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal_3<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
+    props: PublicProps & __VLS_PrettifyLocal_3<{
+        id: Id;
+        label: string;
+    }> & (typeof globalThis extends {
+        __VLS_PROPS_FALLBACK: infer P;
+    } ? P : {});
+    expose: (exposed: {}) => void;
+    attrs: any;
+    slots: {
+        default?: (props: {}) => any;
+    };
+    emit: {};
+}>) => VNode & {
+    __ctx?: NonNullable<Awaited<typeof __VLS_setup>>;
+};
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_9" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_6" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_base_6" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_6" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselStatus: typeof __VLS_export_9;
+export const CarouselStatus: __VLS_WithSlots_6<typeof __VLS_base_6, __VLS_Slots_6>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_10" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_7" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_base_7" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_7" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselTrack: typeof __VLS_export_10;
+export const CarouselTrack: __VLS_WithSlots_7<typeof __VLS_base_7, __VLS_Slots_7>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_11" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_8" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_base_8" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_8" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CarouselViewport: typeof __VLS_export_11;
+export const CarouselViewport: __VLS_WithSlots_8<typeof __VLS_base_8, __VLS_Slots_8>;
 
 // @public (undocumented)
 export interface CarouselWindowOptions {
@@ -209,12 +302,6 @@ export interface FixedStageCarouselGeometryOptions {
     readonly gap?: number;
 }
 
-// @public
-export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "programmatic" | "route";
-
-// @public (undocumented)
-export type PointerIntent = "horizontal" | "pending" | "vertical";
-
 // @public (undocumented)
 export interface PublicCarouselContext<Id extends string = string> {
     // (undocumented)
@@ -229,14 +316,13 @@ export interface PublicCarouselContext<Id extends string = string> {
     readonly direction: ComputedRef<"ltr" | "rtl">;
     // (undocumented)
     readonly ids: ComputedRef<readonly Id[]>;
+    readonly navigate: (id: Id) => boolean;
     // (undocumented)
-    readonly navigate: (id: Id, reason?: NavigationReason) => void;
-    // (undocumented)
-    readonly next: (reason?: NavigationReason) => void;
+    readonly next: () => boolean;
     // (undocumented)
     readonly phase: ComputedRef<ControllerPhase>;
     // (undocumented)
-    readonly previous: (reason?: NavigationReason) => void;
+    readonly previous: () => boolean;
 }
 
 // @public
@@ -272,31 +358,6 @@ export function useCarouselWindow<Id extends string>(idsSource: MaybeRefOrGetter
     preloadIds: ComputedRef<ReadonlySet<Id>>;
     previousIds: ComputedRef<readonly Id[]>;
 };
-
-// @public (undocumented)
-export interface UseSnapMotionOptions<Id extends string> extends Omit<SnapControllerOptions<Id>, "driver" | "onChange" | "reducedMotion"> {
-    // (undocumented)
-    axis: "x" | "y" | (() => "x" | "y");
-    // (undocumented)
-    driver?: AnimationDriver;
-    // (undocumented)
-    onChange?: (snapshot: ControllerSnapshot<Id>) => void;
-    // (undocumented)
-    onReleaseTargetSelected?: (id: Id | undefined) => void;
-    // (undocumented)
-    pointerDeltaMultiplier?: () => number;
-    // (undocumented)
-    pointerIntent?: "horizontal" | "immediate";
-    // (undocumented)
-    reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
-    resolveDragOrigin?: () => Id | undefined;
-    // (undocumented)
-    resolveReleaseTarget?: (context: {
-        controller: SnapController<Id>;
-        snapshot: ControllerSnapshot<Id>;
-        velocity: number;
-    }) => Id | undefined;
-}
 
 // @public (undocumented)
 export interface VariableWidthCenteredCarouselGeometryOptions {

@@ -1,13 +1,11 @@
 <script setup lang="ts" generic="Id extends string">
 import { createFixedStageGeometry, type ControllerSnapshot } from "@snap-motion/core";
-import { useEventListener } from "@vueuse/core";
+import type { SnapMotionMessages } from "@snap-motion/vue/localization";
+import type { NavigationReason } from "@snap-motion/vue/motion";
+import { useEventListener, useMutationObserver } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, provide, ref, useId, watch, watchEffect } from "vue";
 
-import {
-  createEnglishSnapMotionMessages,
-  type SnapMotionMessages,
-} from "../../localization/messages";
-import type { NavigationReason } from "../../motion/motion-contracts";
+import { createEnglishSnapMotionMessages } from "../../localization/messages";
 import { carouselContextKey, type CarouselContext } from "../carousel-context";
 import type { CarouselKeyboardScope, SnapMotionDirection } from "../carousel-contracts";
 import {
@@ -63,6 +61,10 @@ const statusText = ref("");
 const slideRegistrations = new Map<Id, { element?: HTMLElement; label: string }>();
 const reducedMotionOverride = computed(() => props.reducedMotionOverride);
 const requestedDirection = computed(() => props.direction);
+const contentDirection = ref<"ltr" | "rtl">(props.direction === "rtl" ? "rtl" : "ltr");
+const rootStyle = computed(() => ({
+  "--snap-motion-content-direction": contentDirection.value,
+}));
 const ids = computed(() => props.ids);
 const messages = computed(() => createEnglishSnapMotionMessages(props.messages));
 const defaultGeometryStrategy = createFixedStageCarouselGeometryStrategy<Id>();
@@ -72,6 +74,26 @@ let targetGeneration = 0;
 let settledGeneration = 0;
 let settleCheckQueued = false;
 let unmounted = false;
+
+function refreshContentDirection() {
+  if (props.direction !== "auto") {
+    contentDirection.value = props.direction;
+    return;
+  }
+  const target = root.value;
+  contentDirection.value =
+    target?.ownerDocument.defaultView?.getComputedStyle(target).direction === "rtl" ? "rtl" : "ltr";
+}
+
+const directionObservationRoot = computed(() => root.value?.ownerDocument.documentElement);
+useMutationObserver(directionObservationRoot, refreshContentDirection, {
+  attributes: true,
+  attributeFilter: ["class", "dir"],
+  subtree: true,
+});
+watch([requestedDirection, root], () => void nextTick(refreshContentDirection), {
+  immediate: true,
+});
 
 function moveFocusOutsideOutgoingSlide(id: Id) {
   const target = viewport.value;
@@ -171,9 +193,20 @@ function scheduleRemeasure() {
   });
 }
 
-function navigate(id: Id, reason: NavigationReason) {
-  if (!props.ids.includes(id) || !acceptTarget(id, reason, reason !== "route")) return;
+function navigateWithReason(id: Id, reason: NavigationReason, userOriginated = true): boolean {
+  if (!props.ids.includes(id) || !acceptTarget(id, reason, userOriginated)) return false;
   motion.moveTo(id);
+  return true;
+}
+
+/** Public imperative navigation has one truthful provenance. */
+function navigate(id: Id): boolean {
+  return navigateWithReason(id, "programmatic");
+}
+
+/** Internal picker navigation used by pagination controls and slots. */
+function pick(id: Id): boolean {
+  return navigateWithReason(id, "picker");
 }
 
 function adjacentId(direction: -1 | 1): Id | undefined {
@@ -181,14 +214,14 @@ function adjacentId(direction: -1 | 1): Id | undefined {
   return index < 0 ? undefined : props.ids[index + direction];
 }
 
-function previous(reason: NavigationReason = "previous") {
+function previous(): boolean {
   const id = adjacentId(-1);
-  if (id !== undefined) navigate(id, reason);
+  return id !== undefined && navigateWithReason(id, "previous");
 }
 
-function next(reason: NavigationReason = "next") {
+function next(): boolean {
   const id = adjacentId(1);
-  if (id !== undefined) navigate(id, reason);
+  return id !== undefined && navigateWithReason(id, "next");
 }
 
 function onKeyDown(event: KeyboardEvent) {
@@ -205,8 +238,7 @@ function onKeyDown(event: KeyboardEvent) {
         ? props.ids.at(-1)
         : adjacentId(action === "previous" ? -1 : 1);
   if (id === undefined || id === intendedId.value) return;
-  event.preventDefault();
-  navigate(id, "keyboard");
+  if (navigateWithReason(id, "keyboard")) event.preventDefault();
 }
 
 const effectiveKeyboardScope = computed<CarouselKeyboardScope>(() =>
@@ -237,8 +269,13 @@ watchEffect((onCleanup) => {
 });
 
 watch(
-  () => props.ids,
-  async (nextIds) => {
+  [() => JSON.stringify(props.ids), () => props.activeId] as const,
+  async ([idsKey, controlledId], priorState) => {
+    const nextIds = props.ids;
+    const idsChanged = priorState === undefined || idsKey !== priorState[0];
+    const controlledChanged = priorState !== undefined && controlledId !== priorState[1];
+    if (!idsChanged && !controlledChanged) return;
+
     const activeElement = viewport.value?.ownerDocument.activeElement;
     const focusNeedsFallback =
       !nextIds.includes(intendedId.value) &&
@@ -246,24 +283,20 @@ watch(
       activeElement instanceof HTMLElement &&
       viewport.value?.contains(activeElement);
     if (focusNeedsFallback) viewport.value?.focus({ preventScroll: true });
+    motion.interrupt();
     await nextTick();
     if (unmounted) return;
+    if (nextIds.includes(controlledId)) {
+      acceptTarget(controlledId, "route", false);
+      motion.controller.remeasure({ ...measure(), activeId: controlledId });
+      return;
+    }
     const target = motion.remeasure();
     if (target && target.id !== intendedId.value) acceptTarget(target.id, "route", false);
   },
-  { deep: true },
 );
 
 watch(() => props.geometryStrategy, scheduleRemeasure);
-
-watch(
-  () => props.activeId,
-  (id) => {
-    if (id === intendedId.value || !props.ids.includes(id)) return;
-    acceptTarget(id, "route", false);
-    motion.moveTo(id);
-  },
-);
 
 provide(carouselContextKey, {
   activeId: motion.activeId,
@@ -271,17 +304,17 @@ provide(carouselContextKey, {
   canPrevious: motion.canPrevious,
   count: computed(() => props.ids.length),
   direction: motion.direction,
-  directionAttribute: computed(() => (props.direction === "auto" ? undefined : props.direction)),
   ids,
   instructionId,
   messages,
-  navigate,
   next,
   onKeyDown,
   onPointerDown: motion.onPointerDown,
   onWheel: motion.onWheel,
   phase: motion.phase,
+  pick,
   previous,
+  request: navigate,
   registerSlide(id, label, element) {
     slideRegistrations.set(id as Id, { label, ...(element ? { element } : {}) });
     if (element) scheduleRemeasure();
@@ -320,6 +353,7 @@ onBeforeUnmount(() => {
     :data-snap-motion-primary-carousel="keyboardPrimary ? '' : undefined"
     :dir="direction === 'auto' ? undefined : direction"
     :role="landmark ? 'region' : 'group'"
+    :style="rootStyle"
   >
     <slot />
     <p :id="instructionId" class="snap-motion-visually-hidden">

@@ -23,7 +23,7 @@ export function focusInitial(policy: InitialFocus, targets: {
     title?: HTMLElement | undefined;
 }): boolean;
 
-// @public (undocumented)
+// @public
 export interface FocusReturnOptions {
     // (undocumented)
     fallback?: HTMLElement | (() => HTMLElement | undefined) | undefined;
@@ -37,10 +37,12 @@ export type InitialFocus = "close" | "title" | "first-interactive" | HTMLElement
 // @public (undocumented)
 export function maintainModalTabOrder(event: KeyboardEvent, container: HTMLElement | undefined): boolean;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_base" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "__VLS_Slots" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const ModalDialog: typeof __VLS_export;
+export const ModalDialog: __VLS_WithSlots<typeof __VLS_base, __VLS_Slots>;
 
 // @public (undocumented)
 export function restoreFocus(options: FocusReturnOptions | HTMLElement | undefined): boolean;

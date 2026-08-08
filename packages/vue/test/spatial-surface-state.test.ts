@@ -28,6 +28,7 @@ interface DeckInstance {
   canNext: boolean;
   canPrevious: boolean;
   currentId: string | undefined;
+  diagnostics: { pointerInteractionActive: boolean };
   next: () => boolean;
   previous: () => boolean;
   requestId: (id: string) => boolean;
@@ -332,6 +333,82 @@ describe("controlled selection is not user input", () => {
     expect(deck.settledId).toBe("a");
 
     root.dispatchEvent(pointerEvent("pointerup", { clientX: -200 }));
+    wrapper.unmount();
+  });
+
+  it("aborts unresolved touch intent before controlled state takes over", async () => {
+    const wrapper = mountDeck({ activeId: "c" });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+    const root = wrapper.element as HTMLElement;
+
+    root.dispatchEvent(
+      pointerEvent("pointerdown", {
+        buttons: 1,
+        clientX: 20,
+        clientY: 20,
+        pointerType: "touch",
+      }),
+    );
+    expect(deck.diagnostics.pointerInteractionActive).toBe(true);
+
+    await wrapper.setProps({ activeId: "a" });
+    await nextTick();
+    expect(deck.settledId).toBe("a");
+    expect(deck.diagnostics.pointerInteractionActive).toBe(false);
+
+    root.dispatchEvent(
+      pointerEvent("pointermove", {
+        buttons: 1,
+        clientX: -260,
+        clientY: 22,
+        pointerType: "touch",
+      }),
+    );
+    root.dispatchEvent(
+      pointerEvent("pointerup", { clientX: -260, clientY: 22, pointerType: "touch" }),
+    );
+    await nextTick();
+
+    expect(deck.settledId).toBe("a");
+    expect(wrapper.emitted("requestActiveId")).toBeUndefined();
+    expect(wrapper.emitted("activate")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("aborts unresolved touch intent before item reconfiguration", async () => {
+    const wrapper = mountDeck({ activeId: "c" });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+    const root = wrapper.element as HTMLElement;
+    root.dispatchEvent(
+      pointerEvent("pointerdown", {
+        buttons: 1,
+        clientX: 10,
+        clientY: 10,
+        pointerType: "touch",
+      }),
+    );
+
+    await wrapper.setProps({ items: reversedScreens });
+    await nextTick();
+    expect(deck.settledId).toBe("c");
+    expect(deck.diagnostics.pointerInteractionActive).toBe(false);
+
+    root.dispatchEvent(
+      pointerEvent("pointermove", {
+        buttons: 1,
+        clientX: -300,
+        clientY: 12,
+        pointerType: "touch",
+      }),
+    );
+    root.dispatchEvent(
+      pointerEvent("pointerup", { clientX: -300, clientY: 12, pointerType: "touch" }),
+    );
+    await nextTick();
+    expect(deck.settledId).toBe("c");
+    expect(wrapper.emitted("requestActiveId")).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -643,10 +720,59 @@ describe("accessible structure", () => {
     for (const card of wrapper.findAll(".snap-motion-coverflow-card")) {
       const hidden = card.attributes("aria-hidden") === "true";
       expect(card.attributes("inert") !== undefined).toBe(hidden);
-      expect(card.attributes("data-visible")).toBe(hidden ? "false" : "true");
+      expect(card.attributes("data-semantic")).toBe(hidden ? "false" : "true");
     }
+    expect(
+      wrapper
+        .findAll(".snap-motion-coverflow-card")
+        .some(
+          (card) =>
+            card.attributes("data-visible") === "true" &&
+            card.attributes("data-semantic") === "false",
+        ),
+    ).toBe(true);
     wrapper.unmount();
   });
+
+  it.each([
+    ["deck", TypedStackedDeck, ".snap-motion-stacked-deck-card"],
+    ["coverflow", TypedCoverflow, ".snap-motion-coverflow-card"],
+  ] as const)(
+    "moves focus out of %s content before navigation makes that content inert",
+    async (_name, component, cardSelector) => {
+      const wrapper = mount(component, {
+        attachTo: document.body,
+        props: {
+          items: screens,
+          itemLabel: (item: Screen) => item.title,
+          label: "Screens",
+          reducedMotionOverride: true,
+        },
+        slots: {
+          card: ({ item }: { item: Screen }) =>
+            h("button", { class: `inspect-${item.id}`, type: "button" }, `Inspect ${item.title}`),
+        },
+      });
+      await nextTick();
+      const handle = wrapper.vm as unknown as DeckInstance | RailInstance;
+      const root = wrapper.element as HTMLElement;
+      const currentCard = wrapper.get(`${cardSelector}[aria-current='true']`);
+      const inspect = currentCard.get("button").element as HTMLButtonElement;
+      inspect.focus();
+      expect(document.activeElement).toBe(inspect);
+
+      expect(handle.next()).toBe(true);
+      await nextTick();
+      // Coverflow can keep the immediately adjacent card semantic while it remains a genuine
+      // near-centre target. Moving once more proves the exact update where it leaves that set.
+      expect(handle.next()).toBe(true);
+      await nextTick();
+
+      expect(currentCard.attributes()).toHaveProperty("inert");
+      expect(document.activeElement).toBe(root);
+      wrapper.unmount();
+    },
+  );
 });
 
 describe("the public handle is a product surface", () => {

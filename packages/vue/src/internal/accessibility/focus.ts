@@ -1,15 +1,4 @@
-/** Native-dialog focus mechanics. Public access is curated by the dialog feature. */
-export type InitialFocus =
-  | "close"
-  | "title"
-  | "first-interactive"
-  | HTMLElement
-  | (() => HTMLElement | undefined);
-
-export interface FocusReturnOptions {
-  fallback?: HTMLElement | (() => HTMLElement | undefined) | undefined;
-  opener?: HTMLElement | undefined;
-}
+import type { FocusReturnOptions, InitialFocus } from "../../contracts/focus-contracts";
 
 const interactiveSelector = [
   "button",
@@ -162,4 +151,28 @@ export function restoreFocus(options: FocusReturnOptions | HTMLElement | undefin
 
   target.focus({ preventScroll: true });
   return target === target.ownerDocument.activeElement;
+}
+
+/**
+ * Moves focus to a surface immediately before its focused descendant stops being semantic content.
+ *
+ * The caller owns the surface-specific definition of semantic. This helper owns the DOM invariant:
+ * focus is never left inside content that the same update is about to make inert or hidden.
+ */
+export function preserveFocusBeforeSemanticChange(
+  surface: HTMLElement | undefined,
+  remainsSemantic: (activeElement: HTMLElement) => boolean,
+): boolean {
+  const activeElement = surface?.ownerDocument.activeElement;
+  if (
+    typeof HTMLElement === "undefined" ||
+    !(activeElement instanceof HTMLElement) ||
+    !surface?.contains(activeElement) ||
+    activeElement === surface ||
+    remainsSemantic(activeElement)
+  ) {
+    return false;
+  }
+  surface.focus({ preventScroll: true });
+  return surface.ownerDocument.activeElement === surface;
 }

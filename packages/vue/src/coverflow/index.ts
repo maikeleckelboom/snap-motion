@@ -10,7 +10,3 @@ export type {
   UseCoverflowMotionOptions,
   UseCoverflowMotionReturn,
 } from "./use-coverflow-motion";
-export type { CarouselMotion } from "../carousel/carousel-contracts";
-export type { PointerIntent } from "../internal/input/pointer-policy";
-export type { SurfaceMotionDiagnostics } from "../internal/surface/surface-diagnostics";
-export type { NavigationReason } from "../motion/motion-contracts";

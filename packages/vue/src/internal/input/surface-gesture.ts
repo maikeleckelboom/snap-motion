@@ -71,6 +71,7 @@ interface TrackedGesture {
   readonly focusWasOutside: boolean;
   readonly openEligibleAtStart: boolean;
   readonly originElement: HTMLElement | undefined;
+  readonly originTarget: Element | undefined;
   readonly originIndex: number | undefined;
   readonly pointerId: number;
   readonly startX: number;
@@ -80,6 +81,14 @@ interface TrackedGesture {
   deltaY: number;
   involvedMultiplePointers: boolean;
   maximumDisplacement: number;
+}
+
+interface ArmedClickSuppression {
+  readonly expiresAt: number;
+  readonly originTarget: Element | undefined;
+  readonly releaseTarget: Element | undefined;
+  readonly releaseX: number;
+  readonly releaseY: number;
 }
 
 /**
@@ -95,15 +104,15 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
   const activePointers = new Set<number>();
   let gesture: TrackedGesture | undefined;
   let disposed = false;
-  /** When an armed click suppression stops being about the manipulation that armed it. */
-  let clickSuppressedUntil = 0;
+  /** Evidence tying one compatibility click to the swipe that armed its suppression. */
+  let clickSuppression: ArmedClickSuppression | undefined;
 
   // Resolution is deferred by a microtask so a release and the controller's answer to it cannot
   // interleave. A scope torn down inside that window must not be spoken for afterwards.
   onScopeDispose(() => {
     disposed = true;
     gesture = undefined;
-    clickSuppressedUntil = 0;
+    clickSuppression = undefined;
     activePointers.clear();
   });
 
@@ -171,14 +180,32 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
    * only thing that earns a suppression is a manipulation this surface actually consumed, which is
    * exactly what the core resolver calls a swipe.
    */
-  function armClickSuppression(consumed: boolean) {
-    clickSuppressedUntil = consumed ? Date.now() + CLICK_SUPPRESSION_LIFETIME_MS : 0;
+  function clearClickSuppression() {
+    clickSuppression = undefined;
+  }
+
+  function armClickSuppression(
+    tracked: TrackedGesture,
+    resolution: DirectManipulationResolution,
+    event: PointerEvent,
+  ) {
+    if (resolution.action !== "swipe") {
+      clearClickSuppression();
+      return;
+    }
+    clickSuppression = {
+      expiresAt: Date.now() + CLICK_SUPPRESSION_LIFETIME_MS,
+      originTarget: tracked.originTarget,
+      releaseTarget: event.target instanceof Element ? event.target : undefined,
+      releaseX: event.clientX,
+      releaseY: event.clientY,
+    };
   }
 
   function onPointerDown(event: PointerEvent) {
     if (options.disabled?.() || disposed) return;
     // A new press supersedes whatever the previous one asked the browser to suppress.
-    armClickSuppression(false);
+    clearClickSuppression();
     // A control inside a consumer's item owns its own pointer. The low-level drag recognizer
     // already refuses these; the surface recognizer has to agree, or a press on a nested link
     // would still be tracked as a gesture and resolved as a selection when it is released.
@@ -199,6 +226,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
       focusWasOutside: Boolean(root && (!activeElement || !root.contains(activeElement))),
       openEligibleAtStart: originIndex >= 0 && options.isOpenEligible(originIndex),
       originElement,
+      originTarget: event.target instanceof Element ? event.target : undefined,
       originIndex: originIndex >= 0 ? originIndex : undefined,
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -220,7 +248,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     tracked.cancelled = true;
     gesture = undefined;
     // A gesture that undid itself consumed nothing, so it leaves no suppression behind.
-    armClickSuppression(false);
+    clearClickSuppression();
     const resolution = resolutionFor(tracked, false);
     queueMicrotask(() => publish(tracked, resolution));
   }
@@ -244,12 +272,25 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     // Decided synchronously, because the browser's click follows this release before the deferred
     // publication runs — but decided from the same resolution the surface is about to act on, so
     // what suppresses a click is exactly what moved the surface.
-    armClickSuppression(resolution.action === "swipe");
+    armClickSuppression(tracked, resolution, event);
     gesture = undefined;
     queueMicrotask(() => publish(tracked, resolution));
   });
 
   useEventListener("pointercancel", abandon);
+
+  /**
+   * Aborts the browser-side record without publishing a gesture result.
+   *
+   * Authoritative state has already decided what the surface means, so the old contact is not a
+   * cancelled user navigation to resolve later. Clearing both the gesture and its suppression is
+   * what keeps the high- and low-level recognizers in agreement after takeover.
+   */
+  function cancel() {
+    gesture = undefined;
+    activePointers.clear();
+    clearClickSuppression();
+  }
 
   /**
    * Cancels exactly one browser click, and only the one a manipulation this surface consumed
@@ -266,15 +307,25 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
    * to do with the drag that armed it.
    */
   function onClick(event: MouseEvent) {
-    if (clickSuppressedUntil === 0) return;
-    const expired = Date.now() > clickSuppressedUntil;
-    clickSuppressedUntil = 0;
-    if (expired) return;
+    const armed = clickSuppression;
+    if (!armed) return;
+    if (Date.now() > armed.expiresAt) {
+      clearClickSuppression();
+      return;
+    }
+    // Keyboard activation reports detail zero and no meaningful pointer coordinates.
+    if (event.detail <= 0 || event.button !== 0) return;
+    if (Math.hypot(event.clientX - armed.releaseX, event.clientY - armed.releaseY) > 4) return;
+    const target = event.target instanceof Element ? event.target : undefined;
+    if (!target || (target !== armed.originTarget && target !== armed.releaseTarget)) return;
+
+    clearClickSuppression();
     event.preventDefault();
     event.stopPropagation();
   }
 
   return {
+    cancel,
     onClick,
     onPointerDown,
     onLostPointerCapture: abandon,

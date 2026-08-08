@@ -7,6 +7,7 @@ import type {
   SnapAnchor,
   SpringConfiguration,
 } from "@snap-motion/core";
+import type { PointerIntent } from "@snap-motion/vue/motion";
 import { useEventListener } from "@vueuse/core";
 import {
   computed,
@@ -21,7 +22,6 @@ import {
   type Ref,
 } from "vue";
 
-import type { PointerIntent } from "../internal/input/pointer-policy";
 import { useRemeasurement } from "../internal/layout/remeasurement";
 import { useSnapMotion } from "../motion/use-snap-motion";
 import type { SheetAxis, SheetSide, SheetState } from "./sheet-contracts";

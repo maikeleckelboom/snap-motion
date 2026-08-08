@@ -13,6 +13,8 @@ import { ControllerMoveOptions } from '@snap-motion/core';
 import { ControllerPhase } from '@snap-motion/core';
 import { ControllerSnapshot } from '@snap-motion/core';
 import { Ref } from 'vue';
+import type { ScalarBounds } from '@snap-motion/core';
+import type { SemanticId } from '@snap-motion/core';
 import { ShallowRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
 import { SnapController } from '@snap-motion/core';
@@ -25,8 +27,34 @@ export function createMotionDriver(): AnimationDriver;
 // @public
 export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "programmatic" | "route";
 
-// @public (undocumented)
+// @public
 export type PointerIntent = "horizontal" | "pending" | "vertical";
+
+// @public
+export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {
+    // (undocumented)
+    readonly activeId: Id | undefined;
+    // (undocumented)
+    readonly anchors: readonly SnapAnchor<Id>[];
+    // (undocumented)
+    readonly bounds: ScalarBounds;
+    // (undocumented)
+    readonly isAnimating: boolean;
+    // (undocumented)
+    readonly phase: ControllerPhase;
+    // (undocumented)
+    readonly pointerInteractionActive: boolean;
+    // (undocumented)
+    readonly pointerOwned: boolean;
+    // (undocumented)
+    readonly position: number;
+    // (undocumented)
+    readonly reducedMotion: boolean;
+    // (undocumented)
+    readonly targetId: Id | undefined;
+    // (undocumented)
+    readonly velocity: number;
+}
 
 // @public
 export function useBoundedSpringDriver(cardPitchPx: () => number): AnimationDriver;
@@ -45,6 +73,7 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     onNativeDragStart: (event: DragEvent) => void;
     onPointerDown: (event: PointerEvent) => void;
     phase: ComputedRef<ControllerPhase>;
+    pointerInteractionActive: Ref<boolean, boolean>;
     pointerIntent: Ref<PointerIntent, PointerIntent>;
     pointerOwned: Ref<boolean, boolean>;
     position: ComputedRef<number>;

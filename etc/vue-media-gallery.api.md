@@ -7,6 +7,8 @@
 import { ComponentOptionsMixin } from 'vue';
 import { ComponentProvideOptions } from 'vue';
 import { DefineComponent } from 'vue';
+import type { FocusReturnOptions } from '@snap-motion/vue/dialog';
+import type { InitialFocus } from '@snap-motion/vue/dialog';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
 
@@ -25,16 +27,9 @@ export function fitMediaWithinViewport(viewportSize: MediaSize, intrinsicSize: M
 // @public (undocumented)
 export const fittedMediaTransform: Readonly<MediaTransform>;
 
-// @public (undocumented)
-export interface FocusReturnOptions {
-    // (undocumented)
-    fallback?: HTMLElement | (() => HTMLElement | undefined) | undefined;
-    // (undocumented)
-    opener?: HTMLElement | undefined;
-}
+export { FocusReturnOptions }
 
-// @public
-export type InitialFocus = "close" | "title" | "first-interactive" | HTMLElement | (() => HTMLElement | undefined);
+export { InitialFocus }
 
 // @public (undocumented)
 export function interpolateMediaTransform(from: MediaTransform, to: MediaTransform, progress: number): MediaTransform;
@@ -45,10 +40,33 @@ export function isFittedMediaTransform(transform: MediaTransform): boolean;
 // @public (undocumented)
 export type MediaGalleryCloseReason = "backdrop" | "close-button" | "escape" | "programmatic";
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export const MediaGalleryDialog: typeof __VLS_export;
+export const MediaGalleryDialog: DefineComponent<MediaGalleryDialogProps, {
+dialog: Ref<HTMLDialogElement | undefined, HTMLDialogElement | undefined>;
+activeIndex: Ref<number, number>;
+previous: typeof previous;
+next: typeof next;
+resetToFit: typeof resetToFit;
+requestClose: typeof requestClose;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {} & {
+closed: (finalIndex: number) => any;
+"update:open": (open: boolean) => any;
+requestClose: (finalIndex: number, reason: MediaGalleryCloseReason) => any;
+opened: (index: number) => any;
+indexChanged: (index: number, reason: MediaGalleryNavigationReason) => any;
+}, string, PublicProps, Readonly<MediaGalleryDialogProps> & Readonly<{
+onClosed?: (finalIndex: number) => any;
+"onUpdate:open"?: (open: boolean) => any;
+onRequestClose?: (finalIndex: number, reason: MediaGalleryCloseReason) => any;
+onOpened?: (index: number) => any;
+onIndexChanged?: (index: number, reason: MediaGalleryNavigationReason) => any;
+}>, {
+title: string;
+reducedMotionOverride: boolean | undefined;
+initialFocus: InitialFocus;
+initialIndex: number;
+eyebrow: string;
+}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 
 // @public (undocumented)
 export interface MediaGalleryDialogProps {
@@ -205,6 +223,13 @@ export function resolveMediaTransformBounds(context: MediaTransformContext, scal
 
 // @public (undocumented)
 export function zoomMediaTransform(transform: MediaTransform, requestedScale: number, focalPoint: MediaPoint, context: MediaTransformContext, limits?: MediaTransformLimits): MediaTransform;
+
+// Warnings were encountered during analysis:
+//
+// C:/dev/snap-motion/temp/declarations/vue/media-gallery/components/MediaGalleryDialog.d.vue.ts:9:5 - (ae-forgotten-export) The symbol "previous" needs to be exported by the entry point index.d.ts
+// C:/dev/snap-motion/temp/declarations/vue/media-gallery/components/MediaGalleryDialog.d.vue.ts:10:5 - (ae-forgotten-export) The symbol "next" needs to be exported by the entry point index.d.ts
+// C:/dev/snap-motion/temp/declarations/vue/media-gallery/components/MediaGalleryDialog.d.vue.ts:11:5 - (ae-forgotten-export) The symbol "resetToFit" needs to be exported by the entry point index.d.ts
+// C:/dev/snap-motion/temp/declarations/vue/media-gallery/components/MediaGalleryDialog.d.vue.ts:12:5 - (ae-forgotten-export) The symbol "requestClose" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

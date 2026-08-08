@@ -1,7 +1,6 @@
 import type { ControllerPhase } from "@snap-motion/core";
 import { computed, inject, type ComputedRef } from "vue";
 
-import type { NavigationReason } from "../motion/motion-contracts";
 import { carouselContextKey, type CarouselContext } from "./carousel-context";
 
 export interface PublicCarouselContext<Id extends string = string> {
@@ -11,10 +10,11 @@ export interface PublicCarouselContext<Id extends string = string> {
   readonly count: ComputedRef<number>;
   readonly direction: ComputedRef<"ltr" | "rtl">;
   readonly ids: ComputedRef<readonly Id[]>;
-  readonly navigate: (id: Id, reason?: NavigationReason) => void;
-  readonly next: (reason?: NavigationReason) => void;
+  /** Imperative navigation, always reported as `programmatic`. */
+  readonly navigate: (id: Id) => boolean;
+  readonly next: () => boolean;
   readonly phase: ComputedRef<ControllerPhase>;
-  readonly previous: (reason?: NavigationReason) => void;
+  readonly previous: () => boolean;
 }
 
 /** Returns the stable read-only carousel facade available to controls and slots. */
@@ -28,7 +28,7 @@ export function useCarouselContext<Id extends string = string>(): PublicCarousel
     count: computed(() => context.count.value),
     direction: computed(() => context.direction.value),
     ids: computed(() => [...context.ids.value]),
-    navigate: (id, reason = "picker") => context.navigate(id, reason),
+    navigate: context.request,
     next: context.next,
     phase: computed(() => context.phase.value),
     previous: context.previous,

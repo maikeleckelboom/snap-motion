@@ -1,4 +1,4 @@
-import type { NavigationReason } from "../motion/motion-contracts";
+import type { NavigationReason } from "@snap-motion/vue/motion";
 
 export type SheetAxis = "x" | "y";
 export type SheetEdge = "top" | "right" | "bottom" | "left";

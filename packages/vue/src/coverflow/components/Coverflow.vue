@@ -4,13 +4,12 @@ import type {
   ReleaseTargetPolicy,
   SpringConfiguration,
 } from "@snap-motion/core";
-import { computed, ref } from "vue";
+import type { SnapMotionMessages } from "@snap-motion/vue/localization";
+import type { NavigationReason } from "@snap-motion/vue/motion";
+import { computed, ref, watch } from "vue";
 
-import {
-  createEnglishSnapMotionMessages,
-  type SnapMotionMessages,
-} from "../../localization/messages";
-import type { NavigationReason } from "../../motion/motion-contracts";
+import { preserveFocusBeforeSemanticChange } from "../../internal/accessibility/focus";
+import { createEnglishSnapMotionMessages } from "../../localization/messages";
 import type { CoverflowCardState } from "../coverflow-contracts";
 import { useCoverflowMotion } from "../use-coverflow-motion";
 
@@ -88,7 +87,7 @@ const coverflow = useCoverflowMotion<TId>({
   ids,
   controlledId: () => props.activeId,
   disabled: () => props.disabled,
-  initialId: props.activeId ?? props.items[Math.floor(props.items.length / 2)]?.id,
+  initialId: props.items[Math.floor(props.items.length / 2)]?.id,
   reducedMotionOverride,
   root: focusScope,
   stageWidth: () => props.stageWidth,
@@ -131,6 +130,23 @@ const stageStyle = computed(() => ({
   "--snap-motion-coverflow-card-height": `${coverflow.tuning.value.cardHeight}px`,
   "--snap-motion-coverflow-perspective": `${coverflow.tuning.value.perspective}px`,
 }));
+
+watch(
+  () =>
+    coverflow.presentations.value
+      .map((presentation, index) =>
+        presentation.interactive ? coverflow.model.idAt(index) : undefined,
+      )
+      .filter((id): id is TId => id !== undefined),
+  (semanticIds) => {
+    const semantic = new Set(semanticIds);
+    preserveFocusBeforeSemanticChange(root.value, (activeElement) => {
+      const card = activeElement.closest<HTMLElement>("[data-snap-motion-coverflow-card]");
+      return card !== null && semantic.has((card.dataset.itemId ?? "") as TId);
+    });
+  },
+  { deep: true, flush: "sync" },
+);
 
 function cardStyle(card: CoverflowCardState<TItem, TId>) {
   const presentation = card.presentation;
@@ -212,7 +228,7 @@ defineExpose({
         v-for="card in cards"
         :key="card.id"
         :aria-current="card.active ? 'true' : undefined"
-        :aria-hidden="card.presentation.visible ? undefined : 'true'"
+        :aria-hidden="card.presentation.interactive ? undefined : 'true'"
         :aria-label="positionLabel(card.index)"
         aria-roledescription="slide"
         class="snap-motion-coverflow-card"
@@ -220,7 +236,8 @@ defineExpose({
         data-snap-motion-coverflow-card
         :data-item-id="card.id"
         :data-visible="card.presentation.visible ? 'true' : 'false'"
-        :inert="!card.presentation.visible"
+        :data-semantic="card.presentation.interactive ? 'true' : 'false'"
+        :inert="!card.presentation.interactive"
         role="group"
         :style="cardStyle(card)"
       >

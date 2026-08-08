@@ -10,7 +10,8 @@
  * against this rather than against a tuned rig.
  */
 import { Coverflow } from "@snap-motion/vue/coverflow";
-import { StackedDeck, type NavigationReason } from "@snap-motion/vue/stacked-deck";
+import type { NavigationReason } from "@snap-motion/vue/motion";
+import { StackedDeck } from "@snap-motion/vue/stacked-deck";
 import { ref } from "vue";
 
 import { showcaseScreens, type ShowcaseScreenId } from "./showcaseScreens";

@@ -1,6 +1,11 @@
 import { resolve } from "node:path";
 
-import { ConsoleMessageId, Extractor, ExtractorConfig } from "@microsoft/api-extractor";
+import {
+  ConsoleMessageId,
+  Extractor,
+  ExtractorConfig,
+  ExtractorLogLevel,
+} from "@microsoft/api-extractor";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const mode = process.argv.find((argument) => argument.startsWith("--mode="))?.slice(7) ?? "check";
@@ -15,15 +20,19 @@ if (packageFilter && !["core", "vue"].includes(packageFilter)) {
 
 const configurations = [
   { packageName: "core", path: "packages/core/api-extractor.json" },
-  { packageName: "vue", path: "packages/vue/api-extractor.json" },
+  // Cross-entrypoint public types retain the module that conceptually owns them. Generate those
+  // lower-level rollups before the feature reports that import them so API Extractor resolves the
+  // same public package paths a consumer does, rather than requiring every feature to re-export a
+  // shared type it does not own.
+  { packageName: "vue", path: "packages/vue/api-extractor.motion.json" },
+  { packageName: "vue", path: "packages/vue/api-extractor.localization.json" },
+  { packageName: "vue", path: "packages/vue/api-extractor.dialog.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.carousel.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.coverflow.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.stacked-deck.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.sheet.json" },
-  { packageName: "vue", path: "packages/vue/api-extractor.dialog.json" },
-  { packageName: "vue", path: "packages/vue/api-extractor.localization.json" },
   { packageName: "vue", path: "packages/vue/api-extractor.media-gallery.json" },
-  { packageName: "vue", path: "packages/vue/api-extractor.motion.json" },
+  { packageName: "vue", path: "packages/vue/api-extractor.json" },
 ].filter((configuration) => !packageFilter || configuration.packageName === packageFilter);
 
 /**
@@ -39,7 +48,38 @@ const deduplicatedNotices = new Set([
 ]);
 let compilerEngineNoticeReported = false;
 
+function isGeneratedVueForgottenExport(message) {
+  if (
+    message.messageId !== "ae-forgotten-export" ||
+    !message.sourceFilePath?.replaceAll("\\", "/").includes("/temp/declarations/vue/") ||
+    !message.sourceFilePath.endsWith(".d.vue.ts")
+  ) {
+    return false;
+  }
+
+  const symbol = message.text.match(/The symbol "([^"]+)"/)?.[1];
+  if (symbol && /^__VLS_(?:WithSlots|base|Slots|PrettifyLocal|Props)(?:_\d+)?$/.test(symbol)) {
+    return true;
+  }
+
+  return (
+    message.sourceFilePath
+      .replaceAll("\\", "/")
+      .endsWith("/media-gallery/components/MediaGalleryDialog.d.vue.ts") &&
+    symbol !== undefined &&
+    new Set(["next", "previous", "requestClose", "resetToFit"]).has(symbol)
+  );
+}
+
 function messageCallback(message) {
+  if (isGeneratedVueForgottenExport(message)) {
+    // Vue's declaration emitter represents generic components, slots, and defineExpose members
+    // through private helper symbols. They cannot be entrypoint exports and are not public API.
+    // Suppress only those exact generated names from generated SFC declarations; any forgotten
+    // source-owned symbol remains a failing warning below.
+    message.logLevel = ExtractorLogLevel.None;
+    return;
+  }
   if (!deduplicatedNotices.has(message.messageId)) return;
   message.handled = true;
   if (
@@ -72,7 +112,9 @@ for (const configuration of configurations) {
     printApiReportDiff: mode === "check",
     showVerboseMessages: false,
   });
-  failed ||= !result.succeeded;
+  // Updating a checked-in report is itself reported as a warning. It is expected only in update
+  // mode; check and rollup modes still fail on every warning that was not explicitly discarded.
+  failed ||= !result.succeeded || (mode !== "update" && result.warningCount > 0);
 }
 
 if (failed) process.exitCode = 1;

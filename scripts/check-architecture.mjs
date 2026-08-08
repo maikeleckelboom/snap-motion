@@ -80,7 +80,7 @@ function allowedFeatureDependency(importer, target) {
     to === "motion" &&
     [
       "motion/bounded-spring-driver.ts",
-      "motion/motion-contracts.ts",
+      "contracts/motion-contracts.ts",
       "motion/use-snap-motion.ts",
     ].includes(targetPath)
   ) {

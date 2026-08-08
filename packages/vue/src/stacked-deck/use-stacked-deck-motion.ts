@@ -11,6 +11,8 @@ import {
   STACKED_DECK_ANCHOR_SKIP,
   STACKED_DECK_INTERIOR_ELASTICITY,
   StackedDeckModel,
+  tightPreset,
+  type ControllerConfiguration,
   type ElasticityOptions,
   type SnapAnchor,
   type SpringConfiguration,
@@ -21,6 +23,8 @@ import {
   type StackedDeckReleasePolicy,
   type StackedDeckTuning,
 } from "@snap-motion/core";
+import type { CarouselMotion } from "@snap-motion/vue/carousel";
+import type { NavigationReason, SurfaceMotionDiagnostics } from "@snap-motion/vue/motion";
 import { useElementSize } from "@vueuse/core";
 import {
   computed,
@@ -38,16 +42,15 @@ import {
   type ShallowRef,
 } from "vue";
 
-import type { CarouselMotion } from "../carousel/carousel-contracts";
 import { useCarouselMotion } from "../carousel/use-carousel-motion";
 import { resolveDirectionalSnapKeyboardAction } from "../internal/input/keyboard-policy";
 import { useSurfaceGesture } from "../internal/input/surface-gesture";
 import {
-  resolveSurfaceDiagnostics,
-  type SurfaceMotionDiagnostics,
-} from "../internal/surface/surface-diagnostics";
+  resolveSurfaceConfiguration,
+  surfaceConfigurationKey,
+} from "../internal/surface/surface-configuration";
+import { resolveSurfaceDiagnostics } from "../internal/surface/surface-diagnostics";
 import { useBoundedSpringDriver } from "../motion/bounded-spring-driver";
-import type { NavigationReason } from "../motion/motion-contracts";
 import type { StackedDeckPileLayer } from "./stacked-deck-contracts";
 
 export interface UseStackedDeckMotionOptions<Id extends string> {
@@ -96,24 +99,13 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function deckRelease(policy: StackedDeckReleasePolicy | undefined) {
-  return { ...policy, maxAnchorSkip: STACKED_DECK_ANCHOR_SKIP };
-}
-
-/**
- * The deck's physics, resolved from whatever the consumer supplied.
- *
- * The interior envelope is the one thing a deck always states, because the one-card limit is the
- * product and a hard clamp is not how it is supposed to feel. A consumer that supplies its own
- * elasticity customizes that resistance; nothing here can weaken the one-card invariant itself,
- * which is a release policy the surface fixes elsewhere.
- */
-function deckPhysics(elasticity: ElasticityOptions | undefined) {
-  return {
-    elasticity: elasticity ?? STACKED_DECK_INTERIOR_ELASTICITY,
-    dragEnvelopeElasticity: elasticity ?? STACKED_DECK_INTERIOR_ELASTICITY,
-  };
-}
+const STACKED_DECK_CONFIGURATION_DEFAULTS: ControllerConfiguration = {
+  spring: tightPreset.spring,
+  releasePolicy: { ...tightPreset.release, maxAnchorSkip: STACKED_DECK_ANCHOR_SKIP },
+  elasticity: STACKED_DECK_INTERIOR_ELASTICITY,
+  dragEnvelopeElasticity: STACKED_DECK_INTERIOR_ELASTICITY,
+  programmaticImpulse: tightPreset.programmaticImpulse,
+};
 
 /**
  * Everything {@link useStackedDeckMotion} publishes.
@@ -214,12 +206,17 @@ export function useStackedDeckMotion<Id extends string>(
   const pitch = computed(() => naturalTuning.value.motionPitch);
 
   const initialIds = ids.value;
+  const controlledAtCreation = toValue(options.controlledId);
+  const requestedInitialId =
+    controlledAtCreation !== undefined && initialIds.includes(controlledAtCreation)
+      ? controlledAtCreation
+      : options.initialId;
   const model = new StackedDeckModel<Id>({
     ids: initialIds,
     // An ID the collection does not contain is not a destination, so it cannot be a starting point
     // either. Falling back to the model's own default beats refusing to mount.
-    ...(options.initialId !== undefined && initialIds.includes(options.initialId)
-      ? { initialId: options.initialId }
+    ...(requestedInitialId !== undefined && initialIds.includes(requestedInitialId)
+      ? { initialId: requestedInitialId }
       : {}),
   });
   const state = shallowRef<StackedDeckModelState>(model.state);
@@ -240,12 +237,26 @@ export function useStackedDeckMotion<Id extends string>(
    * read at settlement, so a surface reports what actually happened rather than assuming a drag.
    */
   let pendingReason: NavigationReason = "route";
+  function currentConfiguration() {
+    const elasticity = toValue(options.elasticity);
+    return resolveSurfaceConfiguration(
+      {
+        spring: toValue(options.spring),
+        releasePolicy: toValue(options.releasePolicy),
+        elasticity,
+        dragEnvelopeElasticity: elasticity,
+        programmaticImpulse: toValue(options.programmaticImpulse),
+      },
+      STACKED_DECK_CONFIGURATION_DEFAULTS,
+    );
+  }
+
   const motion = useCarouselMotion<Id>({
     anchors: initialGeometry.anchors,
     bounds: initialGeometry.bounds,
     driver,
     measure,
-    releasePolicy: deckRelease(toValue(options.releasePolicy)),
+    ...currentConfiguration(),
     resolveDragOrigin: () => ids.value[model.beginInteraction()],
     track,
     viewport: options.viewport,
@@ -256,11 +267,6 @@ export function useStackedDeckMotion<Id extends string>(
     ...(options.reducedMotionOverride === undefined
       ? {}
       : { reducedMotionOverride: options.reducedMotionOverride }),
-    ...(toValue(options.spring) === undefined ? {} : { spring: toValue(options.spring)! }),
-    ...deckPhysics(toValue(options.elasticity)),
-    ...(toValue(options.programmaticImpulse) === undefined
-      ? {}
-      : { programmaticImpulse: toValue(options.programmaticImpulse)! }),
   });
 
   const anchorsById = computed(() => {
@@ -340,8 +346,8 @@ export function useStackedDeckMotion<Id extends string>(
   const activeTuning = computed<StackedDeckTuning>(() =>
     motion.reducedMotion.value ? reducedTuning.value : naturalTuning.value,
   );
-  const currentId = computed(() => ids.value[state.value.currentIndex]);
-  const settledId = computed(() => ids.value[state.value.settledIndex]);
+  const currentId = computed(() => model.idAt(state.value.currentIndex));
+  const settledId = computed(() => model.idAt(state.value.settledIndex));
 
   let frameStorage = createStackedDeckFrame(ids.value.length);
   const frame = shallowRef<StackedDeckFrame>(frameStorage);
@@ -414,6 +420,7 @@ export function useStackedDeckMotion<Id extends string>(
   const diagnostics = computed<SurfaceMotionDiagnostics<Id>>(() =>
     resolveSurfaceDiagnostics({
       snapshot: motion.snapshot.value,
+      pointerInteractionActive: motion.pointerInteractionActive.value,
       pointerOwned: motion.pointerOwned.value,
       reducedMotion: motion.reducedMotion.value,
     }),
@@ -451,7 +458,7 @@ export function useStackedDeckMotion<Id extends string>(
       current.visualTopIndex === index;
     if (alreadySynchronized) return true;
 
-    motion.interrupt();
+    cancelInteractionRecords();
     pendingReason = reason;
     if (model.synchronize(index, { announce }) < 0) return false;
     motion.controller.remeasure({ ...measure(), activeId: id });
@@ -542,10 +549,13 @@ export function useStackedDeckMotion<Id extends string>(
     if (disabled()) return;
     const action = resolveDirectionalSnapKeyboardAction(event, motion.resolveDirection());
     if (!action) return;
-    event.preventDefault();
-    if (action === "previous") requestRelative(-1, "keyboard");
-    else if (action === "next") requestRelative(1, "keyboard");
-    else requestIndex(action === "home" ? 0 : ids.value.length - 1, "keyboard");
+    const accepted =
+      action === "previous"
+        ? requestRelative(-1, "keyboard")
+        : action === "next"
+          ? requestRelative(1, "keyboard")
+          : requestIndex(action === "home" ? 0 : model.itemCount - 1, "keyboard");
+    if (accepted) event.preventDefault();
   }
 
   /**
@@ -568,7 +578,10 @@ export function useStackedDeckMotion<Id extends string>(
   const gesture = useSurfaceGesture({
     root,
     itemSelector: "[data-snap-motion-stacked-deck-card]",
-    resolveIndex: (element) => model.indexOf((element.dataset.itemId ?? "") as Id),
+    resolveIndex(element) {
+      const index = model.indexOf((element.dataset.itemId ?? "") as Id);
+      return frame.value.poses[index]?.interactive === true ? index : -1;
+    },
     isOpenEligible: isInspectEligible,
     disabled,
     forwardPointerDown: motion.onPointerDown,
@@ -611,22 +624,17 @@ export function useStackedDeckMotion<Id extends string>(
     },
   });
 
-  function currentConfiguration() {
-    const spring = toValue(options.spring);
-    const programmaticImpulse = toValue(options.programmaticImpulse);
-    return {
-      releasePolicy: deckRelease(toValue(options.releasePolicy)),
-      ...(spring === undefined ? {} : { spring }),
-      ...deckPhysics(toValue(options.elasticity)),
-      ...(programmaticImpulse === undefined ? {} : { programmaticImpulse }),
-    };
+  function cancelInteractionRecords() {
+    gesture.cancel();
+    if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+    selectionFrame = undefined;
+    motion.interrupt();
   }
 
-  // Physics is watched by value, not by identity. A consumer that rebuilds its configuration
-  // object on every render is expressing no change at all, and reconfiguring on that would feed
-  // the controller's own snapshot back into the render that produced it.
+  // The key has an explicit fixed field order. Equivalent configuration objects therefore do not
+  // reconfigure the controller, while removing any override reinstalls the complete surface default.
   watch(
-    () => JSON.stringify(currentConfiguration()),
+    () => surfaceConfigurationKey(currentConfiguration()),
     () => motion.configure(currentConfiguration()),
   );
 
@@ -636,36 +644,39 @@ export function useStackedDeckMotion<Id extends string>(
    * two never end up describing different collections.
    */
   watch(
-    () => toValue(options.ids),
-    (nextIds) => {
-      if (nextIds.length === model.itemCount && nextIds.every((id, i) => model.idAt(i) === id)) {
+    [() => toValue(options.ids), () => toValue(options.controlledId)] as const,
+    ([nextIds, controlledId], priorState) => {
+      const itemsChanged =
+        nextIds.length !== model.itemCount || nextIds.some((id, index) => model.idAt(index) !== id);
+      const controlledChanged = priorState !== undefined && controlledId !== priorState[1];
+      if (!itemsChanged && !controlledChanged) return;
+
+      if (itemsChanged || (controlledChanged && controlledId !== undefined)) {
+        cancelInteractionRecords();
+      }
+
+      if (itemsChanged) {
+        const preservedIndex = model.reconfigure(nextIds);
+        const controlledIndex = controlledId === undefined ? -1 : model.indexOf(controlledId);
+        const finalIndex =
+          controlledIndex >= 0 ? model.synchronize(controlledIndex) : preservedIndex;
+        const finalId = model.idAt(finalIndex);
+        publish(model.state);
+        motion.controller.remeasure({
+          ...measure(),
+          ...(finalId === undefined ? {} : { activeId: finalId }),
+        });
         return;
       }
-      motion.interrupt();
-      const index = model.reconfigure(nextIds);
-      const preservedId = model.idAt(index);
-      publish(model.state);
-      motion.controller.remeasure({
-        ...measure(),
-        ...(preservedId === undefined ? {} : { activeId: preservedId }),
-      });
+
+      // An unavailable controlled ID is remembered by this combined source. When item data later
+      // makes it available, the same reconciliation path above adopts it without another ID change.
+      if (controlledId !== undefined) applyControlledId(controlledId);
     },
     { deep: true },
   );
 
   watch([pitch, () => toValue(options.stageWidth)], () => void nextTick(motion.remeasure));
-
-  /**
-   * Controlled selection. It is state rather than input, so it deliberately does not share the
-   * user-command admission path, and it is never echoed back as a request.
-   */
-  watch(
-    () => toValue(options.controlledId),
-    (id) => {
-      if (id === undefined || id === model.idAt(state.value.settledIndex)) return;
-      applyControlledId(id);
-    },
-  );
 
   onBeforeUnmount(() => {
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);

@@ -8,9 +8,8 @@ import type {
   SnapController,
   SnapDirection,
 } from "@snap-motion/core";
+import type { PointerIntent } from "@snap-motion/vue/motion";
 import type { ComputedRef, Ref, ShallowRef } from "vue";
-
-import type { PointerIntent } from "../internal/input/pointer-policy";
 
 /** Controls where automatic Arrow-key carousel navigation is active. */
 export type CarouselKeyboardScope = "auto" | "carousel" | "dialog" | "off";
@@ -40,6 +39,8 @@ export interface CarouselMotion<Id extends string> {
   readonly isDragging: Ref<boolean>;
   readonly isWheeling: Ref<boolean>;
   readonly phase: ComputedRef<ControllerPhase>;
+  /** True from an accepted pointerdown until that contact is ended, cancelled, or aborted. */
+  readonly pointerInteractionActive: Ref<boolean>;
   readonly pointerIntent: Ref<PointerIntent>;
   readonly pointerOwned: Ref<boolean>;
   readonly position: ComputedRef<number>;

@@ -1,9 +1,10 @@
 import { sortAnchors, type ControllerMeasurement } from "@snap-motion/core";
+import type { UseSnapMotionOptions } from "@snap-motion/vue/motion";
 import { computed, isRef, type Ref } from "vue";
 
 import { isSupportedPrimaryPointerStart } from "../internal/input/pointer-policy";
 import { useRemeasurement } from "../internal/layout/remeasurement";
-import { useSnapMotion, type UseSnapMotionOptions } from "../motion/use-snap-motion";
+import { useSnapMotion } from "../motion/use-snap-motion";
 import type { CarouselMotion, SnapMotionDirection } from "./carousel-contracts";
 import { carouselKeyAction } from "./carousel-keyboard";
 import { useHorizontalWheel } from "./carousel-wheel";
