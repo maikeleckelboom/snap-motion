@@ -23,6 +23,12 @@ const props = withDefaults(
     labelledby?: string;
     /** Accessible name of one card. Defaults to its semantic ID. */
     itemLabel?: (item: TItem, index: number) => string;
+    /**
+     * Region that already counts as holding focus. A swipe only moves focus to the stage when
+     * focus was outside it, so a consumer whose controls sit beside the surface passes its own
+     * container here. Defaults to the surface itself.
+     */
+    focusScope?: HTMLElement | undefined;
     /** Refuses every input. Set this while another surface covers the deck. */
     disabled?: boolean;
     /** Fallback stage width, used before the deck has been measured. */
@@ -49,6 +55,7 @@ const emit = defineEmits<{
 }>();
 
 const root = ref<HTMLElement>();
+const focusScope = computed(() => props.focusScope ?? root.value);
 const track = ref<HTMLElement>();
 const messages = computed(() => createEnglishSnapMotionMessages(props.messages));
 const ids = computed(() => props.items.map((item) => item.id));
@@ -73,7 +80,7 @@ const deck = useStackedDeckMotion<TId>({
   disabled: () => props.disabled,
   initialId: props.activeId ?? props.items[Math.floor(props.items.length / 2)]?.id,
   reducedMotionOverride,
-  root,
+  root: focusScope,
   stageWidth: () => props.stageWidth,
   track,
   viewport: root,
@@ -159,6 +166,7 @@ defineExpose({
   isInspectEligible: deck.isInspectEligible,
   motion: deck.motion,
   next: deck.next,
+  onKeyDown: deck.onKeyDown,
   owned: deck.owned,
   paginationIndicator: deck.paginationIndicator,
   physicalIndex: deck.physicalIndex,

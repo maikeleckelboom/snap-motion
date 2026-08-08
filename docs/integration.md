@@ -11,7 +11,8 @@ Snap Motion owns:
 - semantic carousel and page geometry
 - release projection and target policy
 - Vue motion, gesture, resize, and reduced-motion primitives
-- style-light semantic carousel, native dialog, and multi-edge sheet components
+- style-light semantic carousel, spatial stacked-deck and coverflow surfaces, native dialog, and
+  multi-edge sheet components
 - the reusable media-gallery composition, including preview/full-image loading, zoom, pan, and
   swipe behavior
 - stable IDs, focus policy, inertness, status completion, and native snap-picker semantics
@@ -28,49 +29,35 @@ The application should supply stable media IDs and presentation data. It must no
 transitions, smooth scrolling, native scroll snap, or another animation library to the same
 carousel or media-gallery transform.
 
-When an application needs the stacked-deck visual model, it should allocate one
-`MutableStackedDeckTraversal` and one `MutableStackedDeckFrame`. Feed every controller snapshot to
-`resolveStackedDeckTraversal` using `physicalIndex = -position / pitch`, then pass that traversal to
-`resolveStackedDeckFrame`. The traversal retains the visual top between snapshots and completes an
-adjacent handoff whenever a full anchor is crossed; it never issues controller commands or resets
-controller motion. `resolveStackedDeckTuning` owns responsive pitch and reduced-motion tuning.
+When an application needs the stacked-deck or coverflow model, it mounts the surface and supplies
+domain items:
 
-The deck's interaction contract is **one adjacent card per interaction**. Open a transaction when the
-controller takes physical ownership — `useSnapMotion`'s `resolveDragOrigin` is called exactly once
-per pointer drag and per coalesced wheel burst, and returning the current visual top both declares
-the controller's drag origin and marks the start of the transaction. Close it when the controller
-returns to idle with no pointer or wheel ownership. While it is open, configure
-`releasePolicy.maxAnchorSkip = 1` and pass `traversalBounds` of `origin ± 1`; set
-`dragEnvelopeElasticity` so travel past the adjacent anchor resists instead of dying at a frozen
-card. Ignore a second relative command until the current transaction settles, and route any
-non-adjacent destination through a direct synchronization rather than a chain of physical throws.
-This is a presentation policy: do not lower the generic `maxAnchorSkip`, and do not remove generic
-multi-anchor `moveTo()` support — a plain carousel or Coverflow surface keeps both.
+```vue
+<StackedDeck v-model:active-id="activeId" :items="screens" label="Project screens">
+  <template #card="{ item }">
+    <ProjectScreen :screen="item" />
+  </template>
+</StackedDeck>
+```
 
-A frame only ever exposes content-bearing roles: the manipulated top and one adjacent target. Depth
-belongs to `resolveStackedDeckPile`, which draws one layer per screen the frame does not already
-draw, on the side that screen's index lies on — so the deck's thickness is the rest of the deck and
-its shape says where in the deck you are. Layers are placed from index ordering alone, so they carry
-no item identity and no gesture direction or reversal can mirror or reorder them.
-Render those layers as inert `aria-hidden` surfaces behind the cards. One motion pitch spans most of
-a card width, so visual authority has already migrated to the target before an anchor crossing
-transfers ownership: the outgoing card translates one-to-one with the pointer while its scale,
-rotation, drop, shadow, and opacity fall monotonically to a fully dissolved handoff pose, and the
-target rises from the first pile slot to exact top rest geometry. Applications must not reintroduce
-a midpoint arc that returns an outgoing card toward neutral before it loses ownership.
+The deck's interaction contract — **one adjacent card per interaction**, a re-grab that starts on the
+card already on top, distinct rapid commands that chain one card each, and a non-adjacent
+destination that synchronizes rather than throwing through every intermediate card — is the
+component's, not the application's. So are visual authority, durable selection, announcement timing,
+inspection eligibility, and the pile. An application does not allocate traversal or frame storage,
+does not compute a physical index, does not open interaction transactions, and does not configure
+`maxAnchorSkip`: the surface fixes its own effective skip, and the generic controller keeps its
+multi-anchor capability for every other surface. See [Spatial surfaces](spatial-surfaces.md).
 
-Visible caption, counter, current-card semantics, the origin a new gesture is measured from, and
-inspection all follow `authoritativeIndex` — the deck's single answer to "which card is current"
-while a spring is still running. It leads `visualTopIndex` through a handoff by design, because the
-exchange finishes visually before the controller reaches the anchor; a surface that waits for
-ownership, or for mechanical rest, disables itself for a spring tail the user cannot see. Route
-state, durable selection, and announcements do remain tied to the controller's final settled
-selection, and inspection additionally waits until the deck renders exactly one content card.
+Two things do remain the application's. Route state and durable selection follow `update:activeId`
+and `settled`, which fire only at mechanical rest. And a change another surface already made and
+already reported — closing an inspection gallery on a different item — is a direct synchronization
+via `synchronizeId()`, not a navigation: it adopts the destination exactly and announces nothing it
+did not earn.
 
-Applications must not derive horizontal slots or paint order from global relative item index, model
-a multi-anchor movement as one non-adjacent pair, or announce intermediate visual tops. A direct
-absolute synchronization is the exception that proves the rule: it is not a traversal, so it
-announces its destination immediately and truthfully.
+Applications must not add a midpoint arc that returns an outgoing card toward neutral before it
+loses ownership, derive horizontal slots or paint order from global relative item index, model a
+multi-anchor movement as one non-adjacent pair, or announce intermediate visual tops.
 
 Import the essential component CSS once:
 

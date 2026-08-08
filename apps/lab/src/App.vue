@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { STACKED_DECK_ANCHOR_SKIP } from "@snap-motion/core";
 import { useUrlSearchParams } from "@vueuse/core";
 import { computed, ref, shallowRef } from "vue";
 
@@ -10,7 +11,7 @@ import MediaLightboxDemo from "@/demos/MediaLightboxDemo.vue";
 import PagedGridDemo from "@/demos/PagedGridDemo.vue";
 import SheetDemo from "@/demos/SheetDemo.vue";
 import StackedDeckDemo from "@/demos/StackedDeckDemo.vue";
-import { settingsFromPreset, STACKED_DECK_MAX_ANCHOR_SKIP } from "@/fixtures/lab-settings";
+import { settingsFromPreset } from "@/fixtures/lab-settings";
 import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fixtures/lab-types";
 
 type DemoId = "coverflow" | "stacked-deck" | "gallery-at" | "media" | "grid" | "sheet";
@@ -92,7 +93,7 @@ const reducedMotionOverride = computed<boolean | undefined>(() => {
 const notApplicableControls = computed<Partial<Record<keyof LabPhysicsSettings, string>>>(() =>
   activeDemoId.value === "stacked-deck"
     ? {
-        maxAnchorSkip: `Fixed at ${STACKED_DECK_MAX_ANCHOR_SKIP} by the stacked deck: one interaction exchanges one adjacent screen. Other surfaces keep using the stored value.`,
+        maxAnchorSkip: `Fixed at ${STACKED_DECK_ANCHOR_SKIP} by the stacked deck: one interaction exchanges one adjacent screen. Other surfaces keep using the stored value.`,
       }
     : {},
 );

@@ -23,6 +23,7 @@ import { SnapAnchor } from '@snap-motion/core';
 import { SnapController } from '@snap-motion/core';
 import { SnapDirection } from '@snap-motion/core';
 import { SpringConfiguration } from '@snap-motion/core';
+import { StackedDeckFrame } from '@snap-motion/core';
 import { StackedDeckModel } from '@snap-motion/core';
 import { StackedDeckModelState } from '@snap-motion/core';
 import { StackedDeckPose } from '@snap-motion/core';
@@ -53,6 +54,47 @@ export interface StackedDeckCardState<TItem, TId extends string> {
     readonly pose: StackedDeckPose;
     readonly role: StackedDeckRole;
     readonly settled: boolean;
+}
+
+// @public
+export interface StackedDeckHandle<Id extends string> {
+    // (undocumented)
+    readonly canNext: boolean;
+    // (undocumented)
+    readonly canPrevious: boolean;
+    readonly currentId: Id | undefined;
+    // (undocumented)
+    readonly frame: StackedDeckFrame;
+    // (undocumented)
+    isInspectEligible(index: number): boolean;
+    // (undocumented)
+    readonly motion: UseStackedDeckMotionReturn<Id>["motion"];
+    // (undocumented)
+    next(): boolean;
+    onKeyDown(event: KeyboardEvent): void;
+    // (undocumented)
+    readonly owned: boolean;
+    // (undocumented)
+    readonly paginationIndicator: PaginationIndicatorState;
+    // (undocumented)
+    readonly physicalIndex: number;
+    // (undocumented)
+    readonly pitch: number;
+    // (undocumented)
+    previous(): boolean;
+    requestId(id: Id): boolean;
+    // (undocumented)
+    readonly root: HTMLElement | undefined;
+    readonly settledId: Id | undefined;
+    // (undocumented)
+    readonly speedInCards: number;
+    // (undocumented)
+    readonly state: StackedDeckModelState;
+    synchronizeId(id: Id, announce?: boolean): boolean;
+    // (undocumented)
+    readonly tuning: StackedDeckTuning;
+    // (undocumented)
+    readonly tuningProfile: StackedDeckProfile;
 }
 
 // @public
@@ -179,7 +221,7 @@ export type UseStackedDeckMotionReturn<Id extends string> = ReturnType<typeof us
 
 // Warnings were encountered during analysis:
 //
-// src/stacked-deck/use-stacked-deck-motion.ts:313:12 - (ae-forgotten-export) The symbol "PointerIntent" needs to be exported by the entry point index.d.ts
+// src/stacked-deck/use-stacked-deck-motion.ts:316:12 - (ae-forgotten-export) The symbol "PointerIntent" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

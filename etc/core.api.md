@@ -500,6 +500,9 @@ export function isSettledOnAnchor(input: SettledOnAnchorInput): boolean;
 // @public
 export function isStackedDeckAuthorityStable(traversal: StackedDeckTraversal): boolean;
 
+// @public
+export function isStackedDeckInspectEligible(state: StackedDeckModelState, context: StackedDeckInspectContext): boolean;
+
 // @public (undocumented)
 export function isWithinBounds(position: number, bounds: ScalarBounds): boolean;
 

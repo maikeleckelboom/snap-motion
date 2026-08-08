@@ -32,6 +32,7 @@ import { SnapController } from '@snap-motion/core';
 import { SnapControllerOptions } from '@snap-motion/core';
 import { SnapDirection } from '@snap-motion/core';
 import { SpringConfiguration } from '@snap-motion/core';
+import { StackedDeckFrame } from '@snap-motion/core';
 import { StackedDeckModel } from '@snap-motion/core';
 import { StackedDeckModelState } from '@snap-motion/core';
 import { StackedDeckPose } from '@snap-motion/core';
@@ -195,6 +196,48 @@ export interface CoverflowCardState<TItem, TId extends string> {
     // (undocumented)
     readonly presentation: CoverflowCardPresentation;
     readonly settled: boolean;
+}
+
+// @public
+export interface CoverflowHandle<Id extends string> {
+    // (undocumented)
+    readonly canNext: boolean;
+    // (undocumented)
+    readonly canPrevious: boolean;
+    readonly commandIndex: number;
+    // (undocumented)
+    isInspectEligible(index: number): boolean;
+    // (undocumented)
+    readonly motion: UseCoverflowMotionReturn<Id>["motion"];
+    // (undocumented)
+    next(): boolean;
+    onKeyDown(event: KeyboardEvent): void;
+    // (undocumented)
+    readonly paginationIndicator: PaginationIndicatorState;
+    // (undocumented)
+    readonly pendingTargetIndex: number | null;
+    // (undocumented)
+    readonly physicalIndex: number;
+    // (undocumented)
+    readonly pitch: number;
+    readonly presentations: readonly CoverflowCardPresentation[];
+    // (undocumented)
+    previous(): boolean;
+    // (undocumented)
+    requestId(id: Id): boolean;
+    // (undocumented)
+    readonly root: HTMLElement | undefined;
+    readonly settledId: Id | undefined;
+    // (undocumented)
+    readonly settledIndex: number;
+    // (undocumented)
+    readonly speedInCards: number;
+    synchronizeId(id: Id, announce?: boolean): boolean;
+    // (undocumented)
+    readonly tuning: CoverflowTuning;
+    readonly visualId: Id | undefined;
+    // (undocumented)
+    readonly visualIndex: number;
 }
 
 export { CoverflowTuning }
@@ -574,6 +617,47 @@ export interface StackedDeckCardState<TItem, TId extends string> {
     readonly pose: StackedDeckPose;
     readonly role: StackedDeckRole;
     readonly settled: boolean;
+}
+
+// @public
+export interface StackedDeckHandle<Id extends string> {
+    // (undocumented)
+    readonly canNext: boolean;
+    // (undocumented)
+    readonly canPrevious: boolean;
+    readonly currentId: Id | undefined;
+    // (undocumented)
+    readonly frame: StackedDeckFrame;
+    // (undocumented)
+    isInspectEligible(index: number): boolean;
+    // (undocumented)
+    readonly motion: UseStackedDeckMotionReturn<Id>["motion"];
+    // (undocumented)
+    next(): boolean;
+    onKeyDown(event: KeyboardEvent): void;
+    // (undocumented)
+    readonly owned: boolean;
+    // (undocumented)
+    readonly paginationIndicator: PaginationIndicatorState;
+    // (undocumented)
+    readonly physicalIndex: number;
+    // (undocumented)
+    readonly pitch: number;
+    // (undocumented)
+    previous(): boolean;
+    requestId(id: Id): boolean;
+    // (undocumented)
+    readonly root: HTMLElement | undefined;
+    readonly settledId: Id | undefined;
+    // (undocumented)
+    readonly speedInCards: number;
+    // (undocumented)
+    readonly state: StackedDeckModelState;
+    synchronizeId(id: Id, announce?: boolean): boolean;
+    // (undocumented)
+    readonly tuning: StackedDeckTuning;
+    // (undocumented)
+    readonly tuningProfile: StackedDeckProfile;
 }
 
 // @public

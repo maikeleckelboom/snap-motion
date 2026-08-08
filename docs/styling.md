@@ -4,9 +4,10 @@ Import `@snap-motion/vue/style.css` explicitly. JavaScript does not import CSS a
 execution and SSR are independent of a bundler CSS loader. The package marks CSS as a side effect,
 and packed Vite/Nuxt fixtures prove the public CSS subpath.
 
-The base stylesheet supplies visually hidden content, dialog and sheet structure, control target
-sizes, focus fallbacks, forced-colors behavior, small-container safety, and the media gallery's
-responsive structural composition. It deliberately supplies no product palette, typography, or
+The base stylesheet supplies visually hidden content, dialog and sheet structure, the spatial
+surfaces' stage box, camera, and per-card coordinate space, control target sizes, focus fallbacks,
+forced-colors behavior, small-container safety, and the media gallery's responsive structural
+composition. It deliberately supplies no product palette, typography, or
 carousel layout theme. The media gallery's stable theme variables are documented in
 [Media gallery](./media-gallery.md).
 
@@ -20,6 +21,12 @@ Stable customization variables:
   leave unconstrained)
 - `--snap-motion-sheet-content-padding-inline`
 - `--snap-motion-sheet-opposite-edge-gap`
+- `--snap-motion-deck-stage-width`, `--snap-motion-deck-card-width`,
+  `--snap-motion-deck-card-height`, `--snap-motion-deck-shadow-strength`
+- `--snap-motion-coverflow-stage-width`, `--snap-motion-coverflow-card-width`,
+  `--snap-motion-coverflow-card-height`, `--snap-motion-coverflow-perspective`, and the
+  `--snap-motion-coverflow-*` material signals documented in
+  [Spatial surfaces](./spatial-surfaces.md)
 
 Stable state attributes:
 

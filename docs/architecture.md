@@ -22,10 +22,17 @@ index, advances visual ownership at each crossed anchor, and projects only the a
 segment. It mutates caller-owned traversal and frame storage and owns only physical pile geometry
 and paint layers; it does not own motion, targets, final selection, or DOM state.
 
-The lab keeps the two render systems separate: `CoverflowDemo.vue` owns the Coverflow rail, while
-`StackedDeckDemo.vue` owns segment-local deck traversal, whole-frame roles, paint layers, hit
-eligibility, and material treatment. They share the Yoot screen catalog and established motion
-helpers, not a parameterized renderer.
+Above those primitives, core owns two **surface models**. `StackedDeckModel` and `CoverflowModel`
+compose the generic controller's snapshots into a surface's semantics: durable versus visual
+selection, interaction authority, the one-adjacent-card interaction envelope, relative versus
+absolute command policy, direct synchronization, and announcement timing. They are the reason a deck
+is a deck. They issue no controller commands, touch no DOM, and never narrow the generic controller;
+`SnapController` and `resolveStackedDeckTraversal` both keep their full multi-anchor capability.
+
+Shared deterministic policy lives beside them: settled selection and visual hysteresis, pagination
+projection, bounded autonomous spring integration and release-velocity limiting, coverflow kinetics
+and responsive tuning, direct-manipulation gesture arbitration, and the semantic key mapping. The
+lab owns none of it.
 
 The controller has three public phases: `idle`, `dragging`, and `settling`. Every input interrupts
 the current playback before acting. There is no queue and no animation-event ownership handoff.
@@ -62,6 +69,9 @@ replace the Pointer Event policy.
 
 - `carousel` owns carousel components, context, contracts, geometry, keyboard and wheel policy,
   render windows, and carousel composables.
+- `coverflow` and `stacked-deck` own one spatial surface each: its component, its composable, and
+  its presentation contracts. Both compose the shared horizontal carousel adapter and the core
+  surface model rather than reimplementing either.
 - `sheet` owns sheet components, context, semantic snap policy, side descriptors, state contracts, and the
   sheet composable.
 - `dialog` owns the native modal component, close contract, and the deliberately public headless
@@ -73,7 +83,7 @@ replace the Pointer Event policy.
   pointer capture/intent, and remeasurement mechanics.
 
 Components may depend on their feature, `motion`, `localization`, and precise internal capabilities.
-The sheet may use the dialog close contract. Internal capabilities never depend on finished
+The sheet may use the dialog close contract; a spatial surface may use `useCarouselMotion`. Internal capabilities never depend on finished
 features; feature internals do not cross-import one another. Application and fixture code consumes
 package entrypoints, never source paths. `pnpm architecture:check` enforces these directions, rejects
 cycles and wildcard entrypoint exports, and enforces extensionless TypeScript-relative imports.

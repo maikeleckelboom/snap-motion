@@ -187,52 +187,54 @@ async function releaseHeldAtRest(page: Page, held: HeldTraversal, physicalIndex:
 async function readFrame(page: Page) {
   return viewport(page).evaluate((element) => {
     const stageBox = element.getBoundingClientRect();
-    const poses = [...document.querySelectorAll<HTMLElement>(".stacked-deck-card")].map((item) => {
-      const motion = item.querySelector<HTMLElement>(".stacked-deck-card-motion")!;
-      const surface = item.querySelector<HTMLElement>(".screen-chrome")!;
-      const box = surface.getBoundingClientRect();
-      const style = getComputedStyle(item);
-      return {
-        ariaCurrent: item.getAttribute("aria-current"),
-        ariaHidden: item.getAttribute("aria-hidden"),
-        bottom: box.bottom,
-        height: box.height,
-        id: item.dataset.screenId ?? "",
-        interactive: item.dataset.interactive === "true",
-        layer: Number(item.dataset.layer),
-        left: box.left,
-        motionClipPath: getComputedStyle(motion).clipPath,
-        opacity: Number(item.dataset.opacity),
-        pointerEvents: style.pointerEvents,
-        right: box.right,
-        role: item.dataset.role ?? "",
-        rotate: Number(item.dataset.rotate),
-        scale: Number(item.dataset.scale),
-        shadowStrength: Number(item.dataset.shadowStrength),
-        top: box.top,
-        translateX: Number(item.dataset.translateX),
-        translateY: Number(item.dataset.translateY),
-        visibility: style.visibility,
-        visible: item.dataset.visible === "true",
-        width: box.width,
-      };
-    });
-    const pile = [...document.querySelectorAll<HTMLElement>(".stacked-deck-pile-layer")].map(
+    const poses = [...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-card")].map(
       (item) => {
-        const box = item.getBoundingClientRect();
+        const motion = item.querySelector<HTMLElement>(".snap-motion-stacked-deck-card-motion")!;
+        const surface = item.querySelector<HTMLElement>(".screen-chrome")!;
+        const box = surface.getBoundingClientRect();
+        const style = getComputedStyle(item);
         return {
-          slot: Number(item.dataset.pileSlot),
-          side: Number(item.dataset.pileSide),
-          opacity: Number(item.dataset.pileOpacity),
-          layer: Number(item.dataset.pileLayer),
-          left: Number(box.left.toFixed(3)),
-          right: Number(box.right.toFixed(3)),
-          top: Number(box.top.toFixed(3)),
-          bottom: Number(box.bottom.toFixed(3)),
+          ariaCurrent: item.getAttribute("aria-current"),
           ariaHidden: item.getAttribute("aria-hidden"),
+          bottom: box.bottom,
+          height: box.height,
+          id: item.dataset.itemId ?? "",
+          interactive: item.dataset.deckInteractive === "true",
+          layer: Number(item.dataset.deckLayer),
+          left: box.left,
+          motionClipPath: getComputedStyle(motion).clipPath,
+          opacity: Number(surface.dataset.opacity),
+          pointerEvents: style.pointerEvents,
+          right: box.right,
+          role: item.dataset.deckRole ?? "",
+          rotate: Number(surface.dataset.rotate),
+          scale: Number(surface.dataset.scale),
+          shadowStrength: Number(surface.dataset.shadowStrength),
+          top: box.top,
+          translateX: Number(surface.dataset.translateX),
+          translateY: Number(surface.dataset.translateY),
+          visibility: style.visibility,
+          visible: item.dataset.deckVisible === "true",
+          width: box.width,
         };
       },
     );
+    const pile = [
+      ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
+    ].map((item) => {
+      const box = item.getBoundingClientRect();
+      return {
+        slot: Number(item.dataset.pileSlot),
+        side: Number(item.dataset.pileSide),
+        opacity: Number(item.dataset.pileOpacity),
+        layer: Number(item.dataset.pileLayer),
+        left: Number(box.left.toFixed(3)),
+        right: Number(box.right.toFixed(3)),
+        top: Number(box.top.toFixed(3)),
+        bottom: Number(box.bottom.toFixed(3)),
+        ariaHidden: item.getAttribute("aria-hidden"),
+      };
+    });
     const targetAttribute = element.getAttribute("data-segment-target-index");
     return {
       authoritativeIndex: Number(element.dataset.authoritativeIndex),
@@ -374,20 +376,25 @@ async function installTraversalTrace(page: Page, maxFrames = 900) {
         segmentTargetIndex: targetAttribute === null ? null : Number(targetAttribute),
         settledIndex: Number(element.dataset.settledIndex),
         visualTopIndex: Number(element.dataset.visualTopIndex),
-        poses: [...document.querySelectorAll<HTMLElement>(".stacked-deck-card")].map((item) => ({
-          id: item.dataset.screenId ?? "",
-          layer: Number(item.dataset.layer),
-          opacity: Number(item.dataset.opacity),
-          role: item.dataset.role ?? "",
-          rotate: Number(item.dataset.rotate),
-          scale: Number(item.dataset.scale),
-          translateX: Number(item.dataset.translateX),
-          translateY: Number(item.dataset.translateY),
-          visible: item.dataset.visible === "true",
-        })),
-        pile: [...document.querySelectorAll<HTMLElement>(".stacked-deck-pile-layer")].flatMap(
-          (item) => [Number(item.dataset.pileSlot), Number(item.dataset.pileOpacity)],
+        poses: [...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-card")].map(
+          (item) => {
+            const surface = item.querySelector<HTMLElement>(".screen-chrome")!;
+            return {
+              id: item.dataset.itemId ?? "",
+              layer: Number(item.dataset.deckLayer),
+              opacity: Number(surface.dataset.opacity),
+              role: item.dataset.deckRole ?? "",
+              rotate: Number(surface.dataset.rotate),
+              scale: Number(surface.dataset.scale),
+              translateX: Number(surface.dataset.translateX),
+              translateY: Number(surface.dataset.translateY),
+              visible: item.dataset.deckVisible === "true",
+            };
+          },
         ),
+        pile: [
+          ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
+        ].flatMap((item) => [Number(item.dataset.pileSlot), Number(item.dataset.pileOpacity)]),
       });
       remainingFrames -= 1;
       if ((state.started && controllerPhase === "idle") || remainingFrames <= 0) {
@@ -509,7 +516,10 @@ async function grabOnAuthority(page: Page, index: number, pointerId: number) {
     ({ pointerId: id, wanted }) =>
       new Promise<{ frames: TakeoverFrame[]; grabbedAt: number }>((resolve, reject) => {
         const read = (): TakeoverFrame => {
-          const card = document.querySelectorAll<HTMLElement>(".stacked-deck-card")[wanted]!;
+          const card = document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-card")[
+            wanted
+          ]!;
+          const surface = card.querySelector<HTMLElement>(".screen-chrome")!;
           const element = document.querySelector<HTMLElement>(
             '[data-testid="stacked-deck-viewport"]',
           )!;
@@ -519,11 +529,11 @@ async function grabOnAuthority(page: Page, index: number, pointerId: number) {
             phase: element.dataset.phase ?? "",
             physicalIndex: Number(element.dataset.physicalIndex),
             pose: {
-              translateX: Number(card.dataset.translateX),
-              translateY: Number(card.dataset.translateY),
-              scale: Number(card.dataset.scale),
-              rotate: Number(card.dataset.rotate),
-              opacity: Number(card.dataset.opacity),
+              translateX: Number(surface.dataset.translateX),
+              translateY: Number(surface.dataset.translateY),
+              scale: Number(surface.dataset.scale),
+              rotate: Number(surface.dataset.rotate),
+              opacity: Number(surface.dataset.opacity),
             },
           };
         };
@@ -742,7 +752,7 @@ function expectContinuousHandoffs(trace: readonly TraversalSample[]) {
 
 async function expectNoInternalCardClip(page: Page) {
   const result = await viewport(page).evaluate((element) => {
-    const motion = document.querySelector<HTMLElement>(".stacked-deck-card-motion")!;
+    const motion = document.querySelector<HTMLElement>(".snap-motion-stacked-deck-card-motion")!;
     const ancestors: { className: string; clipPath: string; overflowX: string }[] = [];
     let current: HTMLElement | null = motion;
     while (current && current !== element.parentElement) {
@@ -757,7 +767,7 @@ async function expectNoInternalCardClip(page: Page) {
     return {
       ancestors,
       backdropContainsCard: Boolean(
-        document.querySelector(".stacked-deck-backdrop .stacked-deck-card"),
+        document.querySelector(".stacked-deck-backdrop .snap-motion-stacked-deck-card"),
       ),
       documentOverflow: document.documentElement.scrollWidth - innerWidth,
       viewportOverflowX: getComputedStyle(element).overflowX,
@@ -1126,27 +1136,29 @@ test("one coalesced wheel burst exchanges one card and a later burst exchanges a
       samples.push({
         origin: Number(element.dataset.segmentOriginIndex),
         phase: element.dataset.phase,
-        pile: [...element.querySelectorAll<HTMLElement>(".stacked-deck-pile-layer")].flatMap(
-          (layer) => {
-            const box = layer.getBoundingClientRect();
-            return [Number(box.left.toFixed(2)), Number(box.top.toFixed(2))];
-          },
-        ),
+        pile: [
+          ...element.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
+        ].flatMap((layer) => {
+          const box = layer.getBoundingClientRect();
+          return [Number(box.left.toFixed(2)), Number(box.top.toFixed(2))];
+        }),
         target:
           element.dataset.segmentTargetIndex === undefined
             ? null
             : Number(element.dataset.segmentTargetIndex),
         visualTop: Number(element.dataset.visualTopIndex),
-        visibleCount: [...element.querySelectorAll<HTMLElement>(".stacked-deck-card")].filter(
-          (card) => getComputedStyle(card).visibility === "visible",
-        ).length,
-        cards: [...element.querySelectorAll<HTMLElement>(".stacked-deck-card")].map((card) => ({
-          id: card.dataset.screenId ?? "",
-          role: card.dataset.role ?? "",
-          visible: card.dataset.visible === "true",
-          layer: Number(card.dataset.layer),
-          opacity: Number(card.dataset.opacity),
-        })),
+        visibleCount: [
+          ...element.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-card"),
+        ].filter((card) => getComputedStyle(card).visibility === "visible").length,
+        cards: [...element.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-card")].map(
+          (card) => ({
+            id: card.dataset.itemId ?? "",
+            role: card.dataset.deckRole ?? "",
+            visible: card.dataset.deckVisible === "true",
+            layer: Number(card.dataset.deckLayer),
+            opacity: Number(card.querySelector<HTMLElement>(".screen-chrome")!.dataset.opacity),
+          }),
+        ),
       });
     }
     return samples;
@@ -1216,7 +1228,7 @@ test("rapid relative commands never merge into one multi-card throw", async ({ p
   expectVisitedOnly(tops, 0, 1);
   expect(settled).toBe(1);
   await expectCarouselAt(stage, "project");
-  await expect(page.getByTestId("stacked-deck-status")).toHaveText(
+  await expect(page.getByTestId("snap-motion-stacked-deck-status")).toHaveText(
     "Project 24031 — Horizon, 2 of 5",
   );
 
@@ -1263,7 +1275,7 @@ test("non-adjacent absolute navigation synchronizes instead of throwing every ca
     settledIndex: 4,
     visualTopIndex: 4,
   });
-  await expect(page.getByTestId("stacked-deck-status")).toHaveText(
+  await expect(page.getByTestId("snap-motion-stacked-deck-status")).toHaveText(
     "Werkruimte-instellingen, 5 of 5",
   );
   await expectCarouselAt(stage, "settings");
@@ -1272,10 +1284,12 @@ test("non-adjacent absolute navigation synchronizes instead of throwing every ca
   await stage.focus();
   await page.keyboard.press("Home");
   await expectCarouselAt(stage, "templates");
-  await expect(page.getByTestId("stacked-deck-status")).toHaveText("Projectsjablonen, 1 of 5");
+  await expect(page.getByTestId("snap-motion-stacked-deck-status")).toHaveText(
+    "Projectsjablonen, 1 of 5",
+  );
   await page.keyboard.press("End");
   await expectCarouselAt(stage, "settings");
-  await expect(page.getByTestId("stacked-deck-status")).toHaveText(
+  await expect(page.getByTestId("snap-motion-stacked-deck-status")).toHaveText(
     "Werkruimte-instellingen, 5 of 5",
   );
 
@@ -1648,7 +1662,9 @@ test("distinct rapid commands, keys, and wheel bursts each resolve one card", as
   const clicked = await readTraversalTrace(page);
   expect(expectBoundedInteractions(clicked, [0, 1, 2])).toHaveLength(3);
   await expectCarouselAt(stage, "team");
-  await expect(page.getByTestId("stacked-deck-status")).toHaveText("Team & rollen, 4 of 5");
+  await expect(page.getByTestId("snap-motion-stacked-deck-status")).toHaveText(
+    "Team & rollen, 4 of 5",
+  );
 
   // Arrow keys obey the identical contract.
   await stage.focus();
@@ -1955,7 +1971,9 @@ test("named metadata follows visual authority, ownership follows the anchor", as
     visualTopIndex: 2,
   });
   expect(
-    await page.locator(".stacked-deck-card[aria-current='true']").getAttribute("data-screen-id"),
+    await page
+      .locator(".snap-motion-stacked-deck-card[aria-current='true']")
+      .getAttribute("data-item-id"),
   ).toBe("team");
   // Both faces are still drawn, so identity is nameable but not yet uncontested.
   expect(migrated.authorityStable).toBe(false);
@@ -1992,10 +2010,12 @@ test("named metadata follows visual authority, ownership follows the anchor", as
     visualTopIndex: 3,
   });
   expect(after.settledIndex).toBe(2);
-  await expect(page.getByTestId("stacked-deck-status")).toBeEmpty();
+  await expect(page.getByTestId("snap-motion-stacked-deck-status")).toBeEmpty();
   await releaseHeldAtRest(page, held, 3);
   await expectCarouselAt(stage, "team");
-  await expect(page.getByTestId("stacked-deck-status")).toHaveText("Team & rollen, 4 of 5");
+  await expect(page.getByTestId("snap-motion-stacked-deck-status")).toHaveText(
+    "Team & rollen, 4 of 5",
+  );
   await expect(page.getByTestId("stacked-deck-inspect")).toBeEnabled();
 });
 
@@ -2037,11 +2057,11 @@ test("inspection, visual semantics, and accessibility expose one authoritative c
   );
   const held = await beginHeldTraversal(page, 2);
   await holdPhysicalIndex(page, held, 3);
-  const semanticCards = await page.locator(".stacked-deck-card").evaluateAll((cards) =>
+  const semanticCards = await page.locator(".snap-motion-stacked-deck-card").evaluateAll((cards) =>
     cards.map((item) => ({
       current: item.getAttribute("aria-current"),
       hidden: item.getAttribute("aria-hidden"),
-      id: (item as HTMLElement).dataset.screenId,
+      id: (item as HTMLElement).dataset.itemId,
     })),
   );
   expect(semanticCards.filter((item) => item.current === "true")).toEqual([

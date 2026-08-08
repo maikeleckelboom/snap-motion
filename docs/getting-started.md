@@ -61,9 +61,23 @@ export default defineNuxtConfig({
 Components do not access browser globals during SSR. Keep a route-provided `activeId` stable on
 the server and client; `useCarouselWindow` will include that item in its deterministic SSR window.
 
+## Spatial surfaces
+
+A stacked deck or coverflow rail is one component and typed domain items, with no physics vocabulary
+in the integration:
+
+```vue
+<StackedDeck v-model:active-id="activeId" :items="screens" label="Project screens">
+  <template #card="{ item }">
+    <ProjectScreen :screen="item" />
+  </template>
+</StackedDeck>
+```
+
 ## Next reading
 
 - [Components](components.md)
+- [Spatial surfaces](spatial-surfaces.md)
 - [Composables](composables.md)
 - [Keyboard ownership](keyboard.md)
 - [RTL](rtl.md)

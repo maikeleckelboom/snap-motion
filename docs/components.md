@@ -1,9 +1,13 @@
 # Components
 
 All components are available from `@snap-motion/vue`. Capability imports use
-`@snap-motion/vue/carousel`, `@snap-motion/vue/sheet`, `@snap-motion/vue/dialog`, or
-`@snap-motion/vue/media-gallery`.
+`@snap-motion/vue/carousel`, `@snap-motion/vue/coverflow`, `@snap-motion/vue/stacked-deck`,
+`@snap-motion/vue/sheet`, `@snap-motion/vue/dialog`, or `@snap-motion/vue/media-gallery`.
 Components are semantic and style-light; application markup inside slides remains consumer-owned.
+
+`StackedDeck` and `Coverflow` are complete spatial surfaces: an application supplies typed items,
+stable IDs, controlled selection, and content, and the surface supplies everything else. See
+[Spatial surfaces](./spatial-surfaces.md).
 
 The media gallery is a higher-level, interaction-complete composition. Its public item, lifecycle,
 loading, focus, responsive, message, and theme contracts are documented in

@@ -119,7 +119,11 @@ export type {
   StackedDeckTraversalPhase,
   StackedDeckTuning,
 } from "./stackedDeck";
-export { STACKED_DECK_ANCHOR_SKIP, StackedDeckModel } from "./stacked-deck-model";
+export {
+  isStackedDeckInspectEligible,
+  STACKED_DECK_ANCHOR_SKIP,
+  StackedDeckModel,
+} from "./stacked-deck-model";
 export type {
   StackedDeckCommand,
   StackedDeckCommandContext,

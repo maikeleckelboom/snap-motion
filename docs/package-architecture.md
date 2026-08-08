@@ -49,6 +49,15 @@ and mixed ownership rather than a source cycle.
   `sortAnchors`, `NearestAnchorOptions`, `ProgrammaticTargetInput`, `ReleaseTargetInput`,
   `ElasticBoundaryOptions`, `ElasticityOptions`, `ReleaseTargetPolicy`, `SnapAnchor`,
   `SnapDirection`, `SpringConfiguration`, `SemanticId`.
+- Surface models and shared policy: `StackedDeckModel`, `CoverflowModel`,
+  `isStackedDeckAuthorityStable`, `isStackedDeckInspectEligible`, `isSettledOnAnchor`,
+  `STACKED_DECK_ANCHOR_SKIP`, `SettledSelection`, `resolveAdjacentIndex`,
+  `resolveCommandOriginIndex`, `resolveHystereticIndex`, `resolvePaginationIndicator`,
+  `createPaginationIndicatorState`, `PAGINATION_INDICATOR_TUNING`, `advanceBoundedSpring`,
+  `resolveAutonomousReleaseVelocity`, `resolveSpeedInCards`, `BOUNDED_SPRING_TUNING`,
+  `resolveCoverflowKinetics`, `createCoverflowKineticState`, `COVERFLOW_KINETIC_TUNING`,
+  `resolveCoverflowTuning`, `resolveDirectManipulationGesture`, `resolveSnapKeyboardAction`,
+  `DIRECT_MANIPULATION_TUNING`, and their option and state types.
 - Presets and velocity: `balancedPreset`, `DEFAULT_MOTION_PRESET`, `heavyPreset`, `loosePreset`,
   `MOTION_PRESETS`, `tightPreset`, `MotionPreset`, `MotionPresetName`, `VelocityTracker`,
   `VelocitySample`, `VelocityTrackerOptions`.
@@ -67,6 +76,19 @@ modules but are no longer package exports.
   `CarouselWindowOptions`, `CarouselWindowState`, `FixedStageCarouselGeometryOptions`,
   `NavigationReason`, `PublicCarouselContext`, `SnapMotionDirection`, `UseCarouselMotionOptions`,
   `VariableWidthCenteredCarouselGeometryOptions`.
+
+### `@snap-motion/vue/coverflow`
+
+- Component and composable: `Coverflow`, `useCoverflowMotion`.
+- Types: `CoverflowCardPresentation`, `CoverflowCardState`, `CoverflowHandle`, `CoverflowTuning`,
+  `NavigationReason`, `UseCoverflowMotionOptions`, `UseCoverflowMotionReturn`.
+
+### `@snap-motion/vue/stacked-deck`
+
+- Component and composable: `StackedDeck`, `useStackedDeckMotion`.
+- Types: `NavigationReason`, `StackedDeckCardState`, `StackedDeckHandle`, `StackedDeckPileLayer`,
+  `StackedDeckPose`, `StackedDeckRole`, `UseStackedDeckMotionOptions`,
+  `UseStackedDeckMotionReturn`.
 
 ### `@snap-motion/vue/sheet`
 
@@ -92,7 +114,7 @@ enumeration and focus-target resolution remain internal.
 
 ### `@snap-motion/vue/motion`
 
-- Runtime: `createMotionDriver`, `useSnapMotion`.
+- Runtime: `createMotionDriver`, `useBoundedSpringDriver`, `useSnapMotion`.
 - Types: `NavigationReason`, `PointerIntent`, `UseSnapMotionOptions`.
 
 ### `@snap-motion/vue/localization`
@@ -131,7 +153,7 @@ entrypoints. A deterministic architecture check enforces these rules and rejects
 
 ## Declaration output
 
-Core ships one declaration rollup. Vue ships seven: root, carousel, sheet, dialog, media gallery,
-motion, and localization. None contains a relative module specifier. `vue-tsc` still needs a temporary
+Core ships one declaration rollup. Vue ships nine: root, carousel, coverflow, stacked deck, sheet,
+dialog, media gallery, motion, and localization. None contains a relative module specifier. `vue-tsc` still needs a temporary
 normalization step for Vue SFC declarations and minimum-Vue generic compatibility, but those files
 exist only under `temp/declarations` and never enter a tarball.

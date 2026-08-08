@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { createFixedStageGeometry, createPagedGridGeometry } from "@snap-motion/core";
+import { createPagedGridGeometry } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
 import { computed, nextTick, ref, watch } from "vue";
 
@@ -52,28 +52,21 @@ const pages = computed(() => {
   return result;
 });
 
+/**
+ * Pages are the surface's semantic anchors, and the gap between two pages is not the gap between
+ * two cells. Saying so once is the whole geometry: the paged-grid primitive lays the cells out and
+ * spaces the pages, so the demo never composes a second geometry over the first.
+ */
 function geometry() {
-  const gridGeometry = createPagedGridGeometry({
+  return createPagedGridGeometry({
     columns: columns.value,
     gap: gap.value,
     getPageId: ({ pageIndex }) => `page-${pageIndex + 1}`,
     itemIds: items.value.map((item) => item.id),
+    pageGap: gap.value,
     rows: rows.value,
     viewportSize: Math.max(1, viewport.value?.clientWidth ?? props.stageWidth),
   });
-  const pageGeometry = createFixedStageGeometry({
-    gap: gap.value,
-    itemIds: gridGeometry.anchors.map((anchor) => anchor.id),
-    viewportSize: gridGeometry.viewportSize,
-  });
-
-  return {
-    ...gridGeometry,
-    anchors: pageGeometry.anchors,
-    bounds: pageGeometry.bounds,
-    stageSize: pageGeometry.stageSize,
-    trackExtent: pageGeometry.trackExtent,
-  };
 }
 
 const initialGeometry = geometry();

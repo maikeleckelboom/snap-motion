@@ -17,7 +17,7 @@ function gallery(page: Page) {
 }
 
 function card(page: Page, id: string) {
-  return page.locator(`.coverflow-card[data-screen-id="${id}"]`);
+  return page.locator(`.snap-motion-coverflow-card[data-item-id="${id}"]`);
 }
 
 async function openGallery(page: Page) {
@@ -35,7 +35,7 @@ async function visibleCardPoint(target: Locator) {
         const y = rect.top + (rect.height * yStep) / 10;
         const hitCard = document
           .elementsFromPoint(x, y)
-          .map((hit) => hit.closest(".coverflow-card"))
+          .map((hit) => hit.closest(".snap-motion-coverflow-card"))
           .find(Boolean);
         if (hitCard === element) return { x, y };
       }
@@ -529,7 +529,9 @@ test("close synchronizes every carousel owner and resumes navigation without cat
   const pagination = page.getByRole("group", { name: "Coverflow screens" }).getByRole("button");
   await pagination.nth(1).click();
   await expectCarouselAt(viewport, "project");
-  const coverflowMessageBeforeRace = await page.getByTestId("coverflow-status").textContent();
+  const coverflowMessageBeforeRace = await page
+    .getByTestId("snap-motion-coverflow-status")
+    .textContent();
   await openGallery(page);
 
   await gallery(page).evaluate((dialog) => {
@@ -547,10 +549,12 @@ test("close synchronizes every carousel owner and resumes navigation without cat
   await expect(page.getByTestId("snap-motion-media-gallery-status")).toHaveText(
     "Project 24031 — Horizon, 2 of 5",
   );
-  await expect(page.getByTestId("coverflow-status")).toHaveText(coverflowMessageBeforeRace ?? "");
+  await expect(page.getByTestId("snap-motion-coverflow-status")).toHaveText(
+    coverflowMessageBeforeRace ?? "",
+  );
 
   await openGallery(page);
-  await page.getByTestId("coverflow-status").evaluate((element) => {
+  await page.getByTestId("snap-motion-coverflow-status").evaluate((element) => {
     const messages: string[] = [];
     const observer = new MutationObserver(() => {
       messages.push(element.textContent?.trim() ?? "");
@@ -597,7 +601,9 @@ test("close synchronizes every carousel owner and resumes navigation without cat
 
   await page.keyboard.press("ArrowLeft");
   await expectCarouselAt(viewport, "team");
-  await expect(page.getByTestId("coverflow-status")).toContainText("Team & rollen, 4 of 5");
+  await expect(page.getByTestId("snap-motion-coverflow-status")).toContainText(
+    "Team & rollen, 4 of 5",
+  );
 });
 
 test("buttons, keys, announcements, and item changes own bounded gallery navigation", async ({

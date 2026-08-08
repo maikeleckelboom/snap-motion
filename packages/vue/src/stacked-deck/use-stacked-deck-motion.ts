@@ -2,6 +2,7 @@ import {
   createCoverflowGeometry,
   createPaginationIndicatorState,
   createStackedDeckFrame,
+  isStackedDeckInspectEligible,
   resolvePaginationIndicator,
   resolveSnapKeyboardAction,
   resolveSpeedInCards,
@@ -283,8 +284,8 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
   );
 
   function isInspectEligible(index: number): boolean {
-    if (disabled()) return false;
-    return model.isInspectEligible({
+    if (disabled() || index < 0 || index >= ids.value.length) return false;
+    return isStackedDeckInspectEligible(state.value, {
       index,
       // Wheel settlement is not physical ownership: nothing is being held.
       owned: motion.isDragging.value || motion.pointerOwned.value,
@@ -436,27 +437,25 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
     },
   });
 
+  function currentConfiguration() {
+    const spring = toValue(options.spring);
+    const elasticity = toValue(options.elasticity);
+    const programmaticImpulse = toValue(options.programmaticImpulse);
+    return {
+      releasePolicy: deckRelease(toValue(options.releasePolicy)),
+      ...(spring === undefined ? {} : { spring }),
+      // Travel past the adjacent anchor resists instead of dying at a frozen card.
+      ...(elasticity === undefined ? {} : { elasticity, dragEnvelopeElasticity: elasticity }),
+      ...(programmaticImpulse === undefined ? {} : { programmaticImpulse }),
+    };
+  }
+
+  // Physics is watched by value, not by identity. A consumer that rebuilds its configuration
+  // object on every render is expressing no change at all, and reconfiguring on that would feed
+  // the controller's own snapshot back into the render that produced it.
   watch(
-    () => [
-      toValue(options.spring),
-      toValue(options.releasePolicy),
-      toValue(options.elasticity),
-      toValue(options.programmaticImpulse),
-    ],
-    ([spring, releasePolicy, elasticity, programmaticImpulse]) => {
-      const nextElasticity = elasticity as ElasticityOptions | undefined;
-      motion.configure({
-        releasePolicy: deckRelease(releasePolicy as Partial<ReleaseTargetPolicy> | undefined),
-        ...(spring === undefined ? {} : { spring: spring as SpringConfiguration }),
-        ...(nextElasticity === undefined
-          ? {}
-          : { elasticity: nextElasticity, dragEnvelopeElasticity: nextElasticity }),
-        ...(programmaticImpulse === undefined
-          ? {}
-          : { programmaticImpulse: programmaticImpulse as number }),
-      });
-    },
-    { deep: true },
+    () => JSON.stringify(currentConfiguration()),
+    () => motion.configure(currentConfiguration()),
   );
 
   watch([pitch, () => toValue(options.stageWidth)], () => void nextTick(motion.remeasure));
@@ -529,6 +528,8 @@ export interface StackedDeckHandle<Id extends string> {
   readonly tuningProfile: StackedDeckProfile;
   isInspectEligible(index: number): boolean;
   next(): boolean;
+  /** Applies the surface's keyboard policy to an event a wider scope has received. */
+  onKeyDown(event: KeyboardEvent): void;
   previous(): boolean;
   /** Navigates to a destination, traversing it when adjacent and synchronizing when it is not. */
   requestId(id: Id): boolean;

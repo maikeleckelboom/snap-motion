@@ -78,10 +78,9 @@ describe("StackedDeck", () => {
       expect(layer.attributes("aria-hidden")).toBe("true");
       expect(layer.text()).toBe("");
     }
-    expect(layers.map((layer) => layer.attributes("data-pile-side")).toSorted()).toEqual([
-      "-1",
-      "1",
-    ]);
+    expect(new Set(layers.map((layer) => layer.attributes("data-pile-side")))).toEqual(
+      new Set(["-1", "1"]),
+    );
     wrapper.unmount();
   });
 

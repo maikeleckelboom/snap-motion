@@ -38,6 +38,10 @@ wide and contains a CSS grid. For a stage width `W`, gap `G`, and `C` columns, c
 Only the gaps between columns are occupied. A partial final page remains a full semantic page with
 one deterministic anchor.
 
+`pageGap` separates whole pages. Cell gaps stay inside a page and never leak into the distance
+between semantic page anchors, so a rail that wants breathing room between pages says so once
+rather than composing a second geometry over the first.
+
 ## Variable-width rail
 
 Variable-width geometry accepts measured cell layout boxes `{ start, size }` in track-content

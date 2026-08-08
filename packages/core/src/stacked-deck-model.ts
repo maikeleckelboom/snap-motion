@@ -74,6 +74,21 @@ export type StackedDeckCommand =
    */
   | { readonly kind: "synchronize"; readonly targetIndex: number; readonly announce: boolean };
 
+/**
+ * Inspection eligibility: whether the named card is unambiguously the current one and nothing else
+ * is holding the surface. It deliberately never asks whether the controller has reached rest — a
+ * spring tail the user cannot see must not disable an action.
+ *
+ * Reading it off published state rather than off the model keeps an adapter's own change tracking
+ * honest: the answer moves with the frame, so a surface that recomputes it can see it move.
+ */
+export function isStackedDeckInspectEligible(
+  state: StackedDeckModelState,
+  context: StackedDeckInspectContext,
+): boolean {
+  return !context.owned && state.currentIndex === context.index && state.authorityStable;
+}
+
 /** Facts only the surface adapter can know, because they are about input devices and rest. */
 export interface StackedDeckCommandContext {
   /** True while an input device physically holds the deck. */
@@ -274,14 +289,9 @@ export class StackedDeckModel {
     return targetIndex;
   }
 
-  /**
-   * Inspection eligibility: whether the named card is unambiguously the current one and nothing
-   * else is holding the surface. It deliberately never asks whether the controller has reached
-   * rest — a spring tail the user cannot see must not disable an action.
-   */
+  /** {@link isStackedDeckInspectEligible} against this model's current state. */
   isInspectEligible(context: StackedDeckInspectContext): boolean {
     if (context.index < 0 || context.index >= this.itemCount) return false;
-    const state = this.state;
-    return !context.owned && state.currentIndex === context.index && state.authorityStable;
+    return isStackedDeckInspectEligible(this.state, context);
   }
 }

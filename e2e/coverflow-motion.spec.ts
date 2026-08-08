@@ -14,7 +14,7 @@ function paginationButton(page: Page, name: string) {
 
 async function maximumCardProperty(page: Page, property: string) {
   return page
-    .locator(".coverflow-card")
+    .locator(".snap-motion-coverflow-card")
     .evaluateAll(
       (cards, propertyName) =>
         Math.max(
@@ -41,7 +41,10 @@ test("slow direct drag stays 1:1 and visually neutral in both directions", async
     async beforeRelease() {
       const draggedPosition = Number(await viewport.getAttribute("data-position"));
       expect(draggedPosition - initialPosition).toBeCloseTo(-120, 3);
-      expect(await maximumCardProperty(page, "--kinetic-focus")).toBeCloseTo(0, 5);
+      expect(await maximumCardProperty(page, "--snap-motion-coverflow-kinetic-focus")).toBeCloseTo(
+        0,
+        5,
+      );
     },
   });
   await expect(viewport).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
@@ -54,7 +57,10 @@ test("slow direct drag stays 1:1 and visually neutral in both directions", async
     async beforeRelease() {
       const draggedPosition = Number(await viewport.getAttribute("data-position"));
       expect(draggedPosition - reverseStart).toBeCloseTo(120, 3);
-      expect(await maximumCardProperty(page, "--kinetic-focus")).toBeCloseTo(0, 5);
+      expect(await maximumCardProperty(page, "--snap-motion-coverflow-kinetic-focus")).toBeCloseTo(
+        0,
+        5,
+      );
     },
   });
   await expect(viewport).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
@@ -64,7 +70,7 @@ test("fast maximum-skip traversal projects every intermediate card and announces
   page,
 }) => {
   const viewport = page.getByTestId("coverflow-viewport");
-  const status = page.getByTestId("coverflow-status");
+  const status = page.getByTestId("snap-motion-coverflow-status");
   await setMaximumSkip(page, 5);
   await paginationButton(page, "Projectsjablonen").click();
   await expectCarouselAt(viewport, "templates");
@@ -85,7 +91,7 @@ test("fast maximum-skip traversal projects every intermediate card and announces
           attributeFilter: ["data-visual-id"],
         });
         const statusElement = document.querySelector<HTMLElement>(
-          '[data-testid="coverflow-status"]',
+          '[data-testid="snap-motion-coverflow-status"]',
         );
         const announcements = statusElement ? [statusElement.textContent?.trim() ?? ""] : [];
         const statusObserver = new MutationObserver(() => {
@@ -117,15 +123,17 @@ test("fast maximum-skip traversal projects every intermediate card and announces
 
           let maximumContact = 0;
           let maximumKinetic = 0;
-          for (const card of document.querySelectorAll<HTMLElement>(".coverflow-card")) {
+          for (const card of document.querySelectorAll<HTMLElement>(
+            ".snap-motion-coverflow-card",
+          )) {
             const style = getComputedStyle(card);
             maximumContact = Math.max(
               maximumContact,
-              Number.parseFloat(style.getPropertyValue("--contact-shadow")),
+              Number.parseFloat(style.getPropertyValue("--snap-motion-coverflow-contact-shadow")),
             );
             maximumKinetic = Math.max(
               maximumKinetic,
-              Number.parseFloat(style.getPropertyValue("--kinetic-focus")),
+              Number.parseFloat(style.getPropertyValue("--snap-motion-coverflow-kinetic-focus")),
             );
           }
 
@@ -219,19 +227,19 @@ test("fast maximum-skip traversal projects every intermediate card and announces
     "true",
   );
 
-  const settledCard = page.locator('[data-screen-id="settings"]');
+  const settledCard = page.locator('[data-item-id="settings"]');
   await expect(settledCard).toHaveCSS("opacity", "1");
   expect(
     Number.parseFloat(
       await settledCard.evaluate((card) =>
-        getComputedStyle(card).getPropertyValue("--kinetic-focus"),
+        getComputedStyle(card).getPropertyValue("--snap-motion-coverflow-kinetic-focus"),
       ),
     ),
   ).toBeCloseTo(0, 5);
   expect(
     Number.parseFloat(
       await settledCard.evaluate((card) =>
-        getComputedStyle(card).getPropertyValue("--contact-shadow"),
+        getComputedStyle(card).getPropertyValue("--snap-motion-coverflow-contact-shadow"),
       ),
     ),
   ).toBeCloseTo(1, 5);
@@ -292,7 +300,7 @@ test("re-grab cancels a pending semantic handoff and preserves continuous orderi
       await expect(viewport).toHaveAttribute("data-phase", "dragging");
       await expect(viewport).not.toHaveAttribute("data-pending-index", "4");
       const visibleZIndices = await page
-        .locator('.coverflow-card[style*="visibility: visible"]')
+        .locator('.snap-motion-coverflow-card[style*="visibility: visible"]')
         .evaluateAll((cards) => cards.map((card) => getComputedStyle(card).zIndex));
       expect(new Set(visibleZIndices).size).toBe(visibleZIndices.length);
     },
@@ -340,11 +348,14 @@ test("elastic ends remain symmetric and reduced motion settles exactly across st
   for (const mode of ["Phone", "Tablet", "Desktop"]) {
     await page.getByRole("button", { name: mode, exact: true }).click();
     await expect(viewport).toBeVisible();
-    await expect(page.locator('[data-screen-id="settings"]')).toHaveCSS("opacity", "1");
+    await expect(page.locator('[data-item-id="settings"]')).toHaveCSS("opacity", "1");
   }
 
   await page.getByTestId("reduced-motion-mode").selectOption("reduce");
   await paginationButton(page, "Locatie & planning").click();
   await expectCarouselAt(viewport, "map");
-  expect(await maximumCardProperty(page, "--kinetic-focus")).toBeCloseTo(0, 5);
+  expect(await maximumCardProperty(page, "--snap-motion-coverflow-kinetic-focus")).toBeCloseTo(
+    0,
+    5,
+  );
 });

@@ -76,6 +76,48 @@ export interface CoverflowCardState<TItem, TId extends string> {
     readonly settled: boolean;
 }
 
+// @public
+export interface CoverflowHandle<Id extends string> {
+    // (undocumented)
+    readonly canNext: boolean;
+    // (undocumented)
+    readonly canPrevious: boolean;
+    readonly commandIndex: number;
+    // (undocumented)
+    isInspectEligible(index: number): boolean;
+    // (undocumented)
+    readonly motion: UseCoverflowMotionReturn<Id>["motion"];
+    // (undocumented)
+    next(): boolean;
+    onKeyDown(event: KeyboardEvent): void;
+    // (undocumented)
+    readonly paginationIndicator: PaginationIndicatorState;
+    // (undocumented)
+    readonly pendingTargetIndex: number | null;
+    // (undocumented)
+    readonly physicalIndex: number;
+    // (undocumented)
+    readonly pitch: number;
+    readonly presentations: readonly CoverflowCardPresentation[];
+    // (undocumented)
+    previous(): boolean;
+    // (undocumented)
+    requestId(id: Id): boolean;
+    // (undocumented)
+    readonly root: HTMLElement | undefined;
+    readonly settledId: Id | undefined;
+    // (undocumented)
+    readonly settledIndex: number;
+    // (undocumented)
+    readonly speedInCards: number;
+    synchronizeId(id: Id, announce?: boolean): boolean;
+    // (undocumented)
+    readonly tuning: CoverflowTuning;
+    readonly visualId: Id | undefined;
+    // (undocumented)
+    readonly visualIndex: number;
+}
+
 export { CoverflowTuning }
 
 // @public (undocumented)

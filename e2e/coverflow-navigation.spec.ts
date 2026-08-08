@@ -232,7 +232,7 @@ test("Arrow keys share one-step retargeting while focus and announcements remain
   page,
 }) => {
   const viewport = page.getByTestId("coverflow-viewport");
-  const status = page.getByTestId("coverflow-status");
+  const status = page.getByTestId("snap-motion-coverflow-status");
   const buttons = pagination(page);
   await buttons.first().click();
   await expectCarouselAt(viewport, "templates");

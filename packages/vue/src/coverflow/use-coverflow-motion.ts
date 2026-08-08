@@ -401,26 +401,25 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
     },
   });
 
+  function currentConfiguration() {
+    const spring = toValue(options.spring);
+    const releasePolicy = toValue(options.releasePolicy);
+    const elasticity = toValue(options.elasticity);
+    const programmaticImpulse = toValue(options.programmaticImpulse);
+    return {
+      ...(spring === undefined ? {} : { spring }),
+      ...(releasePolicy === undefined ? {} : { releasePolicy }),
+      ...(elasticity === undefined ? {} : { elasticity }),
+      ...(programmaticImpulse === undefined ? {} : { programmaticImpulse }),
+    };
+  }
+
+  // Physics is watched by value, not by identity. A consumer that rebuilds its configuration
+  // object on every render is expressing no change at all, and reconfiguring on that would feed
+  // the controller's own snapshot back into the render that produced it.
   watch(
-    () => [
-      toValue(options.spring),
-      toValue(options.releasePolicy),
-      toValue(options.elasticity),
-      toValue(options.programmaticImpulse),
-    ],
-    ([spring, releasePolicy, elasticity, programmaticImpulse]) => {
-      motion.configure({
-        ...(spring === undefined ? {} : { spring: spring as SpringConfiguration }),
-        ...(releasePolicy === undefined
-          ? {}
-          : { releasePolicy: releasePolicy as Partial<ReleaseTargetPolicy> }),
-        ...(elasticity === undefined ? {} : { elasticity: elasticity as ElasticityOptions }),
-        ...(programmaticImpulse === undefined
-          ? {}
-          : { programmaticImpulse: programmaticImpulse as number }),
-      });
-    },
-    { deep: true },
+    () => JSON.stringify(currentConfiguration()),
+    () => motion.configure(currentConfiguration()),
   );
 
   watch([pitch, () => toValue(options.stageWidth)], () => void nextTick(motion.remeasure));
@@ -475,6 +474,8 @@ export interface CoverflowHandle<Id extends string> {
   readonly motion: UseCoverflowMotionReturn<Id>["motion"];
   readonly paginationIndicator: PaginationIndicatorState;
   readonly pendingTargetIndex: number | null;
+  /** Per-card rail placement and material signals, in item order. */
+  readonly presentations: readonly CoverflowCardPresentation[];
   readonly physicalIndex: number;
   readonly pitch: number;
   readonly root: HTMLElement | undefined;
@@ -488,6 +489,8 @@ export interface CoverflowHandle<Id extends string> {
   readonly visualIndex: number;
   isInspectEligible(index: number): boolean;
   next(): boolean;
+  /** Applies the surface's keyboard policy to an event a wider scope has received. */
+  onKeyDown(event: KeyboardEvent): void;
   previous(): boolean;
   requestId(id: Id): boolean;
   /** Adopts a destination exactly, with no travel. Silent unless `announce` is true. */
