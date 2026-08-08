@@ -497,6 +497,20 @@ export function resolveStackedDeckTraversal(
   return output;
 }
 
+/**
+ * True when the deck renders exactly one content card, so its identity cannot be contested.
+ *
+ * A handoff draws two faces until the outgoing one is fully dissolved, and by that point the
+ * promotion curve has already parked the incoming card within a fraction of a pixel of rest. That
+ * is why remaining spring travel is not disqualifying — exact synchronization from here cannot move
+ * anything the eye can follow. Elastic overdrag is excluded because its single card is deliberately
+ * held off its anchor.
+ */
+export function isStackedDeckAuthorityStable(traversal: StackedDeckTraversal): boolean {
+  if (traversal.phase !== "traversing") return traversal.phase !== "elastic";
+  return outgoingOpacity(traversal.localProgress) <= 0;
+}
+
 function validateTuning(tuning: StackedDeckTuning): void {
   if (tuning.profile !== "compact" && tuning.profile !== "medium" && tuning.profile !== "wide") {
     throw new RangeError("invalid deck profile");
