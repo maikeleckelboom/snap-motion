@@ -1,6 +1,13 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export type DemoId = "coverflow" | "gallery-at" | "grid" | "media" | "sheet" | "stacked-deck";
+export type DemoId =
+  | "coverflow"
+  | "defaults"
+  | "gallery-at"
+  | "grid"
+  | "media"
+  | "sheet"
+  | "stacked-deck";
 export type ReducedMotionMode = "no-preference" | "reduce" | "system";
 
 interface DragOptions {

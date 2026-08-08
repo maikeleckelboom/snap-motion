@@ -185,6 +185,20 @@ async function nuxtHydrationSmoke(cwd) {
   }
 }
 
+/**
+ * Type-checks the consumer's single-file components against the packed declarations.
+ *
+ * `tsc` cannot see inside an SFC and a Vite build erases types, so neither of them can tell whether
+ * `<StackedDeck :items="screens">` still infers the consumer's own item type and semantic ID union
+ * from `items` alone. Only `vue-tsc` compiles the templates, which is the thing the generic
+ * components exist to get right — including the uses that are supposed to be rejected.
+ */
+function certifyTemplateInference(cwd) {
+  process.stdout.write(`\nCertifying packed SFC generic inference with vue-tsc: ${cwd}\n`);
+  run(pnpmCommand, ["exec", "vue-tsc", "--noEmit", "-p", "tsconfig.vue.json"], cwd);
+  process.stdout.write("Packed SFC template inference certified.\n");
+}
+
 async function removeConsumer(directory) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
@@ -254,6 +268,7 @@ try {
   for (const resolution of ["bundler", "node16", "nodenext"]) {
     run(pnpmCommand, ["exec", "tsc", "-p", `tsconfig.${resolution}.json`], minimum);
   }
+  certifyTemplateInference(minimum);
   run(pnpmCommand, ["exec", "vite", "build"], minimum);
   run(process.execPath, ["ssr.mjs"], minimum);
   run(process.execPath, ["media-gallery-import.mjs"], minimum);
@@ -264,6 +279,7 @@ try {
   for (const resolution of ["bundler", "node16", "nodenext"]) {
     run(pnpmCommand, ["exec", "tsc", "-p", `tsconfig.${resolution}.json`], current);
   }
+  certifyTemplateInference(current);
   run(pnpmCommand, ["exec", "vite", "build"], current);
   run(process.execPath, ["ssr.mjs"], current);
   run(process.execPath, ["media-gallery-import.mjs"], current);
@@ -276,5 +292,5 @@ try {
 }
 
 process.stdout.write(
-  "Packed package certification passed for minimum/current Vue, ESM, gallery-only import, Vite, Router, Nuxt build/generate, SSR, hydration, and browser smoke consumers.\n",
+  "Packed package certification passed for minimum/current Vue, ESM, gallery-only import, SFC generic inference, Vite, Router, Nuxt build/generate, SSR, hydration, and browser smoke consumers.\n",
 );

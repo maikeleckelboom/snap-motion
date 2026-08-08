@@ -31,8 +31,17 @@ export class OrderedIdCollection<Id extends SemanticId> {
     return this.#indexes.get(id) ?? -1;
   }
 
-  has(id: Id): boolean {
-    return this.#indexes.has(id);
+  /**
+   * Where a surface starts: the item it was told to start on, or the middle of the collection when
+   * it was told nothing. An ID this collection does not contain is not a starting point, and a
+   * surface that silently started somewhere else would be lying about its own initial state.
+   */
+  resolveInitialIndex(id: Id | undefined, name = "initialId"): number {
+    if (this.#ids.length === 0) return -1;
+    if (id === undefined) return Math.floor(this.#ids.length / 2);
+    const index = this.indexOf(id);
+    if (index < 0) throw new RangeError(`${name} must identify an item: ${id}`);
+    return index;
   }
 
   at(index: number): Id | undefined {

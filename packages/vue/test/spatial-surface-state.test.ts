@@ -18,6 +18,9 @@ const screens: Screen[] = [
   { id: "e", title: "Echo" },
 ];
 
+/** The same five screens in the opposite order, without relying on a newer array method. */
+const reversedScreens: Screen[] = screens.map((_, index) => screens[screens.length - 1 - index]!);
+
 const TypedStackedDeck = StackedDeck<Screen>;
 const TypedCoverflow = Coverflow<Screen>;
 
@@ -92,7 +95,7 @@ describe("item reconfiguration through the public component", () => {
     const deck = wrapper.vm as unknown as DeckInstance;
     expect(deck.settledId).toBe("c");
 
-    await wrapper.setProps({ items: screens.toReversed() });
+    await wrapper.setProps({ items: reversedScreens });
     await nextTick();
 
     expect(deck.settledId).toBe("c");
@@ -169,7 +172,7 @@ describe("item reconfiguration through the public component", () => {
     const rail = wrapper.vm as unknown as RailInstance;
     expect(rail.settledId).toBe("c");
 
-    await wrapper.setProps({ items: screens.toReversed() });
+    await wrapper.setProps({ items: reversedScreens });
     await nextTick();
     expect(rail.settledId).toBe("c");
     expect(rail.visualId).toBe("c");

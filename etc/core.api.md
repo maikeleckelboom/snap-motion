@@ -223,10 +223,15 @@ export interface CoverflowKineticState {
 }
 
 // @public
-export class CoverflowModel {
-    constructor(options: CoverflowModelOptions);
+export class CoverflowModel<Id extends SemanticId = SemanticId> {
+    constructor(options: CoverflowModelOptions<Id>);
+    idAt(index: number): Id | undefined;
     // (undocumented)
-    readonly itemCount: number;
+    get ids(): readonly Id[];
+    indexOf(id: Id): number;
+    // (undocumented)
+    get itemCount(): number;
+    reconfigure(nextIds: readonly Id[]): number;
     resolveNavigationCommand(index: number, context: {
         readonly owned: boolean;
     }): CoverflowCommand;
@@ -244,10 +249,9 @@ export class CoverflowModel {
 }
 
 // @public (undocumented)
-export interface CoverflowModelOptions {
-    readonly initialIndex?: number;
-    // (undocumented)
-    readonly itemCount: number;
+export interface CoverflowModelOptions<Id extends SemanticId = SemanticId> {
+    readonly ids: readonly Id[];
+    readonly initialId?: Id;
 }
 
 // @public
@@ -751,6 +755,21 @@ export function nonlinearElasticDistance(distance: number, boundary: ElasticBoun
 // @public (undocumented)
 export function normalizeBounds(min: number, max: number): ScalarBounds;
 
+// @public
+export class OrderedIdCollection<Id extends SemanticId> {
+    constructor(ids: readonly Id[], name?: string);
+    // (undocumented)
+    at(index: number): Id | undefined;
+    contains(index: number): boolean;
+    // (undocumented)
+    get ids(): readonly Id[];
+    indexOf(id: Id): number;
+    replace(ids: readonly Id[], name?: string): void;
+    resolveInitialIndex(id: Id | undefined, name?: string): number;
+    // (undocumented)
+    get size(): number;
+}
+
 // @public (undocumented)
 export interface PagedGridGeometry extends CarouselGeometry<SemanticId> {
     // (undocumented)
@@ -903,6 +922,9 @@ export function resolveHystereticIndex(physicalIndex: number, currentIndex: numb
 
 // @public
 export function resolvePaginationIndicator(physicalIndex: number, velocityPxPerSecond: number, cardPitchPx: number, itemCount: number, output: PaginationIndicatorState): PaginationIndicatorState;
+
+// @public
+export function resolvePreservedIndex<Id extends SemanticId>(collection: OrderedIdCollection<Id>, previousId: Id | undefined, previousIndex: number): number;
 
 // @public (undocumented)
 export function resolveProgrammaticTarget<Id extends SemanticId>(input: ProgrammaticTargetInput<Id>): SnapAnchor<Id> | null;
@@ -1169,6 +1191,9 @@ export interface SpringConfiguration {
 export const STACKED_DECK_ANCHOR_SKIP = 1;
 
 // @public
+export const STACKED_DECK_INTERIOR_ELASTICITY: ElasticityOptions;
+
+// @public
 export type StackedDeckCommand = {
     readonly kind: "none";
 }
@@ -1208,14 +1233,19 @@ export interface StackedDeckInspectContext {
 }
 
 // @public
-export class StackedDeckModel {
-    constructor(options: StackedDeckModelOptions);
+export class StackedDeckModel<Id extends SemanticId = SemanticId> {
+    constructor(options: StackedDeckModelOptions<Id>);
     beginInteraction(): number;
     endInteraction(): void;
+    idAt(index: number): Id | undefined;
+    // (undocumented)
+    get ids(): readonly Id[];
+    indexOf(id: Id): number;
     isInspectEligible(context: StackedDeckInspectContext): boolean;
     // (undocumented)
-    readonly itemCount: number;
+    get itemCount(): number;
     openInteraction(originIndex: number): void;
+    reconfigure(nextIds: readonly Id[]): number;
     resolveAbsoluteCommand(index: number, context: StackedDeckCommandContext): StackedDeckCommand;
     resolveRelativeCommand(direction: -1 | 1, context: Pick<StackedDeckCommandContext, "owned">): StackedDeckCommand;
     // (undocumented)
@@ -1228,10 +1258,9 @@ export class StackedDeckModel {
 }
 
 // @public (undocumented)
-export interface StackedDeckModelOptions {
-    readonly initialIndex?: number;
-    // (undocumented)
-    readonly itemCount: number;
+export interface StackedDeckModelOptions<Id extends SemanticId = SemanticId> {
+    readonly ids: readonly Id[];
+    readonly initialId?: Id;
 }
 
 // @public

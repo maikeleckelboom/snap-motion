@@ -1,7 +1,10 @@
 import {
   CoverflowModel,
+  OrderedIdCollection,
+  resolvePreservedIndex,
   SnapController,
   STACKED_DECK_ANCHOR_SKIP,
+  STACKED_DECK_INTERIOR_ELASTICITY,
   StackedDeckModel,
   createFixedStageGeometry,
   resolveCoverflowTuning,
@@ -119,31 +122,41 @@ const screens = [
   { id: "outcome", title: "Outcome" },
 ] as const;
 type ScreenId = (typeof screens)[number]["id"];
-type Screen = (typeof screens)[number];
+const screenIds = screens.map((screen) => screen.id);
 
 const deckHandle = ref<StackedDeckHandle<ScreenId>>();
 const railHandle = ref<CoverflowHandle<ScreenId>>();
-void h(StackedDeck<ScreenId, Screen>, {
-  items: screens,
-  activeId: "system",
-  itemLabel: (screen) => screen.title,
-  label: "Project screens",
-});
-void h(Coverflow<ScreenId, Screen>, {
-  items: screens,
-  activeId: "system",
-  itemLabel: (screen) => screen.title,
-});
+// `h()` erases a generic component's type parameters down to their constraints, so these calls
+// only certify that the render-function path accepts the props at all. Whether `items` alone still
+// infers the consumer's own item type and semantic ID union is a *template* question, and it is
+// answered by Inference.vue and InferenceRejection.vue under `vue-tsc`.
+void h(StackedDeck, { items: screens, activeId: "system", label: "Project screens" });
+void h(Coverflow, { items: screens, activeId: "system" });
+void h(StackedDeck, { items: screens });
 void deckHandle.value?.requestId("outcome");
 void railHandle.value?.synchronizeId("overview");
+// A product handle publishes read-only telemetry, never a controller to navigate around it with.
+const deckPhase: string | undefined = deckHandle.value?.diagnostics.phase;
+void deckPhase;
+// @ts-expect-error the high-level handle deliberately exposes no raw motion surface.
+void deckHandle.value?.motion;
+// @ts-expect-error a semantic ID this collection does not contain is not a destination.
+void deckHandle.value?.requestId("chapter-one");
 void useStackedDeckMotion<ScreenId>;
 void useCoverflowMotion<ScreenId>;
 void useBoundedSpringDriver;
 
-const deckModel = new StackedDeckModel({ itemCount: screens.length, initialIndex: 1 });
-void deckModel.resolveAbsoluteCommand(0, { owned: false, atRest: true });
-const railModel = new CoverflowModel({ itemCount: screens.length });
+const deckModel = new StackedDeckModel({ ids: [...screenIds], initialId: "system" });
+void deckModel.resolveAbsoluteCommand(deckModel.indexOf("outcome"), {
+  owned: false,
+  atRest: true,
+});
+void deckModel.reconfigure(["outcome", "system"]);
+const railModel = new CoverflowModel({ ids: [...screenIds] });
 void railModel.resolveRelativeCommand(1, { owned: false });
+void new OrderedIdCollection(screenIds).indexOf("system");
+void resolvePreservedIndex(new OrderedIdCollection(screenIds), "system", 1);
+void STACKED_DECK_INTERIOR_ELASTICITY;
 void resolveCoverflowTuning({ stageWidth: 1_120 });
 void STACKED_DECK_ANCHOR_SKIP;
 

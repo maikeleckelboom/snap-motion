@@ -180,6 +180,7 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
     canNext: ComputedRef<boolean>;
     canPrevious: ComputedRef<boolean>;
     direction: ComputedRef<"ltr" | "rtl">;
+    resolveDirection: () => "ltr" | "rtl";
     isWheeling: Ref<boolean, boolean>;
     interrupt: () => void;
     moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
@@ -250,7 +251,7 @@ export interface VariableWidthCenteredCarouselGeometryOptions {
 
 // Warnings were encountered during analysis:
 //
-// src/carousel/use-carousel-motion.ts:208:10 - (ae-forgotten-export) The symbol "PointerIntent" needs to be exported by the entry point index.d.ts
+// src/carousel/use-carousel-motion.ts:203:10 - (ae-forgotten-export) The symbol "PointerIntent" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

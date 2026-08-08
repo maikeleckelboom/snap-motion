@@ -107,7 +107,7 @@ export class CoverflowModel<Id extends SemanticId = SemanticId> {
 
   constructor(options: CoverflowModelOptions<Id>) {
     this.#items = new OrderedIdCollection(options.ids, "coverflow item");
-    const initialIndex = this.#resolveInitialIndex(options.initialId);
+    const initialIndex = this.#items.resolveInitialIndex(options.initialId);
     this.#selection = new SettledSelection(Math.max(0, initialIndex), this.#items.size);
     this.#physicalIndex = initialIndex;
     this.#visualIndex = initialIndex;
@@ -224,11 +224,6 @@ export class CoverflowModel<Id extends SemanticId = SemanticId> {
     );
   }
 
-  /** The same policy, named semantically. Returns `{ kind: "none" }` for an unknown item. */
-  resolveIdCommand(id: Id, context: { readonly owned: boolean }): CoverflowCommand {
-    return this.resolveNavigationCommand(this.#items.indexOf(id), context);
-  }
-
   /**
    * Adopts a destination without travelling to it, and never announces a change it did not make.
    * Returns the adopted index, or `-1` when the index names no item and nothing was adopted.
@@ -243,14 +238,6 @@ export class CoverflowModel<Id extends SemanticId = SemanticId> {
     this.#selection.pendingTargetIndex = null;
     if (options.announce !== true) this.#suppressedAnnouncementIndex = index;
     this.#announcementIndex = null;
-    return index;
-  }
-
-  #resolveInitialIndex(initialId: Id | undefined): number {
-    if (this.#items.size === 0) return -1;
-    if (initialId === undefined) return Math.floor(this.#items.size / 2);
-    const index = this.#items.indexOf(initialId);
-    if (index < 0) throw new RangeError(`initialId must identify a coverflow item: ${initialId}`);
     return index;
   }
 }

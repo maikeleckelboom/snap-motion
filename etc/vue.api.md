@@ -20,11 +20,12 @@ import { CSSProperties } from 'vue';
 import { DefineComponent } from 'vue';
 import { ElasticityOptions } from '@snap-motion/core';
 import { MaybeRefOrGetter } from 'vue';
-import { MutableStackedDeckFrame } from '@snap-motion/core';
 import { PaginationIndicatorState } from '@snap-motion/core';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
 import { ReleaseTargetPolicy } from '@snap-motion/core';
+import type { ScalarBounds } from '@snap-motion/core';
+import type { SemanticId } from '@snap-motion/core';
 import { ShallowRef } from 'vue';
 import { ShallowUnwrapRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
@@ -205,12 +206,12 @@ export interface CoverflowHandle<Id extends string> {
     // (undocumented)
     readonly canPrevious: boolean;
     readonly commandIndex: number;
+    readonly compositing: boolean;
+    readonly diagnostics: SurfaceMotionDiagnostics<Id>;
     // (undocumented)
     isInspectEligible(index: number): boolean;
     // (undocumented)
-    readonly motion: UseCoverflowMotionReturn<Id>["motion"];
-    // (undocumented)
-    next(): boolean;
+    next(reason?: NavigationReason): boolean;
     onKeyDown(event: KeyboardEvent): void;
     // (undocumented)
     readonly paginationIndicator: PaginationIndicatorState;
@@ -222,9 +223,8 @@ export interface CoverflowHandle<Id extends string> {
     readonly pitch: number;
     readonly presentations: readonly CoverflowCardPresentation[];
     // (undocumented)
-    previous(): boolean;
-    // (undocumented)
-    requestId(id: Id): boolean;
+    previous(reason?: NavigationReason): boolean;
+    requestId(id: Id, reason?: NavigationReason): boolean;
     // (undocumented)
     readonly root: HTMLElement | undefined;
     readonly settledId: Id | undefined;
@@ -625,15 +625,15 @@ export interface StackedDeckHandle<Id extends string> {
     readonly canNext: boolean;
     // (undocumented)
     readonly canPrevious: boolean;
+    readonly compositing: boolean;
     readonly currentId: Id | undefined;
+    readonly diagnostics: SurfaceMotionDiagnostics<Id>;
     // (undocumented)
     readonly frame: StackedDeckFrame;
     // (undocumented)
     isInspectEligible(index: number): boolean;
     // (undocumented)
-    readonly motion: UseStackedDeckMotionReturn<Id>["motion"];
-    // (undocumented)
-    next(): boolean;
+    next(reason?: NavigationReason): boolean;
     onKeyDown(event: KeyboardEvent): void;
     // (undocumented)
     readonly owned: boolean;
@@ -644,8 +644,8 @@ export interface StackedDeckHandle<Id extends string> {
     // (undocumented)
     readonly pitch: number;
     // (undocumented)
-    previous(): boolean;
-    requestId(id: Id): boolean;
+    previous(reason?: NavigationReason): boolean;
+    requestId(id: Id, reason?: NavigationReason): boolean;
     // (undocumented)
     readonly root: HTMLElement | undefined;
     readonly settledId: Id | undefined;
@@ -682,6 +682,27 @@ export { StackedDeckPose }
 
 export { StackedDeckRole }
 
+// @public
+export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {
+    readonly activeId: Id | undefined;
+    // (undocumented)
+    readonly anchors: readonly SnapAnchor<Id>[];
+    // (undocumented)
+    readonly bounds: ScalarBounds;
+    // (undocumented)
+    readonly isAnimating: boolean;
+    // (undocumented)
+    readonly phase: ControllerPhase;
+    readonly pointerOwned: boolean;
+    // (undocumented)
+    readonly position: number;
+    // (undocumented)
+    readonly reducedMotion: boolean;
+    readonly targetId: Id | undefined;
+    // (undocumented)
+    readonly velocity: number;
+}
+
 // @public (undocumented)
 export function toCanonicalSheetDelta(side: SheetSide, physicalDelta: number): number;
 
@@ -699,6 +720,7 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
     canNext: ComputedRef<boolean>;
     canPrevious: ComputedRef<boolean>;
     direction: ComputedRef<"ltr" | "rtl">;
+    resolveDirection: () => "ltr" | "rtl";
     isWheeling: Ref<boolean, boolean>;
     interrupt: () => void;
     moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
@@ -760,16 +782,20 @@ export function useCarouselWindow<Id extends string>(idsSource: MaybeRefOrGetter
 // @public
 export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotionOptions<Id>): {
     anchorsById: ComputedRef<Map<string, number>>;
+    applyControlledId: (id: Id) => boolean;
     commandIndex: ComputedRef<number>;
     canNext: ComputedRef<boolean>;
     canPrevious: ComputedRef<boolean>;
+    compositing: ComputedRef<boolean>;
+    diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
     isInspectEligible: (index: number) => boolean;
     liveIndex: ComputedRef<number>;
-    model: CoverflowModel;
+    model: CoverflowModel<Id>;
     motion: {
         canNext: ComputedRef<boolean>;
         canPrevious: ComputedRef<boolean>;
         direction: ComputedRef<"ltr" | "rtl">;
+        resolveDirection: () => "ltr" | "rtl";
         isWheeling: Ref<boolean, boolean>;
         interrupt: () => void;
         moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
@@ -802,7 +828,8 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
         targetId: ComputedRef<Id | undefined>;
         velocity: ComputedRef<number>;
     };
-    next: () => boolean;
+    next: (reason?: NavigationReason) => boolean;
+    onClick: (event: MouseEvent) => void;
     onKeyDown: (event: KeyboardEvent) => void;
     onLostPointerCapture: (event: PointerEvent) => void;
     onPointerDown: (event: PointerEvent) => void;
@@ -813,9 +840,9 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
     physicalIndex: ComputedRef<number>;
     pitch: ComputedRef<number>;
     presentations: ComputedRef<readonly CoverflowCardPresentation[]>;
-    previous: () => boolean;
+    previous: (reason?: NavigationReason) => boolean;
     remeasure: () => SnapAnchor<Id> | null;
-    requestId: (id: Id) => boolean;
+    requestId: (id: Id, reason?: NavigationReason) => boolean;
     settledId: ComputedRef<Id | undefined>;
     settledIndex: ComputedRef<number>;
     speedInCards: ComputedRef<number>;
@@ -838,7 +865,7 @@ export interface UseCoverflowMotionOptions<Id extends string> {
     // (undocumented)
     readonly initialId?: Id | undefined;
     readonly onActivate?: (id: Id, index: number) => void;
-    readonly onSettled?: (id: Id, index: number) => void;
+    readonly onSettled?: (id: Id, index: number, reason: NavigationReason) => void;
     // (undocumented)
     readonly programmaticImpulse?: MaybeRefOrGetter<number | undefined>;
     // (undocumented)
@@ -1057,14 +1084,17 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
     atRest: ComputedRef<boolean>;
     canNext: ComputedRef<boolean>;
     canPrevious: ComputedRef<boolean>;
+    compositing: ComputedRef<boolean>;
     currentId: ComputedRef<Id | undefined>;
-    frame: ShallowRef<MutableStackedDeckFrame, MutableStackedDeckFrame>;
+    diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
+    frame: ShallowRef<StackedDeckFrame, StackedDeckFrame>;
     isInspectEligible: (index: number) => boolean;
-    model: StackedDeckModel;
+    model: StackedDeckModel<Id>;
     motion: {
         canNext: ComputedRef<boolean>;
         canPrevious: ComputedRef<boolean>;
         direction: ComputedRef<"ltr" | "rtl">;
+        resolveDirection: () => "ltr" | "rtl";
         isWheeling: Ref<boolean, boolean>;
         interrupt: () => void;
         moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions | undefined) => SnapAnchor<Id> | null;
@@ -1097,7 +1127,8 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
         targetId: ComputedRef<Id | undefined>;
         velocity: ComputedRef<number>;
     };
-    next: () => boolean;
+    next: (reason?: NavigationReason) => boolean;
+    onClick: (event: MouseEvent) => void;
     onKeyDown: (event: KeyboardEvent) => void;
     onLostPointerCapture: (event: PointerEvent) => void;
     onPointerDown: (event: PointerEvent) => void;
@@ -1107,10 +1138,11 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
     physicalIndex: ComputedRef<number>;
     pileLayers: ComputedRef<readonly StackedDeckPileLayer[]>;
     pitch: ComputedRef<number>;
-    previous: () => boolean;
+    previous: (reason?: NavigationReason) => boolean;
     remeasure: () => SnapAnchor<Id> | null;
-    requestId: (id: Id) => boolean;
-    requestIndex: (index: number) => boolean;
+    applyControlledId: (id: Id) => boolean;
+    requestId: (id: Id, reason?: NavigationReason) => boolean;
+    requestIndex: (index: number, reason?: NavigationReason) => boolean;
     settledId: ComputedRef<Id | undefined>;
     speedInCards: ComputedRef<number>;
     stageWidth: ComputedRef<number>;
@@ -1125,14 +1157,13 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
 // @public (undocumented)
 export interface UseStackedDeckMotionOptions<Id extends string> {
     readonly disabled?: () => boolean;
-    // (undocumented)
     readonly elasticity?: MaybeRefOrGetter<ElasticityOptions | undefined>;
     // (undocumented)
     readonly ids: MaybeRefOrGetter<readonly Id[]>;
     // (undocumented)
     readonly initialId?: Id | undefined;
     readonly onActivate?: (id: Id, index: number) => void;
-    readonly onSettled?: (id: Id, index: number) => void;
+    readonly onSettled?: (id: Id, index: number, reason: NavigationReason) => void;
     // (undocumented)
     readonly programmaticImpulse?: MaybeRefOrGetter<number | undefined>;
     // (undocumented)

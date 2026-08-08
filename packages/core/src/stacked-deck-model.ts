@@ -146,7 +146,7 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
 
   constructor(options: StackedDeckModelOptions<Id>) {
     this.#items = new OrderedIdCollection(options.ids, "deck item");
-    const initialIndex = this.#resolveInitialIndex(options.initialId);
+    const initialIndex = this.#items.resolveInitialIndex(options.initialId);
     this.#traversalStorage = createStackedDeckTraversal(initialIndex, this.#items.size);
     this.#selection = new SettledSelection(Math.max(0, initialIndex), this.#items.size);
     this.#settledIndex = Math.max(0, initialIndex);
@@ -320,11 +320,6 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
     return { kind: "synchronize", targetIndex: index, announce: true };
   }
 
-  /** The same policy, named semantically. Returns `{ kind: "none" }` for an unknown item. */
-  resolveIdCommand(id: Id, context: StackedDeckCommandContext): StackedDeckCommand {
-    return this.resolveAbsoluteCommand(this.#items.indexOf(id), context);
-  }
-
   /**
    * Adopts a destination without traversing to it: the deck simply *is* there on the next frame.
    *
@@ -358,13 +353,5 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
   isInspectEligible(context: StackedDeckInspectContext): boolean {
     if (!this.#items.contains(context.index)) return false;
     return isStackedDeckInspectEligible(this.state, context);
-  }
-
-  #resolveInitialIndex(initialId: Id | undefined): number {
-    if (this.#items.size === 0) return -1;
-    if (initialId === undefined) return Math.floor(this.#items.size / 2);
-    const index = this.#items.indexOf(initialId);
-    if (index < 0) throw new RangeError(`initialId must identify a deck item: ${initialId}`);
-    return index;
   }
 }

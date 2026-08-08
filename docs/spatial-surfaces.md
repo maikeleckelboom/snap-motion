@@ -55,7 +55,9 @@ the consumer's own item type, and neither requires a cast or an explicit generic
 ### What the deck guarantees
 
 - One gesture, flick, wheel burst, or command resolves **at most one adjacent card**, however far it
-  travels. Travel past that card becomes bounded elastic resistance rather than a second exchange.
+  travels. Travel past that card becomes bounded elastic resistance rather than a second exchange —
+  including with no `elasticity` supplied, because the deck states its own interior resistance.
+  Supplying `elasticity` customizes that resistance; nothing weakens the one-card invariant.
 - Direct manipulation stays 1:1 while the surface is held.
 - The next interaction starts on the card already on top. A spring the user can no longer see is
   never a cooldown, so a re-grab during settlement is a new gesture with its own envelope.
@@ -96,7 +98,8 @@ Both surfaces share the same shape.
 | `activeId`                                                     | Durable selection. Controlled when supplied; it changes only at mechanical rest.   |
 | `itemLabel`                                                    | Accessible name of one item. Defaults to the semantic ID.                          |
 | `label` / `labelledby`                                         | Accessible name of the surface.                                                    |
-| `disabled`                                                     | Refuses every input. Set it while another surface covers this one.                 |
+| `disabled`                                                     | Refuses every **input**. Controlled `activeId` still applies. See below.           |
+| `landmark`                                                     | Publishes the surface as a `region` landmark instead of a labelled `group`.        |
 | `focusScope`                                                   | Region that already counts as holding focus, when controls sit beside the surface. |
 | `stageWidth`                                                   | Fallback width used before the surface has been measured.                          |
 | `spring`, `elasticity`, `releasePolicy`, `programmaticImpulse` | Physics. Watched by value.                                                         |
@@ -106,7 +109,7 @@ Both surfaces share the same shape.
 | Event             | Meaning                                                             |
 | ----------------- | ------------------------------------------------------------------- |
 | `update:activeId` | Durable selection changed.                                          |
-| `requestActiveId` | The same change, as a request a route may answer.                   |
+| `requestActiveId` | The same change, with the reason that caused it (see below).        |
 | `settled`         | The surface reached mechanical rest on an item.                     |
 | `activate`        | A tap on the current, unambiguous item: open it on another surface. |
 
@@ -116,7 +119,36 @@ and `pose`, the rail adds `presentation`.
 
 The exposed instance — typed as `StackedDeckHandle<TId>` or `CoverflowHandle<TId>` — offers
 `previous()`, `next()`, `requestId(id)`, `synchronizeId(id)`, `isInspectEligible(index)`,
-`onKeyDown(event)`, and read-only state.
+`onKeyDown(event)`, and read-only state including a `diagnostics` snapshot of the surface's motion
+(`phase`, `position`, `velocity`, `activeId`, `targetId`, `anchors`, `bounds`, `reducedMotion`).
+
+The handle deliberately exposes **no controller**. A product surface owns a transaction model — the
+deck's one-card exchange most of all — and a handle that returned the controller would be a
+documented way around it. A renderer that genuinely needs that level of control composes
+`useStackedDeckMotion` / `useCoverflowMotion`, which still return `motion` and `model`.
+
+### Navigation reasons
+
+`requestActiveId` carries why the selection changed, and it tells the truth: `previous`, `next`,
+`keyboard`, `drag`, `wheel`, or `picker` for a tap or an imperative `requestId()`. A change the
+application itself made through `activeId` is **not** re-emitted, so a route can never receive its
+own navigation back as a user request.
+
+### Controlled selection is not input
+
+`activeId` is authoritative application state, not an input device. It is applied even while the
+surface is `disabled` or physically held by a pointer, because refusing it would leave the surface
+disagreeing with the application with nothing to retry it. The interruption policy is explicit:
+while the surface is held or refusing input the destination is adopted exactly, since animating out
+from under a hand is worse than arriving; otherwise the surface's own navigation policy applies.
+
+### Changing items
+
+`items` may be added to, removed from, replaced, reordered, emptied, and repopulated at any time.
+The surface preserves the **semantic item** it was on wherever that item moved to; if the item is
+gone it holds the same ordinal position, clamped to what remains. Indexes are never carried across
+a reconfiguration, and an `activeId` or `requestId()` naming an item the collection does not contain
+is refused rather than resolved to item zero.
 
 ## Requesting versus synchronizing
 
@@ -143,6 +175,15 @@ stay with the product.
 
 Stable class names: `snap-motion-stacked-deck`, `-stage`, `-card`, `-card-motion`, `-pile-layer`;
 `snap-motion-coverflow`, `-stage`, `-card`.
+
+Both roots are a labelled `group` with `aria-roledescription="carousel"`, or a `region` landmark
+when `landmark` is set. Each card is a `group` with `aria-roledescription="slide"`, and a card that
+is hidden from assistive technology is also `inert`, so it never leaves focusable content reachable
+by keyboard. Interactive content a consumer puts in a `#card` slot keeps its own clicks, pointer,
+and Arrow keys; only a completed manipulation suppresses the browser click it produced.
+
+`will-change` is set on cards only while the surface is being manipulated or is animating, and
+returns to `auto` once it settles.
 
 Stable state attributes on the surface root: `data-phase`, `data-active-id`, `data-reduced-motion`;
 the deck adds `data-settled-id`, `data-authority-stable`, `data-owned`, and `data-profile`, and the

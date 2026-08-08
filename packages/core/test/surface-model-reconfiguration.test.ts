@@ -25,9 +25,9 @@ describe("stacked deck item reconfiguration", () => {
     expect(model.indexOf("d")).toBe(3);
     expect(model.indexOf("z" as Id)).toBe(-1);
     expect(model.idAt(3)).toBe("d");
-    expect(model.resolveIdCommand("z" as Id, { owned: false, atRest: true })).toEqual({
-      kind: "none",
-    });
+    expect(
+      model.resolveAbsoluteCommand(model.indexOf("z" as Id), { owned: false, atRest: true }),
+    ).toEqual({ kind: "none" });
     // The whole point: an unknown destination is refused, not rounded down to item zero.
     expect(model.resolveAbsoluteCommand(-1, { owned: false, atRest: true })).toEqual({
       kind: "none",
@@ -110,7 +110,9 @@ describe("coverflow item reconfiguration", () => {
   it("names items semantically and refuses an ID it does not have", () => {
     const model = rail();
     expect(model.indexOf("z" as Id)).toBe(-1);
-    expect(model.resolveIdCommand("z" as Id, { owned: false })).toEqual({ kind: "none" });
+    expect(model.resolveNavigationCommand(model.indexOf("z" as Id), { owned: false })).toEqual({
+      kind: "none",
+    });
     expect(model.resolveNavigationCommand(9, { owned: false })).toEqual({ kind: "none" });
     expect(model.synchronize(-1)).toBe(-1);
     expect(model.state.settledIndex).toBe(2);

@@ -6,6 +6,7 @@ import { computed, ref, shallowRef } from "vue";
 import PhysicsControls from "@/components/PhysicsControls.vue";
 import StageControls from "@/components/StageControls.vue";
 import CoverflowDemo from "@/demos/CoverflowDemo.vue";
+import DefaultSurfacesDemo from "@/demos/DefaultSurfacesDemo.vue";
 import MediaGalleryAtCertificationDemo from "@/demos/MediaGalleryAtCertificationDemo.vue";
 import MediaLightboxDemo from "@/demos/MediaLightboxDemo.vue";
 import PagedGridDemo from "@/demos/PagedGridDemo.vue";
@@ -14,12 +15,13 @@ import StackedDeckDemo from "@/demos/StackedDeckDemo.vue";
 import { settingsFromPreset } from "@/fixtures/lab-settings";
 import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fixtures/lab-types";
 
-type DemoId = "coverflow" | "stacked-deck" | "gallery-at" | "media" | "grid" | "sheet";
+type DemoId = "coverflow" | "stacked-deck" | "defaults" | "gallery-at" | "media" | "grid" | "sheet";
 
 function isDemoId(value: unknown): value is DemoId {
   return (
     value === "coverflow" ||
     value === "stacked-deck" ||
+    value === "defaults" ||
     value === "gallery-at" ||
     value === "media" ||
     value === "grid" ||
@@ -42,6 +44,14 @@ const demos = [
     description:
       "A compact pile where one physical interaction exchanges exactly one adjacent screen.",
     component: StackedDeckDemo,
+  },
+  {
+    id: "defaults" as const,
+    label: "Default surfaces",
+    shortLabel: "Defaults",
+    description:
+      "The high-level components with nothing configured: the product a consumer actually gets.",
+    component: DefaultSurfacesDemo,
   },
   {
     id: "gallery-at" as const,

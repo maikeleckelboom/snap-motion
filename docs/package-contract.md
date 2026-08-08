@@ -38,5 +38,12 @@ checks every export-map target, rejects relative declaration edges and source-on
 strict Publint and ATTW checks. Clean fixtures compile bundler, Node16, and NodeNext modes and
 exercise ESM, Vite, Vue Router, SSR, Nuxt hydration, CSS, and browser behavior.
 
+Those fixtures also run `vue-tsc` over single-file components that use the generic surface
+components the way an application does: no explicit generic arguments, no casts, readonly `as const`
+items and ordinary mutable arrays, `v-model:active-id`, `itemLabel` inference, `#card` slot state,
+and handle typing — plus companion uses that must be **rejected**. `tsc` cannot see inside an SFC
+and a Vite build erases types, so neither can tell whether template inference still resolves the
+consumer's own item type and semantic ID union from `items` alone. Only the SFC type-check can.
+
 Tracked reports in `etc/*.api.md` freeze every public entrypoint's TypeScript surface. API changes
 require an intentional report update and a Changeset.
