@@ -92,6 +92,58 @@ describe("production carousel components", () => {
     expect(wrapper.get(".snap-motion-carousel-slide").attributes("dir")).toBe("rtl");
   });
 
+  it("mirrors arrow keys as soon as the page's own direction changes, without remounting", async () => {
+    const wrapper = mount(CarouselRoot, {
+      attachTo: document.body,
+      props: {
+        activeId: "two",
+        // `auto`: the carousel takes its direction from the page rather than stating one.
+        direction: "auto",
+        ids: ["one", "two", "three"],
+        label: "Inherited direction",
+        reducedMotionOverride: true,
+      },
+      slots: {
+        default: () =>
+          h(CarouselViewport, null, {
+            default: () =>
+              h(CarouselTrack, null, {
+                default: () => [
+                  h(CarouselSlide, { id: "one", label: "One" }),
+                  h(CarouselSlide, { id: "two", label: "Two" }),
+                  h(CarouselSlide, { id: "three", label: "Three" }),
+                ],
+              }),
+          }),
+      },
+    });
+    await nextTick();
+    const root = wrapper.element as HTMLElement;
+    const press = (key: string) =>
+      root.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }));
+
+    press("ArrowRight");
+    await nextTick();
+    expect(wrapper.emitted("requestActiveId")?.at(-1)).toEqual(["three", "keyboard"]);
+
+    // The page turns around under a carousel that is already mounted. Nothing reactive tracks
+    // computed style, so this is exactly the case a memoized direction would get wrong.
+    root.style.direction = "rtl";
+    press("ArrowRight");
+    await nextTick();
+    expect(wrapper.emitted("requestActiveId")?.at(-1)).toEqual(["two", "keyboard"]);
+    press("ArrowLeft");
+    await nextTick();
+    expect(wrapper.emitted("requestActiveId")?.at(-1)).toEqual(["three", "keyboard"]);
+
+    // An `auto` carousel imposes no direction of its own, so its slides keep inheriting the
+    // page's — rather than being stamped with whatever it resolved once.
+    for (const slide of wrapper.findAll(".snap-motion-carousel-slide")) {
+      expect(slide.attributes("dir")).toBeUndefined();
+    }
+    wrapper.unmount();
+  });
+
   it("navigates from a non-first controlled initial ID", async () => {
     const wrapper = mount(CarouselRoot, {
       attachTo: document.body,

@@ -32,6 +32,32 @@ export interface CompletedSurfaceGesture {
   readonly originIndex: number | undefined;
 }
 
+/**
+ * How long an armed suppression may wait for the click it exists to cancel.
+ *
+ * A browser dispatches the compatibility click immediately after the release that produced it, in
+ * the same task or the next one. Anything that has not arrived by then is not that click — it is
+ * some later, unrelated one — and consuming it would silently break a control the surface never
+ * touched. This is a lifetime, not a debounce: nothing waits on it.
+ */
+const CLICK_SUPPRESSION_LIFETIME_MS = 300;
+
+/** What a completed gesture asked for. The decision itself stays in core. */
+function resolutionFor(tracked: TrackedGesture, onOrigin: boolean): DirectManipulationResolution {
+  const horizontalIntent =
+    Math.abs(tracked.deltaX) >=
+    Math.abs(tracked.deltaY) * DIRECT_MANIPULATION_TUNING.horizontalIntentRatio;
+  return resolveDirectManipulationGesture({
+    cancelled: tracked.cancelled,
+    crossedDragThreshold:
+      tracked.maximumDisplacement >= DIRECT_MANIPULATION_TUNING.activationThreshold,
+    horizontalIntent,
+    involvedMultiplePointers: tracked.involvedMultiplePointers,
+    openEligibleAtStart: tracked.openEligibleAtStart,
+    releasedOnOrigin: onOrigin,
+  });
+}
+
 function trackMovement(tracked: TrackedGesture, event: PointerEvent) {
   tracked.deltaX = event.clientX - tracked.startX;
   tracked.deltaY = event.clientY - tracked.startY;
@@ -69,13 +95,15 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
   const activePointers = new Set<number>();
   let gesture: TrackedGesture | undefined;
   let disposed = false;
-  let suppressNextClick = false;
+  /** When an armed click suppression stops being about the manipulation that armed it. */
+  let clickSuppressedUntil = 0;
 
   // Resolution is deferred by a microtask so a release and the controller's answer to it cannot
   // interleave. A scope torn down inside that window must not be spoken for afterwards.
   onScopeDispose(() => {
     disposed = true;
     gesture = undefined;
+    clickSuppressedUntil = 0;
     activePointers.clear();
   });
 
@@ -125,20 +153,8 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     );
   }
 
-  function resolve(tracked: TrackedGesture, onOrigin: boolean) {
+  function publish(tracked: TrackedGesture, resolution: DirectManipulationResolution) {
     if (disposed) return;
-    const horizontalIntent =
-      Math.abs(tracked.deltaX) >=
-      Math.abs(tracked.deltaY) * DIRECT_MANIPULATION_TUNING.horizontalIntentRatio;
-    const resolution = resolveDirectManipulationGesture({
-      cancelled: tracked.cancelled,
-      crossedDragThreshold:
-        tracked.maximumDisplacement >= DIRECT_MANIPULATION_TUNING.activationThreshold,
-      horizontalIntent,
-      involvedMultiplePointers: tracked.involvedMultiplePointers,
-      openEligibleAtStart: tracked.openEligibleAtStart,
-      releasedOnOrigin: onOrigin,
-    });
     options.onResolved(resolution, {
       cancelled: tracked.cancelled,
       focusWasOutside: tracked.focusWasOutside,
@@ -146,10 +162,23 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     });
   }
 
+  /**
+   * Arms — or immediately disarms — the one-click suppression.
+   *
+   * Displacement alone is not grounds to consume a click. A vertical touch scroll displaces the
+   * pointer by hundreds of pixels without this surface having moved at all, and eating the click
+   * that follows it would take a button press away from a control the surface never touched. The
+   * only thing that earns a suppression is a manipulation this surface actually consumed, which is
+   * exactly what the core resolver calls a swipe.
+   */
+  function armClickSuppression(consumed: boolean) {
+    clickSuppressedUntil = consumed ? Date.now() + CLICK_SUPPRESSION_LIFETIME_MS : 0;
+  }
+
   function onPointerDown(event: PointerEvent) {
     if (options.disabled?.() || disposed) return;
     // A new press supersedes whatever the previous one asked the browser to suppress.
-    suppressNextClick = false;
+    armClickSuppression(false);
     // A control inside a consumer's item owns its own pointer. The low-level drag recognizer
     // already refuses these; the surface recognizer has to agree, or a press on a nested link
     // would still be tracked as a gesture and resolved as a selection when it is released.
@@ -190,7 +219,10 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     activePointers.delete(event.pointerId);
     tracked.cancelled = true;
     gesture = undefined;
-    queueMicrotask(() => resolve(tracked, false));
+    // A gesture that undid itself consumed nothing, so it leaves no suppression behind.
+    armClickSuppression(false);
+    const resolution = resolutionFor(tracked, false);
+    queueMicrotask(() => publish(tracked, resolution));
   }
 
   useEventListener(
@@ -208,29 +240,36 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     const tracked = gesture;
     if (!tracked || event.pointerId !== tracked.pointerId) return;
     trackMovement(tracked, event);
-    const onOrigin = releasedOnOrigin(tracked, event);
+    const resolution = resolutionFor(tracked, releasedOnOrigin(tracked, event));
     // Decided synchronously, because the browser's click follows this release before the deferred
-    // resolution runs. Only a manipulation the surface actually consumed suppresses it — an
-    // ordinary tap on a consumer's own link or button stays an ordinary click.
-    suppressNextClick =
-      tracked.maximumDisplacement >= DIRECT_MANIPULATION_TUNING.activationThreshold;
+    // publication runs — but decided from the same resolution the surface is about to act on, so
+    // what suppresses a click is exactly what moved the surface.
+    armClickSuppression(resolution.action === "swipe");
     gesture = undefined;
-    queueMicrotask(() => resolve(tracked, onOrigin));
+    queueMicrotask(() => publish(tracked, resolution));
   });
 
   useEventListener("pointercancel", abandon);
 
   /**
-   * Cancels exactly one browser click, and only after a completed manipulation.
+   * Cancels exactly one browser click, and only the one a manipulation this surface consumed
+   * produced.
    *
    * A drag that ends over a link would otherwise both move the surface and follow the link. That is
    * the only reason this exists, so it is deliberately not a blanket `preventDefault` on the item:
    * a `#card` slot is arbitrary application content, and its buttons, links, and forms have to keep
    * working exactly as they would anywhere else.
+   *
+   * An armed suppression the browser never spends expires rather than waiting. Some manipulations
+   * produce no compatibility click at all, and a suppression that outlived its own gesture would
+   * silently swallow whatever the user clicked next — minutes later, on a control that has nothing
+   * to do with the drag that armed it.
    */
   function onClick(event: MouseEvent) {
-    if (!suppressNextClick) return;
-    suppressNextClick = false;
+    if (clickSuppressedUntil === 0) return;
+    const expired = Date.now() > clickSuppressedUntil;
+    clickSuppressedUntil = 0;
+    if (expired) return;
     event.preventDefault();
     event.stopPropagation();
   }

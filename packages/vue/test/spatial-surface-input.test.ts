@@ -327,6 +327,104 @@ describe("interactive descendant ownership", () => {
   });
 });
 
+function click(element: HTMLElement) {
+  const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+  element.dispatchEvent(event);
+  return event;
+}
+
+describe("click suppression follows what the surface consumed", () => {
+  function mountDeckWithLink() {
+    return mount(TypedStackedDeck, {
+      props: { items: screens, label: "Screens", reducedMotionOverride: true },
+      slots: { card: () => h("a", { href: "#detail", class: "card-link" }, "Detail") },
+      attachTo: document.body,
+    });
+  }
+
+  it("cancels the click a horizontal drag generated, and only that one", async () => {
+    const wrapper = mountDeckWithLink();
+    await nextTick();
+    const root = wrapper.element as HTMLElement;
+    const link = wrapper.get(".card-link").element as HTMLElement;
+
+    pressAndMove(root, -240);
+    releaseAt(root, -240);
+    expect(click(link).defaultPrevented).toBe(true);
+    expect(click(link).defaultPrevented).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("leaves an ordinary tap alone", async () => {
+    const wrapper = mountDeckWithLink();
+    await nextTick();
+    const root = wrapper.element as HTMLElement;
+    const link = wrapper.get(".card-link").element as HTMLElement;
+
+    root.dispatchEvent(pointerEvent("pointerdown", { buttons: 1, clientX: 0, clientY: 0 }));
+    root.dispatchEvent(pointerEvent("pointerup", { clientX: 2, clientY: 1 }));
+    expect(click(link).defaultPrevented).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("leaves a control alone after a vertical touch gesture over the surface", async () => {
+    const wrapper = mountDeckWithLink();
+    await nextTick();
+    const root = wrapper.element as HTMLElement;
+    const link = wrapper.get(".card-link").element as HTMLElement;
+
+    // A page scroll displaces the pointer a long way without this surface consuming anything.
+    root.dispatchEvent(
+      pointerEvent("pointerdown", { buttons: 1, clientX: 0, clientY: 0, pointerType: "touch" }),
+    );
+    root.dispatchEvent(
+      pointerEvent("pointermove", { buttons: 1, clientX: 4, clientY: -300, pointerType: "touch" }),
+    );
+    root.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 4, clientY: -300, pointerType: "touch" }),
+    );
+
+    expect(click(link).defaultPrevented).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("leaves no suppression behind after a cancelled or multi-pointer gesture", async () => {
+    const wrapper = mountDeckWithLink();
+    await nextTick();
+    const root = wrapper.element as HTMLElement;
+    const link = wrapper.get(".card-link").element as HTMLElement;
+
+    pressAndMove(root, -240);
+    root.dispatchEvent(pointerEvent("pointercancel", { clientX: -240 }));
+    await Promise.resolve();
+    expect(click(link).defaultPrevented).toBe(false);
+
+    // A second finger joining makes the gesture something the surface does not resolve either.
+    pressAndMove(root, -240);
+    root.dispatchEvent(pointerEvent("pointerdown", { buttons: 1, clientX: -240, pointerId: 2 }));
+    releaseAt(root, -240);
+    await Promise.resolve();
+    expect(click(link).defaultPrevented).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("expires an armed suppression the browser never spent", async () => {
+    vi.useFakeTimers();
+    const wrapper = mountDeckWithLink();
+    await nextTick();
+    const root = wrapper.element as HTMLElement;
+    const link = wrapper.get(".card-link").element as HTMLElement;
+
+    pressAndMove(root, -240);
+    releaseAt(root, -240);
+
+    // No compatibility click followed this drag. Much later, an unrelated one must survive.
+    vi.advanceTimersByTime(5_000);
+    expect(click(link).defaultPrevented).toBe(false);
+    wrapper.unmount();
+  });
+});
+
 function deckHints(wrapper: ReturnType<typeof mountDeck>) {
   return wrapper
     .findAll(".snap-motion-stacked-deck-card-motion")

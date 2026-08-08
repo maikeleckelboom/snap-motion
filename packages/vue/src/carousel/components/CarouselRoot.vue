@@ -193,7 +193,10 @@ function next(reason: NavigationReason = "next") {
 
 function onKeyDown(event: KeyboardEvent) {
   if (effectiveKeyboardScope.value === "off") return;
-  const action = carouselKeyAction(event, motion.direction.value);
+  // Asked, never remembered. `auto` resolves against computed style, which nothing reactive
+  // tracks, so a carousel that mirrored its keys off the memoized direction would keep mirroring
+  // by whatever the page happened to be when it first rendered.
+  const action = carouselKeyAction(event, motion.resolveDirection());
   if (!action) return;
   const id =
     action === "home"
@@ -268,6 +271,7 @@ provide(carouselContextKey, {
   canPrevious: motion.canPrevious,
   count: computed(() => props.ids.length),
   direction: motion.direction,
+  directionAttribute: computed(() => (props.direction === "auto" ? undefined : props.direction)),
   ids,
   instructionId,
   messages,

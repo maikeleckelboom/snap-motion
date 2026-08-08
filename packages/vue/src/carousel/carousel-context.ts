@@ -10,6 +10,18 @@ export interface CarouselContext<Id extends string = string> {
   canPrevious: ComputedRef<boolean>;
   count: ComputedRef<number>;
   direction: ComputedRef<"ltr" | "rtl">;
+  /**
+   * The `dir` a slide should carry, or `undefined` when the carousel resolves direction from the
+   * page.
+   *
+   * A slide restores content direction inside a track whose coordinates are deliberately physical.
+   * That restoration needs a direction to state, and an `auto` carousel has none of its own: what
+   * it resolves is a memo of computed style, which nothing reactive tracks and which is answered
+   * before the surface is even in the document. Stamping that memo writes an explicit `ltr` onto
+   * every slide of a right-to-left page and calls it the carousel's decision. A carousel that
+   * genuinely needs to state a direction states one, through `direction`.
+   */
+  directionAttribute: ComputedRef<"ltr" | "rtl" | undefined>;
   ids: ComputedRef<readonly Id[]>;
   instructionId: string;
   messages: ComputedRef<SnapMotionMessages>;
