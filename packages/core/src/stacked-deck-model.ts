@@ -5,6 +5,7 @@ import {
   resolveAdjacentIndex,
   resolveCommandOriginIndex,
   SettledSelection,
+  type SettledSelectionAdoption,
   type SettledSelectionUpdate,
 } from "./selection";
 import {
@@ -15,7 +16,7 @@ import {
   type StackedDeckTraversal,
   type StackedDeckTraversalBounds,
 } from "./stackedDeck";
-import type { ElasticityOptions, SemanticId } from "./types";
+import type { ElasticityOptions, ReleaseTargetPolicy, SemanticId } from "./types";
 
 /**
  * A stacked deck is a physical card transaction, not a rail: one interaction may exchange exactly
@@ -23,6 +24,17 @@ import type { ElasticityOptions, SemanticId } from "./types";
  * lowering of the generic controller's multi-anchor capability.
  */
 export const STACKED_DECK_ANCHOR_SKIP = 1;
+
+/**
+ * The part of the generic release policy a stacked deck leaves to its consumer.
+ *
+ * `maxAnchorSkip` is absent on purpose. The deck fixes it at {@link STACKED_DECK_ANCHOR_SKIP},
+ * because one interaction exchanging one adjacent screen *is* the product; a surface that accepted
+ * the value and then overwrote it would be documenting a knob that does nothing. Omitting it says
+ * the same thing in the type system, where a consumer finds out at the keyboard instead of by
+ * wondering why their configuration had no effect.
+ */
+export type StackedDeckReleasePolicy = Partial<Omit<ReleaseTargetPolicy, "maxAnchorSkip">>;
 
 /**
  * The deck's product default for travel past the adjacent anchor.
@@ -64,6 +76,11 @@ export interface StackedDeckSnapshotInput {
  * vacating. `settledIndex` is the slower, durable answer route state and announcements use.
  */
 export interface StackedDeckModelState {
+  /**
+   * Every index here is an ordinal into the deck's own collection, and `-1` is the one answer for
+   * "no item" — the state an empty deck is in, and the state an unknown ID resolves to. No layer
+   * above this one substitutes item zero for it.
+   */
   readonly traversal: StackedDeckTraversal;
   readonly settledIndex: number;
   readonly currentIndex: number;
@@ -138,18 +155,14 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
 
   #traversalStorage: MutableStackedDeckTraversal;
   #selection: SettledSelection;
-  #settledIndex: number;
-  #pendingTargetIndex: number | null = null;
   #interactionOriginIndex: number | null = null;
   #announcementIndex: number | null = null;
-  #suppressedAnnouncementIndex: number | undefined;
 
   constructor(options: StackedDeckModelOptions<Id>) {
     this.#items = new OrderedIdCollection(options.ids, "deck item");
     const initialIndex = this.#items.resolveInitialIndex(options.initialId);
     this.#traversalStorage = createStackedDeckTraversal(initialIndex, this.#items.size);
-    this.#selection = new SettledSelection(Math.max(0, initialIndex), this.#items.size);
-    this.#settledIndex = Math.max(0, initialIndex);
+    this.#selection = new SettledSelection(initialIndex, this.#items.size);
   }
 
   get itemCount(): number {
@@ -179,19 +192,16 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
    * because none of it can be trusted to still describe this deck.
    */
   reconfigure(nextIds: readonly Id[]): number {
-    const previousId = this.#items.at(this.state.currentIndex);
     const previousIndex = this.state.currentIndex;
+    const previousId = this.#items.at(previousIndex);
     this.#items.replace(nextIds, "deck item");
     const nextIndex = resolvePreservedIndex(this.#items, previousId, previousIndex);
     this.#traversalStorage = createStackedDeckTraversal(nextIndex, this.#items.size);
-    this.#selection = new SettledSelection(Math.max(0, nextIndex), this.#items.size);
-    this.#settledIndex = Math.max(0, nextIndex);
-    this.#pendingTargetIndex = null;
-    this.#interactionOriginIndex = null;
-    this.#announcementIndex = null;
     // The rebuilt selection already treats the preserved item as announced, so a reconfiguration
     // never speaks for a change the user did not make.
-    this.#suppressedAnnouncementIndex = undefined;
+    this.#selection = new SettledSelection(nextIndex, this.#items.size);
+    this.#interactionOriginIndex = null;
+    this.#announcementIndex = null;
     return nextIndex;
   }
 
@@ -212,19 +222,20 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
   get state(): StackedDeckModelState {
     const traversal = this.#traversalStorage;
     const currentIndex = traversal.authoritativeIndex;
-    const commandOriginIndex = resolveCommandOriginIndex(currentIndex, this.#pendingTargetIndex);
+    const pendingTargetIndex = this.#selection.pendingTargetIndex;
+    const commandOriginIndex = resolveCommandOriginIndex(currentIndex, pendingTargetIndex);
     return {
       traversal,
-      settledIndex: this.#settledIndex,
+      settledIndex: this.#selection.settledIndex,
       currentIndex,
       visualTopIndex: traversal.visualTopIndex,
-      pendingTargetIndex: this.#pendingTargetIndex,
+      pendingTargetIndex,
       commandOriginIndex,
       interactionOriginIndex: this.#interactionOriginIndex,
       authorityStable: isStackedDeckAuthorityStable(traversal),
       announcementIndex: this.#announcementIndex,
       canPrevious: commandOriginIndex > 0,
-      canNext: commandOriginIndex < this.itemCount - 1,
+      canNext: commandOriginIndex >= 0 && commandOriginIndex < this.itemCount - 1,
     };
   }
 
@@ -245,7 +256,8 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
 
   /** Opens an interaction on an explicit origin, which is how a relative command claims one. */
   openInteraction(originIndex: number): void {
-    this.#interactionOriginIndex = clamp(originIndex, 0, Math.max(0, this.itemCount - 1));
+    this.#interactionOriginIndex =
+      this.itemCount === 0 ? null : clamp(originIndex, 0, this.itemCount - 1);
   }
 
   /** Closes the current interaction. Mechanical rest is the only thing that may do this. */
@@ -256,13 +268,11 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
   /** Consumes one controller snapshot and republishes the deck's whole semantic state. */
   update(input: StackedDeckSnapshotInput): StackedDeckModelState {
     if (this.itemCount === 0) return this.state;
-    const announcement = this.#selection.update({
+    this.#announcementIndex = this.#selection.update({
       phase: input.phase,
       targetIndex: input.targetIndex,
       activeIndex: input.nearestIndex,
     });
-    this.#settledIndex = this.#selection.settledIndex;
-    this.#pendingTargetIndex = this.#selection.pendingTargetIndex;
 
     const traversalBounds = this.traversalBounds;
     resolveStackedDeckTraversal(
@@ -275,14 +285,6 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
       },
       this.#traversalStorage,
     );
-
-    if (announcement === null) {
-      this.#announcementIndex = null;
-    } else {
-      const suppressed = announcement === this.#suppressedAnnouncementIndex;
-      this.#suppressedAnnouncementIndex = undefined;
-      this.#announcementIndex = suppressed ? null : announcement;
-    }
     return this.state;
   }
 
@@ -325,17 +327,17 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
    *
    * A silent synchronization is for a change another surface already reported — returning from an
    * inspection gallery, for instance. An announced one is a navigation the user asked this deck
-   * for, and it announces immediately and truthfully because it is not a traversal.
+   * for, and it announces immediately and truthfully because it is not a traversal: the
+   * announcement is published on this state, not left for whichever snapshot happens to arrive
+   * next. The durable selection is rebased in one operation, so the very next snapshot may be a
+   * drag or a settle without reviving the destination the deck has already left.
    *
    * Returns the adopted index, or `-1` when the index names no item and nothing was adopted.
    */
-  synchronize(index: number, options: { readonly announce?: boolean } = {}): number {
+  synchronize(index: number, options: SettledSelectionAdoption = {}): number {
     if (!this.#items.contains(index)) return -1;
     this.#interactionOriginIndex = null;
-    this.#settledIndex = index;
-    this.#pendingTargetIndex = null;
-    this.#selection.pendingTargetIndex = null;
-    if (options.announce !== true) this.#suppressedAnnouncementIndex = index;
+    this.#announcementIndex = this.#selection.adopt(index, options);
     resolveStackedDeckTraversal(
       {
         controllerPhase: "idle",
@@ -345,7 +347,6 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
       },
       this.#traversalStorage,
     );
-    this.#announcementIndex = null;
     return index;
   }
 

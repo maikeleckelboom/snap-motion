@@ -225,14 +225,19 @@ describe("stacked deck announcements", () => {
 
   it("keeps a silent synchronization silent and an asked-for one immediate", () => {
     const deck = model();
-    deck.synchronize(4);
+    expect(deck.synchronize(4)).toBe(4);
     expect(deck.state.settledIndex).toBe(4);
     expect(deck.state.currentIndex).toBe(4);
     expect(deck.state.interactionOriginIndex).toBeNull();
+    expect(deck.state.announcementIndex).toBeNull();
     expect(deck.update(restAt(4)).announcementIndex).toBeNull();
 
+    // An announced adoption is not a traversal, so it says so on the state it produced rather than
+    // waiting for an idle snapshot that may never be the next thing to arrive.
     deck.synchronize(0, { announce: true });
-    expect(deck.update(restAt(0)).announcementIndex).toBe(0);
+    expect(deck.state.announcementIndex).toBe(0);
+    // ...and having already spoken, it does not repeat itself when the deck reports rest.
+    expect(deck.update(restAt(0)).announcementIndex).toBeNull();
   });
 
   it("refuses a synchronization to an index that names no card", () => {
@@ -240,6 +245,56 @@ describe("stacked deck announcements", () => {
     expect(deck.synchronize(99)).toBe(-1);
     expect(deck.synchronize(-4)).toBe(-1);
     expect(deck.state.settledIndex).toBe(2);
+  });
+});
+
+describe("stacked deck synchronization is atomic", () => {
+  it("holds its adopted selection through an interaction opened on the next frame", () => {
+    const deck = model();
+    deck.synchronize(4);
+
+    // No remeasure, no repair snapshot: the very next thing that happens is a new interaction.
+    expect(deck.beginInteraction()).toBe(4);
+    const dragged = deck.update(snapshot(4.4, { phase: "dragging", nearestIndex: 4 }));
+    expect(dragged.settledIndex).toBe(4);
+    expect(dragged.currentIndex).toBe(4);
+    expect(dragged.pendingTargetIndex).toBeNull();
+    expect(dragged.announcementIndex).toBeNull();
+  });
+
+  it("holds it through a settling snapshot, and lets the next command step from the pending card", () => {
+    const deck = model();
+    deck.synchronize(4);
+
+    const settling = deck.update(snapshot(3.6, { phase: "settling", targetIndex: 3 }));
+    expect(settling.settledIndex).toBe(4);
+    expect(settling.pendingTargetIndex).toBe(3);
+    expect(settling.announcementIndex).toBeNull();
+
+    expect(deck.resolveRelativeCommand(-1, { owned: false })).toEqual({
+      kind: "traverse",
+      originIndex: 3,
+      targetIndex: 2,
+    });
+  });
+
+  it("does the same after an announced synchronization", () => {
+    const deck = model();
+    deck.synchronize(0, { announce: true });
+    expect(deck.state.announcementIndex).toBe(0);
+
+    const dragged = deck.update(snapshot(0.4, { phase: "dragging", nearestIndex: 0 }));
+    expect(dragged.settledIndex).toBe(0);
+    // The announcement belonged to the adoption, not to every state published afterwards.
+    expect(dragged.announcementIndex).toBeNull();
+
+    expect(deck.resolveRelativeCommand(1, { owned: false })).toEqual({
+      kind: "traverse",
+      originIndex: 0,
+      targetIndex: 1,
+    });
+    // Arriving where it already is stays silent; it is not a second change.
+    expect(deck.update(restAt(0)).announcementIndex).toBeNull();
   });
 });
 
@@ -252,5 +307,39 @@ describe("empty stacked deck", () => {
       kind: "none",
     });
     expect(deck.isInspectEligible({ index: 0, owned: false })).toBe(false);
+  });
+
+  it("names no item at all, on every index it publishes", () => {
+    const deck = new StackedDeckModel<DeckId>({ ids: [] });
+    const state = deck.state;
+    expect(state.settledIndex).toBe(-1);
+    expect(state.currentIndex).toBe(-1);
+    expect(state.visualTopIndex).toBe(-1);
+    expect(state.commandOriginIndex).toBe(-1);
+    expect(state.interactionOriginIndex).toBeNull();
+    expect(state.canPrevious).toBe(false);
+    expect(state.canNext).toBe(false);
+    expect(deck.idAt(0)).toBeUndefined();
+    expect(deck.synchronize(0)).toBe(-1);
+  });
+
+  it("survives being emptied and repopulated, and never announces the repopulation", () => {
+    const deck = model();
+    deck.update(restAt(2));
+
+    expect(deck.reconfigure([])).toBe(-1);
+    expect(deck.state.settledIndex).toBe(-1);
+    expect(deck.state.canNext).toBe(false);
+    // A command while empty is refused rather than resolved against an item that is not there.
+    expect(deck.resolveRelativeCommand(1, { owned: false })).toEqual({ kind: "none" });
+    expect(deck.beginInteraction()).toBe(-1);
+    expect(deck.traversalBounds).toBeUndefined();
+    expect(deck.update(restAt(0)).settledIndex).toBe(-1);
+
+    expect(deck.reconfigure(["a", "b"])).toBe(0);
+    expect(deck.state.settledIndex).toBe(0);
+    expect(deck.state.announcementIndex).toBeNull();
+    expect(deck.update(restAt(0)).announcementIndex).toBeNull();
+    expect(deck.state.canNext).toBe(true);
   });
 });

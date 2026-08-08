@@ -32,6 +32,32 @@ describe("ordered id collection", () => {
     const items = new OrderedIdCollection<Id>(source);
     source.push("c");
     expect(items.ids).toEqual(["a", "b"]);
+    expect(items.size).toBe(2);
+    expect(items.indexOf("c")).toBe(-1);
+
+    // The same has to hold for a reconfiguration, not only for construction.
+    const replacement: Id[] = ["c", "a"];
+    items.replace(replacement);
+    replacement.length = 0;
+    expect(items.ids).toEqual(["c", "a"]);
+    expect(items.indexOf("a")).toBe(1);
+  });
+
+  it("refuses to let the owned ordering be mutated through the getter", () => {
+    const items = new OrderedIdCollection<Id>(["a", "b", "c"]);
+    // `readonly` is erased at runtime, so the guarantee has to exist in JavaScript too: the ID
+    // array and the index map are two views of one ordering and cannot be allowed to disagree.
+    const owned = items.ids as Id[];
+    expect(Object.isFrozen(owned)).toBe(true);
+    expect(() => owned.push("a")).toThrow(TypeError);
+    expect(() => owned.reverse()).toThrow(TypeError);
+    expect(() => {
+      owned[0] = "c";
+    }).toThrow(TypeError);
+
+    expect(items.ids).toEqual(["a", "b", "c"]);
+    expect(items.indexOf("c")).toBe(2);
+    expect(items.at(0)).toBe("a");
   });
 });
 

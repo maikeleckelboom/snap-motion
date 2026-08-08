@@ -9,6 +9,13 @@ import type { SemanticId } from "./types";
  * to "where is that ID right now". Keeping both in one owned collection is what lets a model be
  * reconfigured — reordered, extended, emptied — without any part of it going on believing a stale
  * ordinal, and without a caller having to perform array surgery on a model's private storage.
+ *
+ * Internal on purpose. It is how the surface models hold their items, not a contract a consumer
+ * builds against: everything an application needs from it — `ids`, `idAt`, `indexOf`,
+ * `reconfigure` — is already published by the models themselves, and freezing this shape into the
+ * package's API would freeze their storage strategy with it.
+ *
+ * @internal
  */
 export class OrderedIdCollection<Id extends SemanticId> {
   #ids: readonly Id[] = [];
@@ -56,10 +63,16 @@ export class OrderedIdCollection<Id extends SemanticId> {
   /**
    * Adopts a new ordering. Duplicate or non-string IDs are rejected here rather than silently
    * de-duplicated, because the same collection is what the surface's geometry is keyed by.
+   *
+   * The copy is frozen, not merely typed `readonly`. `ids` and the index map are two views of one
+   * ordering, and `readonly` is erased at runtime: a caller who reaches the array through the
+   * getter and splices it would leave every ID in the map pointing at the wrong item, with no
+   * error anywhere. Copying defends against the caller's array changing afterwards; freezing
+   * defends against the collection's own array changing at all.
    */
   replace(ids: readonly Id[], name = "item"): void {
     assertUniqueIds(ids, name);
-    this.#ids = [...ids];
+    this.#ids = Object.freeze([...ids]);
     this.#indexes = new Map(this.#ids.map((id, index) => [id, index]));
   }
 }
@@ -71,6 +84,8 @@ export class OrderedIdCollection<Id extends SemanticId> {
  * that item, however far it moved. When the item is gone the fallback is deliberately ordinal — the
  * surface holds its place in the list rather than jumping home — clamped into whatever the
  * collection now is, and `-1` once there is nothing left to stand on.
+ *
+ * @internal
  */
 export function resolvePreservedIndex<Id extends SemanticId>(
   collection: OrderedIdCollection<Id>,

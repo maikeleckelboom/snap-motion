@@ -123,6 +123,101 @@ describe("coverflow rail commands", () => {
   });
 });
 
+describe("coverflow synchronization is atomic", () => {
+  it("holds its adopted selection through the very next dragging snapshot", () => {
+    const rail = model();
+    rail.synchronize(4);
+
+    // No remeasure in between: the controller is still reporting from where it was.
+    const dragged = rail.update({
+      phase: "dragging",
+      physicalIndex: 3.6,
+      targetIndex: null,
+      nearestIndex: 2,
+    });
+    expect(dragged.settledIndex).toBe(4);
+    expect(dragged.pendingTargetIndex).toBeNull();
+    expect(dragged.announcementIndex).toBeNull();
+  });
+
+  it("holds it through a settling snapshot and through the command that follows", () => {
+    const rail = model();
+    rail.synchronize(0);
+
+    const settling = rail.update({
+      phase: "settling",
+      physicalIndex: 0.5,
+      targetIndex: 1,
+      nearestIndex: 0,
+    });
+    expect(settling.settledIndex).toBe(0);
+    expect(settling.pendingTargetIndex).toBe(1);
+    expect(settling.commandIndex).toBe(1);
+    expect(rail.resolveRelativeCommand(1, { owned: false })).toEqual({
+      kind: "move",
+      targetIndex: 2,
+    });
+  });
+
+  it("announces an asked-for adoption at once, and only once", () => {
+    const rail = model();
+    rail.synchronize(0, { announce: true });
+    expect(rail.state.announcementIndex).toBe(0);
+    expect(rail.state.settledIndex).toBe(0);
+
+    const dragged = rail.update({
+      phase: "dragging",
+      physicalIndex: 0.4,
+      targetIndex: null,
+      nearestIndex: 0,
+    });
+    expect(dragged.settledIndex).toBe(0);
+    expect(dragged.announcementIndex).toBeNull();
+    expect(
+      rail.update({ phase: "idle", physicalIndex: 0, targetIndex: 0, nearestIndex: 0 })
+        .announcementIndex,
+    ).toBeNull();
+  });
+});
+
+describe("empty coverflow rail", () => {
+  it("names no item at all, on every index it publishes", () => {
+    const rail = new CoverflowModel<RailId>({ ids: [] });
+    const state = rail.state;
+    expect(state.settledIndex).toBe(-1);
+    expect(state.visualIndex).toBe(-1);
+    expect(state.physicalIndex).toBe(-1);
+    expect(state.commandIndex).toBe(-1);
+    expect(state.pendingTargetIndex).toBeNull();
+    expect(state.canPrevious).toBe(false);
+    expect(state.canNext).toBe(false);
+    expect(rail.resolveRelativeCommand(1, { owned: false })).toEqual({ kind: "none" });
+    expect(rail.resolveNavigationCommand(0, { owned: false })).toEqual({ kind: "none" });
+    expect(rail.synchronize(0)).toBe(-1);
+  });
+
+  it("survives being emptied and repopulated, and never announces the repopulation", () => {
+    const rail = model();
+    rail.update({ phase: "idle", physicalIndex: 2, targetIndex: 2, nearestIndex: 2 });
+
+    expect(rail.reconfigure([])).toBe(-1);
+    expect(rail.state.settledIndex).toBe(-1);
+    expect(
+      rail.update({ phase: "idle", physicalIndex: 0, targetIndex: 0, nearestIndex: 0 })
+        .settledIndex,
+    ).toBe(-1);
+
+    expect(rail.reconfigure(["a", "b"])).toBe(0);
+    expect(rail.state.settledIndex).toBe(0);
+    expect(rail.state.visualIndex).toBe(0);
+    expect(
+      rail.update({ phase: "idle", physicalIndex: 0, targetIndex: 0, nearestIndex: 0 })
+        .announcementIndex,
+    ).toBeNull();
+    expect(rail.state.canNext).toBe(true);
+  });
+});
+
 describe("coverflow inspection eligibility", () => {
   it("requires the exact settled identity and physical state", () => {
     expect(isSettledOnAnchor(settledOnMap)).toBe(true);

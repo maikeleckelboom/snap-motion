@@ -4,6 +4,7 @@ import {
   resolveAdjacentIndex,
   resolveHystereticIndex,
   SettledSelection,
+  type SettledSelectionAdoption,
   type SettledSelectionUpdate,
 } from "./selection";
 import type { SemanticId } from "./types";
@@ -35,6 +36,11 @@ export interface CoverflowSnapshotInput {
  * surface on "the current card" must mean, and it changes only at mechanical rest.
  */
 export interface CoverflowModelState {
+  /**
+   * Every index here is an ordinal into the rail's own collection, and `-1` is the one answer for
+   * "no item" — the state an empty rail is in, and the state an unknown ID resolves to. No layer
+   * above this one substitutes item zero for it.
+   */
   readonly physicalIndex: number;
   readonly visualIndex: number;
   readonly settledIndex: number;
@@ -99,19 +105,15 @@ export class CoverflowModel<Id extends SemanticId = SemanticId> {
   #selection: SettledSelection;
   #physicalIndex: number;
   #visualIndex: number;
-  #settledIndex: number;
-  #pendingTargetIndex: number | null = null;
   #commandIndex: number;
   #announcementIndex: number | null = null;
-  #suppressedAnnouncementIndex: number | undefined;
 
   constructor(options: CoverflowModelOptions<Id>) {
     this.#items = new OrderedIdCollection(options.ids, "coverflow item");
     const initialIndex = this.#items.resolveInitialIndex(options.initialId);
-    this.#selection = new SettledSelection(Math.max(0, initialIndex), this.#items.size);
+    this.#selection = new SettledSelection(initialIndex, this.#items.size);
     this.#physicalIndex = initialIndex;
     this.#visualIndex = initialIndex;
-    this.#settledIndex = initialIndex;
     this.#commandIndex = initialIndex;
   }
 
@@ -141,18 +143,17 @@ export class CoverflowModel<Id extends SemanticId = SemanticId> {
    * that no longer name what they used to.
    */
   reconfigure(nextIds: readonly Id[]): number {
-    const previousId = this.#items.at(this.#settledIndex);
-    const previousIndex = this.#settledIndex;
+    const previousIndex = this.#selection.settledIndex;
+    const previousId = this.#items.at(previousIndex);
     this.#items.replace(nextIds, "coverflow item");
     const nextIndex = resolvePreservedIndex(this.#items, previousId, previousIndex);
-    this.#selection = new SettledSelection(Math.max(0, nextIndex), this.#items.size);
+    // The rebuilt selection already treats the preserved item as announced, so a reconfiguration
+    // never speaks for a change the user did not make.
+    this.#selection = new SettledSelection(nextIndex, this.#items.size);
     this.#physicalIndex = nextIndex;
     this.#visualIndex = nextIndex;
-    this.#settledIndex = nextIndex;
     this.#commandIndex = nextIndex;
-    this.#pendingTargetIndex = null;
     this.#announcementIndex = null;
-    this.#suppressedAnnouncementIndex = undefined;
     return nextIndex;
   }
 
@@ -160,12 +161,12 @@ export class CoverflowModel<Id extends SemanticId = SemanticId> {
     return {
       physicalIndex: this.#physicalIndex,
       visualIndex: this.#visualIndex,
-      settledIndex: this.#settledIndex,
-      pendingTargetIndex: this.#pendingTargetIndex,
+      settledIndex: this.#selection.settledIndex,
+      pendingTargetIndex: this.#selection.pendingTargetIndex,
       commandIndex: this.#commandIndex,
       announcementIndex: this.#announcementIndex,
       canPrevious: this.#commandIndex > 0,
-      canNext: this.#commandIndex < this.itemCount - 1,
+      canNext: this.#commandIndex >= 0 && this.#commandIndex < this.itemCount - 1,
     };
   }
 
@@ -182,22 +183,12 @@ export class CoverflowModel<Id extends SemanticId = SemanticId> {
       this.#visualIndex,
       this.itemCount,
     );
-    const announcement = this.#selection.update({
+    this.#announcementIndex = this.#selection.update({
       phase: input.phase,
       targetIndex: input.targetIndex,
       activeIndex: input.nearestIndex,
     });
-    this.#settledIndex = this.#selection.settledIndex;
-    this.#pendingTargetIndex = this.#selection.pendingTargetIndex;
     this.#commandIndex = clamp(input.targetIndex ?? input.nearestIndex, 0, maximumIndex);
-
-    if (announcement === null) {
-      this.#announcementIndex = null;
-    } else {
-      const suppressed = announcement === this.#suppressedAnnouncementIndex;
-      this.#suppressedAnnouncementIndex = undefined;
-      this.#announcementIndex = suppressed ? null : announcement;
-    }
     return this.state;
   }
 
@@ -226,18 +217,20 @@ export class CoverflowModel<Id extends SemanticId = SemanticId> {
 
   /**
    * Adopts a destination without travelling to it, and never announces a change it did not make.
+   *
+   * The durable selection is rebased in one operation, so the very next snapshot may be a drag or a
+   * settle without reviving the destination the rail has already left. An announced adoption
+   * publishes its announcement here, because a direct adoption is not travel and there is no later
+   * arrival at which it would become true.
+   *
    * Returns the adopted index, or `-1` when the index names no item and nothing was adopted.
    */
-  synchronize(index: number, options: { readonly announce?: boolean } = {}): number {
+  synchronize(index: number, options: SettledSelectionAdoption = {}): number {
     if (!this.#items.contains(index)) return -1;
     this.#physicalIndex = index;
     this.#visualIndex = index;
-    this.#settledIndex = index;
     this.#commandIndex = index;
-    this.#pendingTargetIndex = null;
-    this.#selection.pendingTargetIndex = null;
-    if (options.announce !== true) this.#suppressedAnnouncementIndex = index;
-    this.#announcementIndex = null;
+    this.#announcementIndex = this.#selection.adopt(index, options);
     return index;
   }
 }

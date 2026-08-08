@@ -91,7 +91,7 @@ export {
   resolveHystereticIndex,
   SettledSelection,
 } from "./selection";
-export type { SettledSelectionUpdate } from "./selection";
+export type { SettledSelectionAdoption, SettledSelectionUpdate } from "./selection";
 export {
   createStackedDeckFrame,
   createStackedDeckTraversal,
@@ -119,7 +119,6 @@ export type {
   StackedDeckTraversalPhase,
   StackedDeckTuning,
 } from "./stackedDeck";
-export { OrderedIdCollection, resolvePreservedIndex } from "./item-collection";
 export {
   isStackedDeckInspectEligible,
   STACKED_DECK_ANCHOR_SKIP,
@@ -132,6 +131,7 @@ export type {
   StackedDeckInspectContext,
   StackedDeckModelOptions,
   StackedDeckModelState,
+  StackedDeckReleasePolicy,
   StackedDeckSnapshotInput,
 } from "./stacked-deck-model";
 export { SnapController } from "./controller";

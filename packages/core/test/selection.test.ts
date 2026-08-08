@@ -52,6 +52,59 @@ describe("settled selection", () => {
     expect(selection.pendingTargetIndex).toBe(2);
     expect(selection.update({ phase: "idle", targetIndex: 2, activeIndex: 2 })).toBe(2);
   });
+
+  it("has no selection at all when there are no items", () => {
+    const selection = new SettledSelection(0, 0);
+    expect(selection.settledIndex).toBe(-1);
+    expect(selection.update({ phase: "idle", targetIndex: 0, activeIndex: 0 })).toBeNull();
+    expect(selection.settledIndex).toBe(-1);
+    expect(selection.adopt(0)).toBeNull();
+    expect(selection.adopt(0, { announce: true })).toBeNull();
+    expect(selection.settledIndex).toBe(-1);
+  });
+});
+
+describe("settled selection adoption", () => {
+  it("rebases everything a later snapshot could restore", () => {
+    const selection = new SettledSelection(0, 5);
+    selection.update({ phase: "settling", targetIndex: 1, activeIndex: 0 });
+    expect(selection.pendingTargetIndex).toBe(1);
+
+    expect(selection.adopt(4)).toBeNull();
+    expect(selection.settledIndex).toBe(4);
+    expect(selection.pendingTargetIndex).toBeNull();
+
+    // The settling target was retired too, so a snapshot still naming it is a new commitment
+    // rather than a repeat the machine would ignore.
+    selection.update({ phase: "settling", targetIndex: 1, activeIndex: 4 });
+    expect(selection.pendingTargetIndex).toBe(1);
+    expect(selection.settledIndex).toBe(4);
+
+    // And a drag arriving straight after the adoption never restores the abandoned selection.
+    selection.update({ phase: "dragging", targetIndex: null, activeIndex: 0 });
+    expect(selection.settledIndex).toBe(4);
+  });
+
+  it("returns the announcement a silent adoption withholds and an asked-for one owes", () => {
+    const silent = new SettledSelection(0, 5);
+    expect(silent.adopt(3)).toBeNull();
+    // Having rebased what was last announced, arriving there is not a second change.
+    expect(silent.update({ phase: "idle", targetIndex: 3, activeIndex: 3 })).toBeNull();
+
+    const announced = new SettledSelection(0, 5);
+    expect(announced.adopt(3, { announce: true })).toBe(3);
+    expect(announced.update({ phase: "idle", targetIndex: 3, activeIndex: 3 })).toBeNull();
+    // A genuine change afterwards still speaks.
+    expect(announced.update({ phase: "idle", targetIndex: 4, activeIndex: 4 })).toBe(4);
+  });
+
+  it("clamps an adoption into the collection it is about", () => {
+    const selection = new SettledSelection(0, 3);
+    expect(selection.adopt(9, { announce: true })).toBe(2);
+    expect(selection.settledIndex).toBe(2);
+    expect(selection.adopt(-9, { announce: true })).toBe(0);
+    expect(selection.settledIndex).toBe(0);
+  });
 });
 
 describe("relative command origin", () => {
