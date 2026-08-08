@@ -33,11 +33,7 @@ import {
 } from "@/fixtures/lab-settings";
 import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 
-import {
-  COVERFLOW_GALLERY_TUNING,
-  isCoverflowGalleryEligible,
-  resolveCoverflowGesture,
-} from "./coverflowGallery";
+import { COVERFLOW_GALLERY_TUNING, resolveCoverflowGesture } from "./coverflowGallery";
 import {
   COVERFLOW_MOTION_TUNING,
   COVERFLOW_PAGINATION_TUNING,
@@ -50,6 +46,11 @@ import {
   type CoverflowPaginationIndicatorState,
 } from "./coverflowMotion";
 import { showcaseScreens, type ShowcaseScreenId } from "./showcaseScreens";
+import {
+  isStackedDeckAuthorityStable,
+  isStackedDeckInspectEligible,
+  resolveStackedDeckCommandOrigin,
+} from "./stackedDeckInteraction";
 
 type ScreenId = ShowcaseScreenId;
 
@@ -137,24 +138,27 @@ const initialGeometry = measureGeometry();
 const driver = useBoundedCoverflowDriver(() => pitch.value);
 
 /**
- * One interaction transaction. It opens when the controller takes physical ownership or when a
- * relative command is issued, and closes only once that movement has fully settled. Its origin is
- * the visual top at that moment, which is the only card the user can see themselves acting on.
+ * The interaction currently responsible for the deck, and the envelope its resolution must honour.
+ *
+ * It opens when an input device takes physical ownership or when a relative command is issued, and
+ * the next distinct interaction *replaces* it rather than queueing behind it. It deliberately does
+ * not gate input: a previous interaction's spring tail is not a reason to refuse the next one.
  */
-interface DeckTransaction {
+interface DeckInteraction {
   readonly originIndex: number;
 }
 
-const deckTransaction = shallowRef<DeckTransaction | null>(null);
+const deckInteraction = shallowRef<DeckInteraction | null>(null);
 
 /**
- * Opens a transaction and reports the anchor the controller must measure the drag from. Passing the
- * visual top rather than the nearest anchor keeps the drag envelope, the release cap, and the
- * rendered card on the same origin during a re-grab, so no controller state can run ahead of paint.
+ * Opens an interaction and reports the anchor the controller must measure the drag from. Passing
+ * the interaction-authoritative card rather than the nearest anchor keeps the drag envelope, the
+ * release cap, and the card under the hand on one origin — including during a re-grab made while
+ * the previous spring is still running, where the two would otherwise be a whole card apart.
  */
-function beginDeckTransaction(): ScreenId {
-  const originIndex = visualTopIndex.value;
-  deckTransaction.value = { originIndex };
+function beginDeckInteraction(): ScreenId {
+  const originIndex = authoritativeIndex.value;
+  deckInteraction.value = { originIndex };
   return ids[originIndex]!;
 }
 
@@ -169,48 +173,43 @@ const motion = useCarouselMotion({
   programmaticImpulse: props.settings.programmaticImpulse,
   reducedMotionOverride: reducedOverride,
   releasePolicy: stackedDeckReleaseFromSettings(props.settings),
-  resolveDragOrigin: beginDeckTransaction,
+  resolveDragOrigin: beginDeckInteraction,
   spring: springFromSettings(props.settings),
   track,
   viewport,
 });
 
-/** True while one transaction still owns the deck, from ownership through complete settlement. */
-const deckBusy = computed(
-  () =>
-    deckTransaction.value !== null ||
-    motion.isDragging.value ||
-    motion.pointerOwned.value ||
-    motion.isWheeling.value,
+/**
+ * True only while an input device physically holds the deck. This is the sole reason to refuse a
+ * competing input; residual settlement deliberately is not, because a spring the user can no longer
+ * see must never behave like a cooldown.
+ */
+const deckOwned = computed(
+  () => motion.isDragging.value || motion.pointerOwned.value || motion.isWheeling.value,
 );
 
+/** Mechanical rest. It governs durable selection and announcements, never input admission. */
+const deckAtRest = computed(() => !deckOwned.value && motion.phase.value === "idle");
+
 watch(
-  () =>
-    [
-      motion.phase.value,
-      motion.pointerOwned.value,
-      motion.isDragging.value,
-      motion.isWheeling.value,
-    ] as const,
-  ([phase, pointerOwned, dragging, wheeling]) => {
-    if (phase === "idle" && !pointerOwned && !dragging && !wheeling) {
-      deckTransaction.value = null;
-    }
+  deckAtRest,
+  (atRest) => {
+    if (atRest) deckInteraction.value = null;
   },
   { flush: "sync" },
 );
 
 /**
- * The envelope one transaction may resolve inside. Outside a transaction the projection is free, so
- * the primitive itself keeps its generic multi-anchor capability.
+ * The envelope one interaction may resolve inside. Outside an interaction the projection is free,
+ * so the primitive itself keeps its generic multi-anchor capability.
  */
 const deckTraversalBounds = computed<StackedDeckTraversalBounds | undefined>(() => {
-  const transaction = deckTransaction.value;
-  if (transaction === null) return undefined;
+  const interaction = deckInteraction.value;
+  if (interaction === null) return undefined;
   const lastIndex = ids.length - 1;
   return {
-    minIndex: clamp(transaction.originIndex - STACKED_DECK_MAX_ANCHOR_SKIP, 0, lastIndex),
-    maxIndex: clamp(transaction.originIndex + STACKED_DECK_MAX_ANCHOR_SKIP, 0, lastIndex),
+    minIndex: clamp(interaction.originIndex - STACKED_DECK_MAX_ANCHOR_SKIP, 0, lastIndex),
+    maxIndex: clamp(interaction.originIndex + STACKED_DECK_MAX_ANCHOR_SKIP, 0, lastIndex),
   };
 });
 
@@ -226,24 +225,28 @@ const settledId = computed(() => ids[settledIndex.value] ?? ids[initialIndex]!);
 const deckTraversalOutput = createStackedDeckTraversal(initialIndex, ids.length);
 const deckTraversal = shallowRef<StackedDeckTraversal>(deckTraversalOutput);
 const visualTopIndex = computed(() => deckTraversal.value.visualTopIndex);
-const visualTopId = computed(() => ids[visualTopIndex.value] ?? settledId.value);
-const visualTopScreen = computed(() => screens[visualTopIndex.value] ?? screens[0]!);
+
+/**
+ * The one answer to "which card is current". Every part of the surface that names a card — caption,
+ * counter, pagination, `aria-current`, the re-grab origin, inspection — reads this, so none of them
+ * can invent its own. It equals the visual top except inside a handoff, where it names the card the
+ * eye already reads as current while the outgoing one finishes vacating.
+ */
+const authoritativeIndex = computed(() => deckTraversal.value.authoritativeIndex);
+const authoritativeId = computed(() => ids[authoritativeIndex.value] ?? settledId.value);
+const authoritativeScreen = computed(() => screens[authoritativeIndex.value] ?? screens[0]!);
 
 /** Continuous physical index. It projects motion but never controls the carousel mass. */
 const rawPhysicalIndex = computed(() =>
   pitch.value <= 0 ? 0 : -motion.position.value / pitch.value,
 );
-const physicalIndex = computed(() => {
-  const max = Math.max(0, ids.length - 1);
-  return clamp(rawPhysicalIndex.value, 0, max);
-});
 const speedInCards = computed(() => resolveSpeedInCards(motion.velocity.value, pitch.value));
 
 const paginationDots = computed(() =>
   screens.map((screen, index) => ({
     id: screen.id,
     title: screen.title,
-    current: index === visualTopIndex.value,
+    current: index === authoritativeIndex.value,
   })),
 );
 
@@ -301,25 +304,23 @@ const anchorsById = computed(() => {
   return map;
 });
 
+/**
+ * Inspection follows the same authority the surface displays, not the controller's mechanical rest.
+ * The rail's rest-distance rule does not apply here: the deck's compositor decouples card pose from
+ * controller position, so past the handoff the card is already parked and remaining travel is
+ * invisible.
+ */
 function isCardGalleryEligible(index: number): boolean {
-  const screen = screens[index];
-  if (!screen || galleryOpen.value || motion.isDragging.value || motion.pointerOwned.value) {
-    return false;
-  }
-  return isCoverflowGalleryEligible({
-    activeId: motion.activeId.value,
-    expectedId: screen.id,
-    index,
-    phase: motion.phase.value,
-    physicalIndex: physicalIndex.value,
-    position: motion.position.value,
-    settledIndex: settledIndex.value,
-    targetId: motion.targetId.value,
-    velocity: motion.velocity.value,
-    restDistance: props.settings.restDistance,
-    restSpeed: props.settings.restSpeed,
-    targetPosition: anchorsById.value.get(screen.id),
-  });
+  return (
+    screens[index] !== undefined &&
+    isStackedDeckInspectEligible({
+      dragging: motion.isDragging.value,
+      frame: stackedFrame.value,
+      galleryOpen: galleryOpen.value,
+      index,
+      pointerOwned: motion.pointerOwned.value,
+    })
+  );
 }
 
 interface SlideStyle {
@@ -372,6 +373,13 @@ watchEffect(() => {
   );
   triggerRef(stackedFrame);
 });
+
+/**
+ * Whether the deck currently shows one card or two. Authority names the card the user is acting on
+ * from the segment midpoint; identity only stops being *contestable* once the vacated face is gone.
+ * Actions that open another surface wait for the second, everything else follows the first.
+ */
+const authorityStable = computed(() => isStackedDeckAuthorityStable(stackedFrame.value));
 
 function stackedPose(index: number) {
   return stackedFrame.value.poses[index];
@@ -437,13 +445,15 @@ const paginationStyle = computed(() => ({
   "--_pagination-indicator-scale-x": paginationIndicator.value.scaleX.toFixed(5),
 }));
 
-const keyboardTargetIndex = computed(() => {
-  const semanticId = motion.targetId.value ?? motion.activeId.value ?? settledId.value;
-  const index = ids.indexOf(semanticId);
-  return index < 0 ? settledIndex.value : index;
-});
-const canGoPrevious = computed(() => visualTopIndex.value > 0);
-const canGoNext = computed(() => visualTopIndex.value < ids.length - 1);
+/**
+ * Where the next Previous/Next, arrow key, or adjacent dot steps from. Once the deck is committed to
+ * a destination that destination is the origin, so distinct rapid commands chain one card each.
+ */
+const commandOriginIndex = computed(() =>
+  resolveStackedDeckCommandOrigin(authoritativeIndex.value, pendingTargetIndex.value),
+);
+const canGoPrevious = computed(() => commandOriginIndex.value > 0);
+const canGoNext = computed(() => commandOriginIndex.value < ids.length - 1);
 
 const diagnostics = computed<LabDiagnostics>(() => {
   const geometry = measureGeometry();
@@ -469,12 +479,14 @@ const diagnostics = computed<LabDiagnostics>(() => {
     tuningProfile: stackedTuning.value.profile,
     settledIndex: settledIndex.value,
     visualTopIndex: visualTopIndex.value,
+    authoritativeIndex: authoritativeIndex.value,
+    authorityStable: authorityStable.value,
     ...(focusedPaginationIndex.value === null
       ? {}
       : { focusedPaginationIndex: focusedPaginationIndex.value }),
     indicatorX: paginationIndicator.value.x,
     indicatorScale: paginationIndicator.value.scaleX,
-    keyboardTargetIndex: keyboardTargetIndex.value,
+    keyboardTargetIndex: commandOriginIndex.value,
     maxAnchorSkip: STACKED_DECK_MAX_ANCHOR_SKIP,
     maxAnchorSkipFixed: true,
     releaseVelocityCapActive:
@@ -491,33 +503,32 @@ const diagnostics = computed<LabDiagnostics>(() => {
 });
 
 /**
- * One relative command is one physical throw of the top card. A second command arriving while the
- * first is still settling is ignored rather than retargeted, because retargeting would turn two
- * taps into a single continuous two-card animation.
+ * One relative command is one adjacent card, measured from the destination the deck is committed to.
+ * It re-bases the spring rather than queueing, so distinct rapid commands each resolve their own
+ * card without ever letting a single command travel further than one.
  */
 function requestRelative(direction: -1 | 1): boolean {
-  if (galleryOpen.value || deckBusy.value) return false;
-  const originIndex = visualTopIndex.value;
+  if (galleryOpen.value || deckOwned.value) return false;
+  const originIndex = commandOriginIndex.value;
   const targetIndex = resolveAdjacentCoverflowIndex(originIndex, direction, ids.length);
   const id = ids[targetIndex];
   if (!id || targetIndex === originIndex) return false;
-  deckTransaction.value = { originIndex };
+  deckInteraction.value = { originIndex };
   motion.moveTo(id);
   return true;
 }
 
 /**
  * Absolute navigation names a destination; it is not a throw. An adjacent destination may still use
- * the normal one-card transaction, but anything further synchronizes directly instead of animating
+ * the normal one-card interaction, but anything further synchronizes directly instead of animating
  * through every intermediate card.
  */
 function requestAbsolute(index: number): boolean {
   if (galleryOpen.value) return false;
   const targetIndex = clamp(index, 0, ids.length - 1);
-  const originIndex = visualTopIndex.value;
-  const distance = targetIndex - originIndex;
-  if (distance === 0 && !deckBusy.value) return false;
-  if (!deckBusy.value && Math.abs(distance) === 1) {
+  const distance = targetIndex - commandOriginIndex.value;
+  if (distance === 0 && deckAtRest.value) return false;
+  if (!deckOwned.value && Math.abs(distance) === 1) {
     return requestRelative(distance as -1 | 1);
   }
   return synchronizeCarouselExactly(targetIndex, { announce: true });
@@ -558,11 +569,12 @@ function synchronizeCarouselExactly(index: number, options: { announce?: boolean
     Math.abs(motion.position.value - anchorPosition) <= Number.EPSILON * 16 &&
     Math.abs(motion.velocity.value) <= Number.EPSILON * 16 &&
     settledIndex.value === targetIndex &&
+    authoritativeIndex.value === targetIndex &&
     visualTopIndex.value === targetIndex;
   if (alreadySynchronized) return true;
 
   motion.interrupt();
-  deckTransaction.value = null;
+  deckInteraction.value = null;
   if (options.announce !== true) suppressedCarouselAnnouncementIndex = targetIndex;
   motion.controller.remeasure({
     ...measureGeometry(),
@@ -622,8 +634,11 @@ function releaseMatchesOrigin(gesture: CarouselGesture, event: PointerEvent): bo
 
 function resolveCompletedCarouselGesture(completed: CarouselGesture, releasedOnOrigin: boolean) {
   if (completed.cancelled) {
-    const restoreId = settledId.value;
-    motion.moveTo(restoreId, { initialVelocity: 0 });
+    // A cancelled gesture undoes itself, which means returning to the card it began on. That is the
+    // interaction's own origin, not the settled selection: a gesture that took over a running spring
+    // began on a card the controller had not committed to yet.
+    const restoreIndex = deckInteraction.value?.originIndex ?? settledIndex.value;
+    motion.moveTo(ids[restoreIndex] ?? settledId.value, { initialVelocity: 0 });
     return;
   }
   const horizontalIntent =
@@ -752,12 +767,13 @@ function onCarouselLostPointerCapture(event: PointerEvent) {
 
 /**
  * Wheel ownership follows the coalescing lifecycle, not raw events: the first delta of a burst opens
- * one transaction and every later delta inside it shares the same envelope. Deltas arriving while a
- * previous transaction is still settling are ignored, so a burst can never chain into a second card.
+ * one interaction and every later delta inside it shares the same envelope, so a burst can never
+ * chain into a second card. The burst boundary is the whole gate — once a burst has ended, the next
+ * one begins immediately, interrupting whatever is left of the previous spring.
  */
 function onDeckWheel(event: WheelEvent) {
   if (galleryOpen.value) return;
-  if (!motion.isWheeling.value && deckBusy.value) return;
+  if (!motion.isWheeling.value && deckOwned.value) return;
   motion.onWheel(event);
 }
 
@@ -819,9 +835,9 @@ onBeforeUnmount(() => {
       <div>
         <h3 id="stacked-deck-title">Stacked deck</h3>
         <p class="lede">
-          Drag the top screen to reveal one adjacent screen. Every gesture, flick, or wheel burst is
-          one physical card transaction: it resolves at most one screen away from where it began, no
-          matter how far it travels. Selection commits after settlement.
+          Drag the top screen to reveal one adjacent screen. Every gesture, flick, or wheel burst
+          resolves at most one screen away from where it began, no matter how far it travels — and
+          the next one starts on the card you can already see, without waiting for the spring.
         </p>
       </div>
       <div class="stacked-deck-controls">
@@ -856,12 +872,14 @@ onBeforeUnmount(() => {
       aria-roledescription="carousel"
       class="stacked-deck-viewport"
       data-testid="stacked-deck-viewport"
-      :data-active-id="visualTopId"
+      :data-active-id="authoritativeId"
+      :data-authoritative-index="authoritativeIndex"
+      :data-authority-stable="authorityStable ? 'true' : 'false'"
       :data-card-width="cardWidth"
       :data-gallery-open="galleryOpen ? 'true' : 'false'"
-      :data-interaction-busy="deckBusy ? 'true' : 'false'"
-      :data-interaction-origin-index="deckTransaction?.originIndex ?? -1"
-      :data-keyboard-target-index="keyboardTargetIndex"
+      :data-interaction-origin-index="deckInteraction?.originIndex ?? -1"
+      :data-interaction-owned="deckOwned ? 'true' : 'false'"
+      :data-keyboard-target-index="commandOriginIndex"
       :data-max-anchor-skip="STACKED_DECK_MAX_ANCHOR_SKIP"
       :data-motion-pitch="pitch"
       :data-pending-index="pendingTargetIndex"
@@ -900,8 +918,8 @@ onBeforeUnmount(() => {
         <article
           v-for="(screen, index) in screens"
           :key="screen.id"
-          :aria-current="screen.id === visualTopId ? 'true' : undefined"
-          :aria-hidden="screen.id === visualTopId ? undefined : 'true'"
+          :aria-current="screen.id === authoritativeId ? 'true' : undefined"
+          :aria-hidden="screen.id === authoritativeId ? undefined : 'true'"
           :aria-label="`${screen.title}, ${index + 1} of ${screens.length}`"
           aria-roledescription="slide"
           class="stacked-deck-card"
@@ -909,7 +927,7 @@ onBeforeUnmount(() => {
             `tone-${screen.tone}`,
             `layout-${screen.layout}`,
             {
-              active: screen.id === visualTopId,
+              active: screen.id === authoritativeId,
               inspectable: isCardGalleryEligible(index),
             },
           ]"
@@ -946,19 +964,19 @@ onBeforeUnmount(() => {
 
     <div class="stacked-deck-meta">
       <p>
-        <span class="tabular" data-testid="stacked-deck-counter">{{ visualTopIndex + 1 }}</span>
+        <span class="tabular" data-testid="stacked-deck-counter">{{ authoritativeIndex + 1 }}</span>
         /
         <span class="tabular">{{ screens.length }}</span>
-        <strong data-testid="stacked-deck-caption">{{ visualTopScreen.title }}</strong>
+        <strong data-testid="stacked-deck-caption">{{ authoritativeScreen.title }}</strong>
       </p>
       <button
         ref="inspectControl"
-        :aria-label="`Inspect ${visualTopScreen.title} in screen gallery, ${visualTopIndex + 1} of ${screens.length}`"
+        :aria-label="`Inspect ${authoritativeScreen.title} in screen gallery, ${authoritativeIndex + 1} of ${screens.length}`"
         class="stacked-deck-inspect"
         data-testid="stacked-deck-inspect"
-        :disabled="!isCardGalleryEligible(visualTopIndex)"
+        :disabled="!isCardGalleryEligible(authoritativeIndex)"
         type="button"
-        @click="openGallery(visualTopIndex)"
+        @click="openGallery(authoritativeIndex)"
       >
         <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
           <path

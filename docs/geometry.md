@@ -178,10 +178,10 @@ drags. That is a presentation requirement of this deck, not a limitation of Snap
 projection primitive stays multi-anchor capable when no envelope is passed, and generic carousel and
 Coverflow motion keep the repository default `maxAnchorSkip = 2`.
 
-An interaction transaction opens when the controller takes physical ownership — a pointer drag, or
-the first delta of a coalesced wheel burst — or when a relative command is issued. It closes only
-once that movement has fully settled. Its origin is the visual top at that moment, and the deck
-enforces the envelope at three levels that must agree:
+An interaction opens when the controller takes physical ownership — a pointer drag, or the first
+delta of a coalesced wheel burst — or when a relative command is issued. Its origin is the
+[interaction-authoritative card](#interaction-authority) at that moment, and the deck enforces the
+envelope at three levels that must agree:
 
 - `SnapController.beginDrag({ originId })` measures the temporary drag envelope and the release cap
   from the declared origin instead of the nearest anchor, so a re-grab between the midpoint and the
@@ -197,12 +197,55 @@ the deck's own elasticity at the interior envelope limits, so a two-thousand-pix
 alive and settles back to the adjacent target or the origin. Interior limits stay hard paint
 boundaries for every consumer that does not configure it.
 
-Relative commands are one throw each: a second Previous/Next or Arrow command arriving while the
-first is still settling is ignored rather than retargeted, so two taps can never become one two-card
-animation. Absolute navigation names a destination and is not a throw at all — a non-adjacent
-pagination, `Home`, `End`, or gallery synchronization request selects its destination directly and
-announces it truthfully instead of animating through every intermediate card. Adjacent absolute
-destinations still use the normal one-card transaction.
+An interaction is superseded, never queued. The next distinct one replaces the envelope and re-bases
+the spring from wherever the card currently is, so nothing has to wait for settlement. What bounds
+travel is the per-interaction envelope, not a cooldown between interactions:
+
+```text
+one gesture              → at most one adjacent card
+three distinct gestures  → up to three cards, one each
+```
+
+Relative commands step from the destination the deck is already committed to rather than from what
+is on screen, because Previous/Next name a semantic neighbour rather than throwing the card under
+the hand. That is what lets distinct rapid taps chain one card each while each command stays exactly
+one card from its own origin. Commands issued inside a single event-loop turn — before the deck has
+published an answer to the first — share an origin and coalesce, which is the correct reading of
+input that arrived before the deck could respond.
+
+Absolute navigation names a destination and is not a throw at all — a non-adjacent pagination,
+`Home`, `End`, or gallery synchronization request selects its destination directly and announces it
+truthfully instead of animating through every intermediate card. Adjacent absolute destinations
+still use the normal one-card interaction.
+
+### Interaction authority
+
+Three concepts the deck deliberately keeps apart:
+
+| Concept                                      | Question it answers                  | Changes at                        |
+| -------------------------------------------- | ------------------------------------ | --------------------------------- |
+| Physical ownership                           | Is an input device driving the deck? | pointer/wheel capture and release |
+| Interaction authority (`authoritativeIndex`) | Which card is the current one?       | the segment midpoint              |
+| Visual ownership (`visualTopIndex`)          | Which card holds the surface?        | a complete pitch                  |
+| Mechanical rest (`phase === "idle"`)         | Has the spring stopped?              | `restDistance` / `restSpeed`      |
+
+A spring can still have residual motion long after the card the user is looking at has changed.
+`authoritativeIndex` is the deck's single answer to "which card is current" during that window, and
+it is what the caption, counter, pagination state, `aria-current`, the re-grab origin, the relative
+navigation origin, and inspection all read. It moves to the incoming card once the segment passes
+its midpoint — the point at which that card is nearer the top slot and the compositor begins
+dissolving the outgoing face — and is latched across a small dead band, so a crossing renames the
+deck exactly once and jitter on the boundary cannot rename it at all.
+
+Only two things still wait for mechanical rest, because only they are about durability rather than
+about what is on screen: the settled selection that survives the interaction, and the live-region
+announcement derived from it.
+
+Actions that open another surface additionally wait until the handoff has finished drawing — until
+exactly one content card is rendered. Until then two faces exist and identity is genuinely
+contestable. That threshold is read off the rendered frame rather than re-derived, and by the time
+it is reached the promotion curve has already parked the incoming card within a fraction of a pixel
+of rest, so synchronizing exactly cannot move anything the eye can follow.
 
 ### Direct screen-space mapping
 

@@ -1,6 +1,10 @@
-import { assertFiniteNumber, assertNonNegative, clampToBounds, getTrackBounds } from "./bounds";
-import type { CarouselGeometry } from "./carousel-geometry";
-import type { SemanticId, SnapAnchor } from "./types";
+import { assertFiniteNumber, assertNonNegative, clamp, mix, smoothstep } from "./bounds";
+import {
+  assertUniqueIds,
+  createEqualPitchGeometry,
+  type CarouselGeometry,
+} from "./carousel-geometry";
+import type { SemanticId } from "./types";
 
 export interface CoverflowGeometryOptions<Id extends SemanticId = SemanticId> {
   readonly itemIds: readonly Id[];
@@ -134,33 +138,8 @@ export interface CoverflowPresentation {
   readonly edgeSide: -1 | 0 | 1;
 }
 
-function assertUniqueIds(ids: readonly SemanticId[], name: string): void {
-  const seen = new Set<SemanticId>();
-  for (const id of ids) {
-    if (typeof id !== "string" || id.length === 0) {
-      throw new TypeError(`${name} ids must be non-empty strings`);
-    }
-    if (seen.has(id)) {
-      throw new RangeError(`${name} ids must be unique: ${id}`);
-    }
-    seen.add(id);
-  }
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 function finiteOrZero(value: number): number {
   return Object.is(value, -0) || !Number.isFinite(value) ? 0 : value;
-}
-
-function lerp(from: number, to: number, t: number): number {
-  return from + (to - from) * t;
-}
-
-function smoothstep(t: number): number {
-  return t * t * (3 - 2 * t);
 }
 
 /**
@@ -177,20 +156,8 @@ export function createCoverflowGeometry<Id extends SemanticId>(
   }
   assertUniqueIds(options.itemIds, "item");
 
-  const count = options.itemIds.length;
-  const trackExtent = count === 0 ? 0 : (count - 1) * options.pitch + options.viewportSize;
-  const bounds = getTrackBounds(options.viewportSize, trackExtent);
-  const anchors: SnapAnchor<Id>[] = options.itemIds.map((id, order) => ({
-    id,
-    order,
-    position: clampToBounds(-order * options.pitch, bounds),
-  }));
-
   return {
-    viewportSize: options.viewportSize,
-    trackExtent,
-    bounds,
-    anchors,
+    ...createEqualPitchGeometry(options.itemIds, options.pitch, options.viewportSize),
     pitch: options.pitch,
   };
 }
@@ -361,9 +328,9 @@ export function resolveCoverflowPresentation(
   const projectionRelief = perspective === undefined ? 1 : (perspective - railDepth) / perspective;
   const travelX = direction * railT * sidePeakX * projectionRelief;
   const translateX = finiteOrZero(travelX + direction * stackT * stackStepX);
-  const scale = Math.max(0.01, lerp(1, sideScale, depthEase) + stackT * stackGapScale);
+  const scale = Math.max(0.01, mix(1, sideScale, depthEase) + stackT * stackGapScale);
   // Center stays solid. Only settled side cards dip slightly — never enough to read through.
-  const opacity = !visible ? 0 : magnitude <= flatZone ? 1 : lerp(1, sideOpacity, depthEase);
+  const opacity = !visible ? 0 : magnitude <= flatZone ? 1 : mix(1, sideOpacity, depthEase);
 
   const depth = depthEase + stackT;
   // Paint order reads off the same skewed depth the transform describes, so a flattened consumer

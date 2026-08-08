@@ -1,5 +1,11 @@
 import type { AnimationDriver, AnimationPlaybackControls } from "./animation-driver";
-import { assertFiniteNumber, assertNonNegative, clampToBounds, createBounds } from "./bounds";
+import {
+  assertFiniteNumber,
+  assertNonNegative,
+  clampToBounds,
+  createBounds,
+  normalizeBounds,
+} from "./bounds";
 import { applyElasticity, applyEnvelopeElasticity, validateElasticityOptions } from "./elastic";
 import { tightPreset } from "./presets";
 import {
@@ -477,10 +483,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     );
     const firstPosition = this.#anchors[firstIndex]?.position ?? this.#bounds.min;
     const lastPosition = this.#anchors[lastIndex]?.position ?? this.#bounds.max;
-    const envelope = createBounds(
-      Math.min(firstPosition, lastPosition),
-      Math.max(firstPosition, lastPosition),
-    );
+    const envelope = normalizeBounds(firstPosition, lastPosition);
 
     // The drag envelope is the interaction's own limit: a one-step carousel may reveal either
     // adjacent item, but never pixels from the item beyond it. By default those interior limits are

@@ -530,6 +530,8 @@ export interface MutableStackedDeckPose {
 // @public
 export interface MutableStackedDeckTraversal {
     // (undocumented)
+    authoritativeIndex: number;
+    // (undocumented)
     direction: -1 | 0 | 1;
     // (undocumented)
     localProgress: number;
@@ -893,6 +895,8 @@ export type StackedDeckRole = "top" | "target" | "hidden";
 
 // @public
 export interface StackedDeckTraversal {
+    // (undocumented)
+    readonly authoritativeIndex: number;
     // (undocumented)
     readonly direction: -1 | 0 | 1;
     // (undocumented)

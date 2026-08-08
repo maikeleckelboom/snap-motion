@@ -57,13 +57,18 @@ rotation, drop, shadow, and opacity fall monotonically to a fully dissolved hand
 target rises from the first pile slot to exact top rest geometry. Applications must not reintroduce
 a midpoint arc that returns an outgoing card toward neutral before it loses ownership.
 
-Visible caption, counter, and current-card semantics may follow `visualTopIndex` after each completed
-handoff. Route state, durable selection, inspection eligibility, and announcements remain tied to
-the controller's final settled selection. Inspection stays disabled while motion is unstable, and
-the final item is announced once on idle. Applications must not derive horizontal slots or paint
-order from global relative item index, model a multi-anchor movement as one non-adjacent pair, or
-announce intermediate visual tops. A direct absolute synchronization is the exception that proves the
-rule: it is not a traversal, so it announces its destination immediately and truthfully.
+Visible caption, counter, current-card semantics, the origin a new gesture is measured from, and
+inspection all follow `authoritativeIndex` — the deck's single answer to "which card is current"
+while a spring is still running. It leads `visualTopIndex` through a handoff by design, because the
+exchange finishes visually before the controller reaches the anchor; a surface that waits for
+ownership, or for mechanical rest, disables itself for a spring tail the user cannot see. Route
+state, durable selection, and announcements do remain tied to the controller's final settled
+selection, and inspection additionally waits until the deck renders exactly one content card.
+
+Applications must not derive horizontal slots or paint order from global relative item index, model
+a multi-anchor movement as one non-adjacent pair, or announce intermediate visual tops. A direct
+absolute synchronization is the exception that proves the rule: it is not a traversal, so it
+announces its destination immediately and truthfully.
 
 Import the essential component CSS once:
 

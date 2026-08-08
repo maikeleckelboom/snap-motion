@@ -233,6 +233,8 @@ async function readFrame(page: Page) {
     );
     const targetAttribute = element.getAttribute("data-segment-target-index");
     return {
+      authoritativeIndex: Number(element.dataset.authoritativeIndex),
+      authorityStable: element.dataset.authorityStable === "true",
       caption:
         document.querySelector<HTMLElement>('[data-testid="stacked-deck-caption"]')?.innerText ??
         "",
@@ -241,7 +243,10 @@ async function readFrame(page: Page) {
       counter:
         document.querySelector<HTMLElement>('[data-testid="stacked-deck-counter"]')?.innerText ??
         "",
-      interactionBusy: element.dataset.interactionBusy === "true",
+      inspectEnabled: !document.querySelector<HTMLButtonElement>(
+        '[data-testid="stacked-deck-inspect"]',
+      )?.disabled,
+      interactionOwned: element.dataset.interactionOwned === "true",
       interactionOriginIndex: Number(element.dataset.interactionOriginIndex),
       maxAnchorSkip: Number(element.dataset.maxAnchorSkip),
       direction: Number(element.dataset.segmentDirection),
@@ -300,9 +305,12 @@ function assertLocalSegment(frame: Awaited<ReturnType<typeof readFrame>>) {
 }
 
 interface TraversalSample {
+  readonly authoritativeIndex: number;
+  readonly authorityStable: boolean;
   readonly caption: string;
   readonly controllerPhase: string;
   readonly direction: number;
+  readonly inspectEnabled: boolean;
   readonly interactionOriginIndex: number;
   readonly physicalIndex: number;
   readonly progress: number;
@@ -345,12 +353,17 @@ async function installTraversalTrace(page: Page, maxFrames = 900) {
       if (controllerPhase !== "idle") state.started = true;
       const targetAttribute = element.getAttribute("data-segment-target-index");
       trace.push({
+        authoritativeIndex: Number(element.dataset.authoritativeIndex),
+        authorityStable: element.dataset.authorityStable === "true",
         caption:
           document.querySelector<HTMLElement>('[data-testid="stacked-deck-caption"]')?.innerText ??
           "",
         cardWidth: Number(element.dataset.cardWidth),
         controllerPhase,
         direction: Number(element.dataset.segmentDirection),
+        inspectEnabled: !document.querySelector<HTMLButtonElement>(
+          '[data-testid="stacked-deck-inspect"]',
+        )?.disabled,
         interactionOriginIndex: Number(element.dataset.interactionOriginIndex),
         physicalIndex: Number(element.dataset.physicalIndex),
         progress: Number(element.dataset.segmentProgress),
@@ -421,6 +434,157 @@ function uniqueInOrder(values: readonly number[]) {
   return values.filter((value, index) => index === 0 || value !== values[index - 1]);
 }
 
+/** Resolves on the first rendered frame that names `index`, without waiting for mechanical rest. */
+async function waitForAuthority(page: Page, index: number) {
+  await viewport(page).evaluate(
+    (element, wanted) =>
+      new Promise<void>((resolve, reject) => {
+        let remainingFrames = 300;
+        const tick = () => {
+          if (Number(element.dataset.authoritativeIndex) === wanted) {
+            resolve();
+          } else if ((remainingFrames -= 1) <= 0) {
+            reject(new Error(`the deck never named card ${wanted}`));
+          } else {
+            requestAnimationFrame(tick);
+          }
+        };
+        requestAnimationFrame(tick);
+      }),
+    index,
+  );
+}
+
+const POSE_KEYS = ["translateX", "translateY", "scale", "rotate", "opacity"] as const;
+
+/** Per-frame movement of one pose property across a contiguous run of sampled frames. */
+function stepsIn(samples: readonly TakeoverFrame[], key: string) {
+  return samples
+    .slice(1)
+    .map((frame, index) => Math.abs(frame.pose[key]! - samples[index]!.pose[key]!));
+}
+
+interface TakeoverFrame {
+  readonly authoritativeIndex: number;
+  readonly interactionOriginIndex: number;
+  readonly phase: string;
+  readonly physicalIndex: number;
+  readonly pose: Record<string, number>;
+}
+
+/**
+ * Grabs `index` on the exact rendered frame the deck first names it, sampling every frame around the
+ * takeover inside the page. Measuring across a round trip would let the spring advance unobserved
+ * and hide — or invent — a discontinuity.
+ */
+async function grabOnAuthority(page: Page, index: number, pointerId: number) {
+  return page.evaluate(
+    ({ pointerId: id, wanted }) =>
+      new Promise<{ frames: TakeoverFrame[]; grabbedAt: number }>((resolve, reject) => {
+        const read = (): TakeoverFrame => {
+          const card = document.querySelectorAll<HTMLElement>(".stacked-deck-card")[wanted]!;
+          const element = document.querySelector<HTMLElement>(
+            '[data-testid="stacked-deck-viewport"]',
+          )!;
+          return {
+            authoritativeIndex: Number(element.dataset.authoritativeIndex),
+            interactionOriginIndex: Number(element.dataset.interactionOriginIndex),
+            phase: element.dataset.phase ?? "",
+            physicalIndex: Number(element.dataset.physicalIndex),
+            pose: {
+              translateX: Number(card.dataset.translateX),
+              translateY: Number(card.dataset.translateY),
+              scale: Number(card.dataset.scale),
+              rotate: Number(card.dataset.rotate),
+              opacity: Number(card.dataset.opacity),
+            },
+          };
+        };
+        const stage = document.querySelector<HTMLElement>('[data-testid="stacked-deck-viewport"]')!;
+        const frames: TakeoverFrame[] = [];
+        let grabbedAt = -1;
+        let remainingFrames = 300;
+        const tick = () => {
+          frames.push(read());
+          if (grabbedAt < 0 && frames.at(-1)!.authoritativeIndex === wanted) {
+            grabbedAt = frames.length;
+            const box = stage.getBoundingClientRect();
+            stage.dispatchEvent(
+              new PointerEvent("pointerdown", {
+                bubbles: true,
+                button: 0,
+                buttons: 1,
+                cancelable: true,
+                clientX: box.left + box.width / 2,
+                clientY: box.top + box.height / 2,
+                isPrimary: true,
+                pointerId: id,
+                pointerType: "mouse",
+              }),
+            );
+          } else if (grabbedAt >= 0 && frames.length >= grabbedAt + 3) {
+            resolve({ frames, grabbedAt });
+            return;
+          }
+          if ((remainingFrames -= 1) <= 0) reject(new Error(`the deck never named card ${wanted}`));
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+    { pointerId, wanted: index },
+  );
+}
+
+/** A complete throw with no waiting: press, accelerate, release. */
+async function flick(page: Page, direction: -1 | 1, pitch: number) {
+  const origin = await beginPointer(viewport(page));
+  const travel = -direction * pitch * 0.45;
+  await movePointer(page, origin, travel * 0.4, 8);
+  await movePointer(page, origin, travel, 16);
+  await finishPointer(page, origin, travel, 24, "pointerup");
+}
+
+/**
+ * Splits a trace into the interactions that produced it. `data-interaction-origin-index` is written
+ * when an interaction takes ownership, so a change of origin is exactly a change of transaction and
+ * every sample can be attributed to the gesture, command, or burst responsible for it.
+ */
+function interactionsIn(trace: readonly TraversalSample[]) {
+  const interactions: { originIndex: number; samples: TraversalSample[] }[] = [];
+  for (const sample of trace) {
+    if (sample.interactionOriginIndex < 0) continue;
+    const current = interactions.at(-1);
+    if (current?.originIndex === sample.interactionOriginIndex) current.samples.push(sample);
+    else interactions.push({ originIndex: sample.interactionOriginIndex, samples: [sample] });
+  }
+  return interactions;
+}
+
+/**
+ * The primary regression contract. Each interaction is bounded to one adjacent card from its own
+ * origin — projection, physical mass, authority, and rendered faces alike — while the sequence as a
+ * whole is free to travel as far as it has distinct interactions.
+ */
+function expectBoundedInteractions(trace: readonly TraversalSample[], origins: readonly number[]) {
+  const interactions = interactionsIn(trace);
+  expect(interactions.map((interaction) => interaction.originIndex)).toEqual(origins);
+  for (const { originIndex, samples } of interactions) {
+    for (const sample of samples) {
+      expect(Math.abs(sample.visualTopIndex - originIndex)).toBeLessThanOrEqual(1);
+      expect(Math.abs(sample.authoritativeIndex - originIndex)).toBeLessThanOrEqual(1);
+      // Bounded overdrag is allowed; a second pitch of physical travel is not.
+      expect(Math.abs(sample.physicalIndex - originIndex)).toBeLessThan(1.5);
+      if (sample.segmentTargetIndex !== null) {
+        expect(Math.abs(sample.segmentTargetIndex - originIndex)).toBeLessThanOrEqual(1);
+      }
+      for (const [index, pose] of sample.poses.entries()) {
+        if (pose.visible) expect(Math.abs(index - originIndex)).toBeLessThanOrEqual(1);
+      }
+    }
+  }
+  return interactions;
+}
+
 /**
  * The stacked deck's interaction contract. One transaction may resolve at most one adjacent item
  * from where it began, and the constraint operates on the physical mass, not just on the projection:
@@ -432,6 +596,7 @@ function expectOneCardEnvelope(trace: readonly TraversalSample[], originIndex: n
   for (const sample of active) {
     expect(sample.visualTopIndex).toBeGreaterThanOrEqual(originIndex - 1);
     expect(sample.visualTopIndex).toBeLessThanOrEqual(originIndex + 1);
+    expect(Math.abs(sample.authoritativeIndex - originIndex)).toBeLessThanOrEqual(1);
     // Bounded overdrag is allowed; a second pitch of physical travel is not.
     expect(sample.physicalIndex).toBeGreaterThan(originIndex - 1.5);
     expect(sample.physicalIndex).toBeLessThan(originIndex + 1.5);
@@ -1110,16 +1275,10 @@ test("a re-grab is a new gesture with its own envelope and no surviving velocity
 }) => {
   const stage = viewport(page);
 
-  // Throw toward "team", then re-grab before the handoff boundary and drag hard the same way.
+  // Release short of the segment midpoint, so the deck settles back to "map" and authority never
+  // leaves it. Re-grabbing there is a fresh gesture from the same card.
   const thrown = await beginHeldTraversal(page, 2);
-  await holdPhysicalIndex(page, thrown, 2.35);
-  await finishPointer(
-    page,
-    thrown.origin,
-    -thrown.pitch * 0.35,
-    thrown.elapsedMs + 20,
-    "pointerup",
-  );
+  await releaseHeldAtRest(page, thrown, 2.35);
   const regrab: HeldTraversal = {
     elapsedMs: 0,
     origin: await beginPointer(stage),
@@ -1171,6 +1330,258 @@ test("a re-grab is a new gesture with its own envelope and no surviving velocity
     "pointerup",
   );
   await expectCarouselAt(stage, "settings");
+});
+
+test("fast successive gestures each resolve one card with no settlement cooldown", async ({
+  page,
+}) => {
+  const stage = viewport(page);
+  await pagination(page).first().click();
+  await expectCarouselAt(stage, "templates");
+  const pitch = await motionPitch(stage);
+
+  await installTraversalTrace(page, 1_800);
+  for (let gesture = 0; gesture < 3; gesture += 1) {
+    await flick(page, 1, pitch);
+    // The next gesture starts the moment the deck names the new card, which is a small fraction of
+    // the way into the previous spring. Waiting on that rather than on a clock keeps the test
+    // measuring the contract instead of one engine's frame budget.
+    if (gesture < 2) await waitForAuthority(page, gesture + 1);
+  }
+  const trace = await readTraversalTrace(page);
+
+  // Three gestures, three origins, three cards — and no interaction that reached beyond its own.
+  const interactions = expectBoundedInteractions(trace, [0, 1, 2]);
+  expect(interactions).toHaveLength(3);
+  expect(uniqueInOrder(trace.map((sample) => sample.visualTopIndex))).toEqual([0, 1, 2, 3]);
+  // Each later gesture began while the previous one was still settling: never at rest.
+  for (const interaction of interactions.slice(1)) {
+    expect(interaction.samples[0]!.controllerPhase).not.toBe("idle");
+  }
+  // No card beyond the reachable run was ever projected.
+  expect(trace.every((sample) => !sample.poses[4]!.visible)).toBe(true);
+  await expectCarouselAt(stage, "team");
+  expect(new Set(trace.map((sample) => JSON.stringify(sample.pile))).size).toBe(1);
+});
+
+test("a reverse gesture during settlement takes the card back immediately", async ({ page }) => {
+  const stage = viewport(page);
+  const pitch = await motionPitch(stage);
+
+  await installTraversalTrace(page, 1_800);
+  await flick(page, 1, pitch);
+  await waitForAuthority(page, 3);
+  await flick(page, -1, pitch);
+  await waitForAuthority(page, 2);
+  await flick(page, 1, pitch);
+  const trace = await readTraversalTrace(page);
+
+  // Each reversal is answered immediately. Every gesture's origin is the card the deck named when
+  // that gesture began, so the origin sequence is itself the proof that authority went 2 → 3 → 2
+  // while the physical mass never completed a single pitch.
+  const interactions = expectBoundedInteractions(trace, [2, 3, 2]);
+  expect(interactions).toHaveLength(3);
+  for (const interaction of interactions.slice(1)) {
+    expect(interaction.samples[0]!.controllerPhase).not.toBe("idle");
+  }
+  expect(trace.every((sample) => sample.visualTopIndex === 2 || sample.visualTopIndex === 3)).toBe(
+    true,
+  );
+  await expectCarouselAt(stage, "team");
+});
+
+test("a re-grab during settlement rebases without a jump and cannot inherit momentum", async ({
+  page,
+}) => {
+  const stage = viewport(page);
+  const pitch = await motionPitch(stage);
+
+  // Throw hard toward "team", then grab the card back on the frame the deck first names it. The
+  // sampler is armed before the throw so the grab lands on that frame and not a round trip later.
+  const pointerId = nextPointerId++;
+  const takeover = grabOnAuthority(page, 3, pointerId);
+  await flick(page, 1, pitch);
+  const { frames, grabbedAt } = await takeover;
+  const settling = frames.slice(0, grabbedAt).filter((frame) => frame.phase === "settling");
+  const grabbed = frames.slice(grabbedAt);
+  expect(settling.length).toBeGreaterThan(2);
+  expect(settling.at(-1)).toMatchObject({ authoritativeIndex: 3, phase: "settling" });
+  // Ownership transfers on the frame of the grab: origin, envelope, and phase are all fresh.
+  expect(grabbed[0]).toMatchObject({
+    authoritativeIndex: 3,
+    interactionOriginIndex: 3,
+    phase: "dragging",
+  });
+
+  // Nothing teleported: no property of the grabbed card moves further across the takeover than it
+  // was already moving under free settlement, and the spring stops driving it underneath the hand.
+  for (const key of POSE_KEYS) {
+    const freeStep = Math.max(...stepsIn(settling, key), 0);
+    const takeoverStep = Math.abs(grabbed[0]!.pose[key]! - settling.at(-1)!.pose[key]!);
+    expect(takeoverStep).toBeLessThanOrEqual(freeStep + 1e-9);
+    expect(Math.max(...stepsIn(grabbed, key), 0)).toBe(0);
+  }
+  expect(grabbed.every((frame) => frame.physicalIndex === grabbed[0]!.physicalIndex)).toBe(true);
+
+  const regrab: HeldTraversal = {
+    elapsedMs: 0,
+    origin: await stage.evaluate((element, id) => {
+      const box = element.getBoundingClientRect();
+      return {
+        pointerId: id,
+        pointerType: "mouse" as const,
+        timestamp: performance.now(),
+        x: box.left + box.width / 2,
+        y: box.top + box.height / 2,
+      };
+    }, pointerId),
+    pitch,
+    startIndex: 3,
+  };
+
+  // The fresh envelope is [2, 4] around the card the user grabbed, not [1, 3] around the old one.
+  const forward = await holdPointerAt(page, regrab, 9);
+  expect(forward).toMatchObject({ visualTopIndex: 4, segmentTargetIndex: null });
+  expect(forward.physicalIndex).toBeLessThan(4.5);
+  // No interrupted velocity survived: the same gesture crosses back to the opposite adjacent card.
+  const backward = await holdPointerAt(page, regrab, -4);
+  expect(backward).toMatchObject({ visualTopIndex: 2, segmentTargetIndex: null });
+  expect(backward.physicalIndex).toBeGreaterThan(1.5);
+  // Release without a fresh throw, so the gesture resolves the adjacent card it is resting on.
+  await finishPointer(page, regrab.origin, regrab.pitch * 7, regrab.elapsedMs + 400, "pointerup");
+  await expectCarouselAt(stage, "map");
+});
+
+test("inspection follows the authoritative card instead of waiting for mechanical rest", async ({
+  page,
+}) => {
+  const stage = viewport(page);
+  const inspect = page.getByTestId("stacked-deck-inspect");
+  const pitch = await motionPitch(stage);
+
+  await installTraversalTrace(page, 1_800);
+  await flick(page, 1, pitch);
+  const trace = await readTraversalTrace(page);
+
+  const activeAt = trace.findIndex((sample) => sample.controllerPhase !== "idle");
+  const enabledAt = trace.findIndex(
+    (sample) => sample.inspectEnabled && sample.controllerPhase === "settling",
+  );
+  const restAt = trace.findIndex(
+    (sample, index) => index > activeAt && sample.controllerPhase === "idle",
+  );
+  expect(activeAt).toBeGreaterThanOrEqual(0);
+  expect(enabledAt).toBeGreaterThan(activeAt);
+  expect(restAt).toBeGreaterThan(enabledAt);
+  // Availability arrives while the controller is still measurably short of the anchor and the
+  // durable selection has not committed — not as a rounding error on the last frame.
+  expect(trace[enabledAt]!).toMatchObject({
+    authoritativeIndex: 3,
+    caption: TITLES[3],
+    settledIndex: 2,
+  });
+  expect(trace[enabledAt]!.physicalIndex).toBeLessThan(2.99);
+  // It never enables and then disables again on the way to rest.
+  expect(trace.slice(enabledAt).every((sample) => sample.inspectEnabled)).toBe(true);
+  // It is never available while a second face is on screen, and never before the handoff completes.
+  expect(trace.every((sample) => !sample.inspectEnabled || sample.authorityStable)).toBe(true);
+  expect(trace.slice(activeAt, enabledAt).every((sample) => !sample.inspectEnabled)).toBe(true);
+  await expectCarouselAt(stage, "team");
+
+  // Opening during residual settlement synchronizes exactly, announces nothing wrong, and returns
+  // focus to the control it came from.
+  await pagination(page).nth(2).click();
+  await expectCarouselAt(stage, "map");
+  await flick(page, 1, pitch);
+  const openedDuring = await stage.evaluate(
+    (element) =>
+      new Promise<{ caption: string; phase: string; position: number }>((resolve) => {
+        const control = document.querySelector<HTMLButtonElement>(
+          '[data-testid="stacked-deck-inspect"]',
+        )!;
+        const tick = () => {
+          if (control.disabled) {
+            requestAnimationFrame(tick);
+            return;
+          }
+          const state = {
+            caption:
+              document.querySelector<HTMLElement>('[data-testid="stacked-deck-caption"]')
+                ?.innerText ?? "",
+            phase: element.dataset.phase ?? "",
+            position: Number(element.dataset.position),
+          };
+          control.click();
+          resolve(state);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+  expect(openedDuring.phase).toBe("settling");
+  expect(openedDuring.caption).toBe(TITLES[3]);
+  const gallery = page.getByTestId("snap-motion-media-gallery");
+  await expect(gallery).toBeVisible();
+  await expect(gallery).toHaveAttribute("data-gallery-index", "3");
+  await expect(page.getByTestId("snap-motion-media-gallery-title")).toHaveText(TITLES[3]);
+  await expect(page.getByTestId("snap-motion-media-gallery-close")).toBeFocused();
+  await page.getByTestId("snap-motion-media-gallery-close").click();
+  await expect(inspect).toBeFocused();
+  // Synchronization landed on the anchor it named, with no leftover motion or disagreement.
+  const after = await readFrame(page);
+  expect(after).toMatchObject({
+    authoritativeIndex: 3,
+    controllerPhase: "idle",
+    settledIndex: 3,
+    visualTopIndex: 3,
+  });
+  await expectCarouselAt(stage, "team");
+});
+
+test("distinct rapid commands, keys, and wheel bursts each resolve one card", async ({ page }) => {
+  const stage = viewport(page);
+  await pagination(page).first().click();
+  await expectCarouselAt(stage, "templates");
+
+  // Distinct clicks, each in its own task and each far inside the previous spring.
+  await installTraversalTrace(page, 1_800);
+  for (let click = 0; click < 3; click += 1) {
+    await page.getByTestId("stacked-deck-next").click();
+    if (click < 2) await page.waitForTimeout(50);
+  }
+  const clicked = await readTraversalTrace(page);
+  expect(expectBoundedInteractions(clicked, [0, 1, 2])).toHaveLength(3);
+  await expectCarouselAt(stage, "team");
+  await expect(page.getByTestId("stacked-deck-status")).toHaveText("Team & rollen, 4 of 5");
+
+  // Arrow keys obey the identical contract.
+  await stage.focus();
+  await installTraversalTrace(page, 1_800);
+  for (let press = 0; press < 2; press += 1) {
+    await page.keyboard.press("ArrowLeft");
+    if (press < 1) await page.waitForTimeout(50);
+  }
+  const keyed = await readTraversalTrace(page);
+  expect(expectBoundedInteractions(keyed, [3, 2])).toHaveLength(2);
+  await expectCarouselAt(stage, "project");
+
+  // A distinct later burst interrupts the previous spring; both remain one card each.
+  const pitch = await motionPitch(stage);
+  await installTraversalTrace(page, 1_800);
+  await stage.evaluate(async (element, deltaX) => {
+    const burst = async () => {
+      for (let step = 0; step < 4; step += 1) {
+        element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX }));
+        await new Promise((resolve) => setTimeout(resolve, 16));
+      }
+      // Longer than the coalescing window, shorter than the spring: a genuinely new burst.
+      await new Promise((resolve) => setTimeout(resolve, 130));
+    };
+    await burst();
+    await burst();
+  }, pitch * 0.3);
+  const wheeled = await readTraversalTrace(page);
+  expect(expectBoundedInteractions(wheeled, [1, 2])).toHaveLength(2);
+  await expectCarouselAt(stage, "team");
 });
 
 test("cancel, lost capture, edge elasticity, and reduced motion restore coherently", async ({
@@ -1249,6 +1660,47 @@ test("cancel, lost capture, edge elasticity, and reduced motion restore coherent
     ownedPointerId,
   );
   await page.mouse.up();
+  await expectCarouselAt(stage, "map");
+
+  // A gesture that took over a running spring still cancels back to its own settled selection, and
+  // leaves no stale interaction behind.
+  const takeoverPitch = await motionPitch(stage);
+  await flick(page, 1, takeoverPitch);
+  await waitForAuthority(page, 3);
+  const cancelled: HeldTraversal = {
+    elapsedMs: 0,
+    origin: await beginPointer(stage),
+    pitch: takeoverPitch,
+    startIndex: 3,
+  };
+  await holdPointerAt(page, cancelled, 3.6);
+  await finishPointer(
+    page,
+    cancelled.origin,
+    -cancelled.pitch * 0.6,
+    cancelled.elapsedMs + 100,
+    "pointercancel",
+  );
+  await expectCarouselAt(stage, "team");
+  expect(await readFrame(page)).toMatchObject({
+    authoritativeIndex: 3,
+    interactionOriginIndex: -1,
+    interactionOwned: false,
+    settledIndex: 3,
+    visualTopIndex: 3,
+  });
+
+  // The same for capture loss taken over a running spring.
+  await flick(page, -1, takeoverPitch);
+  await waitForAuthority(page, 2);
+  const lost: HeldTraversal = {
+    elapsedMs: 0,
+    origin: await beginPointer(stage),
+    pitch: takeoverPitch,
+    startIndex: 2,
+  };
+  await holdPointerAt(page, lost, 2.5);
+  await finishPointer(page, lost.origin, -lost.pitch * 0.5, lost.elapsedMs + 100, "pointercancel");
   await expectCarouselAt(stage, "map");
 
   await page.getByTestId("reduced-motion-mode").selectOption("reduce");
@@ -1358,28 +1810,109 @@ test("responsive bleed surface avoids internal clipping and page overflow", asyn
   }
 });
 
-test("visual metadata follows completed handoffs while settlement announces once", async ({
-  page,
-}) => {
+test("named metadata follows visual authority, ownership follows the anchor", async ({ page }) => {
   const stage = viewport(page);
   const held = await beginHeldTraversal(page, 2);
   const midway = await holdPhysicalIndex(page, held, 2.4);
-  expect(midway).toMatchObject({ caption: TITLES[2], counter: "3", visualTopIndex: 2 });
+  expect(midway).toMatchObject({
+    authoritativeIndex: 2,
+    authorityStable: false,
+    caption: TITLES[2],
+    counter: "3",
+    visualTopIndex: 2,
+  });
   expect(topPose(midway)).toMatchObject({ id: "map", opacity: 1, role: "top" });
-  const before = await holdPhysicalIndex(page, held, 2.92);
-  expect(before).toMatchObject({ caption: TITLES[2], counter: "3", visualTopIndex: 2 });
-  // Visual authority already belongs to the target while the counter still names the owner.
-  expect(topPose(before)).toMatchObject({ id: "map", opacity: 0, role: "top", visible: false });
-  expect(dominance(before).targetVisibility).toBeGreaterThan(0.95);
+
+  // Just short of the midpoint the outgoing card still occupies the slot, so it keeps its name.
+  const contested = await holdPhysicalIndex(page, held, 2.52);
+  expect(contested).toMatchObject({
+    authoritativeIndex: 2,
+    authorityStable: false,
+    caption: TITLES[2],
+    counter: "3",
+    visualTopIndex: 2,
+  });
+
+  // Past it the incoming card is the nearer one, so every name follows it immediately even though
+  // ownership, settled selection, and the anchor itself are all most of a pitch behind.
+  const migrated = await holdPhysicalIndex(page, held, 2.56);
+  expect(migrated).toMatchObject({
+    authoritativeIndex: 3,
+    caption: TITLES[3],
+    counter: "4",
+    settledIndex: 2,
+    visualTopIndex: 2,
+  });
+  expect(
+    await page.locator(".stacked-deck-card[aria-current='true']").getAttribute("data-screen-id"),
+  ).toBe("team");
+  // Both faces are still drawn, so identity is nameable but not yet uncontested.
+  expect(migrated.authorityStable).toBe(false);
+  expect(topPose(migrated).visible).toBe(true);
+
+  // Fully dissolved: one card on screen, already parked within a fraction of a pixel of rest. That
+  // is the point at which actions opening another surface become safe, not mechanical rest.
+  const uncontested = await holdPhysicalIndex(page, held, 2.95);
+  expect(uncontested).toMatchObject({
+    authoritativeIndex: 3,
+    authorityStable: true,
+    caption: TITLES[3],
+    settledIndex: 2,
+    visualTopIndex: 2,
+  });
+  expect(topPose(uncontested)).toMatchObject({
+    id: "map",
+    opacity: 0,
+    role: "top",
+    visible: false,
+  });
+  expect(dominance(uncontested).targetVisibility).toBeGreaterThan(0.95);
+  const promoted = uncontested.poses.find((pose) => pose.role === "target")!;
+  expect(Math.abs(promoted.translateX)).toBeLessThan(1);
+  expect(promoted.scale).toBeGreaterThan(0.999);
+  // The pointer still holds the deck, so inspection stays unavailable for that reason alone.
   await expect(page.getByTestId("stacked-deck-inspect")).toBeDisabled();
+
   const after = await holdPhysicalIndex(page, held, 3);
-  expect(after).toMatchObject({ caption: TITLES[3], counter: "4", visualTopIndex: 3 });
+  expect(after).toMatchObject({
+    authoritativeIndex: 3,
+    caption: TITLES[3],
+    counter: "4",
+    visualTopIndex: 3,
+  });
   expect(after.settledIndex).toBe(2);
   await expect(page.getByTestId("stacked-deck-status")).toBeEmpty();
   await releaseHeldAtRest(page, held, 3);
   await expectCarouselAt(stage, "team");
   await expect(page.getByTestId("stacked-deck-status")).toHaveText("Team & rollen, 4 of 5");
   await expect(page.getByTestId("stacked-deck-inspect")).toBeEnabled();
+});
+
+test("authority holds through jitter around the handoff instead of oscillating", async ({
+  page,
+}) => {
+  const held = await beginHeldTraversal(page, 2);
+  // Below the band, at it, and above it: identity changes exactly where it is meant to.
+  expect((await holdPhysicalIndex(page, held, 2.45)).authoritativeIndex).toBe(2);
+  expect((await holdPhysicalIndex(page, held, 2.52)).authoritativeIndex).toBe(2);
+  expect((await holdPhysicalIndex(page, held, 2.56)).authoritativeIndex).toBe(3);
+  // Having crossed, the incoming card keeps identity across the dead band and everything past it,
+  // so a hand shaking on the boundary cannot rename the deck.
+  for (const physicalIndex of [2.5, 2.48, 2.7, 2.47, 2.95, 2.52, 2.9]) {
+    const frame = await holdPhysicalIndex(page, held, physicalIndex);
+    expect(frame).toMatchObject({ authoritativeIndex: 3, caption: TITLES[3], visualTopIndex: 2 });
+  }
+  // Retracing clear of the band hands identity back, once, and it stays back through the same band.
+  expect((await holdPhysicalIndex(page, held, 2.44)).authoritativeIndex).toBe(2);
+  expect((await holdPhysicalIndex(page, held, 2.5)).authoritativeIndex).toBe(2);
+  expect((await holdPhysicalIndex(page, held, 2.53)).authoritativeIndex).toBe(2);
+  expect((await holdPhysicalIndex(page, held, 2.6)).authoritativeIndex).toBe(3);
+  // Reversing through neutral into the opposite segment cannot leave authority stranded.
+  expect((await holdPhysicalIndex(page, held, 2)).authoritativeIndex).toBe(2);
+  expect((await holdPhysicalIndex(page, held, 1.5)).authoritativeIndex).toBe(2);
+  expect((await holdPhysicalIndex(page, held, 1.4)).authoritativeIndex).toBe(1);
+  await finishPointer(page, held.origin, held.pitch * 0.6, held.elapsedMs + 400, "pointercancel");
+  await expectCarouselAt(viewport(page), "map");
 });
 
 test("inspection, visual semantics, and accessibility expose one authoritative card", async ({

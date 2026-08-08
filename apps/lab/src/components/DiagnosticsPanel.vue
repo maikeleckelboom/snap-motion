@@ -89,6 +89,13 @@ function scalar(value: number) {
         <dt>Visual top</dt>
         <dd data-testid="visual-top-index">{{ diagnostics.visualTopIndex }}</dd>
       </div>
+      <div v-if="diagnostics.authoritativeIndex !== undefined">
+        <dt>Authoritative card</dt>
+        <dd data-testid="authoritative-index">
+          {{ diagnostics.authoritativeIndex
+          }}{{ diagnostics.authorityStable === false ? " (in handoff)" : "" }}
+        </dd>
+      </div>
       <div>
         <dt>Target</dt>
         <dd data-testid="target-id">{{ diagnostics.targetId ?? "—" }}</dd>

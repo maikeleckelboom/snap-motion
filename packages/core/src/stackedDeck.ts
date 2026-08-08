@@ -1,4 +1,4 @@
-import { assertFiniteNumber, assertNonNegative } from "./bounds";
+import { assertFiniteNumber, assertNonNegative, clamp, mix, smoothstep } from "./bounds";
 import type { ControllerPhase } from "./types";
 
 export type StackedDeckProfile = "compact" | "medium" | "wide";
@@ -8,10 +8,15 @@ export type StackedDeckTraversalPhase = "idle" | "neutral" | "traversing" | "ela
 /**
  * Presentation state for the one-anchor segment containing the controller's continuous position.
  * Selection remains controller-owned; visualTopIndex advances only after a complete local pitch.
+ *
+ * `visualTopIndex` names the card that still owns the surface, and `authoritativeIndex` names the
+ * card the eye already reads as current. They differ only inside the handoff, because the exchange
+ * finishes dissolving the outgoing face before the controller reaches the anchor.
  */
 export interface StackedDeckTraversal {
   readonly settledIndex: number;
   readonly visualTopIndex: number;
+  readonly authoritativeIndex: number;
   readonly segmentOriginIndex: number;
   readonly segmentTargetIndex: number | null;
   readonly direction: -1 | 0 | 1;
@@ -24,6 +29,7 @@ export interface StackedDeckTraversal {
 export interface MutableStackedDeckTraversal {
   settledIndex: number;
   visualTopIndex: number;
+  authoritativeIndex: number;
   segmentOriginIndex: number;
   segmentTargetIndex: number | null;
   direction: -1 | 0 | 1;
@@ -158,6 +164,18 @@ const OUTGOING_OPACITY_HOLD = 0.5;
  * a skipped-frame crossing continuous: the fastest permitted travel still samples inside the tail.
  */
 const OUTGOING_OPACITY_END = 0.92;
+/**
+ * Local progress at which the incoming card is nearer the top slot than the card vacating it, and
+ * so becomes the one a user would name and act on. `OUTGOING_OPACITY_HOLD` is the same instant read
+ * from the other side: the compositor holds the outgoing face at full strength exactly while it
+ * still occupies the slot, and begins removing it once it does not.
+ */
+const AUTHORITY_MIDPOINT = OUTGOING_OPACITY_HOLD;
+/**
+ * Dead band around that midpoint. Identity then changes once per crossing rather than once per
+ * jitter, so a hand shaking on the boundary cannot rename the deck.
+ */
+const AUTHORITY_HYSTERESIS = 0.04;
 const TRAVERSAL_EPSILON = 0.000_001;
 const TUNING_NUMBER_KEYS = [
   "cardWidth",
@@ -199,19 +217,6 @@ const PROFILE_VALUES: Record<StackedDeckProfile, ProfileValues> = {
     topDropYRatio: 0.068,
   },
 };
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value));
-}
-
-function mix(from: number, to: number, progress: number): number {
-  return from + (to - from) * progress;
-}
-
-function smoothstep(value: number): number {
-  const clamped = clamp(value, 0, 1);
-  return clamped * clamped * (3 - 2 * clamped);
-}
 
 /**
  * Outgoing subordination. Flat at the segment start so early direct manipulation stays dominant,
@@ -328,6 +333,7 @@ export function createStackedDeckTraversal(
   return {
     settledIndex: initialIndex,
     visualTopIndex: initialIndex,
+    authoritativeIndex: initialIndex,
     segmentOriginIndex: initialIndex,
     segmentTargetIndex: null,
     direction: 0,
@@ -343,6 +349,7 @@ function resetTraversal(
 ): MutableStackedDeckTraversal {
   output.settledIndex = settledIndex;
   output.visualTopIndex = settledIndex;
+  output.authoritativeIndex = settledIndex;
   output.segmentOriginIndex = settledIndex;
   output.segmentTargetIndex = null;
   output.direction = 0;
@@ -350,6 +357,26 @@ function resetTraversal(
   output.localProgress = 0;
   output.phase = "idle";
   return output;
+}
+
+/**
+ * Which card a new interaction, or a control that names "the current card", must act on.
+ *
+ * Ownership of the surface still changes at the anchor, which is a whole pitch of travel later. This
+ * is deliberately not that: it is the card the eye reads as current, resolved as soon as the segment
+ * passes its midpoint and latched across the dead band so a crossing renames the deck exactly once.
+ */
+function resolveAuthority(
+  previousAuthority: number,
+  visualTopIndex: number,
+  segmentTargetIndex: number | null,
+  localProgress: number,
+): number {
+  if (segmentTargetIndex === null) return visualTopIndex;
+  const held = previousAuthority === segmentTargetIndex ? -1 : 1;
+  return localProgress >= AUTHORITY_MIDPOINT + held * AUTHORITY_HYSTERESIS
+    ? segmentTargetIndex
+    : visualTopIndex;
 }
 
 /**
@@ -405,13 +432,21 @@ export function resolveStackedDeckTraversal(
   const segmentTargetIndex =
     direction !== 0 && candidate >= minIndex && candidate <= maxIndex ? candidate : null;
 
+  const localProgress = clamp(Math.abs(signedLocalDistance), 0, 1);
+
   output.settledIndex = options.settledIndex;
   output.visualTopIndex = visualTopIndex;
+  output.authoritativeIndex = resolveAuthority(
+    output.authoritativeIndex,
+    visualTopIndex,
+    segmentTargetIndex,
+    localProgress,
+  );
   output.segmentOriginIndex = visualTopIndex;
   output.segmentTargetIndex = segmentTargetIndex;
   output.direction = direction;
   output.signedLocalDistance = signedLocalDistance;
-  output.localProgress = clamp(Math.abs(signedLocalDistance), 0, 1);
+  output.localProgress = localProgress;
   output.phase =
     direction === 0 ? "neutral" : segmentTargetIndex === null ? "elastic" : "traversing";
   return output;
@@ -442,6 +477,14 @@ function validateTraversal(traversal: StackedDeckTraversal, itemCount: number): 
   assertIndex(traversal.segmentOriginIndex, itemCount, "segmentOriginIndex");
   if (traversal.segmentOriginIndex !== traversal.visualTopIndex) {
     throw new RangeError("segment origin must be the visual top");
+  }
+  // Authority is bound to two already-validated indices, which is also the whole invariant: the
+  // current card is either the one that still owns the surface or the one taking it.
+  if (
+    traversal.authoritativeIndex !== traversal.visualTopIndex &&
+    traversal.authoritativeIndex !== traversal.segmentTargetIndex
+  ) {
+    throw new RangeError("authority must name a card of the active segment");
   }
   if (traversal.localProgress < 0 || traversal.localProgress > 1) {
     throw new RangeError("invalid local progress");
@@ -480,32 +523,11 @@ function validateTraversal(traversal: StackedDeckTraversal, itemCount: number): 
   }
 }
 
-function createPose(): MutableStackedDeckPose {
-  return {
-    translateX: 0,
-    translateY: 0,
-    scale: 1,
-    rotate: 0,
-    opacity: 0,
-    layer: 0,
-    role: "hidden",
-    shadowStrength: 0,
-    visible: false,
-    interactive: false,
-  };
-}
-
-/** Creates reusable storage for {@link resolveStackedDeckFrame}. */
-export function createStackedDeckFrame(itemCount: number): MutableStackedDeckFrame {
-  assertItemCount(itemCount);
-  const initialIndex = itemCount === 0 ? -1 : 0;
-  return {
-    ...createStackedDeckTraversal(initialIndex, itemCount),
-    poses: Array.from({ length: itemCount }, createPose),
-  };
-}
-
-function resetPose(pose: MutableStackedDeckPose): void {
+/**
+ * The neutral pose: hidden, at exact rest geometry. It is the single definition of "not rendered",
+ * so both frame storage and every per-frame reset start from the same numbers.
+ */
+function resetPose(pose: MutableStackedDeckPose): MutableStackedDeckPose {
   pose.translateX = 0;
   pose.translateY = 0;
   pose.scale = 1;
@@ -516,13 +538,24 @@ function resetPose(pose: MutableStackedDeckPose): void {
   pose.shadowStrength = 0;
   pose.visible = false;
   pose.interactive = false;
+  return pose;
 }
 
+/** Creates reusable storage for {@link resolveStackedDeckFrame}. */
+export function createStackedDeckFrame(itemCount: number): MutableStackedDeckFrame {
+  assertItemCount(itemCount);
+  const initialIndex = itemCount === 0 ? -1 : 0;
+  return {
+    ...createStackedDeckTraversal(initialIndex, itemCount),
+    poses: Array.from({ length: itemCount }, () => resetPose({} as MutableStackedDeckPose)),
+  };
+}
+
+/**
+ * Reveals a pose the frame has just reset. Rest translation, rotation, and scale are the neutral
+ * values already written, so a top card only has to state what makes it the top card.
+ */
 function setTopPose(pose: MutableStackedDeckPose, interactive: boolean): void {
-  pose.translateX = 0;
-  pose.translateY = 0;
-  pose.scale = 1;
-  pose.rotate = 0;
   pose.opacity = 1;
   pose.layer = TOP_LAYER;
   pose.role = "top";
@@ -576,6 +609,7 @@ function setExchangePair(
 function copyTraversal(output: MutableStackedDeckFrame, traversal: StackedDeckTraversal): void {
   output.settledIndex = traversal.settledIndex;
   output.visualTopIndex = traversal.visualTopIndex;
+  output.authoritativeIndex = traversal.authoritativeIndex;
   output.segmentOriginIndex = traversal.segmentOriginIndex;
   output.segmentTargetIndex = traversal.segmentTargetIndex;
   output.direction = traversal.direction;

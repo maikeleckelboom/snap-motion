@@ -63,7 +63,8 @@ function assertPositiveInteger(value: number, name: string): void {
   }
 }
 
-function assertUniqueIds(ids: readonly SemanticId[], name: string): void {
+/** Shared by every geometry factory, so an id contract violation always reads the same way. */
+export function assertUniqueIds(ids: readonly SemanticId[], name: string): void {
   const seen = new Set<SemanticId>();
   for (const id of ids) {
     if (typeof id !== "string" || id.length === 0) {
@@ -87,6 +88,30 @@ export function calculateFixedCellSize(viewportSize: number, columns: number, ga
   return (viewportSize - occupiedGaps) / columns;
 }
 
+/**
+ * Anchors on one evenly spaced scalar. Every stage-like surface — a fixed stage, a coverflow rail —
+ * is this geometry under a different name for its pitch, so they cannot drift apart.
+ */
+export function createEqualPitchGeometry<Id extends SemanticId>(
+  itemIds: readonly Id[],
+  pitch: number,
+  viewportSize: number,
+): CarouselGeometry<Id> {
+  const count = itemIds.length;
+  const trackExtent = count === 0 ? 0 : (count - 1) * pitch + viewportSize;
+  const bounds = getTrackBounds(viewportSize, trackExtent);
+  return {
+    viewportSize,
+    trackExtent,
+    bounds,
+    anchors: itemIds.map((id, order) => ({
+      id,
+      order,
+      position: clampToBounds(-order * pitch, bounds),
+    })),
+  };
+}
+
 export function createFixedStageGeometry<Id extends SemanticId>(options: {
   readonly viewportSize: number;
   readonly itemIds: readonly Id[];
@@ -97,20 +122,8 @@ export function createFixedStageGeometry<Id extends SemanticId>(options: {
   assertNonNegative(gap, "gap");
   assertUniqueIds(options.itemIds, "item");
 
-  const count = options.itemIds.length;
-  const trackExtent = count === 0 ? 0 : count * options.viewportSize + (count - 1) * gap;
-  const bounds = getTrackBounds(options.viewportSize, trackExtent);
-  const anchors = options.itemIds.map((id, order) => ({
-    id,
-    order,
-    position: clampToBounds(-order * (options.viewportSize + gap), bounds),
-  }));
-
   return {
-    viewportSize: options.viewportSize,
-    trackExtent,
-    bounds,
-    anchors,
+    ...createEqualPitchGeometry(options.itemIds, options.viewportSize + gap, options.viewportSize),
     stageSize: options.viewportSize,
     gap,
   };

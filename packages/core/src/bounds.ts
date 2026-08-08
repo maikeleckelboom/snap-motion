@@ -1,5 +1,20 @@
 import type { ScalarBounds } from "./types";
 
+/** Scalar primitives every geometry module shares. Keeping one copy keeps their rounding identical. */
+export function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+export function mix(from: number, to: number, progress: number): number {
+  return from + (to - from) * progress;
+}
+
+/** Hermite ease over the unit interval. Input is clamped, so the ends are flat rather than divergent. */
+export function smoothstep(value: number): number {
+  const clamped = clamp(value, 0, 1);
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
 export function assertFiniteNumber(value: number, name: string): void {
   if (!Number.isFinite(value)) {
     throw new TypeError(`${name} must be a finite number`);
@@ -38,7 +53,7 @@ export function getTrackBounds(viewportSize: number, trackExtent: number): Scala
 export function clampToBounds(position: number, bounds: ScalarBounds): number {
   assertFiniteNumber(position, "position");
   const validBounds = createBounds(bounds.min, bounds.max);
-  const clamped = Math.min(validBounds.max, Math.max(validBounds.min, position));
+  const clamped = clamp(position, validBounds.min, validBounds.max);
   return Object.is(clamped, -0) ? 0 : clamped;
 }
 

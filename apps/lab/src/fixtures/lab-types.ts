@@ -19,6 +19,10 @@ export interface LabPhysicsSettings {
 export interface LabDiagnostics {
   activeId?: string;
   anchors: readonly SnapAnchor<string>[];
+  /** The card an interaction acts on, which leads the visual top through a handoff. */
+  authoritativeIndex?: number;
+  /** True when exactly one content card is rendered and it is the authoritative one, at rest. */
+  authorityStable?: boolean;
   bodyClientBlockExtent?: number;
   bodyScrollBlockExtent?: number;
   bodyScrollOffset?: number;

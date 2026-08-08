@@ -21,6 +21,8 @@ function traversal(overrides: Partial<StackedDeckTraversal> = {}): StackedDeckTr
   return {
     settledIndex: 2,
     visualTopIndex: 2,
+    // The compositor never reads authority, so it defaults to the card that still owns the surface.
+    authoritativeIndex: overrides.visualTopIndex ?? 2,
     segmentOriginIndex: 2,
     segmentTargetIndex: null,
     direction: 0,
@@ -337,6 +339,78 @@ describe("segment-local stacked deck traversal", () => {
     expect(samples[5]).toMatchObject({ segmentOriginIndex: 3, segmentTargetIndex: 2 });
     expect(samples[7]).toMatchObject({ visualTopIndex: 2, phase: "neutral" });
     expect(samples[8]).toMatchObject({ segmentOriginIndex: 2, segmentTargetIndex: 1 });
+  });
+
+  it("hands interaction authority over at the segment midpoint, latched by a dead band", () => {
+    const state = createStackedDeckTraversal(2, 5);
+    // Below the band, at it, and above it. Authority is separate from ownership throughout: the
+    // visual top does not move until the whole pitch is complete.
+    expect(resolveTraversal(state, 2.45)).toMatchObject({
+      authoritativeIndex: 2,
+      visualTopIndex: 2,
+    });
+    expect(resolveTraversal(state, 2.535).authoritativeIndex).toBe(2);
+    expect(resolveTraversal(state, 2.54).authoritativeIndex).toBe(3);
+    // Latched: nothing inside the band hands it back, in either direction of travel.
+    for (const position of [2.99, 2.54, 2.5, 2.465, 2.7, 2.465]) {
+      expect(resolveTraversal(state, position)).toMatchObject({
+        authoritativeIndex: 3,
+        visualTopIndex: 2,
+      });
+    }
+    expect(resolveTraversal(state, 2.455).authoritativeIndex).toBe(2);
+    for (const position of [2.465, 2.5, 2.535]) {
+      expect(resolveTraversal(state, position).authoritativeIndex).toBe(2);
+    }
+    // Completing the pitch moves ownership; authority is already there and does not flicker.
+    expect(resolveTraversal(state, 3)).toMatchObject({ authoritativeIndex: 3, visualTopIndex: 3 });
+    expect(resolveTraversal(state, 3.6)).toMatchObject({
+      authoritativeIndex: 4,
+      visualTopIndex: 3,
+    });
+    // A reversal through neutral cannot strand authority on a card the segment no longer names: the
+    // new outgoing card holds it until the new segment passes its own midpoint.
+    expect(resolveTraversal(state, 3).authoritativeIndex).toBe(3);
+    expect(resolveTraversal(state, 2.6)).toMatchObject({
+      authoritativeIndex: 3,
+      segmentTargetIndex: 2,
+      visualTopIndex: 3,
+    });
+    expect(resolveTraversal(state, 2.4)).toMatchObject({
+      authoritativeIndex: 2,
+      segmentTargetIndex: 2,
+      visualTopIndex: 3,
+    });
+  });
+
+  it("never lets authority leave the interaction envelope", () => {
+    const state = createStackedDeckTraversal(2, 5);
+    for (const position of [2.6, 3, 3.4, 4.5, 40, 3.2, 2.9, 2.1, 1.6, -40]) {
+      const bounded = resolveBounded(state, position, 2);
+      expect(Math.abs(bounded.authoritativeIndex - 2)).toBeLessThanOrEqual(1);
+      // Authority always names a card of the segment actually on screen.
+      expect(
+        bounded.authoritativeIndex === bounded.visualTopIndex ||
+          bounded.authoritativeIndex === bounded.segmentTargetIndex,
+      ).toBe(true);
+    }
+    // Idle resets authority to the settled selection along with everything else.
+    expect(resolveBounded(state, 3, 2, "idle", 3)).toMatchObject({
+      authoritativeIndex: 3,
+      settledIndex: 3,
+      visualTopIndex: 3,
+    });
+  });
+
+  it("rejects a traversal whose authority names a card outside the active segment", () => {
+    expect(() => resolveFrame(segment(2, 1, 0.7))).not.toThrow();
+    expect(() =>
+      resolveFrame(traversal({ ...segment(2, 1, 0.7), authoritativeIndex: 3 })),
+    ).not.toThrow();
+    expect(() => resolveFrame(traversal({ ...segment(2, 1, 0.7), authoritativeIndex: 1 }))).toThrow(
+      RangeError,
+    );
+    expect(() => resolveFrame(traversal({ authoritativeIndex: 3 }))).toThrow(RangeError);
   });
 
   it("retains edge elasticity without inventing a target", () => {
