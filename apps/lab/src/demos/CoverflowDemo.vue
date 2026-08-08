@@ -117,9 +117,11 @@ function onPaginationBlur(index: number) {
 
 const diagnostics = computed<LabDiagnostics>(() => {
   const surface = rail.value;
-  const snapshot = surface?.motion.snapshot.value;
+  // Read-only telemetry published by the component. The lab is a consumer, so it observes the rail
+  // through the same public surface an application has rather than through its controller.
+  const motion = surface?.diagnostics;
   const viewportSize = Math.max(1, surface?.root?.clientWidth ?? props.stageWidth);
-  const targetId = surface?.motion.targetId.value;
+  const targetId = motion?.targetId;
   const targetIndex = targetId === undefined ? -1 : screens.findIndex((s) => s.id === targetId);
   const focused = surface?.presentations[visualIndex.value];
   return {
@@ -130,13 +132,13 @@ const diagnostics = computed<LabDiagnostics>(() => {
           kineticFocus: focused.kineticFocus,
           settledness: focused.settledness,
         }),
-    ...(surface?.motion.activeId.value ? { activeId: surface.motion.activeId.value } : {}),
-    anchors: snapshot?.anchors ?? [],
-    bounds: snapshot?.bounds ?? { min: 0, max: 0 },
-    isAnimating: surface?.motion.isAnimating.value ?? false,
-    phase: surface?.motion.phase.value ?? "idle",
-    pointerOwned: surface?.motion.pointerOwned.value ?? false,
-    position: surface?.motion.position.value ?? 0,
+    ...(motion?.activeId ? { activeId: motion.activeId } : {}),
+    anchors: motion?.anchors ?? [],
+    bounds: motion?.bounds ?? { min: 0, max: 0 },
+    isAnimating: motion?.isAnimating ?? false,
+    phase: motion?.phase ?? "idle",
+    pointerOwned: motion?.pointerOwned ?? false,
+    position: motion?.position ?? 0,
     physicalIndex: surface?.physicalIndex ?? 0,
     visualIndex: visualIndex.value,
     settledIndex: settledIndex.value,
@@ -148,14 +150,14 @@ const diagnostics = computed<LabDiagnostics>(() => {
     keyboardTargetIndex: surface?.commandIndex ?? 0,
     maxAnchorSkip: props.settings.maxAnchorSkip,
     releaseVelocityCapActive:
-      surface?.motion.phase.value === "settling" &&
-      (surface.speedInCards ?? 0) >= BOUNDED_SPRING_TUNING.maximumFreeVelocity - 0.05,
-    reducedMotion: surface?.motion.reducedMotion.value ?? false,
+      motion?.phase === "settling" &&
+      (surface?.speedInCards ?? 0) >= BOUNDED_SPRING_TUNING.maximumFreeVelocity - 0.05,
+    reducedMotion: motion?.reducedMotion ?? false,
     speedInCards: surface?.speedInCards ?? 0,
     ...(targetId ? { targetId } : {}),
     ...(targetIndex < 0 ? {} : { targetIndex }),
-    trackExtent: viewportSize - (snapshot?.bounds.min ?? 0),
-    velocity: surface?.motion.velocity.value ?? 0,
+    trackExtent: viewportSize - (motion?.bounds.min ?? 0),
+    velocity: motion?.velocity ?? 0,
     viewportSize,
   };
 });
@@ -224,10 +226,10 @@ const diagnostics = computed<LabDiagnostics>(() => {
       :data-motion-pitch="rail?.pitch"
       :data-pending-index="rail?.pendingTargetIndex"
       :data-physical-index="rail?.physicalIndex"
-      :data-position="rail?.motion.position.value"
+      :data-position="rail?.diagnostics.position"
       :data-settled-index="settledIndex"
       :data-speed-in-cards="rail?.speedInCards"
-      :data-target-id="rail?.motion.targetId.value"
+      :data-target-id="rail?.diagnostics.targetId"
       :data-visual-index="visualIndex"
       @activate="(_screen, index) => openGallery(index)"
     >
@@ -359,7 +361,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       :focus-return="galleryFocusReturn"
       :initial-index="galleryOpen ? galleryInitialIndex : settledIndex"
       :items="screens"
-      :reduced-motion-override="rail?.motion.reducedMotion.value"
+      :reduced-motion-override="rail?.diagnostics.reducedMotion"
       title="Screen gallery"
       @request-close="onGalleryRequestClose"
     />

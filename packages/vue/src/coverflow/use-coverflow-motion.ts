@@ -9,7 +9,6 @@ import {
   resolveCoverflowProgress,
   resolveCoverflowTuning,
   resolvePaginationIndicator,
-  resolveSnapKeyboardAction,
   resolveSpeedInCards,
   type CoverflowTuning,
   type PaginationIndicatorState,
@@ -18,12 +17,26 @@ import {
   type SpringConfiguration,
 } from "@snap-motion/core";
 import { useElementSize } from "@vueuse/core";
-import { computed, nextTick, ref, toValue, watch, type MaybeRefOrGetter, type Ref } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  ref,
+  toValue,
+  watch,
+  type MaybeRefOrGetter,
+  type Ref,
+} from "vue";
 
 import { useCarouselMotion } from "../carousel/use-carousel-motion";
-import { elementOwnsSnapMotionKeyboard } from "../internal/input/keyboard-policy";
+import { resolveDirectionalSnapKeyboardAction } from "../internal/input/keyboard-policy";
 import { useSurfaceGesture } from "../internal/input/surface-gesture";
+import {
+  resolveSurfaceDiagnostics,
+  type SurfaceMotionDiagnostics,
+} from "../internal/surface/surface-diagnostics";
 import { useBoundedSpringDriver } from "../motion/bounded-spring-driver";
+import type { NavigationReason } from "../motion/motion-contracts";
 import type { CoverflowCardPresentation } from "./coverflow-contracts";
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -56,8 +69,11 @@ export interface UseCoverflowMotionOptions<Id extends string> {
   readonly elasticity?: MaybeRefOrGetter<ElasticityOptions | undefined>;
   readonly releasePolicy?: MaybeRefOrGetter<Partial<ReleaseTargetPolicy> | undefined>;
   readonly programmaticImpulse?: MaybeRefOrGetter<number | undefined>;
-  /** Announces the durable selection. Fires only at mechanical rest, never on a visual change. */
-  readonly onSettled?: (id: Id, index: number) => void;
+  /**
+   * Announces the durable selection. Fires only at mechanical rest, never on a visual change, and
+   * reports what initiated the change rather than assuming a drag.
+   */
+  readonly onSettled?: (id: Id, index: number, reason: NavigationReason) => void;
   /** A tap on the settled, inspectable card: the request to open it on another surface. */
   readonly onActivate?: (id: Id, index: number) => void;
 }
@@ -82,19 +98,27 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
     resolveCoverflowTuning({ stageWidth: stageWidth.value }),
   );
   const pitch = computed(() => tuning.value.pitch);
-  const initialIndex = Math.max(
-    0,
-    options.initialId === undefined
-      ? Math.floor(ids.value.length / 2)
-      : ids.value.indexOf(options.initialId),
-  );
-  const model = new CoverflowModel({ itemCount: ids.value.length, initialIndex });
+  const initialIds = ids.value;
+  const model = new CoverflowModel<Id>({
+    ids: initialIds,
+    // An ID the collection does not contain is not a destination, so it cannot be a starting point
+    // either. Falling back to the model's own default beats refusing to mount.
+    ...(options.initialId !== undefined && initialIds.includes(options.initialId)
+      ? { initialId: options.initialId }
+      : {}),
+  });
+  const initialIndex = Math.max(0, model.state.settledIndex);
   const statusIndex = ref<number | null>(null);
   const liveIndex = ref(initialIndex);
   const settledIndex = ref(initialIndex);
   const visualIndex = ref(initialIndex);
   const pendingTargetIndex = ref<number | null>(null);
   const commandIndex = ref(initialIndex);
+  /**
+   * What initiated the movement now in flight. It is opened by whichever entry point started it and
+   * read at settlement, so a surface reports what actually happened rather than assuming a drag.
+   */
+  let pendingReason: NavigationReason = "route";
 
   function measure() {
     return createCoverflowGeometry({
@@ -110,10 +134,15 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
     anchors: initialGeometry.anchors,
     bounds: initialGeometry.bounds,
     driver,
-    initialTargetId: ids.value[initialIndex]!,
     measure,
     track: options.track ?? ref<HTMLElement>(),
     viewport: options.viewport,
+    onTargetSelected(_id, reason) {
+      pendingReason = reason;
+    },
+    ...(model.idAt(initialIndex) === undefined
+      ? {}
+      : { initialTargetId: model.idAt(initialIndex)! }),
     ...(options.reducedMotionOverride === undefined
       ? {}
       : { reducedMotionOverride: options.reducedMotionOverride }),
@@ -140,22 +169,27 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
     () => motion.isDragging.value || motion.pointerOwned.value || motion.isWheeling.value,
   );
   const disabled = () => options.disabled?.() ?? false;
+  /**
+   * Whether promoting cards to their own compositor layer is currently buying anything. Direct
+   * manipulation and autonomous animation do; an idle rail does not, and a permanent hint on every
+   * visible card is a permanent cost for a surface that is usually still.
+   */
+  const compositing = computed(() => motion.isAnimating.value || owned.value);
 
   watch(
     motion.snapshot,
     (snapshot) => {
       const currentPitch = Math.max(1, pitch.value);
-      const targetIndex =
-        snapshot.target === null ? null : Math.max(0, ids.value.indexOf(snapshot.target.id));
+      const targetIndex = snapshot.target === null ? null : model.indexOf(snapshot.target.id);
       const nearestIndex =
-        snapshot.active === null
-          ? model.state.settledIndex
-          : Math.max(0, ids.value.indexOf(snapshot.active.id));
+        snapshot.active === null ? model.state.settledIndex : model.indexOf(snapshot.active.id);
       const state = model.update({
         phase: snapshot.phase,
         physicalIndex: -snapshot.position / currentPitch,
-        targetIndex,
-        nearestIndex,
+        // An anchor the model no longer contains says nothing about the rail's selection, so it is
+        // reported as no destination at all rather than as item zero.
+        targetIndex: targetIndex !== null && targetIndex >= 0 ? targetIndex : null,
+        nearestIndex: nearestIndex >= 0 ? nearestIndex : model.state.settledIndex,
       });
       visualIndex.value = state.visualIndex;
       settledIndex.value = state.settledIndex;
@@ -164,8 +198,8 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
       if (state.announcementIndex !== null) {
         liveIndex.value = state.announcementIndex;
         statusIndex.value = state.announcementIndex;
-        const id = ids.value[state.announcementIndex];
-        if (id !== undefined) options.onSettled?.(id, state.announcementIndex);
+        const id = model.idAt(state.announcementIndex);
+        if (id !== undefined) options.onSettled?.(id, state.announcementIndex, pendingReason);
       }
     },
     { immediate: true },
@@ -287,33 +321,38 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
     ),
   );
 
-  function moveToIndex(index: number): boolean {
+  function moveToIndex(index: number, reason: NavigationReason = "picker"): boolean {
     const command = model.resolveNavigationCommand(index, { owned: owned.value });
     if (disabled() || command.kind !== "move") return false;
-    const id = ids.value[command.targetIndex];
+    const id = model.idAt(command.targetIndex);
     if (id === undefined) return false;
+    pendingReason = reason;
     motion.moveTo(id);
     return true;
   }
 
-  function requestId(id: Id): boolean {
-    return moveToIndex(ids.value.indexOf(id));
+  /**
+   * Navigates to a named destination. An ID the rail does not contain is refused outright rather
+   * than clamped, so a stale route can never silently become item zero.
+   */
+  function requestId(id: Id, reason: NavigationReason = "picker"): boolean {
+    const index = model.indexOf(id);
+    return index < 0 ? false : moveToIndex(index, reason);
   }
 
-  function previous(): boolean {
+  function previous(reason: NavigationReason = "previous"): boolean {
     const command = model.resolveRelativeCommand(-1, { owned: owned.value });
-    return command.kind === "move" && moveToIndex(command.targetIndex);
+    return command.kind === "move" && moveToIndex(command.targetIndex, reason);
   }
 
-  function next(): boolean {
+  function next(reason: NavigationReason = "next"): boolean {
     const command = model.resolveRelativeCommand(1, { owned: owned.value });
-    return command.kind === "move" && moveToIndex(command.targetIndex);
+    return command.kind === "move" && moveToIndex(command.targetIndex, reason);
   }
 
   /** Adopts a destination exactly, with no travel and no announcement it did not earn. */
   function synchronizeIndex(index: number, announce = false): boolean {
-    const targetIndex = clamp(index, 0, Math.max(0, ids.value.length - 1));
-    const id = ids.value[targetIndex];
+    const id = model.idAt(index);
     const anchorPosition = id === undefined ? undefined : anchorsById.value.get(id);
     if (id === undefined || anchorPosition === undefined) return false;
     const alreadySynchronized =
@@ -322,43 +361,63 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
       motion.targetId.value === id &&
       Math.abs(motion.position.value - anchorPosition) <= Number.EPSILON * 16 &&
       Math.abs(motion.velocity.value) <= Number.EPSILON * 16 &&
-      visualIndex.value === targetIndex &&
-      settledIndex.value === targetIndex;
+      visualIndex.value === index &&
+      settledIndex.value === index;
     if (alreadySynchronized) return true;
 
     motion.interrupt();
-    model.synchronize(targetIndex, { announce });
+    if (model.synchronize(index, { announce }) < 0) return false;
     motion.controller.remeasure({ ...measure(), activeId: id });
-    visualIndex.value = targetIndex;
-    settledIndex.value = targetIndex;
-    commandIndex.value = targetIndex;
+    visualIndex.value = index;
+    settledIndex.value = index;
+    commandIndex.value = index;
     pendingTargetIndex.value = null;
     return true;
   }
 
   function synchronizeId(id: Id, announce = false): boolean {
-    return synchronizeIndex(ids.value.indexOf(id), announce);
+    const index = model.indexOf(id);
+    return index < 0 ? false : synchronizeIndex(index, announce);
+  }
+
+  /**
+   * Applies authoritative selection that did not come from this surface — a controlled prop, a
+   * route change, another surface reporting where it left the user.
+   *
+   * This deliberately does not share the user-command admission path. `disabled` and physical
+   * ownership are answers to "may this input move the surface", and controlled state is not input:
+   * refusing it leaves the surface disagreeing with the application with nothing to retry it. The
+   * interruption policy is explicit — while the rail is held or refusing input, the destination is
+   * adopted exactly, because animating out from under a hand is worse than arriving; otherwise the
+   * rail travels there the way it travels anywhere.
+   */
+  function applyControlledId(id: Id): boolean {
+    const index = model.indexOf(id);
+    if (index < 0) return false;
+    pendingReason = "route";
+    if (disabled() || owned.value) return synchronizeIndex(index, false);
+    const command = model.resolveNavigationCommand(index, { owned: false });
+    if (command.kind !== "move") return true;
+    const targetId = model.idAt(command.targetIndex);
+    if (targetId === undefined) return false;
+    motion.moveTo(targetId);
+    return true;
   }
 
   function onKeyDown(event: KeyboardEvent) {
     if (disabled()) return;
-    const action = resolveSnapKeyboardAction({
-      key: event.key,
-      altKey: event.altKey,
-      ctrlKey: event.ctrlKey,
-      defaultPrevented: event.defaultPrevented,
-      metaKey: event.metaKey,
-      ownedByDescendant: elementOwnsSnapMotionKeyboard(event.target),
-    });
+    const action = resolveDirectionalSnapKeyboardAction(event, motion.resolveDirection());
     if (!action) return;
     event.preventDefault();
-    if (action === "previous") previous();
-    else if (action === "next") next();
-    else moveToIndex(action === "home" ? 0 : ids.value.length - 1);
+    if (action === "previous") previous("keyboard");
+    else if (action === "next") next("keyboard");
+    else moveToIndex(action === "home" ? 0 : ids.value.length - 1, "keyboard");
   }
 
   function onWheel(event: WheelEvent) {
-    if (!disabled()) motion.onWheel(event);
+    if (disabled()) return;
+    pendingReason = "wheel";
+    motion.onWheel(event);
   }
 
   let selectionFrame: number | undefined;
@@ -366,7 +425,7 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
   const gesture = useSurfaceGesture({
     root,
     itemSelector: "[data-snap-motion-coverflow-card]",
-    resolveIndex: (element) => ids.value.indexOf((element.dataset.itemId ?? "") as Id),
+    resolveIndex: (element) => model.indexOf((element.dataset.itemId ?? "") as Id),
     isOpenEligible: isInspectEligible,
     disabled,
     forwardPointerDown: motion.onPointerDown,
@@ -387,7 +446,7 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
       if (completed.originIndex === undefined) return;
       const originIndex = completed.originIndex;
       if (resolution.action === "open") {
-        const id = ids.value[originIndex];
+        const id = model.idAt(originIndex);
         if (id !== undefined) options.onActivate?.(id, originIndex);
       } else if (resolution.action === "select") {
         // One frame of separation, so the release the controller is still resolving cannot be
@@ -395,11 +454,17 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
         if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
         selectionFrame = requestAnimationFrame(() => {
           selectionFrame = undefined;
-          moveToIndex(originIndex);
+          moveToIndex(originIndex, "picker");
         });
       }
     },
   });
+
+  /** A press is the opening of a drag, so it names the reason before the release resolves one. */
+  function onPointerDown(event: PointerEvent) {
+    pendingReason = "drag";
+    gesture.onPointerDown(event);
+  }
 
   function currentConfiguration() {
     const spring = toValue(options.spring);
@@ -422,21 +487,64 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
     () => motion.configure(currentConfiguration()),
   );
 
+  /**
+   * Item reconfiguration. The model preserves the semantic card the rail was on and rebuilds
+   * everything ordinal around it; the controller is then remeasured onto the same card, so the two
+   * never end up describing different collections.
+   */
+  watch(
+    () => toValue(options.ids),
+    (nextIds) => {
+      if (nextIds.length === model.itemCount && nextIds.every((id, i) => model.idAt(i) === id)) {
+        return;
+      }
+      motion.interrupt();
+      const index = model.reconfigure(nextIds);
+      const preservedId = model.idAt(index);
+      visualIndex.value = Math.max(0, index);
+      settledIndex.value = Math.max(0, index);
+      commandIndex.value = Math.max(0, index);
+      pendingTargetIndex.value = null;
+      motion.controller.remeasure({
+        ...measure(),
+        ...(preservedId === undefined ? {} : { activeId: preservedId }),
+      });
+    },
+    { deep: true },
+  );
+
   watch([pitch, () => toValue(options.stageWidth)], () => void nextTick(motion.remeasure));
+
+  const diagnostics = computed<SurfaceMotionDiagnostics<Id>>(() =>
+    resolveSurfaceDiagnostics({
+      snapshot: motion.snapshot.value,
+      pointerOwned: motion.pointerOwned.value,
+      reducedMotion: motion.reducedMotion.value,
+    }),
+  );
+
+  onBeforeUnmount(() => {
+    if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+    selectionFrame = undefined;
+  });
 
   return {
     anchorsById,
+    applyControlledId,
     commandIndex: computed(() => commandIndex.value),
     canNext: computed(() => commandIndex.value < ids.value.length - 1),
     canPrevious: computed(() => commandIndex.value > 0),
+    compositing,
+    diagnostics,
     isInspectEligible,
     liveIndex: computed(() => liveIndex.value),
     model,
     motion,
     next,
+    onClick: gesture.onClick,
     onKeyDown,
     onLostPointerCapture: gesture.onLostPointerCapture,
-    onPointerDown: gesture.onPointerDown,
+    onPointerDown,
     onWheel,
     owned,
     paginationIndicator,
@@ -465,13 +573,21 @@ export type UseCoverflowMotionReturn<Id extends string> = ReturnType<typeof useC
 /**
  * The imperative surface of a mounted `Coverflow`, as a template ref sees it: Vue unwraps the
  * exposed refs, so this is the same capability without the `.value`.
+ *
+ * It is deliberately a *product* handle. Navigation goes through the rail's own command policy and
+ * observation goes through read-only telemetry; the controller is not part of it, so a consumer
+ * cannot move the surface in a way the model has not agreed to. Composing
+ * {@link useCoverflowMotion} directly remains the way to build a renderer that needs more.
  */
 export interface CoverflowHandle<Id extends string> {
   readonly canNext: boolean;
   readonly canPrevious: boolean;
   /** The destination a relative command steps from. */
   readonly commandIndex: number;
-  readonly motion: UseCoverflowMotionReturn<Id>["motion"];
+  /** True while the surface is being manipulated or is animating on its own. */
+  readonly compositing: boolean;
+  /** Read-only motion telemetry. Observation only: nothing here can move the rail. */
+  readonly diagnostics: SurfaceMotionDiagnostics<Id>;
   readonly paginationIndicator: PaginationIndicatorState;
   readonly pendingTargetIndex: number | null;
   /** Per-card rail placement and material signals, in item order. */
@@ -488,11 +604,12 @@ export interface CoverflowHandle<Id extends string> {
   readonly visualId: Id | undefined;
   readonly visualIndex: number;
   isInspectEligible(index: number): boolean;
-  next(): boolean;
+  next(reason?: NavigationReason): boolean;
   /** Applies the surface's keyboard policy to an event a wider scope has received. */
   onKeyDown(event: KeyboardEvent): void;
-  previous(): boolean;
-  requestId(id: Id): boolean;
+  previous(reason?: NavigationReason): boolean;
+  /** Navigates to a destination. Returns `false` for an ID the rail does not contain. */
+  requestId(id: Id, reason?: NavigationReason): boolean;
   /** Adopts a destination exactly, with no travel. Silent unless `announce` is true. */
   synchronizeId(id: Id, announce?: boolean): boolean;
 }

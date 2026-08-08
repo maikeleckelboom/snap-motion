@@ -193,12 +193,8 @@ function next(reason: NavigationReason = "next") {
 
 function onKeyDown(event: KeyboardEvent) {
   if (effectiveKeyboardScope.value === "off") return;
-  let action = carouselKeyAction(event);
+  const action = carouselKeyAction(event, motion.direction.value);
   if (!action) return;
-  if (motion.direction.value === "rtl") {
-    if (action === "previous") action = "next";
-    else if (action === "next") action = "previous";
-  }
   const id =
     action === "home"
       ? props.ids[0]

@@ -1,21 +1,19 @@
-import { resolveSnapKeyboardAction, type SnapKeyboardAction } from "@snap-motion/core";
+import type { SnapKeyboardAction } from "@snap-motion/core";
 
-import { elementOwnsSnapMotionKeyboard } from "../internal/input/keyboard-policy";
+import { resolveDirectionalSnapKeyboardAction } from "../internal/input/keyboard-policy";
 import type { CarouselKeyboardScope } from "./carousel-contracts";
 
-/** Semantic key mapping from core, with the DOM ownership question answered by the adapter. */
+/**
+ * Semantic key mapping from core, with the DOM ownership question and the writing direction
+ * answered by the adapter. Direction defaults to `ltr` so a caller that has not resolved one yet
+ * still gets the unmirrored reading.
+ */
 export function carouselKeyAction(
   event: Pick<KeyboardEvent, "key" | "target"> &
     Partial<Pick<KeyboardEvent, "altKey" | "ctrlKey" | "defaultPrevented" | "metaKey">>,
+  direction: "ltr" | "rtl" = "ltr",
 ): SnapKeyboardAction | undefined {
-  return resolveSnapKeyboardAction({
-    key: event.key,
-    altKey: event.altKey,
-    ctrlKey: event.ctrlKey,
-    defaultPrevented: event.defaultPrevented,
-    metaKey: event.metaKey,
-    ownedByDescendant: elementOwnsSnapMotionKeyboard(event.target),
-  });
+  return resolveDirectionalSnapKeyboardAction(event, direction);
 }
 
 interface DialogCarouselRegistration {

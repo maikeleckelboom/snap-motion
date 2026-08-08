@@ -10,4 +10,5 @@ export type {
   UseCoverflowMotionOptions,
   UseCoverflowMotionReturn,
 } from "./use-coverflow-motion";
+export type { SurfaceMotionDiagnostics } from "../internal/surface/surface-diagnostics";
 export type { NavigationReason } from "../motion/motion-contracts";

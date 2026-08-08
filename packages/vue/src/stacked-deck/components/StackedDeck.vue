@@ -1,4 +1,4 @@
-<script setup lang="ts" generic="TId extends string, TItem extends { id: TId }">
+<script setup lang="ts" generic="TItem extends { id: string }">
 import type {
   ElasticityOptions,
   ReleaseTargetPolicy,
@@ -13,6 +13,8 @@ import {
 import type { NavigationReason } from "../../motion/motion-contracts";
 import type { StackedDeckCardState } from "../stacked-deck-contracts";
 import { useStackedDeckMotion } from "../use-stacked-deck-motion";
+
+type TId = TItem["id"];
 
 const props = withDefaults(
   defineProps<{
@@ -31,6 +33,12 @@ const props = withDefaults(
     focusScope?: HTMLElement | undefined;
     /** Refuses every input. Set this while another surface covers the deck. */
     disabled?: boolean;
+    /**
+     * Publishes the deck as a landmark region rather than a plain group. Only justified when the
+     * deck is a major section of the page in its own right; a labelled `group` is the default
+     * because a page full of landmarks is harder to navigate than one with none.
+     */
+    landmark?: boolean;
     /** Fallback stage width, used before the deck has been measured. */
     stageWidth?: number;
     elasticity?: ElasticityOptions;
@@ -42,6 +50,7 @@ const props = withDefaults(
   }>(),
   {
     disabled: false,
+    landmark: false,
     stageWidth: 1_120,
   },
 );
@@ -58,7 +67,7 @@ const root = ref<HTMLElement>();
 const focusScope = computed(() => props.focusScope ?? root.value);
 const track = ref<HTMLElement>();
 const messages = computed(() => createEnglishSnapMotionMessages(props.messages));
-const ids = computed(() => props.items.map((item) => item.id));
+const ids = computed<TId[]>(() => props.items.map((item) => item.id));
 const reducedMotionOverride = computed(() => props.reducedMotionOverride);
 const statusText = ref("");
 
@@ -92,13 +101,13 @@ const deck = useStackedDeckMotion<TId>({
     const item = props.items[index];
     if (item) emit("activate", item, index);
   },
-  onSettled(id, index) {
+  onSettled(id, index, reason) {
     statusText.value = positionLabel(index);
     emit("settled", id);
-    if (id !== props.activeId) {
-      emit("requestActiveId", id, "drag");
-      emit("update:activeId", id);
-    }
+    // A settlement the application itself asked for is not a request back to the application.
+    if (reason === "route" || id === props.activeId) return;
+    emit("requestActiveId", id, reason);
+    emit("update:activeId", id);
   },
 });
 
@@ -140,31 +149,34 @@ function cardMotionStyle(card: StackedDeckCardState<TItem, TId>) {
     pointerEvents: pose.interactive ? ("auto" as const) : ("none" as const),
     transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
     transformOrigin: "center center",
-    willChange: pose.visible ? ("transform" as const) : ("auto" as const),
+    // A layer hint is only worth its memory while something is actually moving. An idle deck
+    // returns every card to `auto` rather than holding the compositor hostage.
+    willChange: deck.compositing.value && pose.visible ? ("transform" as const) : ("auto" as const),
     "--snap-motion-deck-shadow-strength": pose.shadowStrength.toFixed(4),
   };
 }
 
+/**
+ * Controlled selection is authoritative state, not input, so it takes its own path into the
+ * surface: it is never refused because the deck is disabled or physically owned, and it is never
+ * echoed back as a request the consumer would have to answer.
+ */
 watch(
   () => props.activeId,
   (id) => {
     if (id === undefined || id === deck.settledId.value) return;
-    deck.requestId(id);
+    deck.applyControlledId(id);
   },
-);
-
-watch(
-  () => props.items.length,
-  () => void deck.remeasure(),
 );
 
 defineExpose({
   canNext: deck.canNext,
   canPrevious: deck.canPrevious,
+  compositing: deck.compositing,
   currentId: deck.currentId,
+  diagnostics: deck.diagnostics,
   frame: deck.frame,
   isInspectEligible: deck.isInspectEligible,
-  motion: deck.motion,
   next: deck.next,
   onKeyDown: deck.onKeyDown,
   owned: deck.owned,
@@ -184,7 +196,8 @@ defineExpose({
 </script>
 
 <template>
-  <div
+  <component
+    :is="landmark ? 'section' : 'div'"
     ref="root"
     :aria-label="label"
     :aria-labelledby="labelledby"
@@ -193,12 +206,14 @@ defineExpose({
     :data-active-id="deck.currentId.value"
     :data-authority-stable="deck.state.value.authorityStable ? 'true' : 'false'"
     :data-owned="deck.owned.value ? 'true' : 'false'"
-    :data-phase="deck.motion.phase.value"
+    :data-phase="deck.diagnostics.value.phase"
     :data-profile="deck.tuningProfile.value"
-    :data-reduced-motion="deck.motion.reducedMotion.value ? 'true' : 'false'"
+    :data-reduced-motion="deck.diagnostics.value.reducedMotion ? 'true' : 'false'"
     :data-settled-id="deck.settledId.value"
+    :role="landmark ? 'region' : 'group'"
     :style="[stageStyle, deck.motion.surfaceStyle]"
     tabindex="0"
+    @click.capture="deck.onClick"
     @keydown="deck.onKeyDown"
     @lostpointercapture="deck.onLostPointerCapture"
     @pointerdown="deck.onPointerDown"
@@ -222,7 +237,7 @@ defineExpose({
           '--snap-motion-deck-shadow-strength': layer.shadowStrength.toFixed(4),
         }"
       />
-      <article
+      <div
         v-for="card in cards"
         :key="card.id"
         :aria-current="card.active ? 'true' : undefined"
@@ -230,19 +245,21 @@ defineExpose({
         :aria-label="positionLabel(card.index)"
         aria-roledescription="slide"
         class="snap-motion-stacked-deck-card"
+        data-snap-motion-item
         data-snap-motion-stacked-deck-card
         :data-deck-interactive="card.pose.interactive ? 'true' : 'false'"
         :data-deck-layer="card.pose.layer"
         :data-deck-role="card.role"
         :data-deck-visible="card.pose.visible ? 'true' : 'false'"
         :data-item-id="card.id"
+        :inert="!card.active"
+        role="group"
         :style="cardStyle(card)"
-        @click.prevent
       >
         <div class="snap-motion-stacked-deck-card-motion" :style="cardMotionStyle(card)">
           <slot name="card" v-bind="card" />
         </div>
-      </article>
+      </div>
     </div>
     <p
       aria-atomic="true"
@@ -252,5 +269,5 @@ defineExpose({
     >
       {{ statusText }}
     </p>
-  </div>
+  </component>
 </template>

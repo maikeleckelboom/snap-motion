@@ -145,14 +145,9 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
   });
 
   function onKeyDown(event: KeyboardEvent) {
-    let action = carouselKeyAction(event);
+    const action = carouselKeyAction(event, resolvedDirection());
     if (!action) {
       return;
-    }
-
-    if (resolvedDirection() === "rtl") {
-      if (action === "previous") action = "next";
-      else if (action === "next") action = "previous";
     }
 
     const anchors = orderedAnchors.value;
@@ -234,6 +229,13 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
     canNext,
     canPrevious,
     direction: computed(resolvedDirection),
+    /**
+     * The writing direction as it is right now. Input handling must ask rather than read a cached
+     * answer: `auto` resolves against computed style, which nothing reactive tracks, so a surface
+     * that mirrors its keys off the memoized `direction` would keep mirroring by whatever the page
+     * happened to be when it first rendered.
+     */
+    resolveDirection: resolvedDirection,
     isWheeling: wheel.isWheeling,
     interrupt,
     moveBy,

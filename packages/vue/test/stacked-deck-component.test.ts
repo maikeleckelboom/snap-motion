@@ -15,7 +15,7 @@ type ScreenId = (typeof screens)[number]["id"];
 type Screen = (typeof screens)[number];
 
 /** Instantiating the generic component up front is what lets the harness keep the item type. */
-const TypedStackedDeck = StackedDeck<ScreenId, Screen>;
+const TypedStackedDeck = StackedDeck<Screen>;
 
 interface DeckInstance {
   canNext: boolean;

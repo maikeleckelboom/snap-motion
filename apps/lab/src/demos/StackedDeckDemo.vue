@@ -102,18 +102,20 @@ function onGalleryRequestClose(finalIndex: number) {
 const diagnostics = computed<LabDiagnostics>(() => {
   const surface = deck.value;
   const traversal = state.value?.traversal;
-  const snapshot = surface?.motion.snapshot.value;
+  // Read-only telemetry published by the component. The lab is a consumer, so it observes the deck
+  // through the same public surface an application has rather than through its controller.
+  const motion = surface?.diagnostics;
   const viewportSize = Math.max(1, surface?.root?.clientWidth ?? props.stageWidth);
-  const targetId = surface?.motion.targetId.value;
+  const targetId = motion?.targetId;
   const targetIndex = targetId === undefined ? -1 : screens.findIndex((s) => s.id === targetId);
   return {
-    ...(surface?.motion.activeId.value ? { activeId: surface.motion.activeId.value } : {}),
-    anchors: snapshot?.anchors ?? [],
-    bounds: snapshot?.bounds ?? { min: 0, max: 0 },
-    isAnimating: surface?.motion.isAnimating.value ?? false,
-    phase: surface?.motion.phase.value ?? "idle",
-    pointerOwned: surface?.motion.pointerOwned.value ?? false,
-    position: surface?.motion.position.value ?? 0,
+    ...(motion?.activeId ? { activeId: motion.activeId } : {}),
+    anchors: motion?.anchors ?? [],
+    bounds: motion?.bounds ?? { min: 0, max: 0 },
+    isAnimating: motion?.isAnimating ?? false,
+    phase: motion?.phase ?? "idle",
+    pointerOwned: motion?.pointerOwned ?? false,
+    position: motion?.position ?? 0,
     physicalIndex: surface?.physicalIndex ?? 0,
     motionPitch: surface?.pitch ?? 0,
     segmentDirection: traversal?.direction ?? 0,
@@ -135,14 +137,14 @@ const diagnostics = computed<LabDiagnostics>(() => {
     maxAnchorSkip: STACKED_DECK_ANCHOR_SKIP,
     maxAnchorSkipFixed: true,
     releaseVelocityCapActive:
-      surface?.motion.phase.value === "settling" &&
-      (surface.speedInCards ?? 0) >= BOUNDED_SPRING_TUNING.maximumFreeVelocity - 0.05,
-    reducedMotion: surface?.motion.reducedMotion.value ?? false,
+      motion?.phase === "settling" &&
+      (surface?.speedInCards ?? 0) >= BOUNDED_SPRING_TUNING.maximumFreeVelocity - 0.05,
+    reducedMotion: motion?.reducedMotion ?? false,
     speedInCards: surface?.speedInCards ?? 0,
     ...(targetId ? { targetId } : {}),
     ...(targetIndex < 0 ? {} : { targetIndex }),
-    trackExtent: viewportSize - (snapshot?.bounds.min ?? 0),
-    velocity: surface?.motion.velocity.value ?? 0,
+    trackExtent: viewportSize - (motion?.bounds.min ?? 0),
+    velocity: motion?.velocity ?? 0,
     viewportSize,
   };
 });
@@ -216,7 +218,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       :data-motion-pitch="deck?.pitch"
       :data-pending-index="state?.pendingTargetIndex"
       :data-physical-index="deck?.physicalIndex"
-      :data-position="deck?.motion.position.value"
+      :data-position="deck?.diagnostics.position"
       :data-segment-direction="state?.traversal.direction"
       :data-segment-origin-index="state?.traversal.segmentOriginIndex"
       :data-segment-phase="state?.traversal.phase"
@@ -225,7 +227,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       :data-settled-index="settledIndex"
       :data-signed-local-distance="state?.traversal.signedLocalDistance"
       :data-speed-in-cards="deck?.speedInCards"
-      :data-target-id="deck?.motion.targetId.value"
+      :data-target-id="deck?.diagnostics.targetId"
       :data-visual-top-index="state?.visualTopIndex"
       @activate="(_screen, index) => openGallery(index)"
     >
@@ -311,7 +313,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       :focus-return="galleryFocusReturn"
       :initial-index="galleryOpen ? galleryInitialIndex : settledIndex"
       :items="screens"
-      :reduced-motion-override="deck?.motion.reducedMotion.value"
+      :reduced-motion-override="deck?.diagnostics.reducedMotion"
       title="Screen gallery"
       @request-close="onGalleryRequestClose"
     />

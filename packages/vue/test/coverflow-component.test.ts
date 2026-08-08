@@ -15,7 +15,7 @@ type ScreenId = (typeof screens)[number]["id"];
 type Screen = (typeof screens)[number];
 
 /** Instantiating the generic component up front is what lets the harness keep the item type. */
-const TypedCoverflow = Coverflow<ScreenId, Screen>;
+const TypedCoverflow = Coverflow<Screen>;
 
 interface CoverflowInstance {
   canNext: boolean;

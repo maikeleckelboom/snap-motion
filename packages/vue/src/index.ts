@@ -40,6 +40,7 @@ export type {
   CoverflowCardState,
   CoverflowHandle,
   CoverflowTuning,
+  SurfaceMotionDiagnostics,
   UseCoverflowMotionOptions,
   UseCoverflowMotionReturn,
 } from "./coverflow";

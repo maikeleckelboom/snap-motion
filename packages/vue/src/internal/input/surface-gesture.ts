@@ -4,9 +4,9 @@ import {
   type DirectManipulationResolution,
 } from "@snap-motion/core";
 import { useEventListener } from "@vueuse/core";
-import type { Ref } from "vue";
+import { onScopeDispose, type Ref } from "vue";
 
-import { isSupportedPrimaryPointerStart } from "./pointer-policy";
+import { elementOwnsSnapMotionDrag, isSupportedPrimaryPointerStart } from "./pointer-policy";
 
 export interface SurfaceGestureOptions {
   /** The element that owns the surface, used to decide whether focus began outside it. */
@@ -68,6 +68,29 @@ interface TrackedGesture {
 export function useSurfaceGesture(options: SurfaceGestureOptions) {
   const activePointers = new Set<number>();
   let gesture: TrackedGesture | undefined;
+  let disposed = false;
+  let suppressNextClick = false;
+
+  // Resolution is deferred by a microtask so a release and the controller's answer to it cannot
+  // interleave. A scope torn down inside that window must not be spoken for afterwards.
+  onScopeDispose(() => {
+    disposed = true;
+    gesture = undefined;
+    activePointers.clear();
+  });
+
+  /**
+   * Items under a point, innermost first. `elementsFromPoint` is universal in browsers but absent
+   * from the DOM implementations consumers run their own tests in, and a hit test that cannot be
+   * performed is simply a hit test that found nothing — never a thrown gesture.
+   */
+  function itemsAtPoint(document: Document | undefined, x: number, y: number): HTMLElement[] {
+    if (typeof document?.elementsFromPoint !== "function") return [];
+    return document
+      .elementsFromPoint(x, y)
+      .map((element) => element.closest<HTMLElement>(options.itemSelector))
+      .filter((element): element is HTMLElement => element !== null);
+  }
 
   function cardAt(event: PointerEvent): HTMLElement | undefined {
     const direct =
@@ -75,10 +98,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
         ? (event.target.closest<HTMLElement>(options.itemSelector) ?? undefined)
         : undefined;
     if (direct) return direct;
-    return options.root.value?.ownerDocument
-      .elementsFromPoint(event.clientX, event.clientY)
-      .map((element) => element.closest<HTMLElement>(options.itemSelector))
-      .find((element): element is HTMLElement => element !== null);
+    return itemsAtPoint(options.root.value?.ownerDocument, event.clientX, event.clientY)[0];
   }
 
   /**
@@ -93,10 +113,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
         ? (event.target.closest<HTMLElement>(options.itemSelector) ?? undefined)
         : undefined;
     if (releaseCard) return releaseCard === origin;
-    const hitCards = origin.ownerDocument
-      .elementsFromPoint(event.clientX, event.clientY)
-      .map((element) => element.closest<HTMLElement>(options.itemSelector))
-      .filter((element): element is HTMLElement => element !== null);
+    const hitCards = itemsAtPoint(origin.ownerDocument, event.clientX, event.clientY);
     if (hitCards.some((element) => element === origin)) return true;
     if (hitCards.length > 0) return false;
     const rect = origin.getBoundingClientRect();
@@ -109,6 +126,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
   }
 
   function resolve(tracked: TrackedGesture, onOrigin: boolean) {
+    if (disposed) return;
     const horizontalIntent =
       Math.abs(tracked.deltaX) >=
       Math.abs(tracked.deltaY) * DIRECT_MANIPULATION_TUNING.horizontalIntentRatio;
@@ -129,7 +147,13 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
   }
 
   function onPointerDown(event: PointerEvent) {
-    if (options.disabled?.()) return;
+    if (options.disabled?.() || disposed) return;
+    // A new press supersedes whatever the previous one asked the browser to suppress.
+    suppressNextClick = false;
+    // A control inside a consumer's item owns its own pointer. The low-level drag recognizer
+    // already refuses these; the surface recognizer has to agree, or a press on a nested link
+    // would still be tracked as a gesture and resolved as a selection when it is released.
+    if (elementOwnsSnapMotionDrag(event.target)) return;
     if (gesture && !activePointers.has(event.pointerId)) {
       gesture.involvedMultiplePointers = true;
       activePointers.add(event.pointerId);
@@ -185,13 +209,34 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     if (!tracked || event.pointerId !== tracked.pointerId) return;
     trackMovement(tracked, event);
     const onOrigin = releasedOnOrigin(tracked, event);
+    // Decided synchronously, because the browser's click follows this release before the deferred
+    // resolution runs. Only a manipulation the surface actually consumed suppresses it — an
+    // ordinary tap on a consumer's own link or button stays an ordinary click.
+    suppressNextClick =
+      tracked.maximumDisplacement >= DIRECT_MANIPULATION_TUNING.activationThreshold;
     gesture = undefined;
     queueMicrotask(() => resolve(tracked, onOrigin));
   });
 
   useEventListener("pointercancel", abandon);
 
+  /**
+   * Cancels exactly one browser click, and only after a completed manipulation.
+   *
+   * A drag that ends over a link would otherwise both move the surface and follow the link. That is
+   * the only reason this exists, so it is deliberately not a blanket `preventDefault` on the item:
+   * a `#card` slot is arbitrary application content, and its buttons, links, and forms have to keep
+   * working exactly as they would anywhere else.
+   */
+  function onClick(event: MouseEvent) {
+    if (!suppressNextClick) return;
+    suppressNextClick = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   return {
+    onClick,
     onPointerDown,
     onLostPointerCapture: abandon,
   };
