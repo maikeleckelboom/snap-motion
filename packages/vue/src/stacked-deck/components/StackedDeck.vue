@@ -1,10 +1,10 @@
 <script setup lang="ts" generic="TItem extends { id: string }">
 import type {
   ElasticityOptions,
-  ReleaseTargetPolicy,
   SpringConfiguration,
+  StackedDeckReleasePolicy,
 } from "@snap-motion/core";
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 
 import {
   createEnglishSnapMotionMessages,
@@ -45,7 +45,8 @@ const props = withDefaults(
     messages?: Partial<SnapMotionMessages>;
     programmaticImpulse?: number;
     reducedMotionOverride?: boolean;
-    releasePolicy?: Partial<ReleaseTargetPolicy>;
+    /** Release policy, minus the anchor skip the deck fixes at one adjacent card. */
+    releasePolicy?: StackedDeckReleasePolicy;
     spring?: SpringConfiguration;
   }>(),
   {
@@ -86,6 +87,7 @@ function positionLabel(index: number): string {
 
 const deck = useStackedDeckMotion<TId>({
   ids,
+  controlledId: () => props.activeId,
   disabled: () => props.disabled,
   initialId: props.activeId ?? props.items[Math.floor(props.items.length / 2)]?.id,
   reducedMotionOverride,
@@ -155,19 +157,6 @@ function cardMotionStyle(card: StackedDeckCardState<TItem, TId>) {
     "--snap-motion-deck-shadow-strength": pose.shadowStrength.toFixed(4),
   };
 }
-
-/**
- * Controlled selection is authoritative state, not input, so it takes its own path into the
- * surface: it is never refused because the deck is disabled or physically owned, and it is never
- * echoed back as a request the consumer would have to answer.
- */
-watch(
-  () => props.activeId,
-  (id) => {
-    if (id === undefined || id === deck.settledId.value) return;
-    deck.applyControlledId(id);
-  },
-);
 
 defineExpose({
   canNext: deck.canNext,

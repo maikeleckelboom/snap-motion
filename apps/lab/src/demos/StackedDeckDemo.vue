@@ -10,7 +10,7 @@ import { computed, ref } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
 import {
-  carouselReleaseFromSettings,
+  deckReleaseFromSettings,
   springFromSettings,
   symmetricElasticityFromSettings,
 } from "@/fixtures/lab-settings";
@@ -34,7 +34,7 @@ const activeId = ref<ShowcaseScreenId>(screens[Math.floor(screens.length / 2)]!.
 
 const spring = computed(() => springFromSettings(props.settings));
 const elasticity = computed(() => symmetricElasticityFromSettings(props.settings));
-const releasePolicy = computed(() => carouselReleaseFromSettings(props.settings));
+const releasePolicy = computed(() => deckReleaseFromSettings(props.settings));
 
 const galleryFocusReturn = computed<FocusReturnOptions>(() => ({
   opener: inspectControl.value,

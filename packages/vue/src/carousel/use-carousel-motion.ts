@@ -4,7 +4,7 @@ import { computed, isRef, type Ref } from "vue";
 import { isSupportedPrimaryPointerStart } from "../internal/input/pointer-policy";
 import { useRemeasurement } from "../internal/layout/remeasurement";
 import { useSnapMotion, type UseSnapMotionOptions } from "../motion/use-snap-motion";
-import type { SnapMotionDirection } from "./carousel-contracts";
+import type { CarouselMotion, SnapMotionDirection } from "./carousel-contracts";
 import { carouselKeyAction } from "./carousel-keyboard";
 import { useHorizontalWheel } from "./carousel-wheel";
 
@@ -22,7 +22,9 @@ export interface UseCarouselMotionOptions<Id extends string> extends Omit<
   wheelSettleDelay?: number;
 }
 
-export function useCarouselMotion<Id extends string>(options: UseCarouselMotionOptions<Id>) {
+export function useCarouselMotion<Id extends string>(
+  options: UseCarouselMotionOptions<Id>,
+): CarouselMotion<Id> {
   const {
     direction = "auto",
     measure,
@@ -229,12 +231,6 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
     canNext,
     canPrevious,
     direction: computed(resolvedDirection),
-    /**
-     * The writing direction as it is right now. Input handling must ask rather than read a cached
-     * answer: `auto` resolves against computed style, which nothing reactive tracks, so a surface
-     * that mirrors its keys off the memoized `direction` would keep mirroring by whatever the page
-     * happened to be when it first rendered.
-     */
     resolveDirection: resolvedDirection,
     isWheeling: wheel.isWheeling,
     interrupt,

@@ -89,7 +89,10 @@ function allowedFeatureDependency(importer, target) {
   if (
     carouselMotionConsumers.has(from) &&
     to === "carousel" &&
-    targetPath === "carousel/use-carousel-motion.ts"
+    // A surface that composes the carousel motion capability needs the *type* of what it returns
+    // as much as the function itself, or it can only publish that escape hatch as an inferred
+    // shape. Both files are the same shared contract; neither is carousel presentation.
+    ["carousel/carousel-contracts.ts", "carousel/use-carousel-motion.ts"].includes(targetPath)
   ) {
     return true;
   }

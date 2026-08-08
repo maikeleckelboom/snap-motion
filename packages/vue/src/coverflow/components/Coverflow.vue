@@ -4,7 +4,7 @@ import type {
   ReleaseTargetPolicy,
   SpringConfiguration,
 } from "@snap-motion/core";
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 
 import {
   createEnglishSnapMotionMessages,
@@ -86,6 +86,7 @@ function positionLabel(index: number): string {
 
 const coverflow = useCoverflowMotion<TId>({
   ids,
+  controlledId: () => props.activeId,
   disabled: () => props.disabled,
   initialId: props.activeId ?? props.items[Math.floor(props.items.length / 2)]?.id,
   reducedMotionOverride,
@@ -111,17 +112,18 @@ const coverflow = useCoverflowMotion<TId>({
   },
 });
 
-const cards = computed<CoverflowCardState<TItem, TId>[]>(() =>
-  props.items.map((item, index) => ({
+const cards = computed<CoverflowCardState<TItem, TId>[]>(() => {
+  const state = coverflow.state.value;
+  return props.items.map((item, index) => ({
     item,
     id: item.id,
     index,
-    active: index === coverflow.visualIndex.value,
-    settled: index === coverflow.settledIndex.value,
+    active: index === state.visualIndex,
+    settled: index === state.settledIndex,
     inspectable: coverflow.isInspectEligible(index),
     presentation: coverflow.presentations.value[index]!,
-  })),
-);
+  }));
+});
 
 const stageStyle = computed(() => ({
   "--snap-motion-coverflow-stage-width": `${Math.min(props.stageWidth, 1_280)}px`,
@@ -160,30 +162,15 @@ function cardStyle(card: CoverflowCardState<TItem, TId>) {
   };
 }
 
-/**
- * Controlled selection is authoritative state, not input, so it takes its own path into the
- * surface: it is never refused because the rail is disabled or physically owned, and it is never
- * echoed back as a request the consumer would have to answer.
- */
-watch(
-  () => props.activeId,
-  (id) => {
-    if (id === undefined || id === coverflow.settledId.value) return;
-    coverflow.applyControlledId(id);
-  },
-);
-
 defineExpose({
   canNext: coverflow.canNext,
   canPrevious: coverflow.canPrevious,
-  commandIndex: coverflow.commandIndex,
   compositing: coverflow.compositing,
   diagnostics: coverflow.diagnostics,
   isInspectEligible: coverflow.isInspectEligible,
   next: coverflow.next,
   onKeyDown: coverflow.onKeyDown,
   paginationIndicator: coverflow.paginationIndicator,
-  pendingTargetIndex: coverflow.pendingTargetIndex,
   physicalIndex: coverflow.physicalIndex,
   presentations: coverflow.presentations,
   pitch: coverflow.pitch,
@@ -191,12 +178,11 @@ defineExpose({
   requestId: coverflow.requestId,
   root,
   settledId: coverflow.settledId,
-  settledIndex: coverflow.settledIndex,
   speedInCards: coverflow.speedInCards,
+  state: coverflow.state,
   synchronizeId: coverflow.synchronizeId,
   tuning: coverflow.tuning,
   visualId: coverflow.visualId,
-  visualIndex: coverflow.visualIndex,
 });
 </script>
 

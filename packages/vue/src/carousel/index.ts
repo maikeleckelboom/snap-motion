@@ -9,7 +9,15 @@ export { default as CarouselSlide } from "./components/CarouselSlide.vue";
 export { default as CarouselStatus } from "./components/CarouselStatus.vue";
 export { default as CarouselTrack } from "./components/CarouselTrack.vue";
 export { default as CarouselViewport } from "./components/CarouselViewport.vue";
-export type { CarouselKeyboardScope, SnapMotionDirection } from "./carousel-contracts";
+export type {
+  CarouselKeyboardScope,
+  CarouselMotion,
+  SnapMotionDirection,
+} from "./carousel-contracts";
+export type { PointerIntent } from "../internal/input/pointer-policy";
+// `UseCarouselMotionOptions` is defined in terms of these, so the entrypoint that publishes it
+// publishes them too rather than leaving a name in its own report that nothing can reach.
+export type { UseSnapMotionOptions } from "../motion/use-snap-motion";
 export {
   createFixedStageCarouselGeometryStrategy,
   createVariableWidthCenteredCarouselGeometryStrategy,

@@ -42,8 +42,11 @@ const galleryFocusReturn = computed<FocusReturnOptions>(() => ({
   fallback: () => rail.value?.root,
 }));
 
-const visualIndex = computed(() => rail.value?.visualIndex ?? 0);
-const settledIndex = computed(() => rail.value?.settledIndex ?? 0);
+// One published state, read the way an application reads it. `-1` is the rail's own answer for
+// "no item", so the lab's fallbacks stay ordinal rather than inventing item zero.
+const railState = computed(() => rail.value?.state);
+const visualIndex = computed(() => railState.value?.visualIndex ?? 0);
+const settledIndex = computed(() => railState.value?.settledIndex ?? 0);
 const visualScreen = computed(() => screens[visualIndex.value] ?? screens[0]!);
 const settledScreen = computed(() => screens[settledIndex.value] ?? screens[0]!);
 const inspectEligible = computed(() => rail.value?.isInspectEligible(settledIndex.value) ?? false);
@@ -147,7 +150,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       : { focusedPaginationIndex: focusedPaginationIndex.value }),
     indicatorX: surface?.paginationIndicator.x ?? 0,
     indicatorScale: surface?.paginationIndicator.scaleX ?? 1,
-    keyboardTargetIndex: surface?.commandIndex ?? 0,
+    keyboardTargetIndex: railState.value?.commandIndex ?? 0,
     maxAnchorSkip: props.settings.maxAnchorSkip,
     releaseVelocityCapActive:
       motion?.phase === "settling" &&
@@ -222,9 +225,9 @@ const diagnostics = computed<LabDiagnostics>(() => {
       :stage-width="stageWidth"
       data-testid="coverflow-viewport"
       :data-gallery-open="galleryOpen ? 'true' : 'false'"
-      :data-keyboard-target-index="rail?.commandIndex"
+      :data-keyboard-target-index="rail?.state.commandIndex"
       :data-motion-pitch="rail?.pitch"
-      :data-pending-index="rail?.pendingTargetIndex"
+      :data-pending-index="rail?.state.pendingTargetIndex"
       :data-physical-index="rail?.physicalIndex"
       :data-position="rail?.diagnostics.position"
       :data-settled-index="settledIndex"

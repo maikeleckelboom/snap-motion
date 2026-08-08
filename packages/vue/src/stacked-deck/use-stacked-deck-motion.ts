@@ -12,12 +12,13 @@ import {
   STACKED_DECK_INTERIOR_ELASTICITY,
   StackedDeckModel,
   type ElasticityOptions,
-  type ReleaseTargetPolicy,
+  type SnapAnchor,
   type SpringConfiguration,
   type PaginationIndicatorState,
   type StackedDeckFrame,
   type StackedDeckModelState,
   type StackedDeckProfile,
+  type StackedDeckReleasePolicy,
   type StackedDeckTuning,
 } from "@snap-motion/core";
 import { useElementSize } from "@vueuse/core";
@@ -31,10 +32,13 @@ import {
   triggerRef,
   watch,
   watchEffect,
+  type ComputedRef,
   type MaybeRefOrGetter,
   type Ref,
+  type ShallowRef,
 } from "vue";
 
+import type { CarouselMotion } from "../carousel/carousel-contracts";
 import { useCarouselMotion } from "../carousel/use-carousel-motion";
 import { resolveDirectionalSnapKeyboardAction } from "../internal/input/keyboard-policy";
 import { useSurfaceGesture } from "../internal/input/surface-gesture";
@@ -65,11 +69,23 @@ export interface UseStackedDeckMotionOptions<Id extends string> {
    */
   readonly elasticity?: MaybeRefOrGetter<ElasticityOptions | undefined>;
   /**
-   * Release policy. `maxAnchorSkip` is deliberately not honoured: a deck fixes its own effective
-   * skip at one adjacent card, and lowering the generic policy would constrain every other surface.
+   * Release policy, minus the anchor skip the deck fixes at one adjacent card. The type says so
+   * rather than the implementation quietly overwriting whatever a consumer supplied.
    */
-  readonly releasePolicy?: MaybeRefOrGetter<Partial<ReleaseTargetPolicy> | undefined>;
+  readonly releasePolicy?: MaybeRefOrGetter<StackedDeckReleasePolicy | undefined>;
   readonly programmaticImpulse?: MaybeRefOrGetter<number | undefined>;
+  /**
+   * Authoritative selection from outside this surface: a controlled prop, a route, another surface
+   * reporting where it left the user.
+   *
+   * It is applied even while the deck is `disabled` or physically held, because it is state rather
+   * than input and refusing it would leave the surface disagreeing with the application with
+   * nothing to retry it. The interruption policy is explicit — held or refusing input, the
+   * destination is adopted exactly, since animating out from under a hand is worse than arriving;
+   * otherwise the deck's own product policy applies, so an adjacent screen still exchanges the way
+   * it always does. It never reports back as a user request.
+   */
+  readonly controlledId?: MaybeRefOrGetter<Id | undefined>;
   /** Announces the durable selection. Fires only at mechanical rest, with what initiated it. */
   readonly onSettled?: (id: Id, index: number, reason: NavigationReason) => void;
   /** A tap on the current, unambiguous card: the request to open it on another surface. */
@@ -80,9 +96,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function deckRelease(
-  policy: Partial<ReleaseTargetPolicy> | undefined,
-): Partial<ReleaseTargetPolicy> {
+function deckRelease(policy: StackedDeckReleasePolicy | undefined) {
   return { ...policy, maxAnchorSkip: STACKED_DECK_ANCHOR_SKIP };
 }
 
@@ -102,6 +116,71 @@ function deckPhysics(elasticity: ElasticityOptions | undefined) {
 }
 
 /**
+ * Everything {@link useStackedDeckMotion} publishes.
+ *
+ * Written out rather than inferred. A `ReturnType<typeof …>` contract versions whatever the
+ * implementation currently happens to return — every internal helper, every ordinal convenience —
+ * and changes silently when one of them does. This is the deliberate list, and the omissions are
+ * deliberate too: index-only request and synchronization helpers, and the controlled-selection
+ * plumbing, are how this capability is built rather than what it offers.
+ *
+ * Ordinal fields follow the model's convention: `-1` names no card, which is what an empty deck
+ * reports everywhere.
+ */
+export interface UseStackedDeckMotionReturn<Id extends string> {
+  /** Each card's anchor position, keyed by the semantic ID the consumer supplied. */
+  readonly anchorsById: ComputedRef<Map<Id, number>>;
+  /** Mechanical rest. It governs durable selection and announcements, never input admission. */
+  readonly atRest: ComputedRef<boolean>;
+  readonly canNext: ComputedRef<boolean>;
+  readonly canPrevious: ComputedRef<boolean>;
+  /** True while the deck is being manipulated or is animating on its own. */
+  readonly compositing: ComputedRef<boolean>;
+  /** The card the deck names, which leads the visual top through a handoff. */
+  readonly currentId: ComputedRef<Id | undefined>;
+  /** Read-only motion telemetry. Observation only: nothing here can move the deck. */
+  readonly diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
+  readonly frame: ShallowRef<StackedDeckFrame>;
+  /** The deck's semantics, as the escape hatch for a renderer that needs to ask them directly. */
+  readonly model: StackedDeckModel<Id>;
+  /** The scalar controller and its input bindings, as the lower-level escape hatch. */
+  readonly motion: CarouselMotion<Id>;
+  /** True only while an input device physically holds the deck. */
+  readonly owned: ComputedRef<boolean>;
+  readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
+  readonly physicalIndex: ComputedRef<number>;
+  readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer[]>;
+  readonly pitch: ComputedRef<number>;
+  /** Durable selection. It changes only at mechanical rest. */
+  readonly settledId: ComputedRef<Id | undefined>;
+  readonly speedInCards: ComputedRef<number>;
+  readonly stageWidth: ComputedRef<number>;
+  readonly state: ShallowRef<StackedDeckModelState>;
+  /** The last index announced, or `null` when the deck has not announced anything yet. */
+  readonly statusIndex: ComputedRef<number | null>;
+  readonly tuning: ComputedRef<StackedDeckTuning>;
+  readonly tuningProfile: ComputedRef<StackedDeckProfile>;
+  isInspectEligible(index: number): boolean;
+  /** One adjacent card forward. It is that operation and no other, so it cannot be relabelled. */
+  next(): boolean;
+  onClick(event: MouseEvent): void;
+  onKeyDown(event: KeyboardEvent): void;
+  onLostPointerCapture(event: PointerEvent): void;
+  onPointerDown(event: PointerEvent): void;
+  onWheel(event: WheelEvent): void;
+  /** One adjacent card back. */
+  previous(): boolean;
+  remeasure(): SnapAnchor<Id> | null;
+  /**
+   * Navigates to a destination, traversing it when adjacent and synchronizing when it is not.
+   * Returns `false` for an ID the deck does not contain. Reported as `programmatic`.
+   */
+  requestId(id: Id): boolean;
+  /** Adopts a destination exactly, with no traversal. Silent unless `announce` is true. */
+  synchronizeId(id: Id, announce?: boolean): boolean;
+}
+
+/**
  * The stacked deck as a Vue capability: one physical interaction exchanges exactly one adjacent
  * screen, however far it travels, and the next interaction starts on the card already on top.
  *
@@ -110,7 +189,9 @@ function deckPhysics(elasticity: ElasticityOptions | undefined) {
  * model to a browser: pointer and wheel ownership, responsive tuning, reduced motion, frame
  * scheduling, hit testing, and the CSS projection of the frame and the pile.
  */
-export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckMotionOptions<Id>) {
+export function useStackedDeckMotion<Id extends string>(
+  options: UseStackedDeckMotionOptions<Id>,
+): UseStackedDeckMotionReturn<Id> {
   const ids = computed(() => toValue(options.ids));
   const root = options.root ?? options.viewport;
   const track = options.track ?? ref<HTMLElement>();
@@ -183,7 +264,7 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
   });
 
   const anchorsById = computed(() => {
-    const map = new Map<string, number>();
+    const map = new Map<Id, number>();
     for (const anchor of motion.snapshot.value.anchors) map.set(anchor.id, anchor.position);
     return map;
   });
@@ -216,6 +297,20 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
 
   const statusIndex = ref<number | null>(null);
 
+  /**
+   * Publishes one model state and speaks for it if it asked to be announced.
+   *
+   * Assigning a newly created state object is already enough to invalidate a shallow ref; the
+   * model builds a fresh one per publication, so nothing here needs a manual trigger.
+   */
+  function publish(published: StackedDeckModelState) {
+    state.value = published;
+    if (published.announcementIndex === null) return;
+    statusIndex.value = published.announcementIndex;
+    const id = model.idAt(published.announcementIndex);
+    if (id !== undefined) options.onSettled?.(id, published.announcementIndex, pendingReason);
+  }
+
   watch(
     motion.snapshot,
     (snapshot) => {
@@ -223,23 +318,16 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
       const targetIndex = snapshot.target === null ? null : model.indexOf(snapshot.target.id);
       const nearestIndex =
         snapshot.active === null ? model.state.settledIndex : model.indexOf(snapshot.active.id);
-      const published = model.update({
-        phase: snapshot.phase,
-        physicalIndex: -snapshot.position / currentPitch,
-        // An anchor the model no longer contains says nothing about the deck's selection, so it is
-        // reported as no destination at all rather than as item zero.
-        targetIndex: targetIndex !== null && targetIndex >= 0 ? targetIndex : null,
-        nearestIndex: nearestIndex >= 0 ? nearestIndex : model.state.settledIndex,
-      });
-      state.value = published;
-      triggerRef(state);
-      if (published.announcementIndex !== null) {
-        statusIndex.value = published.announcementIndex;
-        const id = model.idAt(published.announcementIndex);
-        if (id !== undefined) {
-          options.onSettled?.(id, published.announcementIndex, pendingReason);
-        }
-      }
+      publish(
+        model.update({
+          phase: snapshot.phase,
+          physicalIndex: -snapshot.position / currentPitch,
+          // An anchor the model no longer contains says nothing about the deck's selection, so it
+          // is reported as no destination at all rather than as item zero.
+          targetIndex: targetIndex !== null && targetIndex >= 0 ? targetIndex : null,
+          nearestIndex: nearestIndex >= 0 ? nearestIndex : model.state.settledIndex,
+        }),
+      );
     },
     { immediate: true },
   );
@@ -269,6 +357,8 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
     }
     resolveStackedDeckFrame({ itemCount, traversal, tuning: activeTuning.value }, frameStorage);
     frame.value = frameStorage;
+    // Resolution writes through one reused frame, so the identity in the ref is unchanged and only
+    // an explicit trigger can report it. This is the case manual triggering exists for.
     triggerRef(frame);
   });
 
@@ -338,8 +428,14 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
     });
   }
 
-  /** Adopts a destination exactly: no traversal, and no announcement it did not earn. */
-  function synchronizeIndex(index: number, announce = false): boolean {
+  /**
+   * Adopts a destination exactly: no traversal, and no announcement it did not earn.
+   *
+   * The reason is stated by the caller rather than inherited. A synchronization is authoritative
+   * state arriving from outside, and whatever happened to be in flight before it — a drag, a wheel
+   * burst, a keypress — is not what caused it.
+   */
+  function synchronizeIndex(index: number, reason: NavigationReason, announce = false): boolean {
     const id = model.idAt(index);
     const anchorPosition = id === undefined ? undefined : anchorsById.value.get(id);
     if (id === undefined || anchorPosition === undefined) return false;
@@ -356,10 +452,12 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
     if (alreadySynchronized) return true;
 
     motion.interrupt();
+    pendingReason = reason;
     if (model.synchronize(index, { announce }) < 0) return false;
     motion.controller.remeasure({ ...measure(), activeId: id });
-    state.value = model.state;
-    triggerRef(state);
+    // An announced adoption already carries its announcement, so publishing the state publishes it
+    // too — there is no later idle snapshot this could be waiting for.
+    publish(model.state);
     return true;
   }
 
@@ -379,60 +477,65 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
     return traverse(command.originIndex, command.targetIndex);
   }
 
-  function requestIndex(index: number, reason: NavigationReason = "picker"): boolean {
+  function requestIndex(index: number, reason: NavigationReason): boolean {
     if (disabled()) return false;
     const command = model.resolveAbsoluteCommand(index, {
       owned: owned.value,
       atRest: atRest.value,
     });
     if (command.kind === "none") return false;
-    pendingReason = reason;
-    if (command.kind === "traverse") return traverse(command.originIndex, command.targetIndex);
-    return synchronizeIndex(command.targetIndex, command.announce);
+    if (command.kind === "traverse") {
+      pendingReason = reason;
+      return traverse(command.originIndex, command.targetIndex);
+    }
+    return synchronizeIndex(command.targetIndex, reason, command.announce);
   }
 
   /**
    * Navigates to a named destination. An ID the deck does not contain is refused outright rather
    * than clamped, so a stale route can never silently become item zero.
+   *
+   * It reports `programmatic`: this is the general imperative entry point, and an application
+   * calling it is not the same event as a person tapping a card or a pagination dot.
    */
-  function requestId(id: Id, reason: NavigationReason = "picker"): boolean {
+  function requestId(id: Id): boolean {
     const index = model.indexOf(id);
-    return index < 0 ? false : requestIndex(index, reason);
+    return index < 0 ? false : requestIndex(index, "programmatic");
   }
 
   function synchronizeId(id: Id, announce = false): boolean {
     const index = model.indexOf(id);
-    return index < 0 ? false : synchronizeIndex(index, announce);
+    return index < 0 ? false : synchronizeIndex(index, "route", announce);
   }
 
-  /**
-   * Applies authoritative selection that did not come from this surface — a controlled prop, a
-   * route change, another surface reporting where it left the user.
-   *
-   * This deliberately does not share the user-command admission path. `disabled` and physical
-   * ownership are answers to "may this input move the surface", and controlled state is not input:
-   * refusing it leaves the surface disagreeing with the application with nothing to retry it. The
-   * interruption policy is explicit — while the deck is held or refusing input, the destination is
-   * adopted exactly, because animating out from under a hand is worse than arriving; otherwise the
-   * deck's own product policy applies, so an adjacent screen still exchanges the way it always does.
-   */
+  /** Applies authoritative selection that did not come from this surface. See `controlledId`. */
   function applyControlledId(id: Id): boolean {
     const index = model.indexOf(id);
     if (index < 0) return false;
-    pendingReason = "route";
-    if (disabled() || owned.value) return synchronizeIndex(index, false);
+    if (disabled() || owned.value) return synchronizeIndex(index, "route", false);
     const command = model.resolveAbsoluteCommand(index, { owned: false, atRest: atRest.value });
-    if (command.kind === "traverse") return traverse(command.originIndex, command.targetIndex);
-    if (command.kind === "synchronize") return synchronizeIndex(command.targetIndex, false);
+    if (command.kind === "traverse") {
+      pendingReason = "route";
+      return traverse(command.originIndex, command.targetIndex);
+    }
+    if (command.kind === "synchronize")
+      return synchronizeIndex(command.targetIndex, "route", false);
     return true;
   }
 
-  function previous(reason: NavigationReason = "previous"): boolean {
-    return requestRelative(-1, reason);
+  /**
+   * Previous and Next are semantically fixed operations, not parameterised ones.
+   *
+   * A consumer must not be able to claim that `next()` was a drag, or that `previous()` was a
+   * route: `requestActiveId` exists so an application can trust the reason it is given, and a
+   * reason a caller chose is not evidence of anything. The reason-taking helper stays internal.
+   */
+  function previous(): boolean {
+    return requestRelative(-1, "previous");
   }
 
-  function next(reason: NavigationReason = "next"): boolean {
-    return requestRelative(1, reason);
+  function next(): boolean {
+    return requestRelative(1, "next");
   }
 
   function onKeyDown(event: KeyboardEvent) {
@@ -440,8 +543,8 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
     const action = resolveDirectionalSnapKeyboardAction(event, motion.resolveDirection());
     if (!action) return;
     event.preventDefault();
-    if (action === "previous") previous("keyboard");
-    else if (action === "next") next("keyboard");
+    if (action === "previous") requestRelative(-1, "keyboard");
+    else if (action === "next") requestRelative(1, "keyboard");
     else requestIndex(action === "home" ? 0 : ids.value.length - 1, "keyboard");
   }
 
@@ -454,7 +557,9 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
   function onWheel(event: WheelEvent) {
     if (disabled()) return;
     if (!motion.isWheeling.value && owned.value) return;
-    pendingReason = "wheel";
+    // No reason is claimed here. A WheelEvent arriving is not a wheel navigation: it may be a
+    // vertical page scroll, or belong to a descendant that owns its own scrolling. `onTargetSelected`
+    // names the reason once a burst has actually resolved a destination on this surface.
     motion.onWheel(event);
   }
 
@@ -499,17 +604,12 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
         if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
         selectionFrame = requestAnimationFrame(() => {
           selectionFrame = undefined;
+          // A tap on a card is a discrete choice, which is exactly what `picker` names.
           requestIndex(originIndex, "picker");
         });
       }
     },
   });
-
-  /** A press is the opening of a drag, so it names the reason before the release resolves one. */
-  function onPointerDown(event: PointerEvent) {
-    pendingReason = "drag";
-    gesture.onPointerDown(event);
-  }
 
   function currentConfiguration() {
     const spring = toValue(options.spring);
@@ -544,8 +644,7 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
       motion.interrupt();
       const index = model.reconfigure(nextIds);
       const preservedId = model.idAt(index);
-      state.value = model.state;
-      triggerRef(state);
+      publish(model.state);
       motion.controller.remeasure({
         ...measure(),
         ...(preservedId === undefined ? {} : { activeId: preservedId }),
@@ -555,6 +654,18 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
   );
 
   watch([pitch, () => toValue(options.stageWidth)], () => void nextTick(motion.remeasure));
+
+  /**
+   * Controlled selection. It is state rather than input, so it deliberately does not share the
+   * user-command admission path, and it is never echoed back as a request.
+   */
+  watch(
+    () => toValue(options.controlledId),
+    (id) => {
+      if (id === undefined || id === model.idAt(state.value.settledIndex)) return;
+      applyControlledId(id);
+    },
+  );
 
   onBeforeUnmount(() => {
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
@@ -577,7 +688,9 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
     onClick: gesture.onClick,
     onKeyDown,
     onLostPointerCapture: gesture.onLostPointerCapture,
-    onPointerDown,
+    // Forwarded as-is. A press is not yet a drag: it may be refused outright, resolve as a tap, or
+    // turn out to be a vertical scroll, and only the movement the surface accepts names a reason.
+    onPointerDown: gesture.onPointerDown,
     onWheel,
     owned,
     paginationIndicator,
@@ -586,24 +699,17 @@ export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckM
     pitch,
     previous,
     remeasure: motion.remeasure,
-    applyControlledId,
     requestId,
-    requestIndex,
     settledId,
     speedInCards,
     stageWidth,
     state,
     statusIndex: computed(() => statusIndex.value),
     synchronizeId,
-    synchronizeIndex,
     tuning: activeTuning,
     tuningProfile: computed(() => naturalTuning.value.profile),
   };
 }
-
-export type UseStackedDeckMotionReturn<Id extends string> = ReturnType<
-  typeof useStackedDeckMotion<Id>
->;
 
 /**
  * The imperative surface of a mounted `StackedDeck`, as a template ref sees it: Vue unwraps the
@@ -632,19 +738,27 @@ export interface StackedDeckHandle<Id extends string> {
   /** Durable selection. It changes only at mechanical rest. */
   readonly settledId: Id | undefined;
   readonly speedInCards: number;
+  /** Published semantics. Every ordinal on it is `-1` when the deck has no items. */
   readonly state: StackedDeckModelState;
   readonly tuning: StackedDeckTuning;
   readonly tuningProfile: StackedDeckProfile;
   isInspectEligible(index: number): boolean;
-  next(reason?: NavigationReason): boolean;
+  /**
+   * One adjacent card forward.
+   *
+   * It takes no reason, and that is the point: `requestActiveId` reports why a selection changed,
+   * and an application can only trust that report if a caller cannot author it. Next is next.
+   */
+  next(): boolean;
   /** Applies the surface's keyboard policy to an event a wider scope has received. */
   onKeyDown(event: KeyboardEvent): void;
-  previous(reason?: NavigationReason): boolean;
+  /** One adjacent card back. */
+  previous(): boolean;
   /**
    * Navigates to a destination, traversing it when adjacent and synchronizing when it is not.
-   * Returns `false` for an ID the deck does not contain.
+   * Returns `false` for an ID the deck does not contain. Reported as `programmatic`.
    */
-  requestId(id: Id, reason?: NavigationReason): boolean;
+  requestId(id: Id): boolean;
   /** Adopts a destination exactly, with no traversal. Silent unless `announce` is true. */
   synchronizeId(id: Id, announce?: boolean): boolean;
 }

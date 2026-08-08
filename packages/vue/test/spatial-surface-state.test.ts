@@ -28,17 +28,21 @@ interface DeckInstance {
   canNext: boolean;
   canPrevious: boolean;
   currentId: string | undefined;
-  next: (reason?: string) => boolean;
-  previous: (reason?: string) => boolean;
-  requestId: (id: string, reason?: string) => boolean;
+  next: () => boolean;
+  previous: () => boolean;
+  requestId: (id: string) => boolean;
   settledId: string | undefined;
+  state: { settledIndex: number; currentIndex: number; commandOriginIndex: number };
   synchronizeId: (id: string, announce?: boolean) => boolean;
 }
 
 interface RailInstance {
+  canNext: boolean;
+  canPrevious: boolean;
   next: () => boolean;
   requestId: (id: string) => boolean;
   settledId: string | undefined;
+  state: { settledIndex: number; visualIndex: number; commandIndex: number };
   synchronizeId: (id: string, announce?: boolean) => boolean;
   visualId: string | undefined;
 }
@@ -187,6 +191,74 @@ describe("item reconfiguration through the public component", () => {
   });
 });
 
+describe("empty collections name no item, at every layer", () => {
+  it("mounts a deck with no items at all", async () => {
+    const wrapper = mountDeck({ items: [] });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+
+    expect(wrapper.findAll(".snap-motion-stacked-deck-card")).toHaveLength(0);
+    expect(deck.settledId).toBeUndefined();
+    expect(deck.currentId).toBeUndefined();
+    expect(deck.canNext).toBe(false);
+    expect(deck.canPrevious).toBe(false);
+    // One convention, all the way down: `-1` is "no item", never item zero.
+    expect(deck.state.settledIndex).toBe(-1);
+    expect(deck.state.currentIndex).toBe(-1);
+    expect(deck.state.commandOriginIndex).toBe(-1);
+    // And a command while empty is refused rather than resolved against something imaginary.
+    expect(deck.next()).toBe(false);
+    expect(deck.previous()).toBe(false);
+    expect(deck.requestId("a")).toBe(false);
+    expect(deck.synchronizeId("a")).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("mounts a rail with no items at all", async () => {
+    const wrapper = mountRail({ items: [] });
+    await nextTick();
+    const rail = wrapper.vm as unknown as RailInstance;
+
+    expect(wrapper.findAll(".snap-motion-coverflow-card")).toHaveLength(0);
+    expect(rail.settledId).toBeUndefined();
+    expect(rail.visualId).toBeUndefined();
+    expect(rail.canNext).toBe(false);
+    expect(rail.canPrevious).toBe(false);
+    expect(rail.state.settledIndex).toBe(-1);
+    expect(rail.state.visualIndex).toBe(-1);
+    expect(rail.state.commandIndex).toBe(-1);
+    expect(rail.next()).toBe(false);
+    expect(rail.requestId("a")).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("agrees with itself across populated, empty, and populated again", async () => {
+    const wrapper = mountRail();
+    await nextTick();
+    const rail = wrapper.vm as unknown as RailInstance;
+    expect(rail.state.settledIndex).toBe(2);
+
+    await wrapper.setProps({ items: [] });
+    await nextTick();
+    expect(rail.state.settledIndex).toBe(-1);
+    expect(rail.settledId).toBeUndefined();
+    expect(rail.canNext).toBe(false);
+    expect(rail.next()).toBe(false);
+
+    await wrapper.setProps({ items: screens.slice(0, 3) });
+    await nextTick();
+    expect(rail.state.settledIndex).toBe(0);
+    expect(rail.settledId).toBe("a");
+    expect(rail.canNext).toBe(true);
+    // Repopulating is not a navigation the user made, so nobody is told one happened.
+    expect(wrapper.emitted("requestActiveId")).toBeUndefined();
+    expect(rail.next()).toBe(true);
+    await nextTick();
+    expect(rail.settledId).toBe("b");
+    wrapper.unmount();
+  });
+});
+
 describe("unknown semantic identifiers", () => {
   it("never resolves an unknown deck ID to the first card", async () => {
     const wrapper = mountDeck();
@@ -312,7 +384,8 @@ describe("navigation reasons tell the truth", () => {
       ["d", "next"],
       ["c", "previous"],
       ["d", "keyboard"],
-      ["a", "picker"],
+      // An imperative request is not a person choosing a card. `picker` is reserved for that.
+      ["a", "programmatic"],
     ]);
     wrapper.unmount();
   });
@@ -363,8 +436,132 @@ describe("navigation reasons tell the truth", () => {
     expect(wrapper.emitted("requestActiveId")).toEqual([
       ["d", "next"],
       ["a", "keyboard"],
-      ["e", "picker"],
+      ["e", "programmatic"],
     ]);
+    wrapper.unmount();
+  });
+
+  it("reports a tap on a card as a picker", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const wrapper = mountRail();
+    await nextTick();
+    const card = wrapper.findAll(".snap-motion-coverflow-card")[1]!.element as HTMLElement;
+
+    card.dispatchEvent(pointerEvent("pointerdown", { buttons: 1 }));
+    card.dispatchEvent(pointerEvent("pointerup"));
+    await Promise.resolve();
+    frames.forEach((frame) => frame(0));
+    await nextTick();
+
+    expect(wrapper.emitted("requestActiveId")).toEqual([["b", "picker"]]);
+    wrapper.unmount();
+  });
+});
+
+describe("navigation reasons cannot be forged", () => {
+  it("keeps an existing spring's reason when a press is refused by a nested control", async () => {
+    const wrapper = mount(TypedStackedDeck, {
+      props: {
+        items: screens,
+        label: "Screens",
+        reducedMotionOverride: true,
+      },
+      slots: { card: () => h("button", { class: "card-button", type: "button" }, "Act") },
+      attachTo: document.body,
+    });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+
+    deck.next();
+    // The press never becomes a drag: the button owns its own pointer. It is not evidence of one.
+    const button = wrapper.get(".card-button").element as HTMLElement;
+    button.dispatchEvent(pointerEvent("pointerdown", { buttons: 1 }));
+    button.dispatchEvent(pointerEvent("pointerup"));
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("requestActiveId")).toEqual([["d", "next"]]);
+    wrapper.unmount();
+  });
+
+  it("keeps it when an unsupported pointer reaches the surface", async () => {
+    const wrapper = mountDeck();
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+    const root = wrapper.element as HTMLElement;
+
+    deck.next();
+    // A right-click is not a manipulation this surface accepts, so it names nothing.
+    root.dispatchEvent(pointerEvent("pointerdown", { button: 2, buttons: 2 }));
+    root.dispatchEvent(pointerEvent("pointerup", { button: 2 }));
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("requestActiveId")).toEqual([["d", "next"]]);
+    wrapper.unmount();
+  });
+
+  it("keeps it while the page is scrolled vertically over the surface", async () => {
+    vi.useFakeTimers();
+    const wrapper = mountDeck();
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+
+    deck.next();
+    (wrapper.element as HTMLElement).dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 0, deltaY: 240 }),
+    );
+    vi.advanceTimersByTime(200);
+    await nextTick();
+
+    // The rail never took the wheel, so the settlement is still the one `next()` asked for.
+    expect(wrapper.emitted("requestActiveId")).toEqual([["d", "next"]]);
+    wrapper.unmount();
+  });
+
+  it("keeps it when a wheel gesture belongs to a descendant", async () => {
+    vi.useFakeTimers();
+    const wrapper = mount(TypedStackedDeck, {
+      props: { items: screens, label: "Screens", reducedMotionOverride: true },
+      slots: { card: () => h("input", { class: "card-input", type: "text" }) },
+      attachTo: document.body,
+    });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+
+    deck.next();
+    wrapper
+      .get(".card-input")
+      .element.dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 200, deltaY: 0 }),
+      );
+    vi.advanceTimersByTime(200);
+    await nextTick();
+
+    expect(wrapper.emitted("requestActiveId")).toEqual([["d", "next"]]);
+    wrapper.unmount();
+  });
+
+  it("never lets a synchronization inherit whatever was in flight before it", async () => {
+    const wrapper = mountDeck();
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+
+    // Something the user did is in flight, and then authoritative state arrives and announces.
+    deck.next();
+    expect(deck.synchronizeId("a", true)).toBe(true);
+    await nextTick();
+
+    // The announcement is published by the adoption itself, so it happens at all...
+    expect(wrapper.emitted("settled")).toEqual([["a"]]);
+    expect(deck.settledId).toBe("a");
+    // ...and it carries `route`, so it is never echoed back as a user request — least of all as
+    // the `next` that the adoption interrupted.
+    expect(wrapper.emitted("requestActiveId")).toBeUndefined();
     wrapper.unmount();
   });
 });

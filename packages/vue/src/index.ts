@@ -26,6 +26,7 @@ export type {
   CarouselGeometryMeasureContext,
   CarouselGeometryStrategy,
   CarouselKeyboardScope,
+  CarouselMotion,
   CarouselWindowOptions,
   CarouselWindowState,
   FixedStageCarouselGeometryOptions,
