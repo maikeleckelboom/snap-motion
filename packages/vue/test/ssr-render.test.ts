@@ -9,9 +9,11 @@ import CarouselSlide from "../src/carousel/components/CarouselSlide.vue";
 import CarouselStatus from "../src/carousel/components/CarouselStatus.vue";
 import CarouselTrack from "../src/carousel/components/CarouselTrack.vue";
 import CarouselViewport from "../src/carousel/components/CarouselViewport.vue";
+import Coverflow from "../src/coverflow/components/Coverflow.vue";
 import ModalDialog from "../src/dialog/components/ModalDialog.vue";
 import MediaGalleryDialog from "../src/media-gallery/components/MediaGalleryDialog.vue";
 import Sheet from "../src/sheet/components/Sheet.vue";
+import StackedDeck from "../src/stacked-deck/components/StackedDeck.vue";
 
 function carousel(activeId: string, label: string) {
   return h(
@@ -35,6 +37,12 @@ function carousel(activeId: string, label: string) {
     },
   );
 }
+
+interface SpatialItem {
+  readonly id: "one" | "two" | "three";
+}
+
+const spatialItems: readonly SpatialItem[] = [{ id: "one" }, { id: "two" }, { id: "three" }];
 
 function createCertificationApp() {
   return createSSRApp({
@@ -66,6 +74,16 @@ function createCertificationApp() {
           ],
           initialIndex: 8,
         }),
+        h(
+          Coverflow,
+          { items: spatialItems, label: "Coverflow rail" },
+          { card: ({ item }: { item: SpatialItem }) => h("p", item.id) },
+        ),
+        h(
+          StackedDeck,
+          { items: spatialItems, label: "Stacked deck" },
+          { card: ({ item }: { item: SpatialItem }) => h("p", item.id) },
+        ),
       ]);
     },
   });

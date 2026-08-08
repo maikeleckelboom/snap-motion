@@ -8,6 +8,11 @@ export interface SnapMotionMessages {
   paginationLabel: string;
   progressLabel: string;
   itemStatus(context: { id: string; index: number; count: number; label?: string }): string;
+  /**
+   * Names an item together with where it sits. Spatial surfaces announce and label this way,
+   * because "which one" and "how far through" are the same question when the rail is the content.
+   */
+  itemPositionStatus(context: { index: number; count: number; label?: string }): string;
   sheetStatus(context: { id: string; label: string }): string;
   sheetSnapLegend: string;
 }
@@ -26,6 +31,8 @@ export function createEnglishSnapMotionMessages(
     paginationLabel: "Choose an item",
     progressLabel: "Item progress",
     itemStatus: ({ index, count, label }) => label ?? `${index + 1} of ${count}`,
+    itemPositionStatus: ({ index, count, label }) =>
+      label === undefined ? `${index + 1} of ${count}` : `${label}, ${index + 1} of ${count}`,
     sheetStatus: ({ label }) => `Sheet position: ${label}`,
     sheetSnapLegend: "Sheet position",
     ...overrides,

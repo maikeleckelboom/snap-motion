@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { carouselKeyAction, elementOwnsCarouselKeyboard } from "../src/carousel/carousel-keyboard";
+import { carouselKeyAction } from "../src/carousel/carousel-keyboard";
 import {
   elementOwnsSnapMotionWheel,
   horizontalWheelDelta,
   normalizeWheelDelta,
 } from "../src/carousel/carousel-wheel-policy";
+import { elementOwnsSnapMotionKeyboard } from "../src/internal/input/keyboard-policy";
 import {
   elementOwnsSnapMotionDrag,
   isSupportedPrimaryPointerStart,
@@ -80,9 +81,9 @@ describe("browser input policy", () => {
     slide.append(button, radioGroup, video);
     radioGroup.append(radio);
 
-    expect(elementOwnsCarouselKeyboard(button)).toBe(true);
-    expect(elementOwnsCarouselKeyboard(radio)).toBe(true);
-    expect(elementOwnsCarouselKeyboard(video)).toBe(true);
+    expect(elementOwnsSnapMotionKeyboard(button)).toBe(true);
+    expect(elementOwnsSnapMotionKeyboard(radio)).toBe(true);
+    expect(elementOwnsSnapMotionKeyboard(video)).toBe(true);
     expect(elementOwnsSnapMotionDrag(button)).toBe(true);
     expect(elementOwnsSnapMotionDrag(video)).toBe(true);
     expect(elementOwnsSnapMotionWheel(video)).toBe(true);
@@ -92,6 +93,6 @@ describe("browser input policy", () => {
     expect(elementOwnsSnapMotionWheel(wheelOwner)).toBe(true);
 
     button.dataset.snapMotionKeyboardNavigation = "";
-    expect(elementOwnsCarouselKeyboard(button)).toBe(false);
+    expect(elementOwnsSnapMotionKeyboard(button)).toBe(false);
   });
 });

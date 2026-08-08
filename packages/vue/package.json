@@ -42,6 +42,14 @@
       "types": "./dist/carousel.d.ts",
       "import": "./dist/carousel.js"
     },
+    "./coverflow": {
+      "types": "./dist/coverflow.d.ts",
+      "import": "./dist/coverflow.js"
+    },
+    "./stacked-deck": {
+      "types": "./dist/stacked-deck.d.ts",
+      "import": "./dist/stacked-deck.js"
+    },
     "./dialog": {
       "types": "./dist/dialog.d.ts",
       "import": "./dist/dialog.js"

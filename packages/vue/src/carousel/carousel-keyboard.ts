@@ -1,65 +1,21 @@
+import { resolveSnapKeyboardAction, type SnapKeyboardAction } from "@snap-motion/core";
+
+import { elementOwnsSnapMotionKeyboard } from "../internal/input/keyboard-policy";
 import type { CarouselKeyboardScope } from "./carousel-contracts";
 
-const KEYBOARD_OWNER_SELECTOR = [
-  "input",
-  "textarea",
-  "select",
-  "option",
-  "video[controls]",
-  "audio[controls]",
-  "[contenteditable]:not([contenteditable='false'])",
-  "[role='slider']",
-  "[role='spinbutton']",
-  "[role='combobox']",
-  "[role='listbox']",
-  "[role='menu']",
-  "[role='menubar']",
-  "[role='tree']",
-  "[role='grid']",
-  "[role='tablist']",
-  "[role='radiogroup']",
-  "[data-snap-motion-keyboard-owner]",
-].join(", ");
-
-const SLIDE_INTERACTIVE_SELECTOR = ["a[href]", "button", "[role='button']", "[role='link']"].join(
-  ", ",
-);
-
-export function elementOwnsCarouselKeyboard(target: EventTarget | null) {
-  if (typeof Element === "undefined" || !(target instanceof Element)) return false;
-  if (target.closest("[data-snap-motion-keyboard-navigation]")) return false;
-  if (target.closest(KEYBOARD_OWNER_SELECTOR)) return true;
-  const slide = target.closest("[data-slide-id]");
-  const interactive = target.closest(SLIDE_INTERACTIVE_SELECTOR);
-  return Boolean(slide && interactive && slide.contains(interactive));
-}
-
+/** Semantic key mapping from core, with the DOM ownership question answered by the adapter. */
 export function carouselKeyAction(
   event: Pick<KeyboardEvent, "key" | "target"> &
     Partial<Pick<KeyboardEvent, "altKey" | "ctrlKey" | "defaultPrevented" | "metaKey">>,
-): "end" | "home" | "next" | "previous" | undefined {
-  if (
-    event.defaultPrevented ||
-    event.altKey ||
-    event.ctrlKey ||
-    event.metaKey ||
-    elementOwnsCarouselKeyboard(event.target)
-  ) {
-    return undefined;
-  }
-
-  switch (event.key) {
-    case "ArrowLeft":
-      return "previous";
-    case "ArrowRight":
-      return "next";
-    case "Home":
-      return "home";
-    case "End":
-      return "end";
-    default:
-      return undefined;
-  }
+): SnapKeyboardAction | undefined {
+  return resolveSnapKeyboardAction({
+    key: event.key,
+    altKey: event.altKey,
+    ctrlKey: event.ctrlKey,
+    defaultPrevented: event.defaultPrevented,
+    metaKey: event.metaKey,
+    ownedByDescendant: elementOwnsSnapMotionKeyboard(event.target),
+  });
 }
 
 interface DialogCarouselRegistration {

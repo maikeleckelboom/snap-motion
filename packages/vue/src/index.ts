@@ -34,6 +34,25 @@ export type {
   UseCarouselMotionOptions,
   VariableWidthCenteredCarouselGeometryOptions,
 } from "./carousel";
+export { Coverflow, useCoverflowMotion } from "./coverflow";
+export type {
+  CoverflowCardPresentation,
+  CoverflowCardState,
+  CoverflowHandle,
+  CoverflowTuning,
+  UseCoverflowMotionOptions,
+  UseCoverflowMotionReturn,
+} from "./coverflow";
+export { StackedDeck, useStackedDeckMotion } from "./stacked-deck";
+export type {
+  StackedDeckCardState,
+  StackedDeckHandle,
+  StackedDeckPileLayer,
+  StackedDeckPose,
+  StackedDeckRole,
+  UseStackedDeckMotionOptions,
+  UseStackedDeckMotionReturn,
+} from "./stacked-deck";
 export {
   Sheet,
   SheetSnapPicker,
@@ -79,5 +98,5 @@ export { ModalDialog } from "./dialog";
 export type { CloseReason, FocusReturnOptions, InitialFocus } from "./dialog";
 export { createEnglishSnapMotionMessages } from "./localization";
 export type { SnapMotionMessages } from "./localization";
-export { createMotionDriver, useSnapMotion } from "./motion";
+export { createMotionDriver, useBoundedSpringDriver, useSnapMotion } from "./motion";
 export type { NavigationReason, PointerIntent, UseSnapMotionOptions } from "./motion";

@@ -1,0 +1,6 @@
+{
+  "extends": "./api-extractor.json",
+  "mainEntryPointFilePath": "<projectFolder>/../../temp/declarations/vue/coverflow/index.d.ts",
+  "apiReport": { "reportFileName": "vue-coverflow.api.md" },
+  "dtsRollup": { "untrimmedFilePath": "<projectFolder>/dist/coverflow.d.ts" }
+}

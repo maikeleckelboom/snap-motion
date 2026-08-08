@@ -846,3 +846,117 @@
     border-color: CanvasText;
   }
 }
+
+/*
+ * Spatial surfaces. These rules own containment, the stage box, the camera, and the per-card
+ * coordinate space — the structure a rigid-panel projection cannot be correct without. Palette,
+ * material, radius, and chrome remain the product's.
+ */
+.snap-motion-coverflow {
+  --snap-motion-coverflow-stage-width: 1120px;
+  --snap-motion-coverflow-card-width: 420px;
+  --snap-motion-coverflow-card-height: 294px;
+  --snap-motion-coverflow-perspective: 900px;
+
+  position: relative;
+  inline-size: min(100%, var(--snap-motion-coverflow-stage-width));
+  min-block-size: calc(var(--snap-motion-coverflow-card-height) + 7rem);
+  margin-inline: auto;
+  overflow: hidden;
+  /* One camera for the whole stage. Every panel receives only its own rigid transform. */
+  perspective: var(--snap-motion-coverflow-perspective);
+  perspective-origin: 50% 46%;
+  user-select: none;
+}
+
+.snap-motion-coverflow-stage {
+  position: relative;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: calc(var(--snap-motion-coverflow-card-height) + 7rem);
+  transform-style: preserve-3d;
+}
+
+.snap-motion-coverflow-card {
+  --snap-motion-coverflow-depth: 0;
+  --snap-motion-coverflow-deep-rail: 0;
+  --snap-motion-coverflow-center-influence: 1;
+  --snap-motion-coverflow-kinetic-focus: 0;
+  --snap-motion-coverflow-settledness: 1;
+  --snap-motion-coverflow-contact-shadow: 1;
+  --snap-motion-coverflow-yaw: 0;
+  --snap-motion-coverflow-sheen: 0;
+  --snap-motion-coverflow-occlusion: 0;
+  --snap-motion-coverflow-edge-offset: 0px;
+  --snap-motion-coverflow-edge-strength: 0;
+
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: var(--snap-motion-coverflow-card-width);
+  block-size: var(--snap-motion-coverflow-card-height);
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  transform-style: preserve-3d;
+  transform-origin: center center;
+}
+
+/*
+ * A deck is a pile, so it deliberately does not clip: the cards may lean outside the stage box, and
+ * an ancestor that clipped them would cut the exchange in half.
+ */
+.snap-motion-stacked-deck {
+  --snap-motion-deck-stage-width: 1120px;
+  --snap-motion-deck-card-width: 520px;
+  --snap-motion-deck-card-height: 325px;
+
+  position: relative;
+  inline-size: min(100%, var(--snap-motion-deck-stage-width));
+  min-block-size: calc(var(--snap-motion-deck-card-height) + 5.5rem);
+  margin-inline: auto;
+  overflow: visible;
+  isolation: isolate;
+  user-select: none;
+}
+
+.snap-motion-stacked-deck-stage {
+  position: relative;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: calc(var(--snap-motion-deck-card-height) + 5.5rem);
+  transform-style: flat;
+}
+
+.snap-motion-stacked-deck-card {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.snap-motion-stacked-deck-card-motion,
+.snap-motion-stacked-deck-pile-layer {
+  --snap-motion-deck-shadow-strength: 1;
+
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: var(--snap-motion-deck-card-width);
+  block-size: var(--snap-motion-deck-card-height);
+  transform-origin: center center;
+  backface-visibility: hidden;
+}
+
+.snap-motion-stacked-deck-card-motion {
+  transform-style: flat;
+}
+
+/* Decorative depth only. These layers never carry item identity, content, or semantics. */
+.snap-motion-stacked-deck-pile-layer {
+  pointer-events: none;
+}

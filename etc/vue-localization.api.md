@@ -15,6 +15,11 @@ export interface SnapMotionMessages {
     closeDialog: string;
     // (undocumented)
     closeSheet: string;
+    itemPositionStatus(context: {
+        index: number;
+        count: number;
+        label?: string;
+    }): string;
     // (undocumented)
     itemStatus(context: {
         id: string;

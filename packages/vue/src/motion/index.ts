@@ -1,3 +1,4 @@
+export { useBoundedSpringDriver } from "./bounded-spring-driver";
 export { createMotionDriver } from "./motion-driver";
 export type { NavigationReason } from "./motion-contracts";
 export { useSnapMotion } from "./use-snap-motion";

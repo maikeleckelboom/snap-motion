@@ -12,11 +12,18 @@ const codeExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const featureNames = new Set([
   "sheet",
   "carousel",
+  "coverflow",
   "dialog",
   "localization",
   "media-gallery",
   "motion",
+  "stacked-deck",
 ]);
+/**
+ * Surfaces that compose the shared horizontal carousel adapter rather than reimplementing it. The
+ * dependency is on that one module, never on carousel components, context, or geometry.
+ */
+const carouselMotionConsumers = new Set(["coverflow", "stacked-deck"]);
 
 async function walk(directory, predicate = () => true) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -69,9 +76,20 @@ function allowedFeatureDependency(importer, target) {
   const targetPath = relative(vueRoot, target).split(sep).join("/");
   if (to === "localization" && targetPath === "localization/messages.ts") return true;
   if (
-    (from === "carousel" || from === "sheet") &&
+    (from === "carousel" || from === "sheet" || carouselMotionConsumers.has(from)) &&
     to === "motion" &&
-    ["motion/motion-contracts.ts", "motion/use-snap-motion.ts"].includes(targetPath)
+    [
+      "motion/bounded-spring-driver.ts",
+      "motion/motion-contracts.ts",
+      "motion/use-snap-motion.ts",
+    ].includes(targetPath)
+  ) {
+    return true;
+  }
+  if (
+    carouselMotionConsumers.has(from) &&
+    to === "carousel" &&
+    targetPath === "carousel/use-carousel-motion.ts"
   ) {
     return true;
   }

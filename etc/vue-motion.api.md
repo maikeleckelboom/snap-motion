@@ -28,6 +28,9 @@ export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "whee
 // @public (undocumented)
 export type PointerIntent = "horizontal" | "pending" | "vertical";
 
+// @public
+export function useBoundedSpringDriver(cardPitchPx: () => number): AnimationDriver;
+
 // @public (undocumented)
 export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<Id>): {
     activeId: ComputedRef<Id | undefined>;
