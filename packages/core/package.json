@@ -2,9 +2,10 @@
   "name": "@snap-motion/core",
   "version": "0.1.0-beta.0",
   "private": true,
-  "description": "Framework-neutral scalar snap controller and carousel geometry primitives.",
+  "description": "Framework-neutral snap physics, geometry, and semantic surface state machines.",
   "keywords": [
     "carousel",
+    "geometry",
     "gesture",
     "motion",
     "snap",

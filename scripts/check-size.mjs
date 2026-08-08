@@ -21,6 +21,14 @@ async function collectStaticGraph(entryPath, visited = new Set()) {
 }
 
 const measurements = {};
+const forbiddenEntryEdges = {
+  vueCarousel: ["coverflow", "stacked-deck", "sheet", "media-gallery"],
+  vueCoverflow: ["stacked-deck", "sheet", "dialog", "media-gallery"],
+  vueStackedDeck: ["coverflow", "sheet", "dialog", "media-gallery"],
+  vueSheet: ["carousel", "coverflow", "stacked-deck", "media-gallery"],
+  vueDialog: ["carousel", "coverflow", "stacked-deck", "sheet", "media-gallery"],
+  vueMotion: ["carousel", "coverflow", "stacked-deck", "sheet", "dialog", "media-gallery"],
+};
 for (const [name, budget] of Object.entries(budgets)) {
   const files = await collectStaticGraph(resolve(repoRoot, budget.entry));
   const source = Buffer.concat(files.map((file) => file.source));
@@ -42,6 +50,17 @@ for (const [name, budget] of Object.entries(budgets)) {
           .join(", ")}`,
       );
     }
+  }
+  const forbiddenFeatures = forbiddenEntryEdges[name] ?? [];
+  const emittedImports = files
+    .flatMap((file) => [
+      basename(file.path),
+      ...file.source.toString("utf8").matchAll(/from["']([^"']+)["']/g),
+    ])
+    .join("\n");
+  const leakedFeatures = forbiddenFeatures.filter((feature) => emittedImports.includes(feature));
+  if (leakedFeatures.length > 0) {
+    throw new Error(`${name} pulls unrelated feature chunks: ${leakedFeatures.join(", ")}`);
   }
   const result = {
     bytes: source.byteLength,

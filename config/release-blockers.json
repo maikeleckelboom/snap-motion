@@ -1,0 +1,17 @@
+[
+  {
+    "id": "npm-name-ownership",
+    "status": "unverified",
+    "detail": "Both public registry lookups return 404; that does not prove account or scope ownership."
+  },
+  {
+    "id": "manual-assistive-technology",
+    "status": "not-executed",
+    "detail": "The physical screen-reader, forced-colors, zoom, and mobile AT matrix remains open."
+  },
+  {
+    "id": "manual-publication-approval",
+    "status": "not-granted",
+    "detail": "No release publication is authorized by candidate generation."
+  }
+]

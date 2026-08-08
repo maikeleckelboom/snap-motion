@@ -1,15 +1,3 @@
-import {
-  CoverflowModel,
-  SettledSelection,
-  SnapController,
-  STACKED_DECK_ANCHOR_SKIP,
-  STACKED_DECK_INTERIOR_ELASTICITY,
-  StackedDeckModel,
-  createFixedStageGeometry,
-  resolveCoverflowTuning,
-  type AnimationDriver,
-  type StackedDeckReleasePolicy,
-} from "@snap-motion/core";
 import { Sheet as RootSheet } from "@snap-motion/vue";
 import {
   CarouselPaginationItem,
@@ -18,6 +6,7 @@ import {
   useCarouselWindow,
   useCarouselContext,
   useCarouselMotion,
+  type PublicCarouselContext,
 } from "@snap-motion/vue/carousel";
 import { Coverflow, useCoverflowMotion, type CoverflowHandle } from "@snap-motion/vue/coverflow";
 import { ModalDialog, type CloseReason } from "@snap-motion/vue/dialog";
@@ -43,20 +32,6 @@ import { h, ref } from "vue";
 
 type MediaId = "overview" | "system" | "outcome";
 const ids = ["overview", "system", "outcome"] as const satisfies readonly MediaId[];
-const driver: AnimationDriver = {
-  animate: ({ onComplete }) => {
-    onComplete();
-    return { stop() {} };
-  },
-};
-const geometry = createFixedStageGeometry({ itemIds: ids, viewportSize: 800 });
-const controller = new SnapController({
-  anchors: geometry.anchors,
-  bounds: geometry.bounds,
-  driver,
-  initialTargetId: "system",
-});
-void controller;
 
 const sheetPoints = [
   {
@@ -89,6 +64,13 @@ void useCarouselWindow(ids, ref<MediaId>("overview"), {
   preloadAfter: 2,
 });
 void useCarouselContext<MediaId>;
+declare const publicCarousel: PublicCarouselContext<MediaId>;
+publicCarousel.navigate("overview");
+publicCarousel.next();
+// @ts-expect-error public navigation owns its programmatic provenance.
+publicCarousel.navigate("overview", "drag");
+// @ts-expect-error next is semantically fixed and cannot be relabelled.
+publicCarousel.next("picker");
 void useCarouselMotion<MediaId>;
 void useSnapMotion<MediaId>;
 void createMotionDriver;
@@ -111,10 +93,6 @@ const mediaNavigationReason: MediaGalleryNavigationReason = "swipe";
 void mediaCloseReason;
 void mediaNavigationReason;
 
-// @ts-expect-error Semantic IDs are strings.
-createFixedStageGeometry({ itemIds: [1, 2], viewportSize: 800 });
-createFixedStageGeometry({ itemIds: [] as const, viewportSize: 800 });
-
 // The anti-glue contract: typed domain items, inferred slot state, and no casts anywhere.
 const screens = [
   { id: "overview", title: "Overview" },
@@ -122,8 +100,6 @@ const screens = [
   { id: "outcome", title: "Outcome" },
 ] as const;
 type ScreenId = (typeof screens)[number]["id"];
-const screenIds = screens.map((screen) => screen.id);
-
 const deckHandle = ref<StackedDeckHandle<ScreenId>>();
 const railHandle = ref<CoverflowHandle<ScreenId>>();
 // `h()` erases a generic component's type parameters down to their constraints, so these calls
@@ -146,24 +122,8 @@ void useStackedDeckMotion<ScreenId>;
 void useCoverflowMotion<ScreenId>;
 void useBoundedSpringDriver;
 
-const deckModel = new StackedDeckModel({ ids: [...screenIds], initialId: "system" });
-void deckModel.resolveAbsoluteCommand(deckModel.indexOf("outcome"), {
-  owned: false,
-  atRest: true,
-});
-void deckModel.reconfigure(["outcome", "system"]);
-const railModel = new CoverflowModel({ ids: [...screenIds] });
-void railModel.resolveRelativeCommand(1, { owned: false });
-// Direct adoption of a semantic destination, as one atomic operation on the durable selection.
-void new SettledSelection(0, screenIds.length).adopt(1, { announce: true });
-void STACKED_DECK_INTERIOR_ELASTICITY;
-void resolveCoverflowTuning({ stageWidth: 1_120 });
-void STACKED_DECK_ANCHOR_SKIP;
-
 // The deck states its one-card invariant in the type system: the anchor skip it fixes is simply
 // not a thing a consumer can pass, rather than a value it accepts and silently overwrites.
-const deckRelease: StackedDeckReleasePolicy = { flingVelocity: 320, projectionSeconds: 0.12 };
-void deckRelease;
 // @ts-expect-error the deck fixes its own anchor skip, so this is not part of its release policy.
 void h(StackedDeck, { items: screens, releasePolicy: { maxAnchorSkip: 3 } });
 // @ts-expect-error a product method names its own operation; a caller cannot relabel it.

@@ -14,11 +14,13 @@ export const WORKSPACE_SOURCE_ENTRYPOINTS: Readonly<Record<string, string>> = {
   "@snap-motion/core": sourcePath("packages/core/src/index.ts"),
   "@snap-motion/vue": sourcePath("packages/vue/src/index.ts"),
   "@snap-motion/vue/carousel": sourcePath("packages/vue/src/carousel/index.ts"),
+  "@snap-motion/vue/coverflow": sourcePath("packages/vue/src/coverflow/index.ts"),
   "@snap-motion/vue/dialog": sourcePath("packages/vue/src/dialog/index.ts"),
   "@snap-motion/vue/localization": sourcePath("packages/vue/src/localization/index.ts"),
   "@snap-motion/vue/media-gallery": sourcePath("packages/vue/src/media-gallery/index.ts"),
   "@snap-motion/vue/motion": sourcePath("packages/vue/src/motion/index.ts"),
   "@snap-motion/vue/sheet": sourcePath("packages/vue/src/sheet/index.ts"),
+  "@snap-motion/vue/stacked-deck": sourcePath("packages/vue/src/stacked-deck/index.ts"),
   "@snap-motion/vue/style.css": sourcePath("packages/vue/src/style.css"),
 };
 

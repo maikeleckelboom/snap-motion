@@ -1,0 +1,9 @@
+{
+  "name": "snap-motion-packed-core-consumer",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@snap-motion/core": "file:__CORE_TARBALL__",
+    "typescript": "6.0.3"
+  }
+}
