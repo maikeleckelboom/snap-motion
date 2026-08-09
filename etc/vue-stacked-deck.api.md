@@ -191,9 +191,10 @@ export interface StackedDeckPileLayer<Id extends string = string> {
 }
 
 // @public
-export interface StackedDeckPileLayerSlotState<TItem, TId extends string> {
-    // (undocumented)
-    readonly id: TId;
+export interface StackedDeckPileLayerSlotState<TItem extends {
+    id: string;
+}> {
+    readonly id: TItem["id"];
     readonly index: number;
     // (undocumented)
     readonly item: TItem;

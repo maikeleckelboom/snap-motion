@@ -15,16 +15,6 @@ import { useStackedDeckMotion } from "../use-stacked-deck-motion";
 
 type TId = TItem["id"];
 
-interface IndexedItem<TItem> {
-  readonly item: TItem;
-  readonly index: number;
-}
-
-interface PileLayerView<TItem, Id extends string> {
-  readonly item: TItem;
-  readonly projection: StackedDeckPileLayer<Id>;
-}
-
 const props = withDefaults(
   defineProps<{
     items: readonly TItem[];
@@ -140,25 +130,13 @@ const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {
   });
 });
 
-const indexedItems = computed(() => {
-  const byId = new Map<TId, IndexedItem<TItem>>();
-  props.items.forEach((item, index) => byId.set(item.id, { item, index }));
-  return byId;
-});
-
-/**
- * Model projection and component items update through separate reactive sources. Publish a
- * decorative association only when both sources name the same item at the same current index.
- */
-const pileLayerViews = computed<readonly PileLayerView<TItem, TId>[]>(() => {
-  const views: PileLayerView<TItem, TId>[] = [];
-  for (const projection of deck.pileLayers.value) {
-    const indexedItem = indexedItems.value.get(projection.id);
-    if (indexedItem === undefined || indexedItem.index !== projection.index) continue;
-    views.push({ item: indexedItem.item, projection });
+function pileItem(projection: StackedDeckPileLayer<TId>): TItem {
+  const item = props.items[projection.index];
+  if (item?.id !== projection.id) {
+    throw new Error("Stacked Deck pile projection does not match the current item collection");
   }
-  return views;
-});
+  return item;
+}
 
 watch(
   () =>
@@ -254,32 +232,33 @@ defineExpose({
   >
     <slot name="backdrop" />
     <div ref="track" class="snap-motion-stacked-deck-stage">
-      <div
-        v-for="{ item, projection } in pileLayerViews"
-        :key="projection.key"
-        aria-hidden="true"
-        class="snap-motion-stacked-deck-pile-layer"
-        :data-pile-item-id="projection.id"
-        :data-pile-item-index="projection.index"
-        :data-pile-side="projection.side"
-        :data-pile-slot="projection.slot"
-        inert
-        :style="{
-          opacity: projection.opacity,
-          transform: projection.transform,
-          zIndex: projection.layer,
-          '--snap-motion-deck-shadow-strength': projection.shadowStrength.toFixed(4),
-        }"
-      >
-        <slot
-          name="pile-layer"
-          :item="item"
-          :id="projection.id"
-          :index="projection.index"
-          :side="projection.side"
-          :slot="projection.slot"
-        />
-      </div>
+      <template v-for="projection in deck.pileLayers.value" :key="projection.key">
+        <div
+          v-if="items[projection.index]?.id === projection.id"
+          aria-hidden="true"
+          class="snap-motion-stacked-deck-pile-layer"
+          :data-pile-item-id="projection.id"
+          :data-pile-item-index="projection.index"
+          :data-pile-side="projection.side"
+          :data-pile-slot="projection.slot"
+          inert
+          :style="{
+            opacity: projection.opacity,
+            transform: projection.transform,
+            zIndex: projection.layer,
+            '--snap-motion-deck-shadow-strength': projection.shadowStrength.toFixed(4),
+          }"
+        >
+          <slot
+            name="pile-layer"
+            :item="pileItem(projection)"
+            :id="projection.id"
+            :index="projection.index"
+            :side="projection.side"
+            :slot="projection.slot"
+          />
+        </div>
+      </template>
       <div
         v-for="card in cards"
         :key="card.id"

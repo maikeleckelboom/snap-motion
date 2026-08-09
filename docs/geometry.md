@@ -162,22 +162,22 @@ and cannot make incoherent geometry look like anything.
 
 ## Stacked deck
 
-The deck is a physical pile with one authoritative card at its centre and one restrained backing
+The deck is a physical pile with one authoritative card at its centre and one restrained decorative
 layer for every screen it is not drawing, fanned to the side that screen's index lies on. It reuses
 `createCoverflowGeometry` and `useCarouselMotion` only for generic scalar gesture,
 constraint, velocity, and settlement mechanics. It does not reuse the rail renderer. No card is
 assigned a horizontal slot from its index.
 
-`resolveStackedDeckTuning` owns responsive card size, motion pitch, compact backing offsets, and the
+`resolveStackedDeckTuning` owns responsive card size, motion pitch, compact pile offsets, and the
 one-anchor exchange geometry. `resolveStackedDeckTraversal` consumes the controller phase, settled
 index, continuous physical index, and an optional `traversalBounds` envelope. It retains the current
 visual top, completes every crossed anchor in order inside that envelope, and exposes only the
-residual adjacent segment. `resolveStackedDeckFrame` projects that segment into `top`, `target`,
-`backing`, or `hidden` roles. No active segment can have a non-adjacent target.
+residual adjacent segment. `resolveStackedDeckFrame` projects that segment into `top`, `target`, or
+`hidden` roles. No active segment can have a non-adjacent target.
 
 ### Deck thickness
 
-`resolveStackedDeckPile` draws one backing layer for every screen the frame does not already draw,
+`resolveStackedDeckPile` draws one decorative layer for every screen the frame does not already draw,
 on the side of the current card that screen sits on. The deck is therefore exactly as thick as what
 is left, and its shape says where you are:
 
@@ -327,12 +327,12 @@ the same controller position and traversal resolver.
 
 ### Visual and accessibility invariants
 
-At rest only one semantic card is current and interactive. Backing instances are hidden from the
-accessibility tree and expose only small translated edges; non-participating cards never cross the
-stage. During motion, visible caption, counter, pagination emphasis, and `aria-current` follow the
-visual top only after a completed handoff. Durable selection remains unchanged until controller idle,
-inspection stays disabled, and the live region announces only the final settled card. At idle the
-visual top and settled index must agree exactly.
+At rest only one semantic card is current and interactive. Decorative pile layers are hidden from
+the accessibility tree and expose only small translated edges; non-participating content cards never
+cross the stage. During motion, visible caption, counter, pagination emphasis, and `aria-current`
+follow the visual top only after a completed handoff. Durable selection remains unchanged until
+controller idle, inspection stays disabled, and the live region announces only the final settled
+card. At idle the visual top and settled index must agree exactly.
 
 The clipped decorative backdrop is a sibling of the card stage, never an ancestor. The viewport and
 stage allow intentional render bleed, while page-level horizontal containment prevents document

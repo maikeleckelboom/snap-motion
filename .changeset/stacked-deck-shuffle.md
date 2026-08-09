@@ -1,5 +1,6 @@
 ---
 "@snap-motion/core": minor
+"@snap-motion/vue": minor
 ---
 
 Rework the experimental stacked-deck compositor around a physical handoff. The renderer still
@@ -11,8 +12,14 @@ instead of returning toward neutral through a midpoint arc, and the adjacent tar
 first pile slot to exact top rest geometry. Visual authority therefore migrates before an anchor
 crossing transfers ownership, and a crossing only confirms it.
 
-Depth moves out of the item poses into `resolveStackedDeckPile`, a pure function of tuning that
-returns deterministic decorative layers. Backing surfaces no longer carry item identity, so gesture
-direction, segment changes, and reversal cannot mirror, reorder, or re-identify the pile. Frames now
-render at most one top and one adjacent target. `StackedDeckRole` drops `"backing"`, poses drop
-`stackDepth`, and the `backing*`/`topTravelY` tuning fields become `pile*`/`topDropY`.
+Depth moves out of the item poses into `resolveStackedDeckPile`, which returns deterministic
+decorative layers with ordered source provenance through `itemIndex`. Gesture direction, segment
+changes, and reversal therefore cannot mirror or reorder the pile. Vue carries that provenance into
+the full `useStackedDeckMotion().pileLayers` projection and associates each layer with the matching
+ordered item. The higher-level `StackedDeck` component exposes only `{ item, id, index, side, slot }`
+to decorative pile content after verifying the current item and projection still agree.
+
+Frames now render at most one top and one adjacent target. `StackedDeckRole` drops `"backing"`, poses
+drop `stackDepth`, and the `backing*`/`topTravelY` tuning fields become `pile*`/`topDropY`. Physical
+pile nodes remain topology-keyed, while card semantics, interaction, selection, and motion remain
+unchanged.

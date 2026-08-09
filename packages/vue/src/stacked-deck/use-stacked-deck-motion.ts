@@ -370,7 +370,7 @@ export function useStackedDeckMotion<Id extends string>(
   });
 
   /**
-   * Deck thickness. One backing layer per screen still in the deck, fanned to the side its index
+   * Deck thickness. One decorative layer per screen still in the deck, fanned to the side its index
    * lies on. Layers retain their ordered item association for visual treatment, while keys follow
    * physical rank within a side. Identity can therefore change in place during an exchange without
    * replacing the topological node or making gesture direction an identity source.

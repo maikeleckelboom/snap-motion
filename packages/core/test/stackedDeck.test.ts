@@ -245,7 +245,7 @@ function exposedEdge(pose: { translateX: number; scale: number }, tuning = WIDE_
 }
 
 describe("stacked deck thickness", () => {
-  it("shows one backing card per remaining screen, on the side that screen sits on", () => {
+  it("shows one decorative pile layer per remaining screen, on the side that screen sits on", () => {
     // Position is legible from thickness alone: nothing behind the first screen, nothing ahead of
     // the last, and an even split in the middle. The deck always accounts for every screen exactly
     // once, whatever its length.

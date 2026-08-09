@@ -14,9 +14,11 @@ async function collectStaticGraph(entryPath, visited = new Set()) {
   const imports = [...text.matchAll(/(?:from\s*|import\s*)["'](\.\/[^"']+\.js)["']/g)].map(
     (match) => resolve(dirname(resolvedPath), match[1]),
   );
-  const dependencies = (
-    await Promise.all(imports.map((item) => collectStaticGraph(item, visited)))
-  ).flat();
+  // Visit shared dependencies in source order so concatenated gzip input is deterministic.
+  const dependencies = [];
+  for (const item of imports) {
+    dependencies.push(...(await collectStaticGraph(item, visited)));
+  }
   return [{ path: resolvedPath, source }, ...dependencies];
 }
 

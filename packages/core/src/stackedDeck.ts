@@ -320,7 +320,7 @@ export function resolveStackedDeckTuning(
 }
 
 /**
- * Resolves the pile: one backing layer for every screen still in the deck, on the side of the
+ * Resolves the pile: one decorative layer for every screen still in the deck, on the side of the
  * current card it is waiting on. Screens before the current one fan one way, screens after it fan
  * the other, and the deck is therefore exactly as thick as what is left — four layers behind the
  * middle of five, all four on one side at either end.

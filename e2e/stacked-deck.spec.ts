@@ -469,7 +469,7 @@ function uniqueInOrder(values: readonly number[]) {
 
 /**
  * The deck is exactly as thick as the screens it is not drawing. Summing how present everything is —
- * every backing layer plus every card face — therefore accounts for the whole deck exactly once on
+ * every decorative pile layer plus every card face — therefore accounts for the whole deck exactly once on
  * every frame, including through the exchange, where one screen is part dissolving face and part
  * materialising layer and the two halves add up to it.
  */
@@ -974,7 +974,7 @@ test("deck thickness shows where you are, from index order alone", async ({ page
     Math.max(stageCentre - layer.left, layer.right - stageCentre) - cardWidth / 2;
 
   // Position is legible from thickness alone: nothing behind the first screen, nothing ahead of the
-  // last, an even split in the middle — and always one backing card per remaining screen.
+  // last, an even split in the middle — and always one decorative pile layer per remaining screen.
   for (const [index, itemIds, slots] of [
     [0, ["project", "map", "team", "settings"], [1, 2, 3, 4]],
     [2, ["templates", "project", "team", "settings"], [-2, -1, 1, 2]],
@@ -1928,7 +1928,7 @@ test("cancel, lost capture, edge elasticity, and reduced motion restore coherent
   // Ownership still has to migrate, and depth still has to read as a pile.
   expect(topPose(reducedFrame).opacity).toBeLessThan(1);
   expect(reducedFrame.poses.find((pose) => pose.role === "target")!.scale).toBeLessThan(1);
-  // The deck still accounts for every screen: drawn faces plus the rest as backing edges.
+  // The deck still accounts for every screen: drawn faces plus the rest as decorative pile edges.
   expectFrameAccountsForEveryScreen(reducedFrame);
 
   // Reduced motion keeps the same interaction span: one adjacent card, then bounded resistance.
@@ -1940,7 +1940,7 @@ test("cancel, lost capture, edge elasticity, and reduced motion restore coherent
     segmentPhase: "elastic",
   });
   expect(reducedSecond.physicalIndex).toBeLessThan(3.5);
-  // Overdrag draws no target, so every remaining screen is a backing layer again.
+  // Overdrag draws no target, so every remaining screen is a decorative pile layer again.
   expect(reducedSecond.pile).toHaveLength(IDS.length - 1);
   expect(reducedSecond.pile.filter((layer) => layer.slot < 0)).toHaveLength(3);
   const reducedThird = await holdPointerAt(page, reduced, 6);

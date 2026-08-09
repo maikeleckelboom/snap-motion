@@ -43,10 +43,12 @@ export interface StackedDeckPileLayer<Id extends string = string> {
 /**
  * Decorative visual state supplied to the `StackedDeck` `#pile-layer` slot. Snap Motion retains
  * ownership of the outer layer's physical key, transform, compositing, opacity, and shadow.
+ * Consumers can name this contract when writing slot render helpers; SFC templates infer it.
  */
-export interface StackedDeckPileLayerSlotState<TItem, TId extends string> {
+export interface StackedDeckPileLayerSlotState<TItem extends { id: string }> {
   readonly item: TItem;
-  readonly id: TId;
+  /** The ID carried by `item`. */
+  readonly id: TItem["id"];
   /** Position of this same item in the component's current `items` collection. */
   readonly index: number;
   readonly side: -1 | 1;

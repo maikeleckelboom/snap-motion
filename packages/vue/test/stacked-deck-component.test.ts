@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { h, nextTick } from "vue";
 
 import StackedDeck from "../src/stacked-deck/components/StackedDeck.vue";
@@ -16,7 +16,7 @@ const screens = [
 
 type ScreenId = (typeof screens)[number]["id"];
 type Screen = (typeof screens)[number];
-type PileSlotState = StackedDeckPileLayerSlotState<Screen, ScreenId>;
+type PileSlotState = StackedDeckPileLayerSlotState<Screen>;
 
 /** Instantiating the generic component up front is what lets the harness keep the item type. */
 const TypedStackedDeck = StackedDeck<Screen>;
@@ -98,6 +98,8 @@ describe("StackedDeck", () => {
   });
 
   it("passes only item identity and pile placement to a decorative pile slot", async () => {
+    expectTypeOf<PileSlotState["id"]>().toEqualTypeOf<ScreenId>();
+
     const wrapper = mount(TypedStackedDeck, {
       props: {
         items: screens,
@@ -205,7 +207,7 @@ describe("StackedDeck", () => {
       props: { items: collections[0]!, reducedMotionOverride: true },
       slots: {
         card: () => h("div"),
-        "pile-layer": (layer: StackedDeckPileLayerSlotState<ReconfigurableScreen, string>) =>
+        "pile-layer": (layer: StackedDeckPileLayerSlotState<ReconfigurableScreen>) =>
           h("div", {
             class: "pile-surface",
             "data-slot-id": layer.id,
@@ -271,7 +273,7 @@ describe("StackedDeck", () => {
     wrapper.unmount();
   });
 
-  it("renders no backing identity for zero or one item and exactly one for two", async () => {
+  it("renders no pile identity for zero or one item and exactly one for two", async () => {
     const wrapper = mount(TypedStackedDeck, {
       props: { items: [screens[0]], reducedMotionOverride: true },
       slots: { card: () => h("div") },

@@ -43,7 +43,7 @@ const activeId = ref<(typeof screens)[number]["id"]>("system");
     label="Project screens"
   >
     <template #pile-layer="{ item }">
-      <ProjectScreenMaterial :tone="item.tone" />
+      <ProjectScreenPileSurface :screen="item" />
     </template>
     <template #card="{ item, active }">
       <ProjectScreen :screen="item" :current="active" />
@@ -70,8 +70,8 @@ the consumer's own item type, and neither requires a cast or an explicit generic
 - A destination further than one card **synchronizes** rather than animating through every
   intermediate card, and announces itself immediately because it is not a traversal.
 - The pile behind the current card is exactly the screens the deck is not drawing, placed from item
-  order alone. Each layer retains the ordered item it visually represents, so its tone retraces with
-  geometry instead of mirroring or following gesture direction.
+  order alone. Each layer retains the ordered item it visually represents, so its visual treatment
+  retraces with geometry instead of mirroring or following gesture direction.
 
 ## Coverflow
 
@@ -123,14 +123,14 @@ Slots are `#card` (required) and, for the deck, `#backdrop` for a decorative sta
 pile plus `#pile-layer` for one layer's visual material. `#card` receives
 `{ item, id, index, active, settled, inspectable, … }`; the deck adds `role` and `pose`, the rail
 adds `presentation`. `#pile-layer` receives only `{ item, id, index, side, slot }`, typed as
-`StackedDeckPileLayerSlotState<TItem, TId>`. The `item`, `id`, and `index` always describe the same
+`StackedDeckPileLayerSlotState<TItem>`. The `item`, `id`, and `index` always describe the same
 entry in the currently published collection.
 
 Snap Motion keeps the `#pile-layer` content inside its own transform-bearing outer layer. That
 outer layer remains `aria-hidden`, `inert`, and outside hit testing; it is not another slide and it
 never owns activation, focus, selection, or announcements. Snap Motion retains its physical key,
-transform, z-layer, opacity, and shadow; use the slot for cheap decorative material such as a
-dominant surface tone, not for a second semantic card tree.
+transform, z-layer, opacity, and shadow; use the slot for cheap item-associated presentation, not
+for a second semantic card tree.
 
 The exposed instance — typed as `StackedDeckHandle<TId>` or `CoverflowHandle<TId>` — offers
 `previous()`, `next()`, `requestId(id)`, `synchronizeId(id)`, `isInspectEligible(index)`,
