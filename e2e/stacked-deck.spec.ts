@@ -224,23 +224,24 @@ async function readFrame(page: Page) {
       ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
     ].map((item) => {
       const box = item.getBoundingClientRect();
-      const material = item.querySelector<HTMLElement>(".stacked-deck-pile-surface")!;
+      const surface = item.querySelector<HTMLElement>(".stacked-deck-pile-surface")!;
+      const layerStyle = getComputedStyle(item);
       return {
         id: item.dataset.pileItemId ?? "",
         index: Number(item.dataset.pileItemIndex),
         slot: Number(item.dataset.pileSlot),
         side: Number(item.dataset.pileSide),
-        opacity: Number(item.dataset.pileOpacity),
-        layer: Number(item.dataset.pileLayer),
+        opacity: Number(layerStyle.opacity),
+        layer: Number(layerStyle.zIndex),
         left: Number(box.left.toFixed(3)),
         right: Number(box.right.toFixed(3)),
         top: Number(box.top.toFixed(3)),
         bottom: Number(box.bottom.toFixed(3)),
         ariaHidden: item.getAttribute("aria-hidden"),
         inert: item.hasAttribute("inert"),
-        materialColor: getComputedStyle(material).backgroundColor,
-        materialTone: material.dataset.pileMaterialTone ?? "",
-        pointerEvents: getComputedStyle(item).pointerEvents,
+        backgroundColor: getComputedStyle(surface).backgroundColor,
+        tone: surface.dataset.pileTone ?? "",
+        pointerEvents: layerStyle.pointerEvents,
       };
     });
     const targetAttribute = element.getAttribute("data-segment-target-index");
@@ -346,7 +347,7 @@ interface TraversalSample {
   readonly pileIdentity: readonly {
     readonly id: string;
     readonly index: number;
-    readonly materialTone: string;
+    readonly tone: string;
     readonly opacity: number;
     readonly slot: number;
   }[];
@@ -409,18 +410,22 @@ async function installTraversalTrace(page: Page, maxFrames = 900) {
         ),
         pile: [
           ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
-        ].flatMap((item) => [Number(item.dataset.pileSlot), Number(item.dataset.pileOpacity)]),
+        ].flatMap((item) => [
+          Number(item.dataset.pileSlot),
+          Number(getComputedStyle(item).opacity),
+        ]),
         pileIdentity: [
           ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
-        ].map((item) => ({
-          id: item.dataset.pileItemId ?? "",
-          index: Number(item.dataset.pileItemIndex),
-          materialTone:
-            item.querySelector<HTMLElement>(".stacked-deck-pile-surface")?.dataset
-              .pileMaterialTone ?? "",
-          opacity: Number(item.dataset.pileOpacity),
-          slot: Number(item.dataset.pileSlot),
-        })),
+        ].map((item) => {
+          const surface = item.querySelector<HTMLElement>(".stacked-deck-pile-surface");
+          return {
+            id: item.dataset.pileItemId ?? "",
+            index: Number(item.dataset.pileItemIndex),
+            tone: surface?.dataset.pileTone ?? "",
+            opacity: Number(getComputedStyle(item).opacity),
+            slot: Number(item.dataset.pileSlot),
+          };
+        }),
       });
       remainingFrames -= 1;
       if ((state.started && controllerPhase === "idle") || remainingFrames <= 0) {
@@ -484,7 +489,7 @@ function expectFrameAccountsForEveryScreen(frame: DeckFrame) {
 }
 
 function expectIdentityPresence(
-  layers: readonly { id: string; index: number; materialTone: string; opacity: number }[],
+  layers: readonly { id: string; index: number; tone: string; opacity: number }[],
   faces: readonly { id: string; opacity: number }[],
 ) {
   const presence = new Map<string, number>(IDS.map((id) => [id, 0]));
@@ -492,7 +497,7 @@ function expectIdentityPresence(
   for (const layer of layers) {
     const expectedIndex = IDS.indexOf(layer.id as (typeof IDS)[number]);
     expect(layer.index).toBe(expectedIndex);
-    expect(layer.materialTone).toBe(TONES[expectedIndex]);
+    expect(layer.tone).toBe(TONES[expectedIndex]);
     presence.set(layer.id, (presence.get(layer.id) ?? 0) + layer.opacity);
   }
   for (const id of IDS) expect(presence.get(id)).toBeCloseTo(1, 2);
@@ -507,13 +512,13 @@ function expectFrameAccountsForEveryScreenByIdentity(frame: DeckFrame) {
   }
 }
 
-function materialSignature(frame: DeckFrame) {
+function pileIdentitySignature(frame: DeckFrame) {
   return frame.pile.map((layer) => ({
     id: layer.id,
     index: layer.index,
     opacity: Number(layer.opacity.toFixed(4)),
     slot: Number(layer.slot.toFixed(4)),
-    materialTone: layer.materialTone,
+    tone: layer.tone,
   }));
 }
 
@@ -984,8 +989,8 @@ test("deck thickness shows where you are, from index order alone", async ({ page
     expectFrameAccountsForEveryScreenByIdentity(frame);
     const settingsLayer = frame.pile.find((layer) => layer.id === "settings");
     if (settingsLayer !== undefined) {
-      expect(settingsLayer.materialTone).toBe("ink");
-      expect(settingsLayer.materialColor).toBe("rgb(15, 23, 42)");
+      expect(settingsLayer.tone).toBe("ink");
+      expect(settingsLayer.backgroundColor).toBe("rgb(15, 23, 42)");
     }
     expect(frame.poses.filter((pose) => pose.visible)).toHaveLength(1);
     const centre = (frame.stageLeft + frame.stageRight) / 2;
@@ -1066,23 +1071,21 @@ test("deck thickness shows where you are, from index order alone", async ({ page
   expect(mirrored[0]).toEqual(mirrored[1]);
 });
 
-test("decorative material identity retraces the ordered screen through reversal", async ({
-  page,
-}) => {
+test("decorative pile identity retraces the ordered screen through reversal", async ({ page }) => {
   const held = await beginHeldTraversal(page, 4);
   const outbound = await holdPhysicalIndex(page, held, 3.25);
   expectFrameAccountsForEveryScreenByIdentity(outbound);
   const outgoingSettings = outbound.pile.find((layer) => layer.id === "settings")!;
-  expect(outgoingSettings).toMatchObject({ index: 4, materialTone: "ink", side: 1 });
+  expect(outgoingSettings).toMatchObject({ index: 4, tone: "ink", side: 1 });
   expect(outgoingSettings.opacity).toBeGreaterThan(0);
-  expect(outgoingSettings.materialColor).toBe("rgb(15, 23, 42)");
-  const signature = materialSignature(outbound);
+  expect(outgoingSettings.backgroundColor).toBe("rgb(15, 23, 42)");
+  const signature = pileIdentitySignature(outbound);
 
   const returning = await holdPhysicalIndex(page, held, 3.55);
   expectFrameAccountsForEveryScreenByIdentity(returning);
   const retraced = await holdPhysicalIndex(page, held, 3.25);
   expectFrameAccountsForEveryScreenByIdentity(retraced);
-  expect(materialSignature(retraced)).toEqual(signature);
+  expect(pileIdentitySignature(retraced)).toEqual(signature);
 
   await finishPointer(page, held.origin, held.pitch * 0.75, held.elapsedMs + 100, "pointercancel");
   await expectCarouselAt(viewport(page), "settings");

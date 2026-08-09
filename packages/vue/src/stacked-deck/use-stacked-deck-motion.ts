@@ -141,6 +141,7 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
   readonly owned: ComputedRef<boolean>;
   readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
   readonly physicalIndex: ComputedRef<number>;
+  /** Full decorative physical projection for consumers composing their own renderer. */
   readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer<Id>[]>;
   readonly pitch: ComputedRef<number>;
   /** Durable selection. It changes only at mechanical rest. */
@@ -370,30 +371,32 @@ export function useStackedDeckMotion<Id extends string>(
 
   /**
    * Deck thickness. One backing layer per screen still in the deck, fanned to the side its index
-   * lies on. Layers retain their ordered item association for visual material, while keys follow
+   * lies on. Layers retain their ordered item association for visual treatment, while keys follow
    * physical rank within a side. Identity can therefore change in place during an exchange without
    * replacing the topological node or making gesture direction an identity source.
    */
   const pileLayers = computed<readonly StackedDeckPileLayer<Id>[]>(() => {
     let before = 0;
     let after = 0;
-    return resolveStackedDeckPile({ frame: frame.value, tuning: activeTuning.value }).map(
-      (pose) => {
-        const side = pose.slot < 0 ? -1 : 1;
-        const rank = side < 0 ? (before += 1) : (after += 1);
-        return {
-          id: model.idAt(pose.itemIndex)!,
-          index: pose.itemIndex,
-          key: `${side}:${rank}`,
-          side,
-          slot: Number(pose.slot.toFixed(3)),
-          layer: pose.layer,
-          opacity: pose.opacity,
-          shadowStrength: pose.shadowStrength,
-          transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
-        };
-      },
-    );
+    const layers: StackedDeckPileLayer<Id>[] = [];
+    for (const pose of resolveStackedDeckPile({ frame: frame.value, tuning: activeTuning.value })) {
+      const id = model.idAt(pose.itemIndex);
+      if (id === undefined) continue;
+      const side = pose.slot < 0 ? -1 : 1;
+      const rank = side < 0 ? (before += 1) : (after += 1);
+      layers.push({
+        id,
+        index: pose.itemIndex,
+        key: `${side}:${rank}`,
+        side,
+        slot: Number(pose.slot.toFixed(3)),
+        layer: pose.layer,
+        opacity: pose.opacity,
+        shadowStrength: pose.shadowStrength,
+        transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
+      });
+    }
+    return layers;
   });
 
   const paginationVisualIndex = computed(() => {

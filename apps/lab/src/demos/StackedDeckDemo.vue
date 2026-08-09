@@ -238,7 +238,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
         <div
           class="stacked-deck-pile-surface"
           :class="`tone-${item.tone}`"
-          :data-pile-material-tone="item.tone"
+          :data-pile-tone="item.tone"
         />
       </template>
       <template #card="card">

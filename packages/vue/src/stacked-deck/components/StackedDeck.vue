@@ -10,10 +10,20 @@ import { computed, ref, watch } from "vue";
 
 import { preserveFocusBeforeSemanticChange } from "../../internal/accessibility/focus";
 import { createEnglishSnapMotionMessages } from "../../localization/messages";
-import type { StackedDeckCardState } from "../stacked-deck-contracts";
+import type { StackedDeckCardState, StackedDeckPileLayer } from "../stacked-deck-contracts";
 import { useStackedDeckMotion } from "../use-stacked-deck-motion";
 
 type TId = TItem["id"];
+
+interface IndexedItem<TItem> {
+  readonly item: TItem;
+  readonly index: number;
+}
+
+interface PileLayerView<TItem, Id extends string> {
+  readonly item: TItem;
+  readonly projection: StackedDeckPileLayer<Id>;
+}
 
 const props = withDefaults(
   defineProps<{
@@ -130,6 +140,26 @@ const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {
   });
 });
 
+const indexedItems = computed(() => {
+  const byId = new Map<TId, IndexedItem<TItem>>();
+  props.items.forEach((item, index) => byId.set(item.id, { item, index }));
+  return byId;
+});
+
+/**
+ * Model projection and component items update through separate reactive sources. Publish a
+ * decorative association only when both sources name the same item at the same current index.
+ */
+const pileLayerViews = computed<readonly PileLayerView<TItem, TId>[]>(() => {
+  const views: PileLayerView<TItem, TId>[] = [];
+  for (const projection of deck.pileLayers.value) {
+    const indexedItem = indexedItems.value.get(projection.id);
+    if (indexedItem === undefined || indexedItem.index !== projection.index) continue;
+    views.push({ item: indexedItem.item, projection });
+  }
+  return views;
+});
+
 watch(
   () =>
     deck.frame.value.poses
@@ -225,25 +255,30 @@ defineExpose({
     <slot name="backdrop" />
     <div ref="track" class="snap-motion-stacked-deck-stage">
       <div
-        v-for="layer in deck.pileLayers.value"
-        :key="layer.key"
+        v-for="{ item, projection } in pileLayerViews"
+        :key="projection.key"
         aria-hidden="true"
         class="snap-motion-stacked-deck-pile-layer"
-        :data-pile-item-id="layer.id"
-        :data-pile-item-index="layer.index"
-        :data-pile-layer="layer.layer"
-        :data-pile-opacity="layer.opacity"
-        :data-pile-side="layer.side"
-        :data-pile-slot="layer.slot"
+        :data-pile-item-id="projection.id"
+        :data-pile-item-index="projection.index"
+        :data-pile-side="projection.side"
+        :data-pile-slot="projection.slot"
         inert
         :style="{
-          opacity: layer.opacity,
-          transform: layer.transform,
-          zIndex: layer.layer,
-          '--snap-motion-deck-shadow-strength': layer.shadowStrength.toFixed(4),
+          opacity: projection.opacity,
+          transform: projection.transform,
+          zIndex: projection.layer,
+          '--snap-motion-deck-shadow-strength': projection.shadowStrength.toFixed(4),
         }"
       >
-        <slot name="pile-layer" v-bind="layer" :item="items[layer.index] as TItem" />
+        <slot
+          name="pile-layer"
+          :item="item"
+          :id="projection.id"
+          :index="projection.index"
+          :side="projection.side"
+          :slot="projection.slot"
+        />
       </div>
       <div
         v-for="card in cards"

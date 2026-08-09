@@ -70,7 +70,7 @@ the consumer's own item type, and neither requires a cast or an explicit generic
 - A destination further than one card **synchronizes** rather than animating through every
   intermediate card, and announces itself immediately because it is not a traversal.
 - The pile behind the current card is exactly the screens the deck is not drawing, placed from item
-  order alone. Each layer retains the ordered item it visually represents, so material retraces with
+  order alone. Each layer retains the ordered item it visually represents, so its tone retraces with
   geometry instead of mirroring or following gesture direction.
 
 ## Coverflow
@@ -122,14 +122,15 @@ Both surfaces share the same shape.
 Slots are `#card` (required) and, for the deck, `#backdrop` for a decorative stage layer behind the
 pile plus `#pile-layer` for one layer's visual material. `#card` receives
 `{ item, id, index, active, settled, inspectable, … }`; the deck adds `role` and `pose`, the rail
-adds `presentation`. `#pile-layer` receives `{ item, id, index, side, slot, layer, opacity,
-shadowStrength, transform, key }`. `key` follows physical side/rank topology rather than item
-identity; use `id` or `index` when choosing material.
+adds `presentation`. `#pile-layer` receives only `{ item, id, index, side, slot }`, typed as
+`StackedDeckPileLayerSlotState<TItem, TId>`. The `item`, `id`, and `index` always describe the same
+entry in the currently published collection.
 
 Snap Motion keeps the `#pile-layer` content inside its own transform-bearing outer layer. That
 outer layer remains `aria-hidden`, `inert`, and outside hit testing; it is not another slide and it
-never owns activation, focus, selection, or announcements. Use the slot for cheap decorative
-material such as a dominant surface tone, not for a second semantic card tree.
+never owns activation, focus, selection, or announcements. Snap Motion retains its physical key,
+transform, z-layer, opacity, and shadow; use the slot for cheap decorative material such as a
+dominant surface tone, not for a second semantic card tree.
 
 The exposed instance — typed as `StackedDeckHandle<TId>` or `CoverflowHandle<TId>` — offers
 `previous()`, `next()`, `requestId(id)`, `synchronizeId(id)`, `isInspectEligible(index)`,
@@ -242,8 +243,10 @@ Stable state attributes on the surface root: `data-phase`, `data-active-id`, `da
 the deck adds `data-settled-id`, `data-authority-stable`, `data-owned`, and `data-profile`, and the
 rail adds `data-visual-id`. Each card carries `data-item-id`; deck cards add `data-deck-role`
 (`top`, `target`, `hidden`), `data-deck-visible`, `data-deck-interactive`, and `data-deck-layer`.
-Decorative pile layers carry `data-pile-item-id`, `data-pile-item-index`, `data-pile-side`, and
-`data-pile-slot` for their visual projection without acquiring slide semantics.
+Decorative pile layers deliberately expose `data-pile-item-id`, `data-pile-item-index`,
+`data-pile-side`, and `data-pile-slot` as inspectable projection state without acquiring slide
+semantics. Other lab telemetry, including the lab-only `data-pile-tone`, is test instrumentation and
+not part of the generic component contract.
 
 Stable custom properties: `--snap-motion-deck-card-width`, `--snap-motion-deck-card-height`,
 `--snap-motion-deck-stage-width`, `--snap-motion-deck-shadow-strength`, and the
@@ -269,7 +272,9 @@ Advanced consumers may descend without giving up the product behaviour:
 
 1. `StackedDeck` / `Coverflow` — the components above.
 2. `useStackedDeckMotion` / `useCoverflowMotion` — the same behaviour with your own markup. Supply
-   viewport and track refs; receive frames, pile layers, presentations, and input handlers.
+   viewport and track refs; receive frames, presentations, input handlers, and the full
+   `StackedDeckPileLayer` physical/compositing projection for custom pile renderers. Its `id` and
+   `index` are visual provenance only and grant no item semantics.
 3. `StackedDeckModel` / `CoverflowModel` in `@snap-motion/core` — the framework-neutral semantics:
    selection, authority, interaction envelopes, command policy, and announcements, resolved from
    controller snapshots without touching a controller.
@@ -287,4 +292,5 @@ Below the models sit the primitives they compose: `resolveStackedDeckTraversal`,
 `resolveStackedDeckFrame`, `resolveStackedDeckPile`, `resolveCoverflowPresentation`,
 `resolvePaginationIndicator`, `advanceBoundedSpring`, and `resolveDirectManipulationGesture`. They
 remain public because a custom renderer may genuinely need them — not because ordinary integration
-does.
+does. At that core layer, `StackedDeckPilePose.itemIndex` is only the ordered source index; core has
+no Vue item, ID-to-item lookup, tone, color, CSS, or application material.

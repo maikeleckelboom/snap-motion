@@ -5,7 +5,7 @@ import { h, nextTick } from "vue";
 import StackedDeck from "../src/stacked-deck/components/StackedDeck.vue";
 import type {
   StackedDeckCardState,
-  StackedDeckPileLayer,
+  StackedDeckPileLayerSlotState,
 } from "../src/stacked-deck/stacked-deck-contracts";
 
 const screens = [
@@ -16,7 +16,7 @@ const screens = [
 
 type ScreenId = (typeof screens)[number]["id"];
 type Screen = (typeof screens)[number];
-type PileSlotState = StackedDeckPileLayer<ScreenId> & { readonly item: Screen };
+type PileSlotState = StackedDeckPileLayerSlotState<Screen, ScreenId>;
 
 /** Instantiating the generic component up front is what lets the harness keep the item type. */
 const TypedStackedDeck = StackedDeck<Screen>;
@@ -97,7 +97,7 @@ describe("StackedDeck", () => {
     wrapper.unmount();
   });
 
-  it("passes the associated item and structural projection to a decorative pile slot", async () => {
+  it("passes only item identity and pile placement to a decorative pile slot", async () => {
     const wrapper = mount(TypedStackedDeck, {
       props: {
         items: screens,
@@ -114,7 +114,9 @@ describe("StackedDeck", () => {
               "data-slot-id": layer.id,
               "data-slot-index": layer.index,
               "data-slot-item": layer.item.title,
+              "data-slot-keys": Object.keys(layer).join(","),
               "data-slot-side": layer.side,
+              "data-slot-slot": layer.slot,
             },
             layer.item.title,
           ),
@@ -133,6 +135,17 @@ describe("StackedDeck", () => {
       "Outcome",
     ]);
     expect(surfaces.map((surface) => surface.attributes("data-slot-side"))).toEqual(["-1", "1"]);
+    expect(surfaces.map((surface) => surface.attributes("data-slot-slot"))).toEqual(["-1", "1"]);
+    expect(
+      new Set(
+        surfaces.flatMap((surface) => (surface.attributes("data-slot-keys") ?? "").split(",")),
+      ),
+    ).toEqual(new Set(["id", "index", "item", "side", "slot"]));
+    expect(
+      surfaces.every(
+        (surface) => (surface.attributes("data-slot-keys") ?? "").split(",").length === 5,
+      ),
+    ).toBe(true);
     expect(wrapper.findAll('[aria-roledescription="slide"]')).toHaveLength(screens.length);
     expect(surfaces.every((surface) => surface.element.closest("[inert]") !== null)).toBe(true);
 
@@ -150,6 +163,77 @@ describe("StackedDeck", () => {
       ["outcome", "0", "Outcome"],
       ["overview", "2", "Overview"],
     ]);
+    wrapper.unmount();
+  });
+
+  it("keeps pile slot item, id, and index coherent through collection reconfiguration", async () => {
+    interface ReconfigurableScreen {
+      readonly id: string;
+      readonly title: string;
+    }
+
+    const collections: readonly (readonly ReconfigurableScreen[])[] = [
+      [
+        { id: "alpha", title: "Alpha" },
+        { id: "beta", title: "Beta" },
+        { id: "gamma", title: "Gamma" },
+        { id: "delta", title: "Delta" },
+      ],
+      [
+        { id: "alpha", title: "Alpha" },
+        { id: "gamma", title: "Gamma" },
+        { id: "delta", title: "Delta" },
+      ],
+      [
+        { id: "alpha", title: "Alpha" },
+        { id: "gamma", title: "Gamma" },
+      ],
+      [
+        { id: "before", title: "Before" },
+        { id: "alpha", title: "Alpha" },
+        { id: "gamma", title: "Gamma" },
+        { id: "after", title: "After" },
+      ],
+      [
+        { id: "red", title: "Red" },
+        { id: "green", title: "Green" },
+        { id: "blue", title: "Blue" },
+      ],
+    ];
+    const ReconfigurableStackedDeck = StackedDeck<ReconfigurableScreen>;
+    const wrapper = mount(ReconfigurableStackedDeck, {
+      props: { items: collections[0]!, reducedMotionOverride: true },
+      slots: {
+        card: () => h("div"),
+        "pile-layer": (layer: StackedDeckPileLayerSlotState<ReconfigurableScreen, string>) =>
+          h("div", {
+            class: "pile-surface",
+            "data-slot-id": layer.id,
+            "data-slot-index": layer.index,
+            "data-slot-item-id": layer.item.id,
+          }),
+      },
+    });
+    expect(wrapper.find(".snap-motion-stacked-deck").exists()).toBe(true);
+
+    function expectCoherentPile(collection: readonly ReconfigurableScreen[]) {
+      const surfaces = wrapper.findAll(".pile-surface");
+      expect(surfaces).toHaveLength(Math.max(0, collection.length - 1));
+      for (const surface of surfaces) {
+        const id = surface.attributes("data-slot-id");
+        const itemId = surface.attributes("data-slot-item-id");
+        const index = Number(surface.attributes("data-slot-index"));
+        expect(id).toBe(itemId);
+        expect(collection[index]?.id).toBe(id);
+      }
+    }
+
+    await nextTick();
+    expectCoherentPile(collections[0]!);
+    for (const collection of collections.slice(1)) {
+      await wrapper.setProps({ items: collection });
+      expectCoherentPile(collection);
+    }
     wrapper.unmount();
   });
 

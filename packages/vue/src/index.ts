@@ -49,6 +49,7 @@ export type {
   StackedDeckCardState,
   StackedDeckHandle,
   StackedDeckPileLayer,
+  StackedDeckPileLayerSlotState,
   StackedDeckPose,
   StackedDeckRole,
   UseStackedDeckMotionOptions,

@@ -20,9 +20,12 @@ export interface StackedDeckCardState<TItem, TId extends string> {
 }
 
 /**
- * One decorative depth layer associated with an item in collection order. The association exists
- * only so a renderer can give the layer truthful visual material; it grants no item semantics,
- * interaction, selection, focus, or accessibility ownership.
+ * Full physical projection for one decorative depth layer from {@link useStackedDeckMotion}.
+ * Custom renderers receive the compositor geometry here; the higher-level `StackedDeck`
+ * `#pile-layer` slot deliberately exposes only {@link StackedDeckPileLayerSlotState}.
+ *
+ * The ordered item association grants no item semantics, interaction, selection, focus, or
+ * accessibility ownership.
  */
 export interface StackedDeckPileLayer<Id extends string = string> {
   readonly id: Id;
@@ -35,6 +38,19 @@ export interface StackedDeckPileLayer<Id extends string = string> {
   readonly opacity: number;
   readonly shadowStrength: number;
   readonly transform: string;
+}
+
+/**
+ * Decorative visual state supplied to the `StackedDeck` `#pile-layer` slot. Snap Motion retains
+ * ownership of the outer layer's physical key, transform, compositing, opacity, and shadow.
+ */
+export interface StackedDeckPileLayerSlotState<TItem, TId extends string> {
+  readonly item: TItem;
+  readonly id: TId;
+  /** Position of this same item in the component's current `items` collection. */
+  readonly index: number;
+  readonly side: -1 | 1;
+  readonly slot: number;
 }
 
 export type { StackedDeckPose, StackedDeckRole };

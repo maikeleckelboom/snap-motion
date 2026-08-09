@@ -90,13 +90,8 @@ export const StackedDeck: <TItem extends {
             item: TItem;
             id: TItem["id"];
             index: number;
-            key: string;
-            side: -1 | 1;
+            side: 1 | -1;
             slot: number;
-            layer: number;
-            opacity: number;
-            shadowStrength: number;
-            transform: string;
         }) => any;
     } & {
         card?: (props: {
@@ -195,6 +190,19 @@ export interface StackedDeckPileLayer<Id extends string = string> {
     readonly transform: string;
 }
 
+// @public
+export interface StackedDeckPileLayerSlotState<TItem, TId extends string> {
+    // (undocumented)
+    readonly id: TId;
+    readonly index: number;
+    // (undocumented)
+    readonly item: TItem;
+    // (undocumented)
+    readonly side: -1 | 1;
+    // (undocumented)
+    readonly slot: number;
+}
+
 export { StackedDeckPose }
 
 export { StackedDeckRole }
@@ -261,7 +269,6 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
     readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
     // (undocumented)
     readonly physicalIndex: ComputedRef<number>;
-    // (undocumented)
     readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer<Id>[]>;
     // (undocumented)
     readonly pitch: ComputedRef<number>;
