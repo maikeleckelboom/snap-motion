@@ -956,6 +956,19 @@ export const StackedDeck: <TItem extends {
     slots: {
         backdrop?: (props: {}) => any;
     } & {
+        'pile-layer'?: (props: {
+            item: TItem;
+            id: TItem["id"];
+            index: number;
+            key: string;
+            side: -1 | 1;
+            slot: number;
+            layer: number;
+            opacity: number;
+            shadowStrength: number;
+            transform: string;
+        }) => any;
+    } & {
         card?: (props: {
             item: TItem;
             id: TItem["id"];
@@ -1032,8 +1045,11 @@ export interface StackedDeckHandle<Id extends string> {
 }
 
 // @public
-export interface StackedDeckPileLayer {
+export interface StackedDeckPileLayer<Id extends string = string> {
     // (undocumented)
+    readonly id: Id;
+    // (undocumented)
+    readonly index: number;
     readonly key: string;
     // (undocumented)
     readonly layer: number;
@@ -1456,7 +1472,7 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
     // (undocumented)
     readonly physicalIndex: ComputedRef<number>;
     // (undocumented)
-    readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer[]>;
+    readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer<Id>[]>;
     // (undocumented)
     readonly pitch: ComputedRef<number>;
     previous(): boolean;

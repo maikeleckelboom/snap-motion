@@ -86,10 +86,12 @@ export interface StackedDeckTuning {
 
 /**
  * One decorative depth layer: one screen still in the deck, on the side of the current card it is
- * still waiting on. A layer carries no item identity — nothing about it names, reveals, or lets a
- * caller act on the screen it accounts for — only that the deck has one more card that way.
+ * still waiting on. `itemIndex` preserves which ordered item supplies the layer's visual material;
+ * it grants no item semantics, interaction, selection, or accessibility ownership.
  */
 export interface StackedDeckPilePose {
+  /** Ordered collection index whose decorative material occupies this physical layer. */
+  readonly itemIndex: number;
   /**
    * Continuous slot distance from the card at the centre of the deck, signed by which side of it
    * the screen sits on: negative before, positive after. It is `index - centre` and nothing else,
@@ -334,7 +336,8 @@ export function resolveStackedDeckTuning(
  * dissolves on, because that envelope is read off the frame's own pose rather than recomputed. The
  * frame has already validated its inputs, so nothing is validated twice either.
  *
- * A layer carries no item identity. It only says the deck has one more card that way.
+ * Each layer retains the ordered item index this loop already resolves. That association is visual
+ * provenance only: core still carries no application item, material metadata, or semantic state.
  */
 export function resolveStackedDeckPile(
   options: ResolveStackedDeckPileOptions,
@@ -351,6 +354,7 @@ export function resolveStackedDeckPile(
     const side = slot < 0 ? -1 : 1;
     const spread = pileSlotSpread(distance);
     poses.push({
+      itemIndex: index,
       slot,
       translateX: side * tuning.pileOffsetX * spread,
       translateY: tuning.pileOffsetY * spread,

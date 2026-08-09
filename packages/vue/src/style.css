@@ -961,7 +961,7 @@
   transform-style: flat;
 }
 
-/* Decorative depth only. These layers never carry item identity, content, or semantics. */
+/* Decorative depth only. Visual item association never grants content or semantics. */
 .snap-motion-stacked-deck-pile-layer {
   pointer-events: none;
 }

@@ -42,6 +42,9 @@ const activeId = ref<(typeof screens)[number]["id"]>("system");
     :item-label="(screen) => screen.title"
     label="Project screens"
   >
+    <template #pile-layer="{ item }">
+      <ProjectScreenMaterial :tone="item.tone" />
+    </template>
     <template #card="{ item, active }">
       <ProjectScreen :screen="item" :current="active" />
     </template>
@@ -51,6 +54,7 @@ const activeId = ref<(typeof screens)[number]["id"]>("system");
 
 That is the whole integration. `activeId` keeps the semantic ID union, `item` inside the slot keeps
 the consumer's own item type, and neither requires a cast or an explicit generic argument.
+`#pile-layer` is optional; omit it to keep the default empty decorative surface.
 
 ### What the deck guarantees
 
@@ -66,7 +70,8 @@ the consumer's own item type, and neither requires a cast or an explicit generic
 - A destination further than one card **synchronizes** rather than animating through every
   intermediate card, and announces itself immediately because it is not a traversal.
 - The pile behind the current card is exactly the screens the deck is not drawing, placed from item
-  order alone. A reversal retraces the same layers instead of mirroring them.
+  order alone. Each layer retains the ordered item it visually represents, so material retraces with
+  geometry instead of mirroring or following gesture direction.
 
 ## Coverflow
 
@@ -115,8 +120,16 @@ Both surfaces share the same shape.
 | `activate`        | A tap on the current, unambiguous item: open it on another surface. |
 
 Slots are `#card` (required) and, for the deck, `#backdrop` for a decorative stage layer behind the
-pile. `#card` receives `{ item, id, index, active, settled, inspectable, … }`; the deck adds `role`
-and `pose`, the rail adds `presentation`.
+pile plus `#pile-layer` for one layer's visual material. `#card` receives
+`{ item, id, index, active, settled, inspectable, … }`; the deck adds `role` and `pose`, the rail
+adds `presentation`. `#pile-layer` receives `{ item, id, index, side, slot, layer, opacity,
+shadowStrength, transform, key }`. `key` follows physical side/rank topology rather than item
+identity; use `id` or `index` when choosing material.
+
+Snap Motion keeps the `#pile-layer` content inside its own transform-bearing outer layer. That
+outer layer remains `aria-hidden`, `inert`, and outside hit testing; it is not another slide and it
+never owns activation, focus, selection, or announcements. Use the slot for cheap decorative
+material such as a dominant surface tone, not for a second semantic card tree.
 
 The exposed instance — typed as `StackedDeckHandle<TId>` or `CoverflowHandle<TId>` — offers
 `previous()`, `next()`, `requestId(id)`, `synchronizeId(id)`, `isInspectEligible(index)`,
@@ -229,6 +242,8 @@ Stable state attributes on the surface root: `data-phase`, `data-active-id`, `da
 the deck adds `data-settled-id`, `data-authority-stable`, `data-owned`, and `data-profile`, and the
 rail adds `data-visual-id`. Each card carries `data-item-id`; deck cards add `data-deck-role`
 (`top`, `target`, `hidden`), `data-deck-visible`, `data-deck-interactive`, and `data-deck-layer`.
+Decorative pile layers carry `data-pile-item-id`, `data-pile-item-index`, `data-pile-side`, and
+`data-pile-slot` for their visual projection without acquiring slide semantics.
 
 Stable custom properties: `--snap-motion-deck-card-width`, `--snap-motion-deck-card-height`,
 `--snap-motion-deck-stage-width`, `--snap-motion-deck-shadow-strength`, and the

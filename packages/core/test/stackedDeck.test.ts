@@ -249,12 +249,13 @@ describe("stacked deck thickness", () => {
     // Position is legible from thickness alone: nothing behind the first screen, nothing ahead of
     // the last, and an even split in the middle. The deck always accounts for every screen exactly
     // once, whatever its length.
-    for (const [index, slots] of [
-      [0, [1, 2, 3, 4]],
-      [2, [-2, -1, 1, 2]],
-      [4, [-4, -3, -2, -1]],
+    for (const [index, itemIndexes, slots] of [
+      [0, [1, 2, 3, 4], [1, 2, 3, 4]],
+      [2, [0, 1, 3, 4], [-2, -1, 1, 2]],
+      [4, [0, 1, 2, 3], [-4, -3, -2, -1]],
     ] as const) {
       const pile = resolvePile(traversal({ settledIndex: index, visualTopIndex: index }));
+      expect(pile.map((layer) => layer.itemIndex)).toEqual(itemIndexes);
       expect(pile.map((layer) => layer.slot)).toEqual(slots);
       expect(pile).toHaveLength(4);
     }
@@ -263,6 +264,9 @@ describe("stacked deck thickness", () => {
         resolvePile(traversal({ settledIndex: 0, visualTopIndex: 0 }), itemCount),
       ).toHaveLength(itemCount - 1);
     }
+    expect(resolvePile(traversal({ settledIndex: 0, visualTopIndex: 0 }), 2)).toMatchObject([
+      { itemIndex: 1, slot: 1 },
+    ]);
   });
 
   it("places every layer from index order alone, so a reversal cannot mirror the deck", () => {
@@ -272,11 +276,14 @@ describe("stacked deck thickness", () => {
       for (const progress of SEGMENT_SAMPLES) {
         const active = segment(2, direction, progress);
         const centre = 2 + direction * progress;
-        const expected = [0, 1, 2, 3, 4]
+        const expectedItems = [0, 1, 2, 3, 4]
           .filter((index) => index !== active.segmentTargetIndex)
-          .filter((index) => index !== 2 || progress > OUTGOING_DISSOLVE_START)
-          .map((index) => index - centre);
-        expect(resolvePile(active).map((layer) => layer.slot)).toEqual(expected);
+          .filter((index) => index !== 2 || progress > OUTGOING_DISSOLVE_START);
+        const pile = resolvePile(active);
+        expect(pile.map((layer) => layer.itemIndex)).toEqual(expectedItems);
+        expect(pile.map((layer) => layer.slot)).toEqual(
+          expectedItems.map((index) => index - centre),
+        );
       }
     }
     // Mirrored positions produce mirrored slots, from the item ordering being genuinely reversed.
@@ -337,10 +344,12 @@ describe("stacked deck thickness", () => {
     for (const direction of [1, -1] as const) {
       const opening = resolveFrame(segment(2, direction, 0.0001));
       const target = opening.poses[2 + direction]!;
-      const nearest = resolveStackedDeckPile({
+      const restingPile = resolveStackedDeckPile({
         frame: resolveFrame(traversal()),
         tuning: WIDE_TUNING,
-      }).find((layer) => layer.slot === direction)!;
+      });
+      const nearest = restingPile.find((layer) => layer.slot === direction)!;
+      expect(nearest.itemIndex).toBe(2 + direction);
       for (const key of ["translateX", "translateY", "scale", "rotate"] as const) {
         expect(target[key]).toBeCloseTo(nearest[key], 3);
       }
@@ -350,21 +359,47 @@ describe("stacked deck thickness", () => {
       // envelope its face dissolves on, so the two are one exchange rather than two events.
       for (const progress of SEGMENT_SAMPLES) {
         const frame = resolveFrame(segment(2, direction, progress));
-        const vacating = resolvePile(segment(2, direction, progress)).find(
+        const activePile = resolvePile(segment(2, direction, progress));
+        expect(activePile.every((layer) => layer.itemIndex !== 2 + direction)).toBe(true);
+        const vacating = activePile.find(
           (layer) => Math.abs(layer.slot + direction * progress) < 1e-9,
         );
+        expect(vacating?.itemIndex).toBe(progress > OUTGOING_DISSOLVE_START ? 2 : undefined);
         expect(vacating?.opacity ?? 0).toBeCloseTo(1 - frame.poses[2]!.opacity, 6);
         expect(vacating === undefined ? -direction : Math.sign(vacating.slot)).toBe(-direction);
       }
       // A completed exchange leaves exactly the resting geometry of the card it landed on.
-      const landed = resolvePile(segment(2, direction, 0.999999)).map((layer) =>
-        Number(layer.slot.toFixed(3)),
-      );
+      const landed = resolvePile(segment(2, direction, 0.999999)).map((layer) => ({
+        itemIndex: layer.itemIndex,
+        slot: Number(layer.slot.toFixed(3)),
+      }));
       const resting = resolvePile(
         traversal({ settledIndex: 2 + direction, visualTopIndex: 2 + direction }),
-      ).map((layer) => layer.slot);
+      ).map((layer) => ({ itemIndex: layer.itemIndex, slot: layer.slot }));
       expect(landed).toEqual(resting);
     }
+  });
+
+  it("retraces the same physical item identities through reversal", () => {
+    const outbound = [0.2, 0.55, 0.8].map((progress) =>
+      resolvePile(segment(2, 1, progress)).map((layer) => ({
+        itemIndex: layer.itemIndex,
+        opacity: rounded(layer.opacity),
+        slot: rounded(layer.slot),
+      })),
+    );
+    const retraced = [0.8, 0.55, 0.2].map((progress) =>
+      resolvePile(segment(2, 1, progress)).map((layer) => ({
+        itemIndex: layer.itemIndex,
+        opacity: rounded(layer.opacity),
+        slot: rounded(layer.slot),
+      })),
+    );
+    expect(retraced).toEqual(outbound.map((_sample, index) => outbound.at(-1 - index)));
+
+    const opposite = resolvePile(segment(2, -1, 0.55));
+    expect(opposite.map((layer) => layer.itemIndex)).toEqual([0, 2, 3, 4]);
+    expect(opposite.every((layer) => layer.itemIndex !== 1)).toBe(true);
   });
 
   it("moves every layer continuously across a segment and its reversal", () => {

@@ -19,8 +19,9 @@ may repeat. Semantic identity is therefore never inferred from a deduplicated nu
 Presentation projection is also framework-neutral. The per-card Coverflow rail resolver consumes a
 scalar position. The whole-frame deck compositor consumes that position as a continuous physical
 index, advances visual ownership at each crossed anchor, and projects only the active adjacent
-segment. It mutates caller-owned traversal and frame storage and owns only physical pile geometry
-and paint layers; it does not own motion, targets, final selection, or DOM state.
+segment. It mutates caller-owned traversal and frame storage and owns only physical pile geometry,
+paint layers, and the ordered source index for each decorative layer; it does not own motion,
+targets, final selection, application material, or DOM state.
 
 Above those primitives, core owns two **surface models**. `StackedDeckModel` and `CoverflowModel`
 compose the generic controller's snapshots into a surface's semantics: durable versus visual

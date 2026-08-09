@@ -141,7 +141,7 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
   readonly owned: ComputedRef<boolean>;
   readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
   readonly physicalIndex: ComputedRef<number>;
-  readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer[]>;
+  readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer<Id>[]>;
   readonly pitch: ComputedRef<number>;
   /** Durable selection. It changes only at mechanical rest. */
   readonly settledId: ComputedRef<Id | undefined>;
@@ -370,11 +370,11 @@ export function useStackedDeckMotion<Id extends string>(
 
   /**
    * Deck thickness. One backing layer per screen still in the deck, fanned to the side its index
-   * lies on. Layers are keyed by their rank within a side rather than by screen, because a layer
-   * stands for "one more card that way" and never for a particular screen — so no gesture direction
-   * or reversal can mirror, reorder, or re-identify one.
+   * lies on. Layers retain their ordered item association for visual material, while keys follow
+   * physical rank within a side. Identity can therefore change in place during an exchange without
+   * replacing the topological node or making gesture direction an identity source.
    */
-  const pileLayers = computed<readonly StackedDeckPileLayer[]>(() => {
+  const pileLayers = computed<readonly StackedDeckPileLayer<Id>[]>(() => {
     let before = 0;
     let after = 0;
     return resolveStackedDeckPile({ frame: frame.value, tuning: activeTuning.value }).map(
@@ -382,6 +382,8 @@ export function useStackedDeckMotion<Id extends string>(
         const side = pose.slot < 0 ? -1 : 1;
         const rank = side < 0 ? (before += 1) : (after += 1);
         return {
+          id: model.idAt(pose.itemIndex)!,
+          index: pose.itemIndex,
           key: `${side}:${rank}`,
           side,
           slot: Number(pose.slot.toFixed(3)),

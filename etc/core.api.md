@@ -1271,6 +1271,7 @@ export interface StackedDeckModelState {
 
 // @public
 export interface StackedDeckPilePose {
+    readonly itemIndex: number;
     // (undocumented)
     readonly layer: number;
     // (undocumented)

@@ -203,8 +203,10 @@ Slots are a geometric series rather than a straight multiple of one step: the ne
 exactly one step out — where every target rises from — while the total spread converges, so a deck
 of any length shows exposed edges and depth rather than widening into a horizontal rail.
 
-A layer still carries no item identity. Nothing about it names, reveals, or lets a caller act on the
-screen it accounts for; it only says the deck has one more card that way.
+Each layer retains the ordered item index it came from, so a renderer can associate truthful visual
+material with the same topology that resolved its slot. That structural provenance does not name a
+semantic card, expose application metadata from core, or grant activation, selection, focus, hit
+testing, or accessibility ownership.
 
 ### One card per interaction
 

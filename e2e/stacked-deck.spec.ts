@@ -11,6 +11,7 @@ const TITLES = [
   "Team & rollen",
   "Werkruimte-instellingen",
 ] as const;
+const TONES = ["light", "mist", "light", "mist", "ink"] as const;
 let nextPointerId = 617;
 const existingResizeObserverWarning =
   /ResizeObserver loop completed with undelivered notifications\./;
@@ -223,7 +224,10 @@ async function readFrame(page: Page) {
       ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
     ].map((item) => {
       const box = item.getBoundingClientRect();
+      const material = item.querySelector<HTMLElement>(".stacked-deck-pile-surface")!;
       return {
+        id: item.dataset.pileItemId ?? "",
+        index: Number(item.dataset.pileItemIndex),
         slot: Number(item.dataset.pileSlot),
         side: Number(item.dataset.pileSide),
         opacity: Number(item.dataset.pileOpacity),
@@ -233,6 +237,10 @@ async function readFrame(page: Page) {
         top: Number(box.top.toFixed(3)),
         bottom: Number(box.bottom.toFixed(3)),
         ariaHidden: item.getAttribute("aria-hidden"),
+        inert: item.hasAttribute("inert"),
+        materialColor: getComputedStyle(material).backgroundColor,
+        materialTone: material.dataset.pileMaterialTone ?? "",
+        pointerEvents: getComputedStyle(item).pointerEvents,
       };
     });
     const targetAttribute = element.getAttribute("data-segment-target-index");
@@ -335,6 +343,13 @@ interface TraversalSample {
     readonly visible: boolean;
   }[];
   readonly pile: readonly number[];
+  readonly pileIdentity: readonly {
+    readonly id: string;
+    readonly index: number;
+    readonly materialTone: string;
+    readonly opacity: number;
+    readonly slot: number;
+  }[];
   readonly cardWidth: number;
 }
 
@@ -395,6 +410,17 @@ async function installTraversalTrace(page: Page, maxFrames = 900) {
         pile: [
           ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
         ].flatMap((item) => [Number(item.dataset.pileSlot), Number(item.dataset.pileOpacity)]),
+        pileIdentity: [
+          ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
+        ].map((item) => ({
+          id: item.dataset.pileItemId ?? "",
+          index: Number(item.dataset.pileItemIndex),
+          materialTone:
+            item.querySelector<HTMLElement>(".stacked-deck-pile-surface")?.dataset
+              .pileMaterialTone ?? "",
+          opacity: Number(item.dataset.pileOpacity),
+          slot: Number(item.dataset.pileSlot),
+        })),
       });
       remainingFrames -= 1;
       if ((state.started && controllerPhase === "idle") || remainingFrames <= 0) {
@@ -457,6 +483,40 @@ function expectFrameAccountsForEveryScreen(frame: DeckFrame) {
   );
 }
 
+function expectIdentityPresence(
+  layers: readonly { id: string; index: number; materialTone: string; opacity: number }[],
+  faces: readonly { id: string; opacity: number }[],
+) {
+  const presence = new Map<string, number>(IDS.map((id) => [id, 0]));
+  for (const face of faces) presence.set(face.id, (presence.get(face.id) ?? 0) + face.opacity);
+  for (const layer of layers) {
+    const expectedIndex = IDS.indexOf(layer.id as (typeof IDS)[number]);
+    expect(layer.index).toBe(expectedIndex);
+    expect(layer.materialTone).toBe(TONES[expectedIndex]);
+    presence.set(layer.id, (presence.get(layer.id) ?? 0) + layer.opacity);
+  }
+  for (const id of IDS) expect(presence.get(id)).toBeCloseTo(1, 2);
+}
+
+function expectFrameAccountsForEveryScreenByIdentity(frame: DeckFrame) {
+  expectIdentityPresence(frame.pile, frame.poses);
+  for (const layer of frame.pile) {
+    expect(layer.ariaHidden).toBe("true");
+    expect(layer.inert).toBe(true);
+    expect(layer.pointerEvents).toBe("none");
+  }
+}
+
+function materialSignature(frame: DeckFrame) {
+  return frame.pile.map((layer) => ({
+    id: layer.id,
+    index: layer.index,
+    opacity: Number(layer.opacity.toFixed(4)),
+    slot: Number(layer.slot.toFixed(4)),
+    materialTone: layer.materialTone,
+  }));
+}
+
 /** The same accounting across a whole traced interaction rather than one sampled frame. */
 function expectPileAccountsForEveryScreen(trace: readonly TraversalSample[]) {
   for (const sample of trace) {
@@ -465,6 +525,7 @@ function expectPileAccountsForEveryScreen(trace: readonly TraversalSample[]) {
       sample.pile.filter((_unused, index) => index % 2 === 1),
       sample.poses.map((pose) => pose.opacity),
     );
+    expectIdentityPresence(sample.pileIdentity, sample.poses);
   }
 }
 
@@ -909,16 +970,23 @@ test("deck thickness shows where you are, from index order alone", async ({ page
 
   // Position is legible from thickness alone: nothing behind the first screen, nothing ahead of the
   // last, an even split in the middle — and always one backing card per remaining screen.
-  for (const [index, slots] of [
-    [0, [1, 2, 3, 4]],
-    [2, [-2, -1, 1, 2]],
-    [4, [-4, -3, -2, -1]],
+  for (const [index, itemIds, slots] of [
+    [0, ["project", "map", "team", "settings"], [1, 2, 3, 4]],
+    [2, ["templates", "project", "team", "settings"], [-2, -1, 1, 2]],
+    [4, ["templates", "project", "map", "team"], [-4, -3, -2, -1]],
   ] as const) {
     await pagination(page).nth(index).click();
     await expectCarouselAt(stage, IDS[index]!);
     const frame = await readFrame(page);
+    expect(frame.pile.map((layer) => layer.id)).toEqual(itemIds);
     expect(frame.pile.map((layer) => layer.slot)).toEqual([...slots]);
     expect(frame.pile.every((layer) => layer.ariaHidden === "true")).toBe(true);
+    expectFrameAccountsForEveryScreenByIdentity(frame);
+    const settingsLayer = frame.pile.find((layer) => layer.id === "settings");
+    if (settingsLayer !== undefined) {
+      expect(settingsLayer.materialTone).toBe("ink");
+      expect(settingsLayer.materialColor).toBe("rgb(15, 23, 42)");
+    }
     expect(frame.poses.filter((pose) => pose.visible)).toHaveLength(1);
     const centre = (frame.stageLeft + frame.stageRight) / 2;
     for (const layer of frame.pile) {
@@ -942,6 +1010,7 @@ test("deck thickness shows where you are, from index order alone", async ({ page
     await expectCarouselAt(stage, "map");
     const held = await beginHeldTraversal(page, 2);
     const opening = await holdPhysicalIndex(page, held, 2 + direction * 0.05);
+    expectFrameAccountsForEveryScreenByIdentity(opening);
     const target = opening.poses.find((pose) => pose.role === "target")!;
     expect(Math.sign(target.translateX)).toBe(direction);
     expect(opening.pile.map((layer) => layer.slot)).toEqual(
@@ -950,13 +1019,16 @@ test("deck thickness shows where you are, from index order alone", async ({ page
 
     // Past the midpoint the vacated card is materialising into the far side, part-present.
     const exchanging = await holdPhysicalIndex(page, held, 2 + direction * 0.75);
+    expectFrameAccountsForEveryScreenByIdentity(exchanging);
     const vacating = exchanging.pile.find((layer) => layer.opacity < 1)!;
+    expect(vacating.id).toBe("map");
     expect(Math.sign(vacating.slot)).toBe(-direction);
     expect(Math.abs(vacating.slot)).toBeCloseTo(0.75, 2);
     expect(vacating.opacity).toBeGreaterThan(0);
 
     // A completed exchange leaves exactly the resting geometry of the card it landed on.
     const landed = await holdPhysicalIndex(page, held, 2 + direction);
+    expectFrameAccountsForEveryScreenByIdentity(landed);
     await finishPointer(
       page,
       held.origin,
@@ -992,6 +1064,28 @@ test("deck thickness shows where you are, from index order alone", async ({ page
     await expectCarouselAt(stage, "map");
   }
   expect(mirrored[0]).toEqual(mirrored[1]);
+});
+
+test("decorative material identity retraces the ordered screen through reversal", async ({
+  page,
+}) => {
+  const held = await beginHeldTraversal(page, 4);
+  const outbound = await holdPhysicalIndex(page, held, 3.25);
+  expectFrameAccountsForEveryScreenByIdentity(outbound);
+  const outgoingSettings = outbound.pile.find((layer) => layer.id === "settings")!;
+  expect(outgoingSettings).toMatchObject({ index: 4, materialTone: "ink", side: 1 });
+  expect(outgoingSettings.opacity).toBeGreaterThan(0);
+  expect(outgoingSettings.materialColor).toBe("rgb(15, 23, 42)");
+  const signature = materialSignature(outbound);
+
+  const returning = await holdPhysicalIndex(page, held, 3.55);
+  expectFrameAccountsForEveryScreenByIdentity(returning);
+  const retraced = await holdPhysicalIndex(page, held, 3.25);
+  expectFrameAccountsForEveryScreenByIdentity(retraced);
+  expect(materialSignature(retraced)).toEqual(signature);
+
+  await finishPointer(page, held.origin, held.pitch * 0.75, held.elapsedMs + 100, "pointercancel");
+  await expectCarouselAt(viewport(page), "settings");
 });
 
 test("one held gesture cannot discard a second card however far it travels", async ({ page }) => {

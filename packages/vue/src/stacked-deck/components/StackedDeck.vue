@@ -229,17 +229,22 @@ defineExpose({
         :key="layer.key"
         aria-hidden="true"
         class="snap-motion-stacked-deck-pile-layer"
+        :data-pile-item-id="layer.id"
+        :data-pile-item-index="layer.index"
         :data-pile-layer="layer.layer"
         :data-pile-opacity="layer.opacity"
         :data-pile-side="layer.side"
         :data-pile-slot="layer.slot"
+        inert
         :style="{
           opacity: layer.opacity,
           transform: layer.transform,
           zIndex: layer.layer,
           '--snap-motion-deck-shadow-strength': layer.shadowStrength.toFixed(4),
         }"
-      />
+      >
+        <slot name="pile-layer" v-bind="layer" :item="items[layer.index] as TItem" />
+      </div>
       <div
         v-for="card in cards"
         :key="card.id"

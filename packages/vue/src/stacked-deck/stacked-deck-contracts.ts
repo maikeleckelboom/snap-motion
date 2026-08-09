@@ -20,11 +20,14 @@ export interface StackedDeckCardState<TItem, TId extends string> {
 }
 
 /**
- * One decorative depth layer: one screen still in the deck, on the side of the current card it is
- * waiting on. A layer carries no item identity — nothing about it names, reveals, or lets a caller
- * act on the screen it accounts for — only that the deck has one more card that way.
+ * One decorative depth layer associated with an item in collection order. The association exists
+ * only so a renderer can give the layer truthful visual material; it grants no item semantics,
+ * interaction, selection, focus, or accessibility ownership.
  */
-export interface StackedDeckPileLayer {
+export interface StackedDeckPileLayer<Id extends string = string> {
+  readonly id: Id;
+  readonly index: number;
+  /** Stable physical key. Deliberately follows side topology rather than item identity. */
   readonly key: string;
   readonly side: -1 | 1;
   readonly slot: number;
