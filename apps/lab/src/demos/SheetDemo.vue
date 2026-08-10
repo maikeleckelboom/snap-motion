@@ -17,8 +17,6 @@ import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
 import { springFromSettings } from "@/fixtures/lab-settings";
 import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 
-import AdaptiveSupportingPaneDemo from "./AdaptiveSupportingPaneDemo.vue";
-
 type ContentMode = "prose" | "short" | "tall";
 type SnapMode = "custom" | "default";
 
@@ -298,8 +296,6 @@ function snapTo(id: SheetOpenSnapId) {
         <p v-else>Short content proves that the surface does not invent a phantom scroll range.</p>
       </div>
     </Sheet>
-
-    <AdaptiveSupportingPaneDemo :reduced-motion-override="reducedMotionOverride" />
   </div>
 </template>
 

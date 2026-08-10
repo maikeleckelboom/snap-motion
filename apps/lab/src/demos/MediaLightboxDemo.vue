@@ -26,6 +26,7 @@ import { useMediaTransform } from "@/media-inspection/use-media-transform";
 type MediaLoadState = "pending" | "loaded" | "failed";
 
 const props = defineProps<{
+  inspectionMode: boolean;
   reducedMotionOverride: boolean | undefined;
   settings: LabPhysicsSettings;
   stageWidth: number;
@@ -481,34 +482,38 @@ onBeforeUnmount(() => {
       </button>
     </section>
 
-    <label class="fixture-mode">
-      <span>Fixture set</span>
-      <select v-model="fixtureMode" data-testid="media-fixture-mode">
-        <option value="all">All five media cases</option>
-        <option value="one">One-item boundary</option>
-      </select>
-    </label>
+    <div v-if="props.inspectionMode" class="media-fixture-controls">
+      <label class="fixture-mode">
+        <span>Fixture set</span>
+        <select v-model="fixtureMode" data-testid="media-fixture-mode">
+          <option value="all">All five media cases</option>
+          <option value="one">One-item boundary</option>
+        </select>
+      </label>
 
-    <label class="fixture-mode">
-      <span>Direction</span>
-      <select v-model="directionMode" data-testid="media-direction-mode">
-        <option value="ltr">LTR</option>
-        <option value="rtl">RTL</option>
-      </select>
-    </label>
+      <label class="fixture-mode">
+        <span>Direction</span>
+        <select v-model="directionMode" data-testid="media-direction-mode">
+          <option value="ltr">LTR</option>
+          <option value="rtl">RTL</option>
+        </select>
+      </label>
 
-    <label class="transition-option">
-      <input
-        v-model="transitionMotionEnabled"
-        data-testid="media-transition-toggle"
-        :disabled="!transitionSupported"
-        type="checkbox"
-      />
-      <span>
-        Thumbnail opening motion
-        <small>{{ transitionSupported ? "View Transition" : "Unavailable in this browser" }}</small>
-      </span>
-    </label>
+      <label class="transition-option">
+        <input
+          v-model="transitionMotionEnabled"
+          data-testid="media-transition-toggle"
+          :disabled="!transitionSupported"
+          type="checkbox"
+        />
+        <span>
+          Thumbnail opening motion
+          <small>{{
+            transitionSupported ? "View Transition" : "Unavailable in this browser"
+          }}</small>
+        </span>
+      </label>
+    </div>
 
     <div class="fixture-index" aria-label="Included media fixtures">
       <button
@@ -844,6 +849,7 @@ onBeforeUnmount(() => {
           </section>
 
           <section
+            v-if="props.inspectionMode"
             class="test-rail"
             aria-labelledby="ownership-rail-title"
             data-testid="media-test-rail"
@@ -945,6 +951,11 @@ onBeforeUnmount(() => {
   gap: 1px;
   background: var(--line);
   border-block-end: 1px solid var(--line);
+}
+
+.media-fixture-controls {
+  display: grid;
+  gap: 1rem;
 }
 
 .fixture-mode {

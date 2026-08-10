@@ -4,8 +4,6 @@ import { useCarouselMotion } from "@snap-motion/vue/carousel";
 import { computed, nextTick, ref, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
-import RenderWindowFixture from "@/demos/RenderWindowFixture.vue";
-import VariableRailFixture from "@/demos/VariableRailFixture.vue";
 import {
   carouselReleaseFromSettings,
   springFromSettings,
@@ -307,12 +305,6 @@ watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
     </section>
 
     <DiagnosticsPanel :diagnostics="diagnostics" />
-    <VariableRailFixture
-      :reduced-motion-override="reducedMotionOverride"
-      :settings="settings"
-      :stage-width="stageWidth"
-    />
-    <RenderWindowFixture />
   </div>
 </template>
 

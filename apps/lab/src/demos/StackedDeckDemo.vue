@@ -159,7 +159,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
   >
     <header class="stacked-deck-header">
       <div>
-        <h3 id="stacked-deck-title">Stacked deck</h3>
+        <h3 id="stacked-deck-title">One adjacent screen per exchange</h3>
         <p class="lede">
           Drag the top screen to reveal one adjacent screen. Every gesture, flick, or wheel burst
           resolves at most one screen away from where it began, no matter how far it travels — and

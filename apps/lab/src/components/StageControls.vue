@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const props = withDefaults(
   defineProps<{
+    compact?: boolean;
     max?: number;
     min?: number;
     modelValue: number;
@@ -27,8 +28,8 @@ function update(event: Event) {
 </script>
 
 <template>
-  <div class="stage-controls" aria-label="Lab stage width">
-    <div class="stage-presets">
+  <div class="stage-controls" :class="{ compact }" aria-label="Lab stage width">
+    <div v-if="!compact" class="stage-presets">
       <button
         v-for="preset in presets"
         :key="preset.value"
@@ -40,8 +41,9 @@ function update(event: Event) {
       </button>
     </div>
     <label>
-      <span>Stage width</span>
+      <span>Stage max</span>
       <input
+        aria-label="Stage width"
         :max="props.max"
         :min="props.min"
         :value="modelValue"
@@ -61,6 +63,10 @@ function update(event: Event) {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem 1rem;
+}
+
+.stage-controls.compact {
+  justify-content: flex-end;
 }
 
 .stage-presets {

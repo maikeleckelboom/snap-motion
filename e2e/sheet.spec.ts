@@ -460,7 +460,7 @@ test.describe("multi-edge Sheet", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 600, height: 800 });
-    await openLabDemo(page, "sheet");
+    await openLabDemo(page, "adaptive-sheet");
     await expect(page.getByTestId("adaptive-sheet-trigger")).toBeVisible();
     await expect(page.getByTestId("inline-supporting-pane")).toHaveCount(0);
 

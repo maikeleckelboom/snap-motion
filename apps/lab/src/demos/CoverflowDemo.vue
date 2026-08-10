@@ -176,7 +176,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
     <header class="coverflow-header">
       <div>
         <p class="eyebrow">Spatial carousel</p>
-        <h3 id="coverflow-title">Coverflow stack</h3>
+        <h3 id="coverflow-title">One physical rail, continuous focus</h3>
         <p class="lede">
           Center face stays solid. Neighbors park in left/right rails with real perspective. Drag
           and spring still own one scalar position.

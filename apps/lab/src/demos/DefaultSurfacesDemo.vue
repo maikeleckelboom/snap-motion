@@ -51,7 +51,7 @@ function navigateAsRoute(id: ShowcaseScreenId) {
 <template>
   <section aria-labelledby="defaults-title" class="defaults-demo">
     <header>
-      <h3 id="defaults-title">Default surfaces</h3>
+      <h3 id="defaults-title">Zero-configuration consumer contract</h3>
       <p class="lede">
         Zero configuration: only <code>items</code>. No spring, elasticity, release policy, or stage
         width is supplied, so this is the behaviour the package ships rather than the behaviour the

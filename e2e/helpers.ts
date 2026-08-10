@@ -1,14 +1,25 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
 export type DemoId =
+  | "adaptive-sheet"
   | "coverflow"
   | "defaults"
   | "gallery-at"
   | "grid"
   | "media"
+  | "render-window"
   | "sheet"
-  | "stacked-deck";
+  | "stacked-deck"
+  | "variable-rail";
 export type ReducedMotionMode = "no-preference" | "reduce" | "system";
+
+const fixtureDemos = new Set<DemoId>([
+  "adaptive-sheet",
+  "defaults",
+  "gallery-at",
+  "render-window",
+  "variable-rail",
+]);
 
 interface DragOptions {
   beforeRelease?: () => Promise<void> | void;
@@ -35,13 +46,17 @@ export async function openLabDemo(
   reducedMotion: ReducedMotionMode = "reduce",
 ) {
   // Base-relative, so this also resolves under the preview build's non-root base.
-  await page.goto(`./?demo=${demo}`);
+  const view = fixtureDemos.has(demo) ? "fixtures" : "workbench";
+  await page.goto(`./?demo=${demo}&view=${view}`);
   await page.getByTestId("reduced-motion-mode").selectOption(reducedMotion);
 
-  const tab = page.locator(`#tab-${demo}`);
-  await tab.click();
-  await expect(tab).toHaveAttribute("aria-selected", "true");
+  const navigationItem = page.locator(`#nav-${demo}`);
+  await navigationItem.click();
+  await expect(navigationItem).toHaveAttribute("aria-current", "page");
   await expect(page.locator(`#panel-${demo}`)).toBeVisible();
+
+  const advancedPhysics = page.getByText("Advanced physics", { exact: true });
+  if (await advancedPhysics.isVisible()) await advancedPhysics.click();
 }
 
 export async function expectCarouselAt(carousel: Locator, id: string) {
@@ -63,6 +78,7 @@ export async function dragMouseBy(
   options: DragOptions = {},
 ) {
   await expect(target).toBeVisible();
+  await target.scrollIntoViewIfNeeded();
   const box = await target.boundingBox();
   if (!box) {
     throw new Error("Cannot drag an element without a layout box.");
@@ -95,6 +111,7 @@ export async function dragTouchBy(
   options: Omit<DragOptions, "beforeRelease"> = {},
 ) {
   await expect(target).toBeVisible();
+  await target.scrollIntoViewIfNeeded();
   const box = await target.boundingBox();
   if (!box) {
     throw new Error("Cannot drag an element without a layout box.");
@@ -180,6 +197,7 @@ export async function dragSyntheticPointerBy(
   options: DragOptions = {},
 ) {
   await expect(target).toBeVisible();
+  await target.scrollIntoViewIfNeeded();
   const start = await target.evaluate((element) => {
     const box = element.getBoundingClientRect();
     return { x: box.left + box.width / 2, y: box.top + box.height / 2 };

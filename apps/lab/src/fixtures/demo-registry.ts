@@ -1,0 +1,197 @@
+import { STACKED_DECK_ANCHOR_SKIP } from "@snap-motion/core";
+import type { Component } from "vue";
+
+import AdaptiveSupportingPaneDemo from "@/demos/AdaptiveSupportingPaneDemo.vue";
+import CoverflowDemo from "@/demos/CoverflowDemo.vue";
+import DefaultSurfacesDemo from "@/demos/DefaultSurfacesDemo.vue";
+import MediaGalleryAtCertificationDemo from "@/demos/MediaGalleryAtCertificationDemo.vue";
+import MediaLightboxDemo from "@/demos/MediaLightboxDemo.vue";
+import PagedGridDemo from "@/demos/PagedGridDemo.vue";
+import RenderWindowFixture from "@/demos/RenderWindowFixture.vue";
+import SheetDemo from "@/demos/SheetDemo.vue";
+import StackedDeckDemo from "@/demos/StackedDeckDemo.vue";
+import VariableRailFixture from "@/demos/VariableRailFixture.vue";
+
+import type { LabPhysicsSettings } from "./lab-types";
+
+export type DemoAudience = "showcase" | "fixture";
+export type DemoGroup = "Spatial" | "Media" | "Surfaces" | "Certification" | "Geometry";
+export type LabView = "showcase" | "workbench" | "fixtures";
+
+export interface DemoCapabilities {
+  diagnostics: boolean;
+  inspectionPresentation?: boolean;
+  motionPreference: boolean;
+  physics: boolean;
+  stageWidth: boolean;
+}
+
+export interface LabDemo {
+  audience: DemoAudience;
+  capabilities: DemoCapabilities;
+  component: Component;
+  description: string;
+  group: DemoGroup;
+  id: string;
+  label: string;
+  notApplicablePhysics?: Partial<Record<keyof LabPhysicsSettings, string>>;
+}
+
+export const demos = [
+  {
+    id: "coverflow",
+    label: "Coverflow",
+    description:
+      "A spatial screen rail with direct drag, elastic boundaries, and spring settlement.",
+    group: "Spatial",
+    audience: "showcase",
+    component: CoverflowDemo,
+    capabilities: {
+      diagnostics: true,
+      motionPreference: true,
+      physics: true,
+      stageWidth: true,
+    },
+  },
+  {
+    id: "stacked-deck",
+    label: "Stacked Deck",
+    description: "A compact physical pile that exchanges exactly one adjacent screen.",
+    group: "Spatial",
+    audience: "showcase",
+    component: StackedDeckDemo,
+    notApplicablePhysics: {
+      maxAnchorSkip: `Fixed at ${STACKED_DECK_ANCHOR_SKIP} by the stacked deck: one interaction exchanges one adjacent screen. Other surfaces keep using the stored value.`,
+    },
+    capabilities: {
+      diagnostics: true,
+      motionPreference: true,
+      physics: true,
+      stageWidth: true,
+    },
+  },
+  {
+    id: "grid",
+    label: "Paged Grid",
+    description: "A product-level paged collection with explicit internal rows, columns, and gaps.",
+    group: "Spatial",
+    audience: "showcase",
+    component: PagedGridDemo,
+    capabilities: {
+      diagnostics: true,
+      motionPreference: true,
+      physics: true,
+      stageWidth: true,
+    },
+  },
+  {
+    id: "media",
+    label: "Gallery / Lightbox",
+    description: "A modal media surface for containment, semantic resize, and interruption.",
+    group: "Media",
+    audience: "showcase",
+    component: MediaLightboxDemo,
+    capabilities: {
+      diagnostics: true,
+      inspectionPresentation: true,
+      motionPreference: true,
+      physics: true,
+      stageWidth: true,
+    },
+  },
+  {
+    id: "sheet",
+    label: "Sheet",
+    description:
+      "A multi-edge modal surface with semantic visible extents and native body scrolling.",
+    group: "Surfaces",
+    audience: "showcase",
+    component: SheetDemo,
+    capabilities: {
+      diagnostics: true,
+      motionPreference: true,
+      physics: true,
+      stageWidth: true,
+    },
+  },
+  {
+    id: "defaults",
+    label: "Default Surfaces",
+    description: "The zero-configuration Coverflow and Stacked Deck contract consumers receive.",
+    group: "Certification",
+    audience: "fixture",
+    component: DefaultSurfacesDemo,
+    capabilities: {
+      diagnostics: false,
+      motionPreference: true,
+      physics: false,
+      stageWidth: false,
+    },
+  },
+  {
+    id: "gallery-at",
+    label: "Gallery AT Harness",
+    description: "Deterministic manual assistive-technology scenarios and a non-live event trace.",
+    group: "Certification",
+    audience: "fixture",
+    component: MediaGalleryAtCertificationDemo,
+    capabilities: {
+      diagnostics: false,
+      motionPreference: true,
+      physics: false,
+      stageWidth: false,
+    },
+  },
+  {
+    id: "adaptive-sheet",
+    label: "Adaptive Sheet Host",
+    description: "Host-owned inline-to-sheet composition, state preservation, and focus transfer.",
+    group: "Certification",
+    audience: "fixture",
+    component: AdaptiveSupportingPaneDemo,
+    capabilities: {
+      diagnostics: false,
+      motionPreference: true,
+      physics: false,
+      stageWidth: false,
+    },
+  },
+  {
+    id: "variable-rail",
+    label: "Variable Rail",
+    description: "Unequal-width centered geometry measured from rendered item boxes.",
+    group: "Geometry",
+    audience: "fixture",
+    component: VariableRailFixture,
+    capabilities: {
+      diagnostics: true,
+      motionPreference: true,
+      physics: true,
+      stageWidth: true,
+    },
+  },
+  {
+    id: "render-window",
+    label: "Render Window",
+    description: "One hundred semantic items with bounded mounting and preload candidates.",
+    group: "Geometry",
+    audience: "fixture",
+    component: RenderWindowFixture,
+    capabilities: {
+      diagnostics: false,
+      motionPreference: false,
+      physics: false,
+      stageWidth: false,
+    },
+  },
+] as const satisfies readonly LabDemo[];
+
+export type DemoId = (typeof demos)[number]["id"];
+
+export function isDemoId(value: unknown): value is DemoId {
+  return typeof value === "string" && demos.some((demo) => demo.id === value);
+}
+
+export function isLabView(value: unknown): value is LabView {
+  return value === "showcase" || value === "workbench" || value === "fixtures";
+}

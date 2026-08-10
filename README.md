@@ -20,8 +20,10 @@ pnpm dev
 ```
 
 `pnpm dev` starts the lab Vite server directly and resolves the workspace packages from source, so
-package edits hot-reload without a build step. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
-serve-only boundary that keeps build and release validation on the distributable artifacts.
+package edits hot-reload without a build step. The lab opens as a human-facing showcase; Workbench
+adds tuning and diagnostics for the same surfaces, while Fixtures exposes deterministic engineering
+and certification harnesses. See [CONTRIBUTING.md](CONTRIBUTING.md) for the serve-only boundary that
+keeps build and release validation on the distributable artifacts.
 
 Import the minimal structural stylesheet once in an application entry:
 
@@ -80,7 +82,7 @@ import { Sheet } from "@snap-motion/vue/sheet";
 - `packages/core` — zero-dependency geometry, target policy, velocity, elasticity, and controller
 - `packages/vue` — feature-owned Vue APIs with package-internal accessibility, input, and layout
   capabilities
-- `apps/lab` — media, paged-grid, variable-rail, render-window, and sheet fixtures
+- `apps/lab` — one showcase/workbench/fixture application consuming public package entrypoints
 - `apps/router-fixture` and `apps/nuxt-fixture` — routing, SSR, hydration, and fallback proof
 - `e2e` and `fixture-e2e` — Chromium, Firefox, WebKit, Router, and Nuxt certification
 - `etc` — tracked API Extractor reports
