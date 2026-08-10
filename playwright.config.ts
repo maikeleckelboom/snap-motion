@@ -1,8 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const mediaPreviewSpec = "media-preview.spec.ts";
+const stackedDeckSpec = "stacked-deck.spec.ts";
+
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: "media-preview.spec.ts",
+  testIgnore: mediaPreviewSpec,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
@@ -17,7 +20,17 @@ export default defineConfig({
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     { name: "firefox", use: { ...devices["Desktop Firefox"] } },
-    { name: "webkit", use: { ...devices["Desktop Safari"] } },
+    {
+      name: "webkit",
+      testIgnore: [mediaPreviewSpec, stackedDeckSpec],
+      use: { ...devices["Desktop Safari"] },
+    },
+    {
+      name: "webkit-stacked-deck",
+      testMatch: stackedDeckSpec,
+      workers: process.env.CI ? 1 : 2,
+      use: { ...devices["Desktop Safari"] },
+    },
   ],
   webServer: {
     command: "pnpm --filter @snap-motion/lab dev --host 127.0.0.1 --port 4173 --strictPort",

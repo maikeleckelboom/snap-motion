@@ -13,14 +13,6 @@ export type DemoId =
   | "variable-rail";
 export type ReducedMotionMode = "no-preference" | "reduce" | "system";
 
-const fixtureDemos = new Set<DemoId>([
-  "adaptive-sheet",
-  "defaults",
-  "gallery-at",
-  "render-window",
-  "variable-rail",
-]);
-
 interface DragOptions {
   beforeRelease?: () => Promise<void> | void;
   eventIntervalMs?: number;
@@ -46,13 +38,19 @@ export async function openLabDemo(
   reducedMotion: ReducedMotionMode = "reduce",
 ) {
   // Base-relative, so this also resolves under the preview build's non-root base.
-  const view = fixtureDemos.has(demo) ? "fixtures" : "workbench";
-  await page.goto(`./?demo=${demo}&view=${view}`);
-  await page.getByTestId("reduced-motion-mode").selectOption(reducedMotion);
+  // The lab URL resolver owns fixture/workbench normalization, so this helper does not duplicate
+  // the demo registry. Render Window is the one accepted demo without a motion preference input.
+  await page.goto(`./?demo=${demo}&view=workbench`);
+  const motionPreference = page.getByTestId("reduced-motion-mode");
+  if (demo === "render-window") {
+    await expect(motionPreference).toHaveCount(0);
+  } else {
+    await motionPreference.selectOption(reducedMotion);
+  }
 
   const navigationItem = page.locator(`#nav-${demo}`);
   await navigationItem.click();
-  await expect(navigationItem).toHaveAttribute("aria-current", "page");
+  await expect(navigationItem).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(`#panel-${demo}`)).toBeVisible();
 
   const advancedPhysics = page.getByText("Advanced physics", { exact: true });

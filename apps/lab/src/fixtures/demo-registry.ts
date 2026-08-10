@@ -19,11 +19,15 @@ export type DemoGroup = "Spatial" | "Media" | "Surfaces" | "Certification" | "Ge
 export type LabView = "showcase" | "workbench" | "fixtures";
 
 export interface DemoCapabilities {
-  diagnostics: boolean;
   inspectionPresentation?: boolean;
   motionPreference: boolean;
   physics: boolean;
   stageWidth: boolean;
+}
+
+export interface LabLocation {
+  demo: DemoId;
+  view: LabView;
 }
 
 export interface LabDemo {
@@ -47,7 +51,6 @@ export const demos = [
     audience: "showcase",
     component: CoverflowDemo,
     capabilities: {
-      diagnostics: true,
       motionPreference: true,
       physics: true,
       stageWidth: true,
@@ -64,7 +67,6 @@ export const demos = [
       maxAnchorSkip: `Fixed at ${STACKED_DECK_ANCHOR_SKIP} by the stacked deck: one interaction exchanges one adjacent screen. Other surfaces keep using the stored value.`,
     },
     capabilities: {
-      diagnostics: true,
       motionPreference: true,
       physics: true,
       stageWidth: true,
@@ -78,7 +80,6 @@ export const demos = [
     audience: "showcase",
     component: PagedGridDemo,
     capabilities: {
-      diagnostics: true,
       motionPreference: true,
       physics: true,
       stageWidth: true,
@@ -92,7 +93,6 @@ export const demos = [
     audience: "showcase",
     component: MediaLightboxDemo,
     capabilities: {
-      diagnostics: true,
       inspectionPresentation: true,
       motionPreference: true,
       physics: true,
@@ -108,7 +108,6 @@ export const demos = [
     audience: "showcase",
     component: SheetDemo,
     capabilities: {
-      diagnostics: true,
       motionPreference: true,
       physics: true,
       stageWidth: true,
@@ -122,7 +121,6 @@ export const demos = [
     audience: "fixture",
     component: DefaultSurfacesDemo,
     capabilities: {
-      diagnostics: false,
       motionPreference: true,
       physics: false,
       stageWidth: false,
@@ -136,7 +134,6 @@ export const demos = [
     audience: "fixture",
     component: MediaGalleryAtCertificationDemo,
     capabilities: {
-      diagnostics: false,
       motionPreference: true,
       physics: false,
       stageWidth: false,
@@ -150,7 +147,6 @@ export const demos = [
     audience: "fixture",
     component: AdaptiveSupportingPaneDemo,
     capabilities: {
-      diagnostics: false,
       motionPreference: true,
       physics: false,
       stageWidth: false,
@@ -164,7 +160,6 @@ export const demos = [
     audience: "fixture",
     component: VariableRailFixture,
     capabilities: {
-      diagnostics: true,
       motionPreference: true,
       physics: true,
       stageWidth: true,
@@ -178,7 +173,6 @@ export const demos = [
     audience: "fixture",
     component: RenderWindowFixture,
     capabilities: {
-      diagnostics: false,
       motionPreference: false,
       physics: false,
       stageWidth: false,
@@ -194,4 +188,35 @@ export function isDemoId(value: unknown): value is DemoId {
 
 export function isLabView(value: unknown): value is LabView {
   return value === "showcase" || value === "workbench" || value === "fixtures";
+}
+
+/**
+ * Resolve URL state with the demo's declared audience as the authority. The returned pair is the
+ * only state the shell is allowed to render and is also the canonical pair written back to the URL.
+ */
+export function resolveLabLocation(demoValue: unknown, viewValue: unknown): LabLocation {
+  const explicitDemo = isDemoId(demoValue)
+    ? demos.find((demo) => demo.id === demoValue)
+    : undefined;
+  const explicitView = isLabView(viewValue) ? viewValue : undefined;
+
+  if (explicitDemo?.audience === "fixture") {
+    return { demo: explicitDemo.id, view: "fixtures" };
+  }
+
+  if (explicitDemo) {
+    return {
+      demo: explicitDemo.id,
+      view: explicitView === "workbench" ? "workbench" : "showcase",
+    };
+  }
+
+  if (explicitView === "fixtures") {
+    return { demo: "defaults", view: "fixtures" };
+  }
+
+  return {
+    demo: "coverflow",
+    view: explicitView === "workbench" ? "workbench" : "showcase",
+  };
 }

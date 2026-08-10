@@ -22,5 +22,8 @@ GitHub on 2026-08-08 and is no longer a blocker. Both npm registry lookups retur
 date. That proves no public version was found, not that the current account owns the scope or names,
 so ownership remains unverified.
 
-Packages remain private and unpublished. These blockers also mean downstream maikel.site
-integration is not unblocked.
+Packages remain private and unpublished. A verified local candidate may be installed from its
+checksummed tarballs for private maikel.site integration and dogfooding. That does not authorize
+public production activation: the physical accessibility rows must pass or record an accepted
+limitation first. Public npm publication additionally requires verified name ownership and manual
+publication approval.

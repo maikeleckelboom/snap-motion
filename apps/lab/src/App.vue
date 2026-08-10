@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { useUrlSearchParams } from "@vueuse/core";
-import { computed, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, ref, shallowRef, watch } from "vue";
 
 import PhysicsControls from "@/components/PhysicsControls.vue";
 import StageControls from "@/components/StageControls.vue";
 import {
   demos,
-  isDemoId,
-  isLabView,
+  resolveLabLocation,
   type DemoGroup,
   type DemoId,
+  type LabLocation,
   type LabView,
 } from "@/fixtures/demo-registry";
 import { settingsFromPreset } from "@/fixtures/lab-settings";
@@ -23,16 +23,14 @@ interface LabParams {
 const showcaseGroups: DemoGroup[] = ["Spatial", "Media", "Surfaces"];
 const fixtureGroups: DemoGroup[] = ["Certification", "Geometry"];
 const labParams = useUrlSearchParams<LabParams>("history", { write: true, writeMode: "replace" });
-const initialDemoId: DemoId = isDemoId(labParams.demo) ? labParams.demo : "coverflow";
-const initialDemo = demos.find((demo) => demo.id === initialDemoId) ?? demos[0];
-const inferredView: LabView = initialDemo?.audience === "fixture" ? "fixtures" : "showcase";
-const activeDemoId = ref<DemoId>(initialDemoId);
-const view = ref<LabView>(isLabView(labParams.view) ? labParams.view : inferredView);
 const preset = ref<LabPresetName>("balanced");
 const settings = shallowRef<LabPhysicsSettings>(settingsFromPreset(preset.value));
 const stageWidth = ref(1_120);
 const reducedMotionMode = ref<ReducedMotionMode>("system");
 
+const labLocation = computed(() => resolveLabLocation(labParams.demo, labParams.view));
+const activeDemoId = computed(() => labLocation.value.demo);
+const view = computed(() => labLocation.value.view);
 const activeDemo = computed(
   () => demos.find((demo) => demo.id === activeDemoId.value) ?? demos[0]!,
 );
@@ -55,31 +53,68 @@ const reducedMotionOverride = computed<boolean | undefined>(() => {
   if (reducedMotionMode.value === "system") return undefined;
   return reducedMotionMode.value === "reduce";
 });
+const activeComponentProps = computed<Record<string, unknown>>(() => {
+  const capabilities = activeDemo.value.capabilities;
+  const props: Record<string, unknown> = {};
+
+  if (capabilities.motionPreference) props.reducedMotionOverride = reducedMotionOverride.value;
+  if (capabilities.physics) props.settings = settings.value;
+  if (capabilities.stageWidth) props.stageWidth = stageWidth.value;
+  if (inspectionPresentation.value) props.inspectionMode = workbench.value;
+
+  return props;
+});
 const notApplicableControls = computed<Partial<Record<keyof LabPhysicsSettings, string>>>(() =>
   "notApplicablePhysics" in activeDemo.value ? activeDemo.value.notApplicablePhysics : {},
 );
 
-watch([activeDemoId, view], ([demo, currentView]) => {
-  labParams.demo = demo;
-  if (currentView === "showcase") delete labParams.view;
-  else labParams.view = currentView;
-});
+watch(
+  () => [labParams.demo, labParams.view] as const,
+  () => {
+    // VueUse pauses its URL writer while applying a popstate snapshot and resumes on nextTick.
+    // Canonicalize one tick later so history-driven conflicts update both rendered and URL state.
+    void nextTick(() => writeLabLocation(resolveLabLocation(labParams.demo, labParams.view)));
+  },
+  { immediate: true },
+);
+
+function writeLabLocation(location: LabLocation) {
+  if (labParams.demo !== location.demo) labParams.demo = location.demo;
+
+  if (location.view === "showcase") {
+    if (labParams.view !== undefined) delete labParams.view;
+  } else if (labParams.view !== location.view) {
+    labParams.view = location.view;
+  }
+}
 
 function selectDemo(id: DemoId) {
   const selected = demos.find((demo) => demo.id === id);
   if (!selected) return;
-  activeDemoId.value = id;
-  if (selected.audience === "fixture") view.value = "fixtures";
-  else if (view.value === "fixtures") view.value = "showcase";
+
+  writeLabLocation({
+    demo: id,
+    view:
+      selected.audience === "fixture"
+        ? "fixtures"
+        : view.value === "fixtures"
+          ? "showcase"
+          : view.value,
+  });
 }
 
 function selectView(nextView: LabView) {
-  view.value = nextView;
-  if (nextView === "fixtures" && activeDemo.value.audience !== "fixture") {
-    activeDemoId.value = "defaults";
-  } else if (nextView !== "fixtures" && activeDemo.value.audience !== "showcase") {
-    activeDemoId.value = "coverflow";
-  }
+  writeLabLocation({
+    demo:
+      nextView === "fixtures"
+        ? activeDemo.value.audience === "fixture"
+          ? activeDemoId.value
+          : "defaults"
+        : activeDemo.value.audience === "showcase"
+          ? activeDemoId.value
+          : "coverflow",
+    view: nextView,
+  });
 }
 
 function applyPreset(name: LabPresetName) {
@@ -104,7 +139,7 @@ function resetPreset() {
           </div>
         </div>
 
-        <nav aria-label="Lab view" class="view-nav">
+        <div aria-label="Lab view" class="view-nav" role="group">
           <button :aria-pressed="view === 'showcase'" type="button" @click="selectView('showcase')">
             Showcase
           </button>
@@ -118,21 +153,29 @@ function resetPreset() {
           <button :aria-pressed="view === 'fixtures'" type="button" @click="selectView('fixtures')">
             Fixtures
           </button>
-        </nav>
+        </div>
       </div>
 
-      <nav
+      <div
         :aria-label="view === 'fixtures' ? 'Engineering fixtures' : 'Showcase surfaces'"
         class="demo-navigation"
+        role="group"
       >
-        <section v-for="group in navigationGroups" :key="group.group" class="demo-group">
-          <h2>{{ group.group }}</h2>
+        <section
+          v-for="group in navigationGroups"
+          :key="group.group"
+          :aria-labelledby="`group-${group.group.toLowerCase()}`"
+          class="demo-group"
+          role="group"
+        >
+          <h2 :id="`group-${group.group.toLowerCase()}`">{{ group.group }}</h2>
           <div>
             <button
               v-for="demo in group.demos"
               :id="`nav-${demo.id}`"
               :key="demo.id"
-              :aria-current="activeDemoId === demo.id ? 'page' : undefined"
+              :aria-controls="activeDemoId === demo.id ? `panel-${demo.id}` : undefined"
+              :aria-pressed="activeDemoId === demo.id"
               type="button"
               @click="selectDemo(demo.id)"
             >
@@ -140,7 +183,7 @@ function resetPreset() {
             </button>
           </div>
         </section>
-      </nav>
+      </div>
     </header>
 
     <div class="lab-workspace" :class="{ 'has-workbench': workbench }">
@@ -200,14 +243,7 @@ function resetPreset() {
           :aria-labelledby="`surface-${activeDemo.id}`"
           class="demo-panel"
         >
-          <component
-            :is="activeComponent"
-            :key="activeDemo.id"
-            :reduced-motion-override="reducedMotionOverride"
-            :settings="settings"
-            :stage-width="stageWidth"
-            v-bind="inspectionPresentation ? { inspectionMode: workbench } : {}"
-          />
+          <component :is="activeComponent" :key="activeDemo.id" v-bind="activeComponentProps" />
         </section>
       </main>
 
@@ -367,7 +403,7 @@ function resetPreset() {
   white-space: nowrap;
 }
 
-.demo-group button[aria-current="page"] {
+.demo-group button[aria-pressed="true"] {
   box-shadow: inset 0 -3px var(--ink);
   font-weight: 800;
 }

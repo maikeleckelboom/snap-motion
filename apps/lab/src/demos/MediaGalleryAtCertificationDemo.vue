@@ -9,7 +9,6 @@ import {
 } from "@snap-motion/vue/media-gallery";
 import { computed, nextTick, ref } from "vue";
 
-import type { LabPhysicsSettings } from "@/fixtures/lab-types";
 import { mediaFixtures } from "@/fixtures/media";
 
 type ScenarioId =
@@ -46,8 +45,6 @@ interface TraceEntry {
 
 const props = defineProps<{
   reducedMotionOverride: boolean | undefined;
-  settings: LabPhysicsSettings;
-  stageWidth: number;
 }>();
 
 const regular = mediaFixtures.find((fixture) => fixture.id === "regular")!;

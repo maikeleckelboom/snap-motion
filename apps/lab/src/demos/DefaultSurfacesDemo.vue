@@ -18,8 +18,6 @@ import { showcaseScreens, type ShowcaseScreenId } from "./showcaseScreens";
 
 defineProps<{
   reducedMotionOverride: boolean | undefined;
-  settings: unknown;
-  stageWidth: number;
 }>();
 
 const screens = showcaseScreens;

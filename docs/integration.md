@@ -24,10 +24,17 @@ Snap Motion owns:
 - portfolio visual treatment
 - routing and project data
 
-Integration should consume workspace or source modules without claiming a published npm package.
+Private integration and dogfooding should install the checksummed core and Vue tarballs from one
+verified local release candidate. This exercises the package surface consumers will receive without
+claiming a published npm package or copying lab implementation code. The application should import
+the relevant capability entry points, including `@snap-motion/vue/media-gallery`,
+`@snap-motion/vue/coverflow`, and `@snap-motion/vue/style.css`.
+
 The application should supply stable media IDs and presentation data. It must not add CSS
 transitions, smooth scrolling, native scroll snap, or another animation library to the same
-carousel or media-gallery transform.
+carousel or media-gallery transform. Private integration does not authorize public production
+activation; the manual certification gate in [production certification](production-certification.md)
+still applies.
 
 When an application needs the stacked-deck or coverflow model, it mounts the surface and supplies
 domain items:
