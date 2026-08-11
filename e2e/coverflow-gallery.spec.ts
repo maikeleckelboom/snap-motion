@@ -255,6 +255,8 @@ test("settled card, side card, touch tap, cancellation, and stage focus resolve 
   await clickVisibleCard(page, card(page, "team"));
   await expect(gallery(page)).not.toBeVisible();
   await expectCarouselAt(viewport, "team");
+  await expect(viewport).toHaveAttribute("data-visual-id", "team");
+  await expect(viewport).toHaveAttribute("data-settled-index", "3");
   await expect(viewport).not.toBeFocused();
   await clickVisibleCard(page, card(page, "team"));
   await expect(gallery(page)).toBeVisible();

@@ -354,6 +354,13 @@ function onOpenRequest(_open: false, details: MediaGalleryOpenRequestDetails) {
 async function onClosed(finalId: string | undefined) {
   appendTrace("closed", `final id ${finalId ?? "none"}`);
   await nextTick();
+  for (
+    let frame = 0;
+    frame < 4 && opener.value?.ownerDocument.activeElement !== opener.value;
+    frame += 1
+  ) {
+    await new Promise<void>((resolveFrame) => requestAnimationFrame(() => resolveFrame()));
+  }
   const activeElement = opener.value?.ownerDocument.activeElement;
   const focusTarget =
     activeElement instanceof HTMLElement

@@ -2,6 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 const mediaPreviewSpec = "media-preview.spec.ts";
 const stackedDeckSpec = "stacked-deck.spec.ts";
+const testPort = process.env.SNAP_MOTION_TEST_PORT ?? "4173";
+const testUrl = `http://127.0.0.1:${testPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -12,7 +14,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? "line" : "list",
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: testUrl,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "off",
@@ -33,8 +35,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm --filter @snap-motion/lab dev --host 127.0.0.1 --port 4173 --strictPort",
-    url: "http://127.0.0.1:4173",
+    command: `pnpm --filter @snap-motion/lab dev --host 127.0.0.1 --port ${testPort} --strictPort`,
+    url: testUrl,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
