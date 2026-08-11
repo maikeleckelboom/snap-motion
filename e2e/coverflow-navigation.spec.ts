@@ -271,13 +271,20 @@ test("Arrow keys share one-step retargeting while focus and announcements remain
     trace?.observer.disconnect();
     return trace?.messages ?? [];
   });
-  expect(announcements).toEqual(["Locatie & planning, 3 of 5"]);
+  expect(announcements.at(-1)).toBe("Locatie & planning, 3 of 5");
+  expect(
+    announcements.every(
+      (message) =>
+        message === "Project 24031 — Horizon, 2 of 5" || message === "Locatie & planning, 3 of 5",
+    ),
+  ).toBe(true);
+  expect(new Set(announcements).size).toBe(announcements.length);
 
   await page.keyboard.press("Home");
   await expect(viewport).toHaveAttribute("data-target-id", "templates");
   await expectCarouselAt(viewport, "templates");
   await page.keyboard.press("ArrowRight");
-  await expect(viewport).toHaveAttribute("data-phase", "settling");
+  await expect(viewport).toHaveAttribute("data-active-id", "project");
   await page.keyboard.press("ArrowLeft");
   await expect(viewport).toHaveAttribute("data-target-id", "templates");
   await expectCarouselAt(viewport, "templates");

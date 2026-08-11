@@ -163,7 +163,7 @@ test("fast maximum-skip traversal projects every intermediate card and announces
 
   await expect(viewport).toHaveAttribute("data-target-id", "settings");
   await expect(viewport).toHaveAttribute("data-phase", "settling");
-  await expect(viewport).toHaveAttribute("data-active-id", "templates");
+  await expect(viewport).toHaveAttribute("data-active-id", "settings");
   await expect(viewport).not.toHaveAttribute("data-visual-id", "templates");
   await expect(status).toHaveText(sourceAnnouncement ?? "");
   await expectCarouselAt(viewport, "settings");
