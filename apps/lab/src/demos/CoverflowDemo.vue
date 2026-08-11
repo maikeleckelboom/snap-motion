@@ -10,7 +10,7 @@ import {
   type FocusReturnOptions,
   type MediaGalleryOpenRequestDetails,
 } from "@snap-motion/vue/media-gallery";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
 import {
@@ -106,10 +106,11 @@ function openGallery(index: number) {
   galleryOpen.value = true;
 }
 
-function onGalleryOpenRequest(_open: false, details: MediaGalleryOpenRequestDetails) {
+async function onGalleryOpenRequest(_open: false, details: MediaGalleryOpenRequestDetails) {
   const id = details.activeId as ShowcaseScreenId | undefined;
   if (id !== undefined) {
     activeId.value = id;
+    await nextTick();
     rail.value?.synchronizeTo(id);
   }
 }

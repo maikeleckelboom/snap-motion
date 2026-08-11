@@ -146,6 +146,7 @@ let settledGeneration = 0;
 let focusRestoreFrame: number | undefined;
 let suppressNextFocusRestore = false;
 let presentationChangeClosing = false;
+let closingIntentionally = false;
 
 let settlementReason: NavigationReason = "external";
 
@@ -271,7 +272,10 @@ function requestClose(reason: CloseReason) {
 }
 
 function beginClose() {
-  if (dialog.value?.open && motion.sheetState.value !== "closing") motion.close();
+  if (dialog.value?.open && motion.sheetState.value !== "closing") {
+    closingIntentionally = true;
+    motion.close();
+  }
 }
 
 function completeClose() {
@@ -301,7 +305,9 @@ function onCancel(event: Event) {
   requestClose("escape");
 }
 
-function onClose() {
+async function onClose() {
+  const wasIntentional = closingIntentionally;
+  closingIntentionally = false;
   if (!mounted) {
     capturedOpener = undefined;
     suppressNextFocusRestore = false;
@@ -318,12 +324,19 @@ function onClose() {
     emit("closed");
     return;
   }
+  // A reduced or very short close can beat Vue's parent-to-child prop flush. Let an already
+  // accepted `update:open(false)` arrive before classifying the native close as unexpected.
+  if (props.open) await nextTick();
   if (props.open) {
-    emit("update:open", false);
-    emit("openRequest", false, { reason: closeReason });
-    void nextTick().then(() => {
-      return props.open ? show() : undefined;
-    });
+    if (!wasIntentional) {
+      emit("update:open", false);
+      emit("openRequest", false, { reason: closeReason });
+      await nextTick();
+    }
+  }
+  if (props.open) {
+    if (wasIntentional) emit("closed");
+    await show();
     return;
   }
   const opener = capturedOpener ?? props.focusReturn?.opener;

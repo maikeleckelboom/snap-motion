@@ -284,6 +284,30 @@ describe("MediaGalleryDialog lifecycle", () => {
     expect(document.activeElement).toBe(fallback);
   });
 
+  it("waits for a temporarily disabled opener before using the fallback", async () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    const fallback = document.createElement("button");
+    document.body.append(opener, fallback);
+    opener.focus();
+    const wrapper = mountGallery({ focusReturn: { opener, fallback } });
+    await flushReactiveTasks();
+    opener.disabled = true;
+
+    await wrapper.setProps({ open: false });
+    await flushReactiveTasks();
+    expect(frames.pending()).toBe(1);
+
+    await frames.flushNext();
+    expect(document.activeElement).not.toBe(fallback);
+    expect(frames.pending()).toBe(1);
+
+    opener.disabled = false;
+    await frames.flushNext();
+    expect(document.activeElement).toBe(opener);
+    expect(frames.pending()).toBe(0);
+  });
+
   it("restores scroll ownership and focus on unmount", async () => {
     const opener = document.createElement("button");
     document.body.append(opener);

@@ -165,6 +165,8 @@ let pendingTrackGeneration: number | undefined;
 let navigationGeneration = 0;
 let closeGeneration = 0;
 let capturedOpener: HTMLElement | undefined;
+let closingIntentionally = false;
+let focusRestoreFrame: number | undefined;
 let geometry = {
   height: 0,
   left: 0,
@@ -1062,9 +1064,26 @@ function unlockDocumentScroll() {
   previousPaddingInlineEnd = "";
 }
 
+function scheduleFocusRestore(opener: HTMLElement | undefined) {
+  let remainingFrames = 4;
+  const restore = () => {
+    focusRestoreFrame = undefined;
+    if (!mounted.value || props.open) return;
+    if (restoreFocus({ opener })) return;
+    if (opener?.isConnected && --remainingFrames > 0) {
+      focusRestoreFrame = requestAnimationFrame(restore);
+    } else restoreFocus({ fallback: props.focusReturn?.fallback });
+  };
+  focusRestoreFrame = requestAnimationFrame(restore);
+}
+
 async function openDialog() {
   const target = dialog.value;
   if (!mounted.value || !target || target.open) return;
+  if (focusRestoreFrame !== undefined) {
+    cancelAnimationFrame(focusRestoreFrame);
+    focusRestoreFrame = undefined;
+  }
   const generation = invalidateOpenCycle();
   invalidateNavigation();
   invalidateClose();
@@ -1124,6 +1143,7 @@ function onCancel(event: Event) {
 
 function startClose() {
   if (!dialog.value?.open || dialogState.value === "closing") return;
+  closingIntentionally = true;
   invalidateOpenCycle();
   invalidateNavigation();
   const generation = invalidateClose();
@@ -1160,7 +1180,9 @@ function onShellTransitionEnd(event: TransitionEvent) {
   }
 }
 
-function onClose() {
+async function onClose() {
+  const wasIntentional = closingIntentionally;
+  closingIntentionally = false;
   if (dialog.value?.open) return;
   invalidateOpenCycle();
   invalidateNavigation();
@@ -1171,19 +1193,24 @@ function onClose() {
   resetTransform();
   unlockDocumentScroll();
   if (!mounted.value) return;
+  // A reduced or very short close can beat Vue's parent-to-child prop flush. The same flush also
+  // re-enables an opener disabled while the modal is present, so focus restoration waits for it.
+  await nextTick();
   if (props.open) {
-    emit("update:open", false);
-    emit("openRequest", false, { activeId: semanticActiveId.value, reason: "programmatic" });
-    void nextTick().then(() => {
-      return props.open ? openDialog() : undefined;
-    });
+    if (!wasIntentional) {
+      emit("update:open", false);
+      emit("openRequest", false, { activeId: semanticActiveId.value, reason: "programmatic" });
+      await nextTick();
+    }
+  }
+  if (props.open) {
+    if (wasIntentional) emit("closed", semanticActiveId.value);
+    await openDialog();
     return;
   }
-  restoreFocus({
-    fallback: props.focusReturn?.fallback,
-    opener: capturedOpener ?? props.focusReturn?.opener,
-  });
+  const opener = capturedOpener ?? props.focusReturn?.opener;
   capturedOpener = undefined;
+  scheduleFocusRestore(opener);
   emit("closed", semanticActiveId.value);
 }
 
@@ -1339,6 +1366,10 @@ onBeforeUnmount(() => {
   unlockDocumentScroll();
   mediaTransformElements.clear();
   if (dialog.value?.open) dialog.value.close();
+  if (focusRestoreFrame !== undefined) {
+    cancelAnimationFrame(focusRestoreFrame);
+    focusRestoreFrame = undefined;
+  }
   restoreFocus({
     fallback: props.focusReturn?.fallback,
     opener: capturedOpener ?? props.focusReturn?.opener,

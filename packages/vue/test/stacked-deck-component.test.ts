@@ -353,7 +353,8 @@ describe("StackedDeck", () => {
 
     expect(deck.next()).toBe(true);
     await nextTick();
-    // Reduced motion completes the settle synchronously, so this is the settled result.
+    await nextTick();
+    // Reduced motion rests synchronously; publication waits one Vue flush for controlled authority.
     expect(deck.settledId).toBe("outcome");
     expect(wrapper.emitted("update:activeId")).toEqual([["outcome"]]);
     expect(wrapper.emitted("settled")).toEqual([["outcome", { reason: "next" }]]);

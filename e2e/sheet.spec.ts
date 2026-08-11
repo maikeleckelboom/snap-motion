@@ -209,6 +209,8 @@ test.describe("multi-edge Sheet", () => {
       await dragTouchBy(page, handle(page), inward.x, inward.y, { stepDelay: 30, steps: 12 });
       await expectSheetOpenAt(dialog(page), "full");
       await closeButton(page).click();
+      await expect(dialog(page)).not.toBeVisible();
+      await expect(page.getByTestId("open-sheet")).toBeFocused();
     }
 
     await setNumericInput(page.getByLabel("Fling threshold"), 100);

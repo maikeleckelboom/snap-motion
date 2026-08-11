@@ -142,15 +142,12 @@ function resolveFocusTarget(target: HTMLElement | (() => HTMLElement | undefined
 
 export function restoreFocus(options: FocusReturnOptions | HTMLElement | undefined) {
   const normalized = options instanceof HTMLElement ? { opener: options } : (options ?? {});
-  const target = [normalized.opener, resolveFocusTarget(normalized.fallback)].find(
-    (candidate) => candidate?.isConnected,
-  );
-  if (!target) {
-    return false;
+  for (const candidate of [normalized.opener, resolveFocusTarget(normalized.fallback)]) {
+    if (!candidate?.isConnected) continue;
+    candidate.focus({ preventScroll: true });
+    if (candidate === candidate.ownerDocument.activeElement) return true;
   }
-
-  target.focus({ preventScroll: true });
-  return target === target.ownerDocument.activeElement;
+  return false;
 }
 
 /**

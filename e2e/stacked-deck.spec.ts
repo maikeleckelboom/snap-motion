@@ -358,84 +358,99 @@ interface TraversalSample {
  * Samples every rendered frame until the deck settles. `maxFrames` also bounds a trace that never
  * leaves idle, which is exactly what a direct absolute synchronization must look like.
  */
-async function installTraversalTrace(page: Page, maxFrames = 900) {
-  await viewport(page).evaluate((element, frameBudget) => {
-    const trace: TraversalSample[] = [];
-    const state = { done: false, started: false, trace };
-    (
-      window as typeof window & {
-        stackedDeckTraversalTrace?: typeof state;
-      }
-    ).stackedDeckTraversalTrace = state;
-    let remainingFrames = frameBudget;
-    const sample = () => {
-      const controllerPhase = element.dataset.phase ?? "";
-      if (controllerPhase !== "idle") state.started = true;
-      const targetAttribute = element.getAttribute("data-segment-target-index");
-      trace.push({
-        authoritativeIndex: Number(element.dataset.authoritativeIndex),
-        authorityStable: element.dataset.authorityStable === "true",
-        caption:
-          document.querySelector<HTMLElement>('[data-testid="stacked-deck-caption"]')?.innerText ??
-          "",
-        cardWidth: Number(element.dataset.cardWidth),
-        controllerPhase,
-        direction: Number(element.dataset.segmentDirection),
-        inspectEnabled: !document.querySelector<HTMLButtonElement>(
-          '[data-testid="stacked-deck-inspect"]',
-        )?.disabled,
-        interactionOriginIndex: Number(element.dataset.interactionOriginIndex),
-        physicalIndex: Number(element.dataset.physicalIndex),
-        progress: Number(element.dataset.segmentProgress),
-        segmentOriginIndex: Number(element.dataset.segmentOriginIndex),
-        segmentPhase: element.dataset.segmentPhase ?? "",
-        segmentTargetIndex: targetAttribute === null ? null : Number(targetAttribute),
-        settledIndex: Number(element.dataset.settledIndex),
-        visualTopIndex: Number(element.dataset.visualTopIndex),
-        poses: [...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-card")].map(
-          (item) => {
-            const surface = item.querySelector<HTMLElement>(".screen-chrome")!;
+async function installTraversalTrace(page: Page, maxFrames = 900, minimumInteractions = 1) {
+  await viewport(page).evaluate(
+    (element, options) => {
+      const trace: TraversalSample[] = [];
+      const state = { done: false, started: false, trace };
+      (
+        window as typeof window & {
+          stackedDeckTraversalTrace?: typeof state;
+        }
+      ).stackedDeckTraversalTrace = state;
+      let interactionCount = 0;
+      let lastInteractionOrigin = -1;
+      let remainingFrames = options.frameBudget;
+      const sample = () => {
+        const controllerPhase = element.dataset.phase ?? "";
+        if (controllerPhase !== "idle") state.started = true;
+        const targetAttribute = element.getAttribute("data-segment-target-index");
+        const interactionOriginIndex = Number(element.dataset.interactionOriginIndex);
+        if (interactionOriginIndex >= 0 && interactionOriginIndex !== lastInteractionOrigin) {
+          interactionCount += 1;
+          lastInteractionOrigin = interactionOriginIndex;
+        }
+        trace.push({
+          authoritativeIndex: Number(element.dataset.authoritativeIndex),
+          authorityStable: element.dataset.authorityStable === "true",
+          caption:
+            document.querySelector<HTMLElement>('[data-testid="stacked-deck-caption"]')
+              ?.innerText ?? "",
+          cardWidth: Number(element.dataset.cardWidth),
+          controllerPhase,
+          direction: Number(element.dataset.segmentDirection),
+          inspectEnabled: !document.querySelector<HTMLButtonElement>(
+            '[data-testid="stacked-deck-inspect"]',
+          )?.disabled,
+          interactionOriginIndex,
+          physicalIndex: Number(element.dataset.physicalIndex),
+          progress: Number(element.dataset.segmentProgress),
+          segmentOriginIndex: Number(element.dataset.segmentOriginIndex),
+          segmentPhase: element.dataset.segmentPhase ?? "",
+          segmentTargetIndex: targetAttribute === null ? null : Number(targetAttribute),
+          settledIndex: Number(element.dataset.settledIndex),
+          visualTopIndex: Number(element.dataset.visualTopIndex),
+          poses: [...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-card")].map(
+            (item) => {
+              const surface = item.querySelector<HTMLElement>(".screen-chrome")!;
+              return {
+                id: item.dataset.itemId ?? "",
+                layer: Number(item.dataset.deckLayer),
+                opacity: Number(surface.dataset.opacity),
+                role: item.dataset.deckRole ?? "",
+                rotate: Number(surface.dataset.rotate),
+                scale: Number(surface.dataset.scale),
+                translateX: Number(surface.dataset.translateX),
+                translateY: Number(surface.dataset.translateY),
+                visible: item.dataset.deckVisible === "true",
+              };
+            },
+          ),
+          pile: [
+            ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
+          ].flatMap((item) => [
+            Number(item.dataset.pileSlot),
+            Number(getComputedStyle(item).opacity),
+          ]),
+          pileIdentity: [
+            ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
+          ].map((item) => {
+            const surface = item.querySelector<HTMLElement>(".stacked-deck-pile-surface");
             return {
-              id: item.dataset.itemId ?? "",
-              layer: Number(item.dataset.deckLayer),
-              opacity: Number(surface.dataset.opacity),
-              role: item.dataset.deckRole ?? "",
-              rotate: Number(surface.dataset.rotate),
-              scale: Number(surface.dataset.scale),
-              translateX: Number(surface.dataset.translateX),
-              translateY: Number(surface.dataset.translateY),
-              visible: item.dataset.deckVisible === "true",
+              id: item.dataset.pileItemId ?? "",
+              index: Number(item.dataset.pileItemIndex),
+              tone: surface?.dataset.pileTone ?? "",
+              opacity: Number(getComputedStyle(item).opacity),
+              slot: Number(item.dataset.pileSlot),
             };
-          },
-        ),
-        pile: [
-          ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
-        ].flatMap((item) => [
-          Number(item.dataset.pileSlot),
-          Number(getComputedStyle(item).opacity),
-        ]),
-        pileIdentity: [
-          ...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
-        ].map((item) => {
-          const surface = item.querySelector<HTMLElement>(".stacked-deck-pile-surface");
-          return {
-            id: item.dataset.pileItemId ?? "",
-            index: Number(item.dataset.pileItemIndex),
-            tone: surface?.dataset.pileTone ?? "",
-            opacity: Number(getComputedStyle(item).opacity),
-            slot: Number(item.dataset.pileSlot),
-          };
-        }),
-      });
-      remainingFrames -= 1;
-      if ((state.started && controllerPhase === "idle") || remainingFrames <= 0) {
-        state.done = true;
-        return;
-      }
+          }),
+        });
+        remainingFrames -= 1;
+        if (
+          (state.started &&
+            controllerPhase === "idle" &&
+            interactionCount >= options.minimumInteractions) ||
+          remainingFrames <= 0
+        ) {
+          state.done = true;
+          return;
+        }
+        requestAnimationFrame(sample);
+      };
       requestAnimationFrame(sample);
-    };
-    requestAnimationFrame(sample);
-  }, maxFrames);
+    },
+    { frameBudget: maxFrames, minimumInteractions },
+  );
 }
 
 async function readTraversalTrace(page: Page): Promise<TraversalSample[]> {
@@ -1548,7 +1563,7 @@ test("fast successive gestures each resolve one card with no settlement cooldown
   await expectCarouselAt(stage, "templates");
   const pitch = await motionPitch(stage);
 
-  await installTraversalTrace(page, 1_800);
+  await installTraversalTrace(page, 1_800, 3);
   for (let gesture = 0; gesture < 3; gesture += 1) {
     await flick(page, 1, pitch);
     // The next gesture starts the moment the deck names the new card, which is a small fraction of
@@ -1576,7 +1591,7 @@ test("a reverse gesture during settlement takes the card back immediately", asyn
   const stage = viewport(page);
   const pitch = await motionPitch(stage);
 
-  await installTraversalTrace(page, 1_800);
+  await installTraversalTrace(page, 1_800, 3);
   await flick(page, 1, pitch);
   await waitForAuthority(page, 3);
   await flick(page, -1, pitch);

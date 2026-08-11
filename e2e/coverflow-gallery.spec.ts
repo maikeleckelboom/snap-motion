@@ -543,11 +543,12 @@ test("close synchronizes every carousel owner and resumes navigation without cat
       ?.click();
   });
   await expect(gallery(page)).not.toBeVisible();
-  // Model A accepts the gallery's next destination before its track settles. Closing immediately
-  // therefore returns and synchronizes that semantic ID instead of rolling back to the opener.
-  await expectCarouselAt(viewport, "map");
+  // The gallery requested `map`, but close happened in the same task before Vue could confirm that
+  // controlled value. Close details therefore retain the authoritative `project` ID and never
+  // manufacture a settlement for the pending destination.
+  await expectCarouselAt(viewport, "project");
   await page.waitForTimeout(400);
-  await expect(viewport).toHaveAttribute("data-active-id", "map");
+  await expect(viewport).toHaveAttribute("data-active-id", "project");
   await expect(page.getByTestId("snap-motion-media-gallery-status")).toHaveText(
     "Project 24031 — Horizon, 2 of 5",
   );

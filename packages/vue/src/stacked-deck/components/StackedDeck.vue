@@ -72,7 +72,7 @@ const messages = computed(() => createEnglishSnapMotionMessages(props.messages))
 const ids = computed<TId[]>(() => props.items.map((item) => item.id));
 const reducedMotionOverride = computed(() => props.reducedMotionOverride);
 const statusText = ref("");
-let suppressAuthorityRollbackSettlement = false;
+let rollbackSettlementId: TId | undefined;
 const initialMechanicalId =
   props.activeId !== undefined && ids.value.includes(props.activeId)
     ? props.activeId
@@ -118,6 +118,37 @@ function positionLabel(index: number): string {
   });
 }
 
+function publishSettlement(id: TId, index: number, reason: NavigationReason) {
+  // Reduced motion and direct synchronization can settle in the same stack as the request. Vue
+  // still needs its already-scheduled prop flush before strict authority can be evaluated.
+  queueMicrotask(() => {
+    if (reason === "external" && rollbackSettlementId === id) {
+      rollbackSettlementId = undefined;
+      return;
+    }
+    if (props.activeId !== undefined && id !== props.activeId) {
+      if (reason === "reconcile" && ids.value.includes(id)) {
+        rollbackAnchorId.value = id;
+        return;
+      }
+      const authoritativeId = rollbackAnchorId.value;
+      if (authoritativeId !== undefined) {
+        rollbackSettlementId = authoritativeId;
+        const synchronized = deck.synchronizeTo(authoritativeId);
+        if (!synchronized) rollbackSettlementId = undefined;
+        else {
+          queueMicrotask(() => {
+            if (rollbackSettlementId === authoritativeId) rollbackSettlementId = undefined;
+          });
+        }
+      }
+      return;
+    }
+    if (reason !== "external") statusText.value = positionLabel(index);
+    emit("settled", id, { reason });
+  });
+}
+
 const deck = useStackedDeckMotion<TId>({
   ids,
   controlledId: () => props.activeId,
@@ -142,31 +173,7 @@ const deck = useStackedDeckMotion<TId>({
     emit("update:activeId", id);
     emit("activeIdRequest", id, { reason });
   },
-  onSettled(id, index, reason) {
-    if (props.activeId !== undefined && id !== props.activeId) {
-      if (reason === "reconcile" && ids.value.includes(id)) {
-        rollbackAnchorId.value = id;
-        return;
-      }
-      const authoritativeId = rollbackAnchorId.value;
-      if (authoritativeId !== undefined) {
-        queueMicrotask(() => {
-          suppressAuthorityRollbackSettlement = true;
-          const synchronized = deck.synchronizeTo(authoritativeId);
-          if (!synchronized || suppressAuthorityRollbackSettlement) {
-            suppressAuthorityRollbackSettlement = false;
-          }
-        });
-      }
-      return;
-    }
-    if (suppressAuthorityRollbackSettlement && reason === "external") {
-      suppressAuthorityRollbackSettlement = false;
-      return;
-    }
-    if (reason !== "external") statusText.value = positionLabel(index);
-    emit("settled", id, { reason });
-  },
+  onSettled: publishSettlement,
 });
 
 const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {

@@ -87,6 +87,7 @@ describe("Coverflow", () => {
 
     expect(rail.next()).toBe(true);
     await nextTick();
+    await nextTick();
     expect(rail.settledId).toBe("outcome");
     expect(rail.visualId).toBe("outcome");
     expect(wrapper.emitted("settled")).toEqual([["outcome", { reason: "next" }]]);
