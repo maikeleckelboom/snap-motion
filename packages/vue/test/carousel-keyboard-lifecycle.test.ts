@@ -158,8 +158,8 @@ describe("carousel scoped keyboard and controlled lifecycle", () => {
         activeId: "one",
         ids: ["one", "two", "three"],
         reducedMotionOverride: true,
-        onActiveIdChange: (id: string, details: { reason: string }) =>
-          events.push(`change:${id}:${details.reason}`),
+        onActiveIdRequest: (id: string, details: { reason: string }) =>
+          events.push(`request:${id}:${details.reason}`),
         onSettled: (id: string) => events.push(`settled:${id}`),
         "onUpdate:activeId": (id: string) => events.push(`update:${id}`),
       },
@@ -174,16 +174,18 @@ describe("carousel scoped keyboard and controlled lifecycle", () => {
     await nextTick();
 
     await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await wrapper.setProps({ activeId: "two" });
     await flushSettlement();
-    expect(events).toEqual(["update:two", "change:two:next", "settled:two"]);
+    expect(events).toEqual(["update:two", "request:two:next", "settled:two"]);
 
     await wrapper.setProps({ activeId: "two" });
     await flushSettlement();
     expect(events).toHaveLength(3);
 
     await wrapper.get(".snap-motion-carousel-pagination-item").trigger("click");
+    await wrapper.setProps({ activeId: "three" });
     await flushSettlement();
-    expect(events.slice(3)).toEqual(["update:three", "change:three:picker", "settled:three"]);
+    expect(events.slice(3)).toEqual(["update:three", "request:three:picker", "settled:three"]);
 
     await wrapper.setProps({ activeId: "one" });
     await flushSettlement();
@@ -211,8 +213,9 @@ describe("carousel scoped keyboard and controlled lifecycle", () => {
       new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 80 }),
     );
     vi.advanceTimersByTime(90);
+    await wrapper.setProps({ activeId: "two" });
     await flushSettlement();
-    expect(wrapper.emitted("activeIdChange")).toEqual([["two", { reason: "wheel" }]]);
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["two", { reason: "wheel" }]]);
     expect(wrapper.emitted("update:activeId")).toEqual([["two"]]);
     expect(wrapper.emitted("settled")).toEqual([["two", { reason: "wheel" }]]);
     wrapper.unmount();

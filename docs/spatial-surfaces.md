@@ -9,7 +9,7 @@ state, accessibility, and projection.
   v-model:active-id="activeId"
   :items="screens"
   label="Project screens"
-  @active-id-change="onActiveIdChange"
+  @active-id-request="onActiveIdRequest"
   @settled="onSettled"
 >
   <template #card="{ item, active, visual, settled, inspectable }">
@@ -28,13 +28,16 @@ state, accessibility, and projection.
 
 Four names describe distinct facts:
 
-- `activeId`: the semantic destination accepted by application state;
+- `activeId`: semantic application state, controlled by the prop when supplied;
 - `targetId`: the controller destination in flight, available in advanced diagnostics;
 - `visualId`: the item currently dominant in the projection;
 - `settledId`: the item at mechanical rest.
 
-User interaction follows Model A: `activeId` changes immediately through `update:activeId` and
-`activeIdChange(id, { reason })`; motion then catches up and emits `settled(id, { reason })` at rest.
+User interaction emits `update:activeId` and `activeIdRequest(id, { reason })`. An uncontrolled
+surface commits that state itself. A controlled surface keeps the prop value while mechanics may
+travel toward the requested target; the host confirms by publishing the requested ID. Only a
+confirmed destination emits `settled(id, { reason })` at rest. Ignored requests reconcile back
+without settlement or announcement.
 The slot's `active`, `visual`, and `settled` booleans preserve the same distinction. `aria-current`
 follows visual authority in DOM metadata; cards remain inert and accessibility-hidden while a
 pointer owns the surface, then the one current card is exposed on release. Live announcements remain
@@ -50,12 +53,13 @@ Supplying `activeId` makes the surface controlled. Omitting it gives the compone
 initially the center item. No separate `defaultActiveId` is needed before first publication.
 
 Stable IDs, not indices, are application identity. Reorder preserves the active ID. Uncontrolled
-removal falls back to the same ordinal where possible and emits one `reconcile` change. An empty
+removal falls back to the same ordinal where possible and emits one `reconcile` request. An empty
 collection has no active item. A controlled unknown ID stays pending and is adopted if a later
-`items` update introduces it; it is never silently rewritten to item zero.
+`items` update introduces it; it is never silently rewritten to item zero. Controlled removal never
+rewrites the host ID: mechanics retain their last valid anchor.
 
 External prop changes cancel pointer recognition, drag, wheel coalescing, and stale settlement.
-They emit neither `update:activeId` nor `activeIdChange` and do not announce. This makes route/query
+They emit neither `update:activeId` nor `activeIdRequest` and do not announce. This makes route/query
 changes, Back/Forward, and cross-surface synchronization loop-free.
 
 ## Navigation and exact synchronization
@@ -68,7 +72,9 @@ High-level handles and feature composables use the same verbs:
 
 `StackedDeck` accepts only one adjacent card per interaction. A non-adjacent `navigateTo` is adopted
 exactly instead of animating through intermediate cards. `Coverflow` can target the requested rail
-position directly. `synchronizeTo` cancels conflicting motion and never replays semantic events.
+position directly. `synchronizeTo` cancels conflicting motion and never replays request events. On
+controlled high-level handles it accepts only the current prop; `navigateTo` is the route for asking
+the owner to change state.
 
 ```ts
 function onGalleryClosed(finalId: string | undefined) {
@@ -105,9 +111,9 @@ leaves vertical page scrolling alone. Descendant controls, right-click, and regi
 wheel default; refused navigation does not.
 
 Direct drag preserves one scalar physical position. Re-grab starts from the rendered state rather
-than a stale logical anchor. Rapid commands chain from the accepted semantic destination. Reduced
-motion preserves the same semantic protocol while completing mechanics without a spring-duration
-dependency.
+than a stale logical anchor. Rapid commands chain from the pending mechanical target without
+promoting it to semantic state. Reduced motion preserves the same authority protocol while
+completing mechanics without a spring-duration dependency.
 
 Only the settled inspectable card is interactive. Hidden and pile-only cards stay inert. Focus is
 preserved before semantic collection changes, status announcements happen once at settlement, and

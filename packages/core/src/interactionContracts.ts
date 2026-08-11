@@ -1,4 +1,4 @@
-/** Framework-neutral provenance for an accepted semantic navigation. */
+/** Framework-neutral provenance for semantic navigation and mechanical settlement. */
 export type NavigationReason =
   | "previous"
   | "next"
@@ -10,8 +10,8 @@ export type NavigationReason =
   | "reconcile"
   | "external";
 
-/** Provenance emitted when a surface accepts a component-originated semantic destination. */
-export interface ActiveIdChangeDetails {
+/** Provenance emitted when a component asks its owner to accept a semantic destination. */
+export interface ActiveIdRequestDetails {
   readonly reason: Exclude<NavigationReason, "external">;
 }
 

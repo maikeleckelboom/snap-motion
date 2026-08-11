@@ -11,7 +11,7 @@ export interface PublicCarouselContext<Id extends string = string> {
   readonly direction: ComputedRef<"ltr" | "rtl">;
   readonly ids: ComputedRef<readonly Id[]>;
   /** Imperative navigation, always reported as `programmatic`. */
-  readonly navigate: (id: Id) => boolean;
+  readonly navigateTo: (id: Id) => boolean;
   readonly next: () => boolean;
   readonly phase: ComputedRef<ControllerPhase>;
   readonly previous: () => boolean;
@@ -28,7 +28,7 @@ export function useCarouselContext<Id extends string = string>(): PublicCarousel
     count: computed(() => context.count.value),
     direction: computed(() => context.direction.value),
     ids: computed(() => [...context.ids.value]),
-    navigate: context.request,
+    navigateTo: context.request,
     next: context.next,
     phase: computed(() => context.phase.value),
     previous: context.previous,

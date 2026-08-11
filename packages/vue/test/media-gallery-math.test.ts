@@ -474,22 +474,19 @@ describe("gallery item normalization", () => {
     expect(previewReads).toBe(0);
   });
 
-  it("rejects a duplicate after trimming", () => {
+  it("rejects non-canonical IDs before comparing identity", () => {
     expect(() =>
       normalizeMediaGalleryItems([galleryItem(), galleryItem({ id: " one " })]),
-    ).toThrowError(/"one" at index 1 duplicates an earlier item/);
+    ).toThrowError(/has surrounding whitespace/);
   });
 
-  it("trims unique IDs while preserving item order", () => {
-    expect(
+  it("rejects rather than rewriting otherwise unique semantic IDs", () => {
+    expect(() =>
       normalizeMediaGalleryItems([
         galleryItem({ id: " first ", title: "First" }),
         galleryItem({ id: " second ", title: "Second" }),
-      ]).map(({ id, title }) => ({ id, title })),
-    ).toEqual([
-      { id: "first", title: "First" },
-      { id: "second", title: "Second" },
-    ]);
+      ]),
+    ).toThrowError(/has surrounding whitespace/);
   });
 
   it("does not duplicate a full layer when full and preview sources match", () => {

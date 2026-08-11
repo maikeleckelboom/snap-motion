@@ -17,7 +17,7 @@ export interface LabPhysicsSettings {
 }
 
 export interface LabDiagnostics {
-  activeId?: string;
+  nearestId?: string;
   anchors: readonly SnapAnchor<string>[];
   /** The card an interaction acts on, which leads the visual top through a handoff. */
   authoritativeIndex?: number;

@@ -325,37 +325,43 @@ export function clampGalleryIndex(index: number, itemCount: number): number {
   return clamp(Math.round(finiteOr(index, 0)), 0, Math.max(0, itemCount - 1));
 }
 
-export function normalizeMediaGalleryItems(items: readonly MediaGalleryItem[]): MediaGalleryItem[] {
+export function normalizeMediaGalleryItems<TItem extends MediaGalleryItem>(
+  items: readonly TItem[],
+): Array<MediaGalleryItem & TItem> {
   const ids = new Set<string>();
-  const normalizedIds = items.map((item, index) => {
-    const id = item.id.trim();
-    if (!id) {
+  items.forEach((item, index) => {
+    const trimmedId = item.id.trim();
+    if (!trimmedId) {
       throw new RangeError(
         `Media gallery item IDs must be unique non-empty strings; item at index ${index} has an empty ID.`,
       );
     }
-    if (ids.has(id)) {
+    if (trimmedId !== item.id) {
       throw new RangeError(
-        `Media gallery item IDs must be unique non-empty strings; "${id}" at index ${index} duplicates an earlier item.`,
+        `Media gallery item IDs must already be canonical; "${item.id}" at index ${index} has surrounding whitespace.`,
       );
     }
-    ids.add(id);
-    return id;
+    if (ids.has(item.id)) {
+      throw new RangeError(
+        `Media gallery item IDs must be unique non-empty strings; "${item.id}" at index ${index} duplicates an earlier item.`,
+      );
+    }
+    ids.add(item.id);
   });
 
-  return items.map((item, index) => {
+  return items.map((item) => {
     const intrinsicSize = normalizeIntrinsicSize(item);
     const { fullSrc: _fullSrc, ...itemWithoutFullSrc } = item;
     const previewSrc = item.previewSrc;
     const fullSrc = item.fullSrc && item.fullSrc !== previewSrc ? item.fullSrc : undefined;
     return {
       ...itemWithoutFullSrc,
-      id: normalizedIds[index]!,
+      id: item.id,
       previewSrc,
       width: intrinsicSize.width,
       height: intrinsicSize.height,
       ...(fullSrc ? { fullSrc } : {}),
-    };
+    } as MediaGalleryItem & TItem;
   });
 }
 

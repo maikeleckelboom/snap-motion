@@ -252,7 +252,7 @@ describe("empty collections name no item, at every layer", () => {
     expect(rail.settledId).toBe("a");
     expect(rail.canNext).toBe(true);
     // Collection reconciliation is explicit and cannot be mistaken for user navigation.
-    expect(wrapper.emitted("activeIdChange")).toEqual([
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
       [undefined, { reason: "reconcile" }],
       ["a", { reason: "reconcile" }],
     ]);
@@ -374,7 +374,7 @@ describe("controlled selection is not user input", () => {
     await nextTick();
 
     expect(deck.settledId).toBe("a");
-    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
     expect(wrapper.emitted("activate")).toBeUndefined();
     wrapper.unmount();
   });
@@ -411,7 +411,7 @@ describe("controlled selection is not user input", () => {
     );
     await nextTick();
     expect(deck.settledId).toBe("c");
-    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -437,7 +437,7 @@ describe("controlled selection is not user input", () => {
     await nextTick();
 
     expect((wrapper.vm as unknown as DeckInstance).settledId).toBe("a");
-    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
     expect(wrapper.emitted("update:activeId")).toBeUndefined();
     wrapper.unmount();
   });
@@ -460,7 +460,7 @@ describe("navigation reasons tell the truth", () => {
     deck.navigateTo("a");
     await nextTick();
 
-    expect(wrapper.emitted("activeIdChange")).toEqual([
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
       ["d", { reason: "next" }],
       ["c", { reason: "previous" }],
       ["d", { reason: "keyboard" }],
@@ -480,7 +480,7 @@ describe("navigation reasons tell the truth", () => {
     root.dispatchEvent(pointerEvent("pointerup", { clientX: -400 }));
     await nextTick();
 
-    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "drag" }]]);
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["d", { reason: "drag" }]]);
     wrapper.unmount();
   });
 
@@ -495,7 +495,7 @@ describe("navigation reasons tell the truth", () => {
     vi.advanceTimersByTime(150);
     await nextTick();
 
-    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "wheel" }]]);
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["d", { reason: "wheel" }]]);
     wrapper.unmount();
   });
 
@@ -513,7 +513,7 @@ describe("navigation reasons tell the truth", () => {
     rail.navigateTo("e");
     await nextTick();
 
-    expect(wrapper.emitted("activeIdChange")).toEqual([
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
       ["d", { reason: "next" }],
       ["a", { reason: "keyboard" }],
       ["e", { reason: "programmatic" }],
@@ -537,7 +537,7 @@ describe("navigation reasons tell the truth", () => {
     frames.forEach((frame) => frame(0));
     await nextTick();
 
-    expect(wrapper.emitted("activeIdChange")).toEqual([["b", { reason: "picker" }]]);
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["b", { reason: "picker" }]]);
     wrapper.unmount();
   });
 });
@@ -564,7 +564,7 @@ describe("navigation reasons cannot be forged", () => {
     await Promise.resolve();
     await nextTick();
 
-    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "next" }]]);
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["d", { reason: "next" }]]);
     wrapper.unmount();
   });
 
@@ -581,7 +581,7 @@ describe("navigation reasons cannot be forged", () => {
     await Promise.resolve();
     await nextTick();
 
-    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "next" }]]);
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["d", { reason: "next" }]]);
     wrapper.unmount();
   });
 
@@ -599,7 +599,7 @@ describe("navigation reasons cannot be forged", () => {
     await nextTick();
 
     // The rail never took the wheel, so the settlement is still the one `next()` asked for.
-    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "next" }]]);
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["d", { reason: "next" }]]);
     wrapper.unmount();
   });
 
@@ -622,7 +622,7 @@ describe("navigation reasons cannot be forged", () => {
     vi.advanceTimersByTime(200);
     await nextTick();
 
-    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "next" }]]);
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["d", { reason: "next" }]]);
     wrapper.unmount();
   });
 
@@ -641,7 +641,7 @@ describe("navigation reasons cannot be forged", () => {
     expect(deck.settledId).toBe("a");
     // ...and it carries `external`, so it is never echoed back as a user request — least of all as
     // the `next` that the adoption interrupted.
-    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "next" }]]);
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["d", { reason: "next" }]]);
     wrapper.unmount();
   });
 });

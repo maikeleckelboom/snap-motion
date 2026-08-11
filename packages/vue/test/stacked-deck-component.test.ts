@@ -22,6 +22,7 @@ type PileSlotState = StackedDeckPileLayerSlotState<Screen>;
 const TypedStackedDeck = StackedDeck<Screen>;
 
 interface DeckInstance {
+  activeId: ScreenId | undefined;
   canNext: boolean;
   canPrevious: boolean;
   visualId: ScreenId | undefined;
@@ -69,6 +70,47 @@ describe("StackedDeck", () => {
     expect(cards[1]!.attributes("data-deck-visible")).toBe("true");
     expect(cards[0]!.attributes("data-deck-visible")).toBe("false");
     expect(cards[1]!.attributes("data-deck-role")).toBe("top");
+    wrapper.unmount();
+  });
+
+  it("keeps controlled semantics authoritative when a navigation request is ignored", async () => {
+    const wrapper = mountDeck({ activeId: "system" });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+
+    expect(deck.next()).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["outcome", { reason: "next" }]]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect(deck.activeId).toBe("system");
+    expect(deck.settledId).toBe("system");
+    expect(wrapper.get('[data-testid="snap-motion-stacked-deck-status"]').text()).toBe("");
+    expect(deck.synchronizeTo("outcome")).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("rolls back to a valid deck anchor while controlled authority is unavailable", async () => {
+    const wrapper = mountDeck({ activeId: "future" });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+
+    expect(deck.next()).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    expect(deck.next()).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
+      ["outcome", { reason: "next" }],
+      ["outcome", { reason: "next" }],
+    ]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect((deck as unknown as { activeId: string }).activeId).toBe("future");
+    expect(deck.settledId).toBe("system");
+    expect(wrapper.get('[data-testid="snap-motion-stacked-deck-status"]').text()).toBe("");
     wrapper.unmount();
   });
 

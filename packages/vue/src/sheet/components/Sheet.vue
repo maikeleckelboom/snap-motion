@@ -1,6 +1,6 @@
 <script setup lang="ts" generic="Id extends string = SheetOpenSnapId">
 import type {
-  ActiveIdChangeDetails,
+  ActiveIdRequestDetails,
   ElasticityOptions,
   NavigationReason,
   ReleaseTargetPolicy,
@@ -11,7 +11,7 @@ import type {
   CloseReason,
   FocusReturnOptions,
   InitialFocus,
-  OpenChangeDetails,
+  OpenRequestDetails,
 } from "@snap-motion/vue/dialog";
 import type { SnapMotionMessages } from "@snap-motion/vue/localization";
 import {
@@ -80,8 +80,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   (event: "update:open", open: boolean): void;
   (event: "update:activeId", id: Id): void;
-  (event: "openChange", open: false, details: OpenChangeDetails): void;
-  (event: "activeIdChange", id: Id, details: ActiveIdChangeDetails): void;
+  (event: "openRequest", open: false, details: OpenRequestDetails): void;
+  (event: "activeIdRequest", id: Id, details: ActiveIdRequestDetails): void;
   (event: "opened"): void;
   (event: "closed"): void;
   (event: "settled", id: Id, details: SettlementDetails): void;
@@ -131,7 +131,13 @@ function retainedConfiguredId() {
 }
 
 const intendedId = ref<Id>(preferredIdForSide());
-const resolvedActiveId = computed<Id>(() => intendedId.value);
+const internalActiveId = ref<Id>(intendedId.value);
+const semanticActiveId = computed<Id>(() => props.activeId ?? internalActiveId.value);
+const rollbackAnchorId = ref<Id | undefined>(
+  props.activeId !== undefined && hasConfiguredPoint(props.activeId)
+    ? props.activeId
+    : intendedId.value,
+);
 let mounted = false;
 let capturedOpener: HTMLElement | undefined;
 let closeReason: CloseReason = "programmatic";
@@ -149,8 +155,9 @@ function acceptTarget(id: Id, reason: NavigationReason, componentOriginated: boo
   settlementReason = reason;
   targetGeneration += 1;
   if (componentOriginated && reason !== "external") {
+    if (props.activeId === undefined) internalActiveId.value = id;
     emit("update:activeId", id);
-    emit("activeIdChange", id, { reason });
+    emit("activeIdRequest", id, { reason });
   }
   return true;
 }
@@ -165,6 +172,12 @@ const motion = useSheetMotion<Id>({
   onSnap(id) {
     queueMicrotask(() => {
       if (id !== intendedId.value || settledGeneration === targetGeneration) return;
+      if (props.activeId !== undefined && id !== props.activeId) {
+        settledGeneration = targetGeneration;
+        const authoritativeId = rollbackAnchorId.value;
+        if (authoritativeId !== undefined) synchronizeExact(authoritativeId, false);
+        return;
+      }
       settledGeneration = targetGeneration;
       const label =
         props.snapLabels?.[id] ??
@@ -210,11 +223,11 @@ const shouldShowPicker = computed(
 const diagnostics = computed<SheetDiagnostics<Id>>(() => {
   const snapshot = motion.snapshot.value;
   return {
-    activeId: intendedId.value,
     anchors: snapshot.anchors,
     bounds: snapshot.bounds,
     geometry: motion.geometry.value,
     isAnimating: motion.isAnimating.value,
+    nearestId: snapshot.active?.id,
     phase: snapshot.phase,
     pointerInteractionActive: motion.isDragging.value,
     pointerOwned: motion.pointerOwned.value,
@@ -236,7 +249,7 @@ async function show() {
     focusRestoreFrame = undefined;
   }
   suppressNextFocusRestore = false;
-  capturedOpener = props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
+  capturedOpener ??= props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
   target.showModal();
   await nextTick();
   body.value?.scrollTo(0, 0);
@@ -254,7 +267,7 @@ function requestClose(reason: CloseReason) {
   if (!dialog.value?.open) return;
   closeReason = reason;
   emit("update:open", false);
-  emit("openChange", false, { reason });
+  emit("openRequest", false, { reason });
 }
 
 function beginClose() {
@@ -278,7 +291,7 @@ function closeForPresentationChange() {
   target.close();
   if (props.open) {
     emit("update:open", false);
-    emit("openChange", false, { reason: "programmatic" });
+    emit("openRequest", false, { reason: "programmatic" });
   }
   return focusedInside;
 }
@@ -298,6 +311,21 @@ function onClose() {
   motion.interrupt();
   body.value?.scrollTo(0, 0);
   const presentationChange = presentationChangeClosing;
+  if (presentationChange) {
+    presentationChangeClosing = false;
+    capturedOpener = undefined;
+    suppressNextFocusRestore = false;
+    emit("closed");
+    return;
+  }
+  if (props.open) {
+    emit("update:open", false);
+    emit("openRequest", false, { reason: closeReason });
+    void nextTick().then(() => {
+      return props.open ? show() : undefined;
+    });
+    return;
+  }
   const opener = capturedOpener ?? props.focusReturn?.opener;
   const shouldRestoreFocus = !suppressNextFocusRestore;
   capturedOpener = undefined;
@@ -309,17 +337,9 @@ function onClose() {
     });
   }
   emit("closed");
-  if (presentationChange) {
-    presentationChangeClosing = false;
-    return;
-  }
-  if (props.open) {
-    emit("update:open", false);
-    emit("openChange", false, { reason: closeReason });
-  }
 }
 
-function navigateWithReason(id: Id, reason: ActiveIdChangeDetails["reason"]) {
+function navigateWithReason(id: Id, reason: ActiveIdRequestDetails["reason"]) {
   if (!hasConfiguredPoint(id) || !acceptTarget(id, reason, true)) {
     return false;
   }
@@ -331,15 +351,22 @@ function navigateTo(id: Id) {
   return navigateWithReason(id, "programmatic");
 }
 
-function synchronizeTo(id: Id) {
+function synchronizeExact(id: Id, reportSettlement = true) {
   if (!hasConfiguredPoint(id)) return false;
   settlementReason = "external";
   const changed = acceptTarget(id, "external", false);
+  if (!reportSettlement) settledGeneration = targetGeneration;
   if (!props.open) return changed || intendedId.value === id;
   motion.interrupt();
   motion.remeasure(id);
   motion.sheetState.value = "open";
   return true;
+}
+
+function synchronizeTo(id: Id) {
+  if (props.activeId !== undefined && id !== props.activeId) return false;
+  if (props.activeId === undefined) internalActiveId.value = id;
+  return synchronizeExact(id);
 }
 
 watch(
@@ -355,7 +382,12 @@ watch(
   (id) => {
     // A v-model confirmation of the semantic destination already accepted by the Sheet is not an
     // external takeover. Re-synchronizing would cancel the spring and lose its original reason.
-    if (id !== undefined && id !== intendedId.value) synchronizeTo(id);
+    if (id !== undefined && hasConfiguredPoint(id)) {
+      rollbackAnchorId.value = id;
+      if (id !== intendedId.value) synchronizeExact(id);
+    } else if (id === undefined) {
+      internalActiveId.value = intendedId.value;
+    }
   },
 );
 
@@ -363,6 +395,9 @@ watch(
   () => props.side,
   async (side) => {
     const retained = retainedConfiguredId();
+    if (props.activeId !== undefined && !hasConfiguredPoint(props.activeId)) {
+      rollbackAnchorId.value = retained;
+    }
     if (retained !== intendedId.value) {
       acceptTarget(
         retained,
@@ -388,6 +423,9 @@ watch(
   configuredPoints,
   () => {
     const retained = retainedConfiguredId();
+    if (props.activeId !== undefined && !hasConfiguredPoint(props.activeId)) {
+      rollbackAnchorId.value = retained;
+    }
     if (retained !== intendedId.value) {
       acceptTarget(
         retained,
@@ -423,7 +461,7 @@ watch(
 );
 
 provide(sheetContextKey, {
-  activeId: resolvedActiveId,
+  activeId: semanticActiveId,
   messages,
   name: pickerName,
   points: resolvedPoints,
@@ -459,7 +497,7 @@ defineExpose({
   diagnostics,
   intrinsicBodyContent,
   panel,
-  activeId: resolvedActiveId,
+  activeId: semanticActiveId,
   sheetState: motion.sheetState,
   side: motion.side,
   requestClose,

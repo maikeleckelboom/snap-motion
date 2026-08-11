@@ -47,7 +47,7 @@ describe("useCarouselMotion", () => {
 
     bPosition = -150;
     motion?.remeasure();
-    expect(motion?.activeId.value).toBe("b");
+    expect(motion?.nearestId.value).toBe("b");
     expect(motion?.position.value).toBe(-150);
     expect(motion?.trackStyle.value.transform).toBe("translate3d(-150px, 0, 0)");
     wrapper.unmount();
@@ -155,7 +155,7 @@ describe("useCarouselMotion", () => {
     expect(motion?.position.value).toBe(-200);
     vi.advanceTimersByTime(90);
     await nextTick();
-    expect(motion?.activeId.value).toBe("c");
+    expect(motion?.nearestId.value).toBe("c");
 
     wrapper.element.dispatchEvent(
       new PointerEvent("pointerdown", {
@@ -194,7 +194,7 @@ describe("useCarouselMotion", () => {
         pointerType: "mouse",
       }),
     );
-    expect(motion?.activeId.value).toBe("a");
+    expect(motion?.nearestId.value).toBe("a");
     wrapper.unmount();
   });
 
@@ -240,7 +240,7 @@ describe("useCarouselMotion", () => {
     vi.advanceTimersByTime(90);
     await nextTick();
     expect(motion?.position.value).toBe(-100);
-    expect(motion?.activeId.value).toBe("b");
+    expect(motion?.nearestId.value).toBe("b");
     expect(motion?.isWheeling.value).toBe(false);
     wrapper.unmount();
   });
@@ -291,6 +291,9 @@ describe("useCarouselMotion", () => {
 
     expect(driver.animations[0]?.stopped).toBe(true);
     expect(driver.latest?.request.from).toBe(-60);
+    expect(driver.latest?.request.from).toBeGreaterThan(-100);
+    expect(driver.latest?.request.to).toBe(-200);
+    expect(motion?.position.value).toBe(-60);
     expect(motion?.targetId.value).toBe("c");
     expect(selected).toEqual(["b", "c"]);
     wrapper.unmount();
@@ -336,7 +339,7 @@ describe("useCarouselMotion", () => {
     wrapper.element.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "ArrowRight" }),
     );
-    expect(motion?.activeId.value).toBe("a");
+    expect(motion?.nearestId.value).toBe("a");
     motion?.moveTo("b");
 
     wrapper.element.dispatchEvent(
@@ -372,7 +375,7 @@ describe("useCarouselMotion", () => {
         pointerType: "mouse",
       }),
     );
-    expect(motion?.activeId.value).toBe("a");
+    expect(motion?.nearestId.value).toBe("a");
     motion?.moveTo("b");
 
     wrapper.element.dispatchEvent(
@@ -380,7 +383,7 @@ describe("useCarouselMotion", () => {
     );
     vi.advanceTimersByTime(90);
     await nextTick();
-    expect(motion?.activeId.value).toBe("a");
+    expect(motion?.nearestId.value).toBe("a");
     wrapper.unmount();
   });
 });

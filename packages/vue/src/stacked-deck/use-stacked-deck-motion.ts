@@ -12,7 +12,7 @@ import {
   STACKED_DECK_INTERIOR_ELASTICITY,
   StackedDeckModel,
   tightPreset,
-  type ActiveIdChangeDetails,
+  type ActiveIdRequestDetails,
   type ControllerConfiguration,
   type ElasticityOptions,
   type SnapAnchor,
@@ -91,10 +91,10 @@ export interface UseStackedDeckMotionOptions<Id extends string> {
    */
   readonly controlledId?: MaybeRefOrGetter<Id | undefined>;
   /** Fires when this surface accepts a semantic destination, before mechanical settlement. */
-  readonly onActiveIdChange?: (
+  readonly onActiveIdRequest?: (
     id: Id,
     index: number,
-    reason: ActiveIdChangeDetails["reason"],
+    reason: ActiveIdRequestDetails["reason"],
   ) => void;
   /** Announces the durable selection. Fires only at mechanical rest, with what initiated it. */
   readonly onSettled?: (id: Id, index: number, reason: NavigationReason) => void;
@@ -246,10 +246,10 @@ export function useStackedDeckMotion<Id extends string>(
    */
   let pendingReason: NavigationReason = "external";
 
-  function acceptDestination(id: Id, reason: ActiveIdChangeDetails["reason"]): void {
+  function acceptDestination(id: Id, reason: ActiveIdRequestDetails["reason"]): void {
     pendingReason = reason;
     const index = model.indexOf(id);
-    if (index >= 0) options.onActiveIdChange?.(id, index, reason);
+    if (index >= 0) options.onActiveIdRequest?.(id, index, reason);
   }
   function currentConfiguration() {
     const elasticity = toValue(options.elasticity);
@@ -467,7 +467,7 @@ export function useStackedDeckMotion<Id extends string>(
     const current = state.value;
     const alreadySynchronized =
       motion.phase.value === "idle" &&
-      motion.activeId.value === id &&
+      motion.nearestId.value === id &&
       motion.targetId.value === id &&
       Math.abs(motion.position.value - anchorPosition) <= Number.EPSILON * 16 &&
       Math.abs(motion.velocity.value) <= Number.EPSILON * 16 &&
@@ -495,7 +495,7 @@ export function useStackedDeckMotion<Id extends string>(
     return true;
   }
 
-  function requestRelative(direction: -1 | 1, reason: ActiveIdChangeDetails["reason"]): boolean {
+  function requestRelative(direction: -1 | 1, reason: ActiveIdRequestDetails["reason"]): boolean {
     if (disabled()) return false;
     const command = model.resolveRelativeCommand(direction, { owned: owned.value });
     if (command.kind !== "traverse") return false;
@@ -505,7 +505,7 @@ export function useStackedDeckMotion<Id extends string>(
     return traverse(command.originIndex, command.targetIndex);
   }
 
-  function requestIndex(index: number, reason: ActiveIdChangeDetails["reason"]): boolean {
+  function requestIndex(index: number, reason: ActiveIdRequestDetails["reason"]): boolean {
     if (disabled()) return false;
     const command = model.resolveAbsoluteCommand(index, {
       owned: owned.value,
@@ -767,6 +767,8 @@ export function useStackedDeckMotion<Id extends string>(
  * Consumers who want that level of control compose `useStackedDeckMotion` instead.
  */
 export interface StackedDeckHandle<Id extends string> {
+  /** Application semantic selection, independent of target, visual, and settled mechanics. */
+  readonly activeId: Id | undefined;
   readonly canNext: boolean;
   readonly canPrevious: boolean;
   /** True while the surface is being manipulated or is animating on its own. */
@@ -792,7 +794,7 @@ export interface StackedDeckHandle<Id extends string> {
   /**
    * One adjacent card forward.
    *
-   * It takes no reason, and that is the point: `activeIdChange` reports why a selection changed,
+   * It takes no reason, and that is the point: `activeIdRequest` reports why a selection was requested,
    * and an application can only trust that report if a caller cannot author it. Next is next.
    */
   next(): boolean;

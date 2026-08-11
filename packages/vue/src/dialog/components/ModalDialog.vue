@@ -12,7 +12,7 @@ import {
   createEnglishSnapMotionMessages,
   type SnapMotionMessages,
 } from "../../localization/messages";
-import type { CloseReason, OpenChangeDetails } from "../dialog-contracts";
+import type { CloseReason, OpenRequestDetails } from "../dialog-contracts";
 
 const props = withDefaults(
   defineProps<{
@@ -31,7 +31,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (event: "update:open", open: boolean): void;
-  (event: "openChange", open: false, details: OpenChangeDetails): void;
+  (event: "openRequest", open: false, details: OpenRequestDetails): void;
   (event: "opened"): void;
   (event: "closed"): void;
 }>();
@@ -50,7 +50,7 @@ let closingIntentionally = false;
 async function show() {
   const target = dialog.value;
   if (!mounted || !target || target.open) return;
-  capturedOpener = props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
+  capturedOpener ??= props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
   target.showModal();
   await nextTick();
   focusInitial(props.initialFocus, {
@@ -69,7 +69,7 @@ function closeNative() {
 
 function requestClose(reason: CloseReason) {
   emit("update:open", false);
-  emit("openChange", false, { reason });
+  emit("openRequest", false, { reason });
 }
 
 function onCancel(event: Event) {
@@ -82,7 +82,11 @@ function onClose() {
   closingIntentionally = false;
   if (!wasIntentional && props.open) {
     emit("update:open", false);
-    emit("openChange", false, { reason: "programmatic" });
+    emit("openRequest", false, { reason: "programmatic" });
+    void nextTick().then(() => {
+      return props.open ? show() : undefined;
+    });
+    return;
   }
   restoreFocus({
     fallback: props.focusReturn?.fallback,

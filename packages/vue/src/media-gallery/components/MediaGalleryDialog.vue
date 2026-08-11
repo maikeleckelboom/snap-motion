@@ -1,5 +1,5 @@
-﻿<script setup lang="ts">
-import type { ActiveIdChangeDetails, SettlementDetails } from "@snap-motion/core";
+﻿<script setup lang="ts" generic="TItem extends MediaGalleryItem">
+import type { ActiveIdRequestDetails, SettlementDetails } from "@snap-motion/core";
 import type { CloseReason, FocusReturnOptions, InitialFocus } from "@snap-motion/vue/dialog";
 import { useEventListener, useResizeObserver, useScrollLock, useTimeoutFn } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from "vue";
@@ -16,7 +16,7 @@ import {
   type GalleryTap,
   type MediaGalleryItem,
   type MediaGalleryMessages,
-  type MediaGalleryOpenChangeDetails,
+  type MediaGalleryOpenRequestDetails,
   type MediaPoint,
   type MediaTransform,
   type MediaTransformContext,
@@ -44,6 +44,7 @@ type ImageLoadState = "failed" | "loaded" | "pending" | "preview";
 type MediaTransitionMode = "direct" | "discrete";
 type PointerMode = "blocked" | "pan" | "pending" | "swipe";
 type TrackNavigationState = "idle" | "recentering" | "settling";
+type TId = TItem["id"];
 
 interface PointerSample {
   readonly id: number;
@@ -74,12 +75,12 @@ interface PinchSession {
 
 const props = withDefaults(
   defineProps<{
-    activeId?: string;
+    activeId?: TId;
     descriptionId?: string;
     eyebrow?: string;
     focusReturn?: FocusReturnOptions;
     initialFocus?: InitialFocus;
-    items: readonly MediaGalleryItem[];
+    items: readonly TItem[];
     messages?: Partial<MediaGalleryMessages>;
     open: boolean;
     reducedMotionOverride?: boolean | undefined;
@@ -95,15 +96,15 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (event: "update:open", open: boolean): void;
-  (event: "update:activeId", id: string | undefined): void;
-  (event: "openChange", open: false, details: MediaGalleryOpenChangeDetails): void;
-  (event: "activeIdChange", id: string | undefined, details: ActiveIdChangeDetails): void;
-  (event: "opened", id: string | undefined): void;
-  (event: "closed", finalId: string | undefined): void;
-  (event: "settled", id: string, details: SettlementDetails): void;
+  (event: "update:activeId", id: TId | undefined): void;
+  (event: "openRequest", open: false, details: MediaGalleryOpenRequestDetails<TId>): void;
+  (event: "activeIdRequest", id: TId | undefined, details: ActiveIdRequestDetails): void;
+  (event: "opened", id: TId | undefined): void;
+  (event: "closed", finalId: TId | undefined): void;
+  (event: "settled", id: TId, details: SettlementDetails): void;
 }>();
 
-const items = computed(() => normalizeMediaGalleryItems(props.items));
+const items = computed<readonly TItem[]>(() => normalizeMediaGalleryItems(props.items));
 const messages = computed(() => createEnglishMediaGalleryMessages(props.messages));
 const systemReducedMotion = ref(false);
 const reducedMotionQuery = shallowRef<MediaQueryList>();
@@ -113,7 +114,13 @@ const shell = ref<HTMLElement>();
 const closeButton = ref<HTMLButtonElement>();
 const titleHeading = ref<HTMLElement>();
 const imageViewport = ref<HTMLElement>();
-const intendedActiveId = ref<string | undefined>(props.activeId ?? items.value[0]?.id);
+const intendedActiveId = shallowRef<TId | undefined>(props.activeId ?? items.value[0]?.id);
+const internalActiveId = shallowRef<TId | undefined>(intendedActiveId.value);
+const rollbackAnchorId = shallowRef<TId | undefined>(
+  props.activeId !== undefined && items.value.some((item) => item.id === props.activeId)
+    ? props.activeId
+    : intendedActiveId.value,
+);
 const galleryIndex = ref(indexForId(intendedActiveId.value));
 const dialogState = ref<DialogState>("closed");
 const imageLoadStateByItem = ref<Record<string, ImageLoadState>>({});
@@ -150,11 +157,10 @@ let openingFrame: number | undefined;
 let trackFrame: number | undefined;
 let lockedRoot: HTMLElement | undefined;
 let previousPaddingInlineEnd = "";
-let closeRequested = false;
 let pendingTrackDestination: number | undefined;
-let pendingTrackDestinationId: string | undefined;
+let pendingTrackDestinationId: TId | undefined;
 let pendingTrackAnnouncement = true;
-let pendingTrackReason: ActiveIdChangeDetails["reason"] | undefined;
+let pendingTrackReason: ActiveIdRequestDetails["reason"] | undefined;
 let pendingTrackGeneration: number | undefined;
 let navigationGeneration = 0;
 let closeGeneration = 0;
@@ -167,8 +173,8 @@ let geometry = {
 };
 
 const activeItem = computed(() => items.value[galleryIndex.value] ?? items.value[0]);
-const semanticActiveId = computed(() => intendedActiveId.value);
-const settledId = computed(() => activeItem.value?.id);
+const semanticActiveId = computed<TId | undefined>(() => props.activeId ?? internalActiveId.value);
+const settledId = computed<TId | undefined>(() => activeItem.value?.id);
 const trackSlots = computed(() =>
   resolveGalleryTrackSlots(galleryIndex.value, items.value.length, trackDestinationIndex.value).map(
     (slot) => ({ ...slot, item: items.value[slot.itemIndex] }),
@@ -316,17 +322,18 @@ function clampIndex(index: number): number {
   return clampGalleryIndex(index, items.value.length);
 }
 
-function indexForId(id: string | undefined): number {
+function indexForId(id: TId | undefined): number {
   if (id === undefined) return 0;
   const index = items.value.findIndex((item) => item.id === id);
   return index < 0 ? 0 : index;
 }
 
-function acceptActiveId(id: string | undefined, reason: ActiveIdChangeDetails["reason"]): void {
+function acceptActiveId(id: TId | undefined, reason: ActiveIdRequestDetails["reason"]): void {
   if (id === intendedActiveId.value) return;
   intendedActiveId.value = id;
+  if (props.activeId === undefined) internalActiveId.value = id;
   emit("update:activeId", id);
-  emit("activeIdChange", id, { reason });
+  emit("activeIdRequest", id, { reason });
 }
 
 function activeContext(): MediaTransformContext {
@@ -397,6 +404,10 @@ function zoomOut(action: GalleryMediaAction = "button") {
 function resetToFit(action: GalleryMediaAction = "fit") {
   setMediaTransition(action);
   resetTransform();
+}
+
+function resetToFitPublic(): void {
+  resetToFit();
 }
 
 function announceCurrent() {
@@ -561,9 +572,9 @@ function interruptDiscreteTransform() {
 function beginTrackSettlement(
   destinationIndex?: number,
   announcement = true,
-  reason?: ActiveIdChangeDetails["reason"],
+  reason?: ActiveIdRequestDetails["reason"],
   generation = navigationGeneration,
-  destinationId?: string,
+  destinationId?: TId,
 ) {
   if (!isNavigationCurrent(generation)) return;
   stopTrackFallback();
@@ -636,6 +647,11 @@ async function completeTrackSettlement(generation = pendingTrackGeneration) {
     trackNavigationState.value = "idle";
     pendingTrackGeneration = undefined;
     const id = items.value[galleryIndex.value]?.id;
+    if (props.activeId !== undefined && id !== props.activeId) {
+      const authoritativeId = rollbackAnchorId.value;
+      if (authoritativeId !== undefined) synchronizeExact(authoritativeId, false);
+      return;
+    }
     if (id && reason) emit("settled", id, { reason });
     if (announcement) announceCurrent();
   });
@@ -649,7 +665,7 @@ function onTrackTransitionEnd(event: TransitionEvent) {
 
 async function changeIndex(
   index: number,
-  reason: ActiveIdChangeDetails["reason"],
+  reason: ActiveIdRequestDetails["reason"],
   announcement = true,
 ): Promise<boolean> {
   const nextIndex = clampIndex(index);
@@ -658,7 +674,14 @@ async function changeIndex(
     const id = items.value[nextIndex]?.id;
     if (!id || id === intendedActiveId.value) return false;
     acceptActiveId(id, reason);
-    emit("settled", id, { reason });
+    await nextTick();
+    if (props.activeId === undefined || props.activeId === id) {
+      emit("settled", id, { reason });
+      if (announcement) announceCurrent();
+    } else {
+      const authoritativeId = rollbackAnchorId.value;
+      if (authoritativeId !== undefined) synchronizeExact(authoritativeId, false);
+    }
     return true;
   }
   clearPointerState();
@@ -693,7 +716,7 @@ function next() {
   if (canGoNext.value) void changeIndex(galleryIndex.value + 1, "next");
 }
 
-function navigateTo(id: string): boolean {
+function navigateTo(id: TId): boolean {
   const index = items.value.findIndex((item) => item.id === id);
   if (index < 0 || galleryBusy.value) return false;
   void changeIndex(index, "programmatic");
@@ -701,7 +724,7 @@ function navigateTo(id: string): boolean {
 }
 
 /** Exact authoritative adoption: cancels interaction, emits no change, and never announces. */
-function synchronizeTo(id: string): boolean {
+function synchronizeExact(id: TId, reportSettlement = true): boolean {
   const index = items.value.findIndex((item) => item.id === id);
   if (index < 0) return false;
   intendedActiveId.value = id;
@@ -710,8 +733,14 @@ function synchronizeTo(id: string): boolean {
   galleryIndex.value = index;
   resetTransform();
   ensureTrackImageStates();
-  if (dialog.value?.open) emit("settled", id, { reason: "external" });
+  if (reportSettlement && dialog.value?.open) emit("settled", id, { reason: "external" });
   return true;
+}
+
+function synchronizeTo(id: TId): boolean {
+  if (props.activeId !== undefined && id !== props.activeId) return false;
+  if (props.activeId === undefined) internalActiveId.value = id;
+  return synchronizeExact(id);
 }
 
 function pointerDistance(first: PointerSample, second: PointerSample): number {
@@ -1039,12 +1068,11 @@ async function openDialog() {
   const generation = invalidateOpenCycle();
   invalidateNavigation();
   invalidateClose();
-  capturedOpener = props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
+  capturedOpener ??= props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
   if (items.value.length === 0) {
     requestClose("programmatic");
     return;
   }
-  closeRequested = false;
   const requestedIndex = items.value.findIndex((item) => item.id === intendedActiveId.value);
   galleryIndex.value = requestedIndex < 0 ? 0 : requestedIndex;
   trackDestinationIndex.value = undefined;
@@ -1067,7 +1095,7 @@ async function openDialog() {
   });
   if (!isOpenCycleCurrent(generation, target)) return;
   announceCurrent();
-  emit("opened", activeItem.value?.id);
+  emit("opened", semanticActiveId.value);
   if (!isOpenCycleCurrent(generation, target)) return;
 
   if (reducedMotion.value) {
@@ -1084,13 +1112,9 @@ async function openDialog() {
 }
 
 function requestClose(reason: CloseReason = "programmatic") {
-  if (closeRequested || (!dialog.value?.open && !props.open)) return;
-  closeRequested = true;
-  invalidateOpenCycle();
-  invalidateNavigation();
-  clearPointerState();
+  if (!dialog.value?.open && !props.open) return;
   emit("update:open", false);
-  emit("openChange", false, { activeId: intendedActiveId.value, reason });
+  emit("openRequest", false, { activeId: semanticActiveId.value, reason });
 }
 
 function onCancel(event: Event) {
@@ -1143,18 +1167,24 @@ function onClose() {
   invalidateClose();
   clearPointerState();
   dialogState.value = "closed";
-  closeRequested = false;
   mediaTransitionMode.value = "direct";
   resetTransform();
   unlockDocumentScroll();
   if (!mounted.value) return;
+  if (props.open) {
+    emit("update:open", false);
+    emit("openRequest", false, { activeId: semanticActiveId.value, reason: "programmatic" });
+    void nextTick().then(() => {
+      return props.open ? openDialog() : undefined;
+    });
+    return;
+  }
   restoreFocus({
     fallback: props.focusReturn?.fallback,
     opener: capturedOpener ?? props.focusReturn?.opener,
   });
   capturedOpener = undefined;
-  emit("closed", intendedActiveId.value);
-  if (props.open) void openDialog();
+  emit("closed", semanticActiveId.value);
 }
 
 function onBackdropPointerDown(event: PointerEvent) {
@@ -1209,15 +1239,20 @@ watch(
   (id) => {
     // A host confirming the stable ID emitted by this navigation is acknowledgement, not an
     // external takeover. Keep the transition and its provenance intact.
-    if (id === undefined || id === intendedActiveId.value) return;
-    const index = items.value.findIndex((item) => item.id === id);
-    if (index < 0) {
-      intendedActiveId.value = id;
-      invalidateNavigation();
-      clearPointerState();
+    if (id === undefined) {
+      internalActiveId.value = intendedActiveId.value ?? activeItem.value?.id;
       return;
     }
-    synchronizeTo(id);
+    const index = items.value.findIndex((item) => item.id === id);
+    if (index < 0) {
+      invalidateNavigation();
+      clearPointerState();
+      intendedActiveId.value = activeItem.value?.id;
+      rollbackAnchorId.value = intendedActiveId.value;
+      return;
+    }
+    rollbackAnchorId.value = id;
+    if (id !== intendedActiveId.value) synchronizeExact(id);
   },
   { immediate: true },
 );
@@ -1228,7 +1263,7 @@ watch(items, (nextItems, previousItems) => {
   const openGeneration = openCycleGeneration.value;
   const navigation = invalidateNavigation();
   const previousId = previousItems[galleryIndex.value]?.id;
-  const previousSemanticId = intendedActiveId.value;
+  const previousSemanticId = semanticActiveId.value;
   const nextIds = new Set(nextItems.map((item) => item.id));
   imageLoadStateByItem.value = Object.fromEntries(
     Object.entries(imageLoadStateByItem.value).filter(([id]) => nextIds.has(id)),
@@ -1244,7 +1279,9 @@ watch(items, (nextItems, previousItems) => {
   }
 
   if (nextItems.length === 0) {
-    if (previousSemanticId !== undefined) acceptActiveId(undefined, "reconcile");
+    if (props.activeId === undefined && previousSemanticId !== undefined) {
+      acceptActiveId(undefined, "reconcile");
+    }
     if (props.open) {
       invalidateOpenCycle();
       requestClose("programmatic");
@@ -1263,12 +1300,19 @@ watch(items, (nextItems, previousItems) => {
       : nextItems.findIndex((candidate) => candidate.id === intendedActiveId.value);
   if (controlledIndex >= 0) {
     intendedActiveId.value = props.activeId;
+    rollbackAnchorId.value = props.activeId;
     galleryIndex.value = controlledIndex;
   } else if (semanticIndex >= 0) {
     galleryIndex.value = semanticIndex;
+    if (props.activeId !== undefined) rollbackAnchorId.value = intendedActiveId.value;
   } else {
     galleryIndex.value = resolvePreservedGalleryIndex(previousId, galleryIndex.value, nextItems);
-    acceptActiveId(nextItems[galleryIndex.value]?.id, "reconcile");
+    const fallbackId = nextItems[galleryIndex.value]?.id;
+    if (props.activeId === undefined) acceptActiveId(fallbackId, "reconcile");
+    else {
+      intendedActiveId.value = fallbackId;
+      rollbackAnchorId.value = fallbackId;
+    }
   }
   resetTransform();
   ensureTrackImageStates();
@@ -1280,7 +1324,8 @@ watch(items, (nextItems, previousItems) => {
       openGeneration === openCycleGeneration.value &&
       navigation === navigationGeneration
     ) {
-      measureGeometry();
+      if (props.open && !dialog.value?.open) void openDialog();
+      else measureGeometry();
     }
   })();
 });
@@ -1307,7 +1352,7 @@ defineExpose({
   navigateTo,
   next,
   previous,
-  resetToFit,
+  resetToFit: resetToFitPublic,
   requestClose,
   synchronizeTo,
 });

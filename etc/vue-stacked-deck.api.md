@@ -4,7 +4,7 @@
 
 ```ts
 
-import { ActiveIdChangeDetails } from '@snap-motion/core';
+import { ActiveIdRequestDetails } from '@snap-motion/core';
 import type { CarouselMotion } from '@snap-motion/vue/carousel';
 import { ComputedRef } from 'vue';
 import { ElasticityOptions } from '@snap-motion/core';
@@ -52,7 +52,7 @@ export const StackedDeck: <TItem extends {
         releasePolicy?: StackedDeckReleasePolicy;
         spring?: SpringConfiguration;
     } & {
-        onActiveIdChange?: (id: TItem["id"] | undefined, details: ActiveIdChangeDetails) => any;
+        onActiveIdRequest?: (id: TItem["id"] | undefined, details: ActiveIdRequestDetails) => any;
         onSettled?: (id: TItem["id"], details: SettlementDetails) => any;
         "onUpdate:activeId"?: (id: TItem["id"] | undefined) => any;
         onActivate?: (item: TItem, index: number) => any;
@@ -60,6 +60,7 @@ export const StackedDeck: <TItem extends {
         __VLS_PROPS_FALLBACK: infer P;
     } ? P : {});
     expose: (exposed: ShallowUnwrapRef<    {
+    activeId: ComputedRef<TItem["id"] | undefined>;
     canNext: ComputedRef<boolean>;
     canPrevious: ComputedRef<boolean>;
     compositing: ComputedRef<boolean>;
@@ -109,7 +110,7 @@ export const StackedDeck: <TItem extends {
     };
     emit: {
         (event: "update:activeId", id: TItem["id"] | undefined): void;
-        (event: "activeIdChange", id: TItem["id"] | undefined, details: ActiveIdChangeDetails): void;
+        (event: "activeIdRequest", id: TItem["id"] | undefined, details: ActiveIdRequestDetails): void;
         (event: "settled", id: TItem["id"], details: SettlementDetails): void;
         (event: "activate", item: TItem, index: number): void;
     };
@@ -136,6 +137,7 @@ export interface StackedDeckCardState<TItem, TId extends string> {
 
 // @public
 export interface StackedDeckHandle<Id extends string> {
+    readonly activeId: Id | undefined;
     // (undocumented)
     readonly canNext: boolean;
     // (undocumented)
@@ -224,7 +226,7 @@ export interface UseStackedDeckMotionOptions<Id extends string> {
     // (undocumented)
     readonly initialId?: Id | undefined;
     readonly onActivate?: (id: Id, index: number) => void;
-    readonly onActiveIdChange?: (id: Id, index: number, reason: ActiveIdChangeDetails["reason"]) => void;
+    readonly onActiveIdRequest?: (id: Id, index: number, reason: ActiveIdRequestDetails["reason"]) => void;
     readonly onSettled?: (id: Id, index: number, reason: NavigationReason) => void;
     // (undocumented)
     readonly programmaticImpulse?: MaybeRefOrGetter<number | undefined>;

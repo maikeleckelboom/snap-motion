@@ -104,7 +104,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
 
   const geometry = motion.geometry;
   return {
-    ...(motion.activeId ? { activeId: motion.activeId } : {}),
+    ...(motion.nearestId ? { nearestId: motion.nearestId } : {}),
     anchors: motion.anchors,
     bodyClientBlockExtent: geometry.bodyClientBlockExtent,
     bodyScrollBlockExtent: geometry.bodyScrollBlockExtent,

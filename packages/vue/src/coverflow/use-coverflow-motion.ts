@@ -14,7 +14,7 @@ import {
   type CoverflowTuning,
   type PaginationIndicatorState,
   type ElasticityOptions,
-  type ActiveIdChangeDetails,
+  type ActiveIdRequestDetails,
   type ReleaseTargetPolicy,
   type SnapAnchor,
   type SpringConfiguration,
@@ -90,10 +90,10 @@ export interface UseCoverflowMotionOptions<Id extends string> {
    */
   readonly controlledId?: MaybeRefOrGetter<Id | undefined>;
   /** Fires when this surface accepts a semantic destination, before mechanical settlement. */
-  readonly onActiveIdChange?: (
+  readonly onActiveIdRequest?: (
     id: Id,
     index: number,
-    reason: ActiveIdChangeDetails["reason"],
+    reason: ActiveIdRequestDetails["reason"],
   ) => void;
   /**
    * Announces the durable selection. Fires only at mechanical rest, never on a visual change, and
@@ -220,10 +220,10 @@ export function useCoverflowMotion<Id extends string>(
    */
   let pendingReason: NavigationReason = "external";
 
-  function acceptDestination(id: Id, reason: ActiveIdChangeDetails["reason"]): void {
+  function acceptDestination(id: Id, reason: ActiveIdRequestDetails["reason"]): void {
     pendingReason = reason;
     const index = model.indexOf(id);
-    if (index >= 0) options.onActiveIdChange?.(id, index, reason);
+    if (index >= 0) options.onActiveIdRequest?.(id, index, reason);
   }
 
   function measure() {
@@ -345,7 +345,7 @@ export function useCoverflowMotion<Id extends string>(
       velocity: motion.velocity.value,
       restDistance: spring.restDistance,
       restSpeed: spring.restSpeed,
-      activeMatches: motion.activeId.value === id,
+      activeMatches: motion.nearestId.value === id,
       targetMatches: motion.targetId.value === id,
     });
   }
@@ -433,7 +433,7 @@ export function useCoverflowMotion<Id extends string>(
     ),
   );
 
-  function moveToIndex(index: number, reason: ActiveIdChangeDetails["reason"]): boolean {
+  function moveToIndex(index: number, reason: ActiveIdRequestDetails["reason"]): boolean {
     const command = model.resolveNavigationCommand(index, { owned: owned.value });
     if (disabled() || command.kind !== "move") return false;
     const id = model.idAt(command.targetIndex);
@@ -443,7 +443,7 @@ export function useCoverflowMotion<Id extends string>(
     return true;
   }
 
-  function moveRelative(direction: -1 | 1, reason: ActiveIdChangeDetails["reason"]): boolean {
+  function moveRelative(direction: -1 | 1, reason: ActiveIdRequestDetails["reason"]): boolean {
     const command = model.resolveRelativeCommand(direction, { owned: owned.value });
     return command.kind === "move" && moveToIndex(command.targetIndex, reason);
   }
@@ -486,7 +486,7 @@ export function useCoverflowMotion<Id extends string>(
     const current = state.value;
     const alreadySynchronized =
       motion.phase.value === "idle" &&
-      motion.activeId.value === id &&
+      motion.nearestId.value === id &&
       motion.targetId.value === id &&
       Math.abs(motion.position.value - anchorPosition) <= Number.EPSILON * 16 &&
       Math.abs(motion.velocity.value) <= Number.EPSILON * 16 &&
@@ -717,6 +717,8 @@ export function useCoverflowMotion<Id extends string>(
  * `useCoverflowMotion` directly remains the way to build a renderer that needs more.
  */
 export interface CoverflowHandle<Id extends string> {
+  /** Application semantic selection, independent of target, visual, and settled mechanics. */
+  readonly activeId: Id | undefined;
   readonly canNext: boolean;
   readonly canPrevious: boolean;
   /** True while the surface is being manipulated or is animating on its own. */
@@ -741,7 +743,7 @@ export interface CoverflowHandle<Id extends string> {
   /**
    * One adjacent card forward.
    *
-   * It takes no reason, and that is the point: `activeIdChange` reports why a selection changed,
+   * It takes no reason, and that is the point: `activeIdRequest` reports why a selection was requested,
    * and an application can only trust that report if a caller cannot author it. Next is next.
    */
   next(): boolean;

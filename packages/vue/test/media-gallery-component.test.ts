@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 
 import MediaGalleryDialog from "../src/media-gallery/components/MediaGalleryDialog.vue";
-import type { MediaGalleryItem } from "../src/media-gallery/media-gallery-contracts";
+import type {
+  MediaGalleryDialogProps,
+  MediaGalleryItem,
+} from "../src/media-gallery/media-gallery-contracts";
 
 const items: readonly MediaGalleryItem[] = [
   {
@@ -106,9 +109,11 @@ function preferReducedMotion(): MediaQueryList {
 }
 
 function mountGallery(
-  props: Partial<InstanceType<typeof MediaGalleryDialog>["$props"]> = {},
+  props: Partial<MediaGalleryDialogProps> & {
+    "onUpdate:activeId"?: (id: string | undefined) => void;
+  } = {},
   useReducedMotionOverride = true,
-): VueWrapper<InstanceType<typeof MediaGalleryDialog>> {
+): VueWrapper {
   return mount(MediaGalleryDialog, {
     attachTo: document.body,
     props: {
@@ -214,7 +219,7 @@ describe("MediaGalleryDialog lifecycle", () => {
     await nextTick();
 
     expect(wrapper.get("dialog").attributes("open")).toBeUndefined();
-    expect(wrapper.emitted("openChange")).toEqual([
+    expect(wrapper.emitted("openRequest")).toEqual([
       [false, { activeId: undefined, reason: "programmatic" }],
     ]);
     expect(wrapper.emitted("update:open")).toEqual([[false]]);
@@ -231,7 +236,7 @@ describe("MediaGalleryDialog lifecycle", () => {
     await settleTrack(wrapper);
     await wrapper.get('[data-testid="snap-motion-media-gallery-close"]').trigger("click");
 
-    expect(wrapper.emitted("openChange")?.at(-1)).toEqual([
+    expect(wrapper.emitted("openRequest")?.at(-1)).toEqual([
       false,
       { activeId: "two", reason: "close-button" },
     ]);
@@ -242,6 +247,26 @@ describe("MediaGalleryDialog lifecycle", () => {
     expect(wrapper.emitted("closed")?.at(-1)).toEqual(["two"]);
     expect(document.activeElement).toBe(opener);
     expect(document.documentElement.style.overflow).toBe("");
+  });
+
+  it("keeps a refused controlled close request open and repeatable", async () => {
+    const wrapper = mountGallery({ activeId: "one" });
+    await flushReactiveTasks();
+
+    await wrapper.get('[data-testid="snap-motion-media-gallery-close"]').trigger("click");
+    await wrapper.get('[data-testid="snap-motion-media-gallery-close"]').trigger("click");
+    expect(wrapper.get("dialog").attributes()).toHaveProperty("open");
+    expect(wrapper.get("dialog").attributes("data-dialog-state")).toBe("open");
+    expect(wrapper.emitted("openRequest")).toEqual([
+      [false, { activeId: "one", reason: "close-button" }],
+      [false, { activeId: "one", reason: "close-button" }],
+    ]);
+    expect(wrapper.emitted("closed")).toBeUndefined();
+
+    await wrapper.setProps({ open: false });
+    await flushReactiveTasks();
+    expect(wrapper.get("dialog").attributes("open")).toBeUndefined();
+    expect(wrapper.emitted("closed")?.at(-1)).toEqual(["one"]);
   });
 
   it("falls back when the opener is removed before close", async () => {
@@ -308,7 +333,7 @@ describe("MediaGalleryDialog lifecycle", () => {
 
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("0");
     expect(wrapper.emitted("settled")).toBeUndefined();
-    expect(wrapper.emitted("openChange")).toBeUndefined();
+    expect(wrapper.emitted("openRequest")).toBeUndefined();
     expect(wrapper.emitted("closed")?.at(-1)).toEqual(["two"]);
     expect(wrapper.get('[data-testid="snap-motion-media-gallery-status"]').text()).toBe(
       "One, 1 of 3",
@@ -363,7 +388,7 @@ describe("MediaGalleryDialog lifecycle", () => {
     await flushReactiveTasks();
     await frames.flushAll();
 
-    expect(wrapper.emitted("openChange")).toEqual([
+    expect(wrapper.emitted("openRequest")).toEqual([
       [false, { activeId: undefined, reason: "programmatic" }],
     ]);
     expect(wrapper.emitted("update:open")).toEqual([[false]]);
@@ -477,7 +502,7 @@ describe("MediaGalleryDialog navigation", () => {
 
     expect(wrapper.get("dialog").attributes("data-active-id")).toBe("three");
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("2");
-    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
     expect(wrapper.emitted("update:activeId")).toBeUndefined();
     expect(wrapper.emitted("settled")?.at(-1)).toEqual(["three", { reason: "external" }]);
   });
@@ -508,11 +533,16 @@ describe("MediaGalleryDialog navigation", () => {
     await flushReactiveTasks();
     expect(wrapper.get("dialog").attributes("data-active-id")).toBe("two");
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("1");
-    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
 
     await wrapper.setProps({ items: [items[2]!, items[0]!] });
     await flushReactiveTasks();
-    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["one", { reason: "reconcile" }]);
+    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
+    expect(wrapper.get("dialog").attributes("data-active-id")).toBe("two");
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("1");
+
+    await wrapper.setProps({ activeId: "one" });
+    await flushReactiveTasks();
     expect(wrapper.get("dialog").attributes("data-active-id")).toBe("one");
   });
 
@@ -524,7 +554,7 @@ describe("MediaGalleryDialog navigation", () => {
 
     await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
     await flushReactiveTasks();
-    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["two", { reason: "next" }]);
+    expect(wrapper.emitted("activeIdRequest")?.at(-1)).toEqual(["two", { reason: "next" }]);
 
     await wrapper.setProps({ activeId: "three" });
     await flushReactiveTasks();
@@ -533,8 +563,50 @@ describe("MediaGalleryDialog navigation", () => {
     expect(wrapper.emitted("settled")).toEqual([["three", { reason: "external" }]]);
   });
 
+  it("keeps an ignored controlled navigation pending only mechanically, then rolls it back", async () => {
+    const wrapper = mountGallery({ activeId: "one" });
+    await flushReactiveTasks();
+
+    await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
+    await flushReactiveTasks();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["two", { reason: "next" }]]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect(wrapper.get("dialog").attributes("data-active-id")).toBe("one");
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("0");
+    expect(
+      (wrapper.vm as unknown as { synchronizeTo: (id: string) => boolean }).synchronizeTo("two"),
+    ).toBe(false);
+
+    await wrapper.setProps({ activeId: "two" });
+    await flushReactiveTasks();
+    expect(wrapper.emitted("settled")?.at(-1)).toEqual(["two", { reason: "external" }]);
+  });
+
+  it("retains a valid gallery anchor while controlled authority is unavailable", async () => {
+    const wrapper = mountGallery({ activeId: "future" });
+    await flushReactiveTasks();
+
+    await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
+    await flushReactiveTasks();
+    await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
+    await flushReactiveTasks();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
+      ["two", { reason: "next" }],
+      ["two", { reason: "next" }],
+    ]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect(wrapper.get("dialog").attributes("data-active-id")).toBe("future");
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("0");
+  });
+
   it("uses one centralized track settlement for buttons, Home, and End", async () => {
-    const wrapper = mountGallery({ activeId: "two" });
+    let wrapper: VueWrapper;
+    wrapper = mountGallery({
+      activeId: "two",
+      "onUpdate:activeId": (id) => void wrapper.setProps({ activeId: id }),
+    });
     await nextTick();
 
     await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");

@@ -69,6 +69,8 @@ items and ordinary mutable arrays, `v-model:active-id`, `itemLabel` inference, `
 and handle typing — plus companion uses that must be **rejected**. `tsc` cannot see inside an SFC
 and a Vite build erases types, so neither can tell whether template inference still resolves the
 consumer's own item type and semantic ID union from `items` alone. Only the SFC type-check can.
+Media Gallery is included in both readonly and mutable forms, and its props, `v-model`, events, and
+handle must retain the exact item ID union. Every packed consumer uses `skipLibCheck: false`.
 
 Tracked reports in `etc/*.api.md` freeze every public entrypoint's TypeScript surface. API changes
 require an intentional report update and a Changeset.
@@ -79,9 +81,14 @@ Repository-owned `.ts` code and core declarations are maintained with TypeScript
 7 deliberately no longer exposes the programmatic compiler API used by Vue SFC tooling. Vue
 Language Tools 3.3.9 supports the transition by running SFC declaration and template checks through
 the official `@typescript/typescript6` compatibility package; the resolved compiler is TypeScript
-6.0.3. This is an upstream boundary, not a pin of the whole workspace to TypeScript 6.
+6.0.2. This is an upstream boundary, not a pin of the whole workspace to TypeScript 6.
 
 Packed declaration consumers cover current TypeScript 7 for ordinary `.ts` entrypoints and the
-TypeScript 6 bridge for actual Vue SFC template inference. TypeScript is neither a runtime nor peer
-dependency. API Extractor 7.58.12 continues to use its own analysis engine after deterministic
-declaration emission; the maintainer compiler and extractor engine are intentionally distinct.
+TypeScript 6 bridge for actual Vue SFC template inference. Vue Language Tools cannot currently run
+its programmatic SFC pipeline on TypeScript 7 because that compiler API was removed; the official
+TypeScript 6 bridge is therefore the strongest real SFC check, while TypeScript 7 still checks every
+ordinary declaration entrypoint under bundler, Node16, and NodeNext resolution. TypeScript is
+neither a runtime nor peer dependency. API Extractor 7.58.12 continues to use its own analysis engine
+after deterministic declaration emission; the maintainer compiler and extractor engine are
+intentionally distinct. Packed-consumer compiler versions are read from the root workspace
+configuration, so fixture templates cannot drift.

@@ -1,6 +1,6 @@
 <script setup lang="ts" generic="TItem extends { id: string }">
 import type {
-  ActiveIdChangeDetails,
+  ActiveIdRequestDetails,
   ElasticityOptions,
   ReleaseTargetPolicy,
   SettlementDetails,
@@ -58,7 +58,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (event: "update:activeId", id: TId | undefined): void;
-  (event: "activeIdChange", id: TId | undefined, details: ActiveIdChangeDetails): void;
+  (event: "activeIdRequest", id: TId | undefined, details: ActiveIdRequestDetails): void;
   (event: "settled", id: TId, details: SettlementDetails): void;
   /** A tap on the settled card: the request to open it on another surface. */
   (event: "activate", item: TItem, index: number): void;
@@ -71,10 +71,22 @@ const messages = computed(() => createEnglishSnapMotionMessages(props.messages))
 const ids = computed<TId[]>(() => props.items.map((item) => item.id));
 const reducedMotionOverride = computed(() => props.reducedMotionOverride);
 const statusText = ref("");
-const internalActiveId = ref<TId | undefined>(
-  props.activeId ?? props.items[Math.floor(props.items.length / 2)]?.id,
-);
-const semanticActiveId = computed(() => props.activeId ?? internalActiveId.value);
+let suppressAuthorityRollbackSettlement = false;
+const initialMechanicalId =
+  props.activeId !== undefined && ids.value.includes(props.activeId)
+    ? props.activeId
+    : props.items[Math.floor(props.items.length / 2)]?.id;
+const internalActiveId = ref<TId | undefined>(initialMechanicalId);
+const semanticActiveId = computed<TId | undefined>(() => props.activeId ?? internalActiveId.value);
+const rollbackAnchorId = ref<TId | undefined>(initialMechanicalId);
+
+watch([ids, () => props.activeId] as const, ([nextIds, controlledId], previousState) => {
+  if (controlledId !== undefined && nextIds.includes(controlledId)) {
+    rollbackAnchorId.value = controlledId;
+  } else if (controlledId === undefined && previousState?.[1] !== undefined) {
+    internalActiveId.value = rollbackAnchorId.value;
+  }
+});
 
 watch(ids, (nextIds, previousIds) => {
   if (props.activeId !== undefined || nextIds.includes(internalActiveId.value as TId)) return;
@@ -82,7 +94,7 @@ watch(ids, (nextIds, previousIds) => {
   const nextId = nextIds[Math.min(previousIndex, Math.max(0, nextIds.length - 1))];
   internalActiveId.value = nextId;
   emit("update:activeId", nextId);
-  emit("activeIdChange", nextId, { reason: "reconcile" });
+  emit("activeIdRequest", nextId, { reason: "reconcile" });
 });
 
 function labelFor(item: TItem, index: number): string {
@@ -91,6 +103,8 @@ function labelFor(item: TItem, index: number): string {
 
 /** Exact application-authoritative adoption; the high-level surface always keeps it silent. */
 function synchronizeTo(id: TId) {
+  if (props.activeId !== undefined && id !== props.activeId) return false;
+  if (props.activeId === undefined) internalActiveId.value = id;
   return coverflow.synchronizeTo(id);
 }
 
@@ -121,13 +135,34 @@ const coverflow = useCoverflowMotion<TId>({
     const item = props.items[index];
     if (item) emit("activate", item, index);
   },
-  onActiveIdChange(id, _index, reason) {
+  onActiveIdRequest(id, _index, reason) {
     if (id === semanticActiveId.value) return;
-    internalActiveId.value = id;
+    if (props.activeId === undefined) internalActiveId.value = id;
     emit("update:activeId", id);
-    emit("activeIdChange", id, { reason });
+    emit("activeIdRequest", id, { reason });
   },
   onSettled(id, index, reason) {
+    if (props.activeId !== undefined && id !== props.activeId) {
+      if (reason === "reconcile" && ids.value.includes(id)) {
+        rollbackAnchorId.value = id;
+        return;
+      }
+      const authoritativeId = rollbackAnchorId.value;
+      if (authoritativeId !== undefined) {
+        queueMicrotask(() => {
+          suppressAuthorityRollbackSettlement = true;
+          const synchronized = coverflow.synchronizeTo(authoritativeId);
+          if (!synchronized || suppressAuthorityRollbackSettlement) {
+            suppressAuthorityRollbackSettlement = false;
+          }
+        });
+      }
+      return;
+    }
+    if (suppressAuthorityRollbackSettlement && reason === "external") {
+      suppressAuthorityRollbackSettlement = false;
+      return;
+    }
     if (reason !== "external") statusText.value = positionLabel(index);
     emit("settled", id, { reason });
   },
@@ -202,6 +237,7 @@ function cardStyle(card: CoverflowCardState<TItem, TId>) {
 }
 
 defineExpose({
+  activeId: semanticActiveId,
   canNext: coverflow.canNext,
   canPrevious: coverflow.canPrevious,
   compositing: coverflow.compositing,

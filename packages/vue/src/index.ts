@@ -51,11 +51,11 @@ export type {
   SheetViewportSnapId,
 } from "./sheet";
 export { ModalDialog } from "./dialog";
-export type { CloseReason, FocusReturnOptions, InitialFocus, OpenChangeDetails } from "./dialog";
+export type { CloseReason, FocusReturnOptions, InitialFocus, OpenRequestDetails } from "./dialog";
 export { createEnglishSnapMotionMessages } from "./localization";
 export type { SnapMotionMessages } from "./localization";
 export type {
-  ActiveIdChangeDetails,
+  ActiveIdRequestDetails,
   NavigationReason,
   PointerIntent,
   SettlementDetails,

@@ -37,14 +37,15 @@ Right Arrow work while the close button retains focus.
 
 ## Route-controlled state
 
-Routing stays outside the package. A component-originated destination emits one semantic change as
-Vue model plumbing plus provenance; the resulting authoritative prop change is not echoed back.
+Routing stays outside the package. A component-originated destination emits one semantic request as
+Vue model plumbing plus provenance; only the router's resulting prop changes authoritative state,
+and that adoption is not echoed back.
 
 ```vue
 <CarouselRoot
   :active-id="routeMediaId"
   :ids="ids"
-  @active-id-change="(id) => router.replace({ query: { media: id } })"
+  @active-id-request="(id) => router.replace({ query: { media: id } })"
 />
 ```
 

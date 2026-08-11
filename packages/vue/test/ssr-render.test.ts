@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { renderToString } from "@vue/server-renderer";
 import { describe, expect, it } from "vitest";
 import { createSSRApp, h } from "vue";
@@ -129,7 +131,7 @@ describe("production component SSR contract", () => {
             height: 1_000,
           },
           {
-            id: " item ",
+            id: "item",
             title: "Second",
             alt: "Second",
             previewSrc: "/second.jpg",

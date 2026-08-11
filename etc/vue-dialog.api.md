@@ -29,7 +29,7 @@ export type InitialFocus = "close" | "title" | "first-interactive" | HTMLElement
 export const ModalDialog: __VLS_WithSlots<typeof __VLS_base, __VLS_Slots>;
 
 // @public
-export interface OpenChangeDetails {
+export interface OpenRequestDetails {
     // (undocumented)
     readonly reason: CloseReason;
 }

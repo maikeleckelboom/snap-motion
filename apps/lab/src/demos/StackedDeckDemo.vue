@@ -3,7 +3,7 @@ import { BOUNDED_SPRING_TUNING, STACKED_DECK_ANCHOR_SKIP } from "@snap-motion/co
 import {
   MediaGalleryDialog,
   type FocusReturnOptions,
-  type MediaGalleryOpenChangeDetails,
+  type MediaGalleryOpenRequestDetails,
 } from "@snap-motion/vue/media-gallery";
 import {
   StackedDeck,
@@ -95,7 +95,7 @@ function openGallery(index: number) {
   galleryOpen.value = true;
 }
 
-function onGalleryOpenChange(_open: false, details: MediaGalleryOpenChangeDetails) {
+function onGalleryOpenRequest(_open: false, details: MediaGalleryOpenRequestDetails) {
   const id = details.activeId as ShowcaseScreenId | undefined;
   if (id !== undefined) {
     activeId.value = id;
@@ -113,7 +113,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
   const targetId = motion?.targetId;
   const targetIndex = targetId === undefined ? -1 : screens.findIndex((s) => s.id === targetId);
   return {
-    ...(motion?.activeId ? { activeId: motion.activeId } : {}),
+    ...(motion?.nearestId ? { nearestId: motion.nearestId } : {}),
     anchors: motion?.anchors ?? [],
     bounds: motion?.bounds ?? { min: 0, max: 0 },
     isAnimating: motion?.isAnimating ?? false,
@@ -326,7 +326,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       :items="screens"
       :reduced-motion-override="deck?.diagnostics.reducedMotion"
       title="Screen gallery"
-      @open-change="onGalleryOpenChange"
+      @open-request="onGalleryOpenRequest"
     />
   </section>
 </template>

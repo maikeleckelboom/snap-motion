@@ -15,6 +15,22 @@ const fixtureDirectory = resolve(repoRoot, "fixtures/packed-consumers");
 const coreFixtureDirectory = resolve(repoRoot, "fixtures/packed-core-consumer");
 const pnpmCommand = "pnpm";
 const pnpmCli = resolve(dirname(process.execPath), "node_modules/corepack/dist/pnpm.js");
+const workspaceManifest = await readFile(resolve(repoRoot, "pnpm-workspace.yaml"), "utf8");
+
+function workspaceVersion(pattern: RegExp, label: string): string {
+  const version = workspaceManifest.match(pattern)?.[1];
+  if (!version) throw new Error(`Could not resolve ${label} from pnpm-workspace.yaml.`);
+  return version;
+}
+
+const consumerCompilerVersions = {
+  typescript6: workspaceVersion(
+    /^\s{4}typescript: npm:@typescript\/typescript6@([^\s]+)$/m,
+    "the TypeScript 6 bridge version",
+  ),
+  typescript7: workspaceVersion(/^\s{2}typescript: ([^\s]+)$/m, "the TypeScript 7 version"),
+  vueTsc: workspaceVersion(/^\s{2}vue-tsc: ([^\s]+)$/m, "the vue-tsc version"),
+} as const;
 
 interface PackageManifest {
   readonly dependencies?: Readonly<Record<string, string>>;
@@ -345,7 +361,10 @@ async function createConsumer(
   const template = await readFile(resolve(directory, templateName), "utf8");
   const packageJson = template
     .replaceAll("__CORE_TARBALL__", coreTarball.replaceAll("\\", "/"))
-    .replaceAll("__VUE_TARBALL__", vueTarball.replaceAll("\\", "/"));
+    .replaceAll("__VUE_TARBALL__", vueTarball.replaceAll("\\", "/"))
+    .replaceAll("__TYPESCRIPT6_VERSION__", consumerCompilerVersions.typescript6)
+    .replaceAll("__TYPESCRIPT7_VERSION__", consumerCompilerVersions.typescript7)
+    .replaceAll("__VUE_TSC_VERSION__", consumerCompilerVersions.vueTsc);
   await writeFile(resolve(directory, "package.json"), packageJson);
   const workspaceTemplate = await readFile(
     resolve(directory, "pnpm-workspace.template.yaml"),
@@ -364,7 +383,9 @@ async function createCoreConsumer(coreTarball: string) {
   const template = await readFile(resolve(directory, "package.template.json"), "utf8");
   await writeFile(
     resolve(directory, "package.json"),
-    template.replaceAll("__CORE_TARBALL__", coreTarball.replaceAll("\\", "/")),
+    template
+      .replaceAll("__CORE_TARBALL__", coreTarball.replaceAll("\\", "/"))
+      .replaceAll("__TYPESCRIPT7_VERSION__", consumerCompilerVersions.typescript7),
   );
   return directory;
 }

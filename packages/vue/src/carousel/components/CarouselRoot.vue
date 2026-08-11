@@ -1,7 +1,7 @@
 <script setup lang="ts" generic="Id extends string">
 import {
   createFixedStageGeometry,
-  type ActiveIdChangeDetails,
+  type ActiveIdRequestDetails,
   type ControllerSnapshot,
   type SettlementDetails,
 } from "@snap-motion/core";
@@ -52,7 +52,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (event: "update:activeId", id: Id): void;
-  (event: "activeIdChange", id: Id, details: ActiveIdChangeDetails): void;
+  (event: "activeIdRequest", id: Id, details: ActiveIdRequestDetails): void;
   (event: "settled", id: Id, details: SettlementDetails): void;
 }>();
 
@@ -72,7 +72,14 @@ const rootStyle = computed(() => ({
 const ids = computed(() => props.ids);
 const messages = computed(() => createEnglishSnapMotionMessages(props.messages));
 const defaultGeometryStrategy = createFixedStageCarouselGeometryStrategy<Id>();
-const intendedId = ref<Id>(props.activeId);
+const initialMechanicalId = props.ids.includes(props.activeId)
+  ? props.activeId
+  : (props.ids[0] ?? props.activeId);
+const intendedId = ref<Id>(initialMechanicalId);
+const semanticActiveId = computed(() => props.activeId);
+const rollbackAnchorId = ref<Id | undefined>(
+  props.ids.includes(props.activeId) ? props.activeId : props.ids[0],
+);
 let latestSnapshot: ControllerSnapshot<Id>;
 let targetGeneration = 0;
 let settledGeneration = 0;
@@ -143,6 +150,13 @@ function publishSettlement() {
   ) {
     return;
   }
+  if (active.id !== props.activeId) {
+    const authoritativeId = rollbackAnchorId.value;
+    if (authoritativeId !== undefined) {
+      queueMicrotask(() => synchronizeExact(authoritativeId, false));
+    }
+    return;
+  }
   moveFocusOutsideOutgoingSlide(active.id);
   settledGeneration = targetGeneration;
   const label = slideRegistrations.get(active.id)?.label;
@@ -172,7 +186,7 @@ function acceptTarget(id: Id, reason: NavigationReason, userOriginated: boolean)
   targetGeneration += 1;
   if (userOriginated && reason !== "external") {
     emit("update:activeId", id);
-    emit("activeIdChange", id, { reason });
+    emit("activeIdRequest", id, { reason });
   }
   return true;
 }
@@ -183,7 +197,7 @@ const motion = useCarouselMotion<Id>({
   bounds: initialGeometry.bounds,
   direction: requestedDirection,
   initialPosition: 0,
-  initialTargetId: props.activeId,
+  initialTargetId: initialMechanicalId,
   measure,
   onChange: onControllerChange,
   onTargetSelected(id, reason) {
@@ -212,12 +226,17 @@ function navigateTo(id: Id): boolean {
 }
 
 /** Adopts authoritative state exactly, without replaying navigation or announcing it. */
-function synchronizeTo(id: Id): boolean {
+function synchronizeExact(id: Id, reportSettlement = true): boolean {
   if (!props.ids.includes(id)) return false;
   motion.interrupt();
   acceptTarget(id, "external", false);
+  if (!reportSettlement) settledGeneration = targetGeneration;
   motion.controller.remeasure({ ...measure(), activeId: id });
   return true;
+}
+
+function synchronizeTo(id: Id): boolean {
+  return id === props.activeId && synchronizeExact(id);
 }
 
 /** Internal picker navigation used by pagination controls and slots. */
@@ -306,19 +325,23 @@ watch(
     await nextTick();
     if (unmounted) return;
     if (nextIds.includes(controlledId)) {
+      rollbackAnchorId.value = controlledId;
       acceptTarget(controlledId, "external", false);
       motion.controller.remeasure({ ...measure(), activeId: controlledId });
       return;
     }
     const target = motion.remeasure();
-    if (target && target.id !== intendedId.value) acceptTarget(target.id, "external", false);
+    if (target) {
+      rollbackAnchorId.value = target.id;
+      if (target.id !== intendedId.value) acceptTarget(target.id, "external", false);
+    }
   },
 );
 
 watch(() => props.geometryStrategy, scheduleRemeasure);
 
 provide(carouselContextKey, {
-  activeId: motion.activeId,
+  activeId: semanticActiveId,
   canNext: motion.canNext,
   canPrevious: motion.canPrevious,
   count: computed(() => props.ids.length),
@@ -353,7 +376,14 @@ provide(carouselContextKey, {
   trackStyle: motion.trackStyle,
 } satisfies CarouselContext<Id> as unknown as CarouselContext);
 
-defineExpose({ navigateTo, next, previous, remeasure: motion.remeasure, synchronizeTo });
+defineExpose({
+  activeId: semanticActiveId,
+  navigateTo,
+  next,
+  previous,
+  remeasure: motion.remeasure,
+  synchronizeTo,
+});
 
 onBeforeUnmount(() => {
   unmounted = true;

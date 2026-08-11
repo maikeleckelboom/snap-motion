@@ -130,7 +130,7 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     controller.dispose();
   });
 
-  const activeId = computed(() => snapshot.value.active?.id);
+  const nearestId = computed(() => snapshot.value.active?.id);
   const targetId = computed(() => snapshot.value.target?.id);
   const phase = computed(() => snapshot.value.phase);
   const position = computed(() => snapshot.value.position);
@@ -142,7 +142,6 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
   }
 
   return {
-    activeId,
     configure: controller.configure.bind(controller),
     controller,
     interrupt: () => {
@@ -154,6 +153,7 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     isDragging: pointer.isDragging,
     moveBy: controller.moveBy.bind(controller),
     moveTo: controller.moveTo.bind(controller),
+    nearestId,
     next: controller.next.bind(controller),
     onNativeDragStart: pointer.onNativeDragStart,
     onPointerDown: pointer.onPointerDown,

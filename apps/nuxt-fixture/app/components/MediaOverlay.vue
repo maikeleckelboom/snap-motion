@@ -1,13 +1,8 @@
 <script setup lang="ts">
-import type { ActiveIdChangeDetails } from "@snap-motion/vue";
-import type { MediaGalleryOpenChangeDetails } from "@snap-motion/vue/media-gallery";
+import type { ActiveIdRequestDetails } from "@snap-motion/vue";
+import type { MediaGalleryOpenRequestDetails } from "@snap-motion/vue/media-gallery";
 import { MediaGalleryDialog } from "@snap-motion/vue/media-gallery";
 
-defineProps<{ activeId: string; open: boolean }>();
-const emit = defineEmits<{
-  activeIdChange: [id: string | undefined, details: ActiveIdChangeDetails];
-  openChange: [open: false, details: MediaGalleryOpenChangeDetails];
-}>();
 const media = [
   {
     id: "overview",
@@ -33,14 +28,21 @@ const media = [
     width: 1_600,
     height: 1_000,
   },
-];
+] as const;
+type MediaId = (typeof media)[number]["id"];
 
-function onActiveIdChange(id: string | undefined, details: ActiveIdChangeDetails) {
-  emit("activeIdChange", id, details);
+defineProps<{ activeId: MediaId; open: boolean }>();
+const emit = defineEmits<{
+  activeIdRequest: [id: MediaId | undefined, details: ActiveIdRequestDetails];
+  openRequest: [open: false, details: MediaGalleryOpenRequestDetails<MediaId>];
+}>();
+
+function onActiveIdRequest(id: MediaId | undefined, details: ActiveIdRequestDetails) {
+  emit("activeIdRequest", id, details);
 }
 
-function onOpenChange(open: false, details: MediaGalleryOpenChangeDetails) {
-  emit("openChange", open, details);
+function onOpenRequest(open: false, details: MediaGalleryOpenRequestDetails<MediaId>) {
+  emit("openRequest", open, details);
 }
 </script>
 
@@ -49,7 +51,7 @@ function onOpenChange(open: false, details: MediaGalleryOpenChangeDetails) {
     :active-id="activeId"
     :items="media"
     :open="open"
-    @active-id-change="onActiveIdChange"
-    @open-change="onOpenChange"
+    @active-id-request="onActiveIdRequest"
+    @open-request="onOpenRequest"
   />
 </template>

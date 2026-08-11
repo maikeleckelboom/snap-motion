@@ -4,7 +4,7 @@
 
 ```ts
 
-import type { ActiveIdChangeDetails } from '@snap-motion/core';
+import type { ActiveIdRequestDetails } from '@snap-motion/core';
 import type { AnimationDriver } from '@snap-motion/core';
 import type { CloseReason } from '@snap-motion/vue/dialog';
 import { ComponentOptionsMixin } from 'vue';
@@ -18,7 +18,7 @@ import type { ElasticityOptions } from '@snap-motion/core';
 import type { FocusReturnOptions } from '@snap-motion/vue/dialog';
 import type { InitialFocus } from '@snap-motion/vue/dialog';
 import { MaybeRefOrGetter } from 'vue';
-import type { OpenChangeDetails } from '@snap-motion/vue/dialog';
+import type { OpenRequestDetails } from '@snap-motion/vue/dialog';
 import type { PointerIntent } from '@snap-motion/vue/motion';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
@@ -94,11 +94,11 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
         viewportPolicy?: Partial<SheetViewportPolicy>;
     } & {
         onClosed?: () => any;
-        onActiveIdChange?: (id: Id, details: ActiveIdChangeDetails) => any;
+        onActiveIdRequest?: (id: Id, details: ActiveIdRequestDetails) => any;
         onSettled?: (id: Id, details: SettlementDetails) => any;
         "onUpdate:activeId"?: (id: Id) => any;
         "onUpdate:open"?: (open: boolean) => any;
-        onOpenChange?: (open: false, details: OpenChangeDetails) => any;
+        onOpenRequest?: (open: false, details: OpenRequestDetails) => any;
         onOpened?: () => any;
     }> & (typeof globalThis extends {
         __VLS_PROPS_FALLBACK: infer P;
@@ -133,8 +133,8 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
     emit: {
         (event: "update:open", open: boolean): void;
         (event: "update:activeId", id: Id): void;
-        (event: "openChange", open: false, details: OpenChangeDetails): void;
-        (event: "activeIdChange", id: Id, details: ActiveIdChangeDetails): void;
+        (event: "openRequest", open: false, details: OpenRequestDetails): void;
+        (event: "activeIdRequest", id: Id, details: ActiveIdRequestDetails): void;
         (event: "opened"): void;
         (event: "closed"): void;
         (event: "settled", id: Id, details: SettlementDetails): void;
@@ -418,8 +418,6 @@ export interface UseSheetMotionOptions<Id extends string = SheetOpenSnapId> {
 
 // @public (undocumented)
 export interface UseSheetMotionReturn<Id extends string = SheetOpenSnapId> {
-    // (undocumented)
-    readonly activeId: ComputedRef<Id | undefined>;
     // (undocumented)
     readonly activeSnapId: ComputedRef<Id | undefined>;
     // (undocumented)

@@ -19,9 +19,11 @@ import "@snap-motion/vue/style.css";
 ## Basic carousel
 
 Use stable string IDs. A user action emits `update:activeId` and
-`activeIdChange(id, { reason })` as soon as the destination is accepted, followed by
-`settled(id, { reason })` after physical completion. A host-provided `activeId` is authoritative and
-is never echoed through the two change events.
+`activeIdRequest(id, { reason })` when the command is accepted. With `v-model`, the host confirms by
+publishing that ID back through `activeId`; only a confirmed destination emits
+`settled(id, { reason })` after physical completion. If the host ignores the request, semantic state
+does not change and the mechanics reconcile without a settlement or announcement. External prop
+changes are authoritative and are never echoed through the request events.
 
 ```vue
 <script setup lang="ts">
@@ -54,9 +56,11 @@ const activeId = ref<(typeof ids)[number]>("a");
 </template>
 ```
 
-Use an exposed `navigateTo(id)` for a new programmatic navigation. Use `synchronizeTo(id)` only to
-adopt state that another authority already changed; synchronization cancels conflicting interaction
-without replaying a semantic event or live announcement.
+Use an exposed `navigateTo(id)` for a new programmatic request. Use `synchronizeTo(id)` only to
+adopt state that the same component already exposes as authoritative. On a controlled high-level
+component, it refuses any ID other than the current prop, so an imperative handle cannot become a
+second state store. Synchronization cancels conflicting interaction without replaying a request or
+live announcement.
 
 `CarouselTrack` accepts logical `startInset` and `endInset` values as numbers in pixels or CSS
 length strings. Use them with a track-measuring strategy when the first and last unequal-width item

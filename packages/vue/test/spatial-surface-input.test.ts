@@ -530,7 +530,7 @@ describe("gesture lifecycle ownership", () => {
 
     expect(deck.owned).toBe(false);
     expect(deck.diagnostics.targetId).toBe("c");
-    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -555,7 +555,7 @@ describe("gesture lifecycle ownership", () => {
     // still be read as a selection, scheduling a deferred move.
     expect(frames).toHaveLength(0);
     expect((wrapper.vm as unknown as RailInstance).settledId).toBe("c");
-    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
     wrapper.unmount();
   });
 

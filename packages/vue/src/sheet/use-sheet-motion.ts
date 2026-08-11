@@ -77,7 +77,6 @@ export interface UseSheetMotionOptions<Id extends string = SheetOpenSnapId> {
 }
 
 export interface UseSheetMotionReturn<Id extends string = SheetOpenSnapId> {
-  readonly activeId: ComputedRef<Id | undefined>;
   readonly activeSnapId: ComputedRef<Id | undefined>;
   readonly axis: ComputedRef<SheetAxis>;
   /** Latest measured body client block extent; not read on every motion frame. */
@@ -618,7 +617,6 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
   });
 
   return {
-    activeId: activeSnapId,
     activeSnapId,
     axis: computed(() => getSheetSideDescriptor(currentSide.value).axis),
     bodyClientBlockExtent,

@@ -15,15 +15,16 @@ package source.
 ## Semantic selection
 
 All selection surfaces use stable IDs. `activeId` is the application-authoritative semantic item or
-snap and changes when a destination is accepted, before animation finishes. `settled` is a later
-mechanical fact. Applications must not wait for settlement to update route state.
+snap. A component asks the host to change it through `activeIdRequest`; a router can accept, delay,
+refuse, or replace that request according to its own guards. `settled` is a later mechanical fact
+for the confirmed ID. Applications update route state from requests, not from settlement.
 
 ```vue
 <StackedDeck
   v-model:active-id="activeId"
   :items="screens"
   label="Project screens"
-  @active-id-change="(id) => replaceRouteMedia(id)"
+  @active-id-request="(id) => replaceRouteMedia(id)"
 >
   <template #card="{ item }">
     <ProjectScreen :screen="item" />
@@ -48,7 +49,7 @@ import "@snap-motion/vue/style.css";
 ## Controlled routing
 
 Production components never import Vue Router or Nuxt routing. The application maps a route media
-parameter or query to `open` and `activeId`, responds to `activeIdChange` and `openChange`, and owns
+parameter or query to `open` and `activeId`, responds to `activeIdRequest` and `openRequest`, and owns
 history behavior:
 
 - push when opening from an underlying page;
@@ -57,9 +58,10 @@ history behavior:
 - replace to the base route when a direct overlay entry has no valid base-history entry.
 
 Back/Forward and query updates are authoritative prop changes. Snap Motion adopts them without
-emitting the same semantic request back. `apps/router-fixture` certifies history behavior;
-`apps/nuxt-fixture` certifies a query-controlled SSR gallery, initially open valid IDs, hydration,
-and direct-entry fallback. Neither fixture uses `ClientOnly`.
+emitting the same semantic request back. `apps/router-fixture` certifies history behavior plus
+accepted, delayed, and refused requests; `apps/nuxt-fixture` certifies the same authority boundary
+for a query-controlled SSR gallery, initially open valid IDs, hydration, and direct-entry fallback.
+Neither fixture uses `ClientOnly`.
 
 The host must not add CSS transitions, native smooth scrolling, native scroll snap, or another
 animation library to the same transform. Private integration does not authorize public activation;

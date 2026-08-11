@@ -78,7 +78,7 @@ export {
 } from "./kinetics";
 export type { MutableSpringState } from "./kinetics";
 export type {
-  ActiveIdChangeDetails,
+  ActiveIdRequestDetails,
   NavigationReason,
   SettlementDetails,
 } from "./interactionContracts";

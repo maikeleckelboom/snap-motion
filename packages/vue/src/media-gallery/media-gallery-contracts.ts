@@ -2,7 +2,7 @@ import type {
   CloseReason,
   FocusReturnOptions,
   InitialFocus,
-  OpenChangeDetails,
+  OpenRequestDetails,
 } from "@snap-motion/vue/dialog";
 
 export interface MediaGalleryItem {
@@ -16,9 +16,9 @@ export interface MediaGalleryItem {
   readonly description?: string;
 }
 
-export interface MediaGalleryOpenChangeDetails<
+export interface MediaGalleryOpenRequestDetails<
   Id extends string = string,
-> extends OpenChangeDetails {
+> extends OpenRequestDetails {
   /** Final semantic media identity, independent of collection order. */
   readonly activeId: Id | undefined;
 }
@@ -56,7 +56,20 @@ export interface MediaGalleryDialogProps<TItem extends MediaGalleryItem = MediaG
   descriptionId?: string;
 }
 
-export type { CloseReason, FocusReturnOptions, InitialFocus, OpenChangeDetails };
+/** The read-only state and commands exposed by a mounted media gallery template ref. */
+export interface MediaGalleryHandle<Id extends string = string> {
+  readonly activeId: Id | undefined;
+  readonly dialog: HTMLDialogElement | undefined;
+  readonly settledId: Id | undefined;
+  navigateTo(id: Id): boolean;
+  next(): void;
+  previous(): void;
+  resetToFit(): void;
+  requestClose(reason?: CloseReason): void;
+  synchronizeTo(id: Id): boolean;
+}
+
+export type { CloseReason, FocusReturnOptions, InitialFocus, OpenRequestDetails };
 
 export interface MediaSize {
   height: number;

@@ -26,7 +26,6 @@ export type SnapMotionDirection = "auto" | "ltr" | "rtl";
  * reachable through it, and would change silently whenever an implementation detail did.
  */
 export interface CarouselMotion<Id extends string> {
-  readonly activeId: ComputedRef<Id | undefined>;
   readonly canNext: ComputedRef<boolean>;
   readonly canPrevious: ComputedRef<boolean>;
   readonly controller: SnapController<Id>;
@@ -38,6 +37,8 @@ export interface CarouselMotion<Id extends string> {
   readonly isAnimating: ComputedRef<boolean>;
   readonly isDragging: Ref<boolean>;
   readonly isWheeling: Ref<boolean>;
+  /** The anchor nearest the current mechanical position. It is not semantic application state. */
+  readonly nearestId: ComputedRef<Id | undefined>;
   readonly phase: ComputedRef<ControllerPhase>;
   /** True from an accepted pointerdown until that contact is ended, cancelled, or aborted. */
   readonly pointerInteractionActive: Ref<boolean>;

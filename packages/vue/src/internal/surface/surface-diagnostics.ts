@@ -10,10 +10,10 @@ export function resolveSurfaceDiagnostics<Id extends SemanticId>(
 ): SurfaceMotionDiagnostics<Id> {
   const snapshot = input.snapshot;
   return {
-    activeId: snapshot.active?.id,
     anchors: snapshot.anchors,
     bounds: snapshot.bounds,
     isAnimating: snapshot.isAnimating,
+    nearestId: snapshot.active?.id,
     phase: snapshot.phase,
     pointerInteractionActive: input.pointerInteractionActive,
     pointerOwned: input.pointerOwned,

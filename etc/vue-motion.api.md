@@ -4,7 +4,7 @@
 
 ```ts
 
-import { ActiveIdChangeDetails } from '@snap-motion/core';
+import { ActiveIdRequestDetails } from '@snap-motion/core';
 import { AnimationDriver } from '@snap-motion/core';
 import { ComputedRef } from 'vue';
 import { ControllerConfigurationUpdate } from '@snap-motion/core';
@@ -24,7 +24,7 @@ import { SnapController } from '@snap-motion/core';
 import { SnapControllerOptions } from '@snap-motion/core';
 import { SnapDirection } from '@snap-motion/core';
 
-export { ActiveIdChangeDetails }
+export { ActiveIdRequestDetails }
 
 // @public (undocumented)
 export function createMotionDriver(): AnimationDriver;
@@ -39,13 +39,12 @@ export { SettlementDetails }
 // @public
 export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {
     // (undocumented)
-    readonly activeId: Id | undefined;
-    // (undocumented)
     readonly anchors: readonly SnapAnchor<Id>[];
     // (undocumented)
     readonly bounds: ScalarBounds;
     // (undocumented)
     readonly isAnimating: boolean;
+    readonly nearestId: Id | undefined;
     // (undocumented)
     readonly phase: ControllerPhase;
     // (undocumented)
@@ -67,7 +66,6 @@ export function useBoundedSpringDriver(cardPitchPx: () => number): AnimationDriv
 
 // @public (undocumented)
 export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<Id>): {
-    activeId: ComputedRef<Id | undefined>;
     configure: (update: ControllerConfigurationUpdate) => void;
     controller: SnapController<Id>;
     interrupt: () => void;
@@ -75,6 +73,7 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     isDragging: Ref<boolean, boolean>;
     moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions) => SnapAnchor<Id> | null;
     moveTo: (id: Id, options?: ControllerMoveOptions) => SnapAnchor<Id> | null;
+    nearestId: ComputedRef<Id | undefined>;
     next: (options?: ControllerMoveByOptions) => SnapAnchor<Id> | null;
     onNativeDragStart: (event: DragEvent) => void;
     onPointerDown: (event: PointerEvent) => void;

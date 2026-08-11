@@ -117,7 +117,7 @@ const motion = useCarouselMotion({
 });
 
 const semanticId = computed(
-  () => motion.targetId.value ?? motion.activeId.value ?? fixtureIds.value[0],
+  () => motion.targetId.value ?? motion.nearestId.value ?? fixtureIds.value[0],
 );
 const activeIndex = computed(() => {
   const currentId = semanticId.value;
@@ -143,7 +143,7 @@ const stageStyle = computed(() => ({
 const diagnostics = computed<LabDiagnostics>(() => {
   const geometry = measureGeometry();
   return {
-    ...(motion.activeId.value ? { activeId: motion.activeId.value } : {}),
+    ...(motion.nearestId.value ? { nearestId: motion.nearestId.value } : {}),
     anchors: motion.snapshot.value.anchors,
     bounds: motion.snapshot.value.bounds,
     isAnimating: motion.isAnimating.value,
@@ -441,8 +441,8 @@ watch(fixtureMode, async () => {
 
 watch(semanticId, () => mediaTransform.reset({ animated: false }));
 
-watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
-  if (phase === "idle" && activeId !== undefined && activeId !== previousId) {
+watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
+  if (phase === "idle" && nearestId !== undefined && nearestId !== previousId) {
     announceCurrent();
   }
 });

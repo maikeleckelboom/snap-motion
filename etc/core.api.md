@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export interface ActiveIdChangeDetails {
+export interface ActiveIdRequestDetails {
     // (undocumented)
     readonly reason: Exclude<NavigationReason, "external">;
 }

@@ -191,14 +191,14 @@ Paste or transcribe the non-live trace only after completing the spoken-interact
 
 ```
 
-| Check                                                                          | Result  | Notes |
-| ------------------------------------------------------------------------------ | ------- | ----- |
-| `opened` follows the open request                                              | Not run |       |
-| Each accepted navigation has one `activeIdChange` and one later `settled`      | Not run |       |
-| Spoken item output corresponds to the committed index                          | Not run |       |
-| Close order ends `update:open false`, `openChange`, `closed`, `focus-restored` | Not run |       |
-| `focus-restored` identifies `at-open-gallery`                                  | Not run |       |
-| Trace itself was not announced as a live update                                | Not run |       |
+| Check                                                                           | Result  | Notes |
+| ------------------------------------------------------------------------------- | ------- | ----- |
+| `opened` follows the open request                                               | Not run |       |
+| Each accepted navigation has one `activeIdRequest` and one later `settled`      | Not run |       |
+| Spoken item output corresponds to the committed index                           | Not run |       |
+| Close order ends `update:open false`, `openRequest`, `closed`, `focus-restored` | Not run |       |
+| `focus-restored` identifies `at-open-gallery`                                   | Not run |       |
+| Trace itself was not announced as a live update                                 | Not run |       |
 
 ## Defects and limitations
 

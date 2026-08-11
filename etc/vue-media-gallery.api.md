@@ -4,18 +4,17 @@
 
 ```ts
 
-import type { ActiveIdChangeDetails } from '@snap-motion/core';
+import type { ActiveIdRequestDetails } from '@snap-motion/core';
 import type { CloseReason } from '@snap-motion/vue/dialog';
-import { ComponentOptionsMixin } from 'vue';
-import { ComponentProvideOptions } from 'vue';
 import { ComputedRef } from 'vue';
-import { DefineComponent } from 'vue';
 import type { FocusReturnOptions } from '@snap-motion/vue/dialog';
 import type { InitialFocus } from '@snap-motion/vue/dialog';
-import type { OpenChangeDetails } from '@snap-motion/vue/dialog';
+import type { OpenRequestDetails } from '@snap-motion/vue/dialog';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
 import type { SettlementDetails } from '@snap-motion/core';
+import { ShallowUnwrapRef } from 'vue';
+import { VNode } from 'vue';
 
 // @public (undocumented)
 export function clampMediaScale(scale: number, limits?: MediaTransformLimits): number;
@@ -46,38 +45,54 @@ export function isFittedMediaTransform(transform: MediaTransform): boolean;
 
 //
 // @public (undocumented)
-export const MediaGalleryDialog: DefineComponent<__VLS_Props, {
-dialog: Ref<HTMLDialogElement | undefined, HTMLDialogElement | undefined>;
-activeId: ComputedRef<string | undefined>;
-settledId: ComputedRef<string | undefined>;
-navigateTo: typeof navigateTo;
-next: typeof next;
-previous: typeof previous;
-resetToFit: typeof resetToFit;
-requestClose: typeof requestClose;
-synchronizeTo: typeof synchronizeTo;
-}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {} & {
-closed: (finalId: string | undefined) => any;
-activeIdChange: (id: string | undefined, details: ActiveIdChangeDetails) => any;
-settled: (id: string, details: SettlementDetails) => any;
-"update:activeId": (id: string | undefined) => any;
-"update:open": (open: boolean) => any;
-openChange: (open: false, details: MediaGalleryOpenChangeDetails<string>) => any;
-opened: (id: string | undefined) => any;
-}, string, PublicProps, Readonly<__VLS_Props> & Readonly<{
-onClosed?: (finalId: string | undefined) => any;
-onActiveIdChange?: (id: string | undefined, details: ActiveIdChangeDetails) => any;
-onSettled?: (id: string, details: SettlementDetails) => any;
-"onUpdate:activeId"?: (id: string | undefined) => any;
-"onUpdate:open"?: (open: boolean) => any;
-onOpenChange?: (open: false, details: MediaGalleryOpenChangeDetails<string>) => any;
-onOpened?: (id: string | undefined) => any;
-}>, {
-title: string;
-reducedMotionOverride: boolean | undefined;
-initialFocus: InitialFocus;
-eyebrow: string;
-}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
+export const MediaGalleryDialog: <TItem extends MediaGalleryItem>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
+    props: PublicProps & __VLS_PrettifyLocal<{
+        activeId?: TItem["id"];
+        descriptionId?: string;
+        eyebrow?: string;
+        focusReturn?: FocusReturnOptions;
+        initialFocus?: InitialFocus;
+        items: readonly TItem[];
+        messages?: Partial<MediaGalleryMessages>;
+        open: boolean;
+        reducedMotionOverride?: boolean | undefined;
+        title?: string;
+    } & {
+        onClosed?: (finalId: TItem["id"] | undefined) => any;
+        onActiveIdRequest?: (id: TItem["id"] | undefined, details: ActiveIdRequestDetails) => any;
+        onSettled?: (id: TItem["id"], details: SettlementDetails) => any;
+        "onUpdate:activeId"?: (id: TItem["id"] | undefined) => any;
+        "onUpdate:open"?: (open: boolean) => any;
+        onOpenRequest?: (open: false, details: MediaGalleryOpenRequestDetails<TItem["id"]>) => any;
+        onOpened?: (id: TItem["id"] | undefined) => any;
+    }> & (typeof globalThis extends {
+        __VLS_PROPS_FALLBACK: infer P;
+    } ? P : {});
+    expose: (exposed: ShallowUnwrapRef<    {
+    dialog: Ref<HTMLDialogElement | undefined, HTMLDialogElement | undefined>;
+    activeId: ComputedRef<TItem["id"] | undefined>;
+    settledId: ComputedRef<TItem["id"] | undefined>;
+    navigateTo: (id: TItem["id"]) => boolean;
+    next: () => void;
+    previous: () => void;
+    resetToFit: () => void;
+    requestClose: (reason?: CloseReason) => void;
+    synchronizeTo: (id: TItem["id"]) => boolean;
+    }>) => void;
+    attrs: any;
+    slots: {};
+    emit: {
+        (event: "update:open", open: boolean): void;
+        (event: "update:activeId", id: TItem["id"] | undefined): void;
+        (event: "openRequest", open: false, details: MediaGalleryOpenRequestDetails<TItem["id"]>): void;
+        (event: "activeIdRequest", id: TItem["id"] | undefined, details: ActiveIdRequestDetails): void;
+        (event: "opened", id: TItem["id"] | undefined): void;
+        (event: "closed", finalId: TItem["id"] | undefined): void;
+        (event: "settled", id: TItem["id"], details: SettlementDetails): void;
+    };
+}>) => VNode & {
+    __ctx?: NonNullable<Awaited<typeof __VLS_setup>>;
+};
 
 // @public (undocumented)
 export interface MediaGalleryDialogProps<TItem extends MediaGalleryItem = MediaGalleryItem> {
@@ -100,6 +115,28 @@ export interface MediaGalleryDialogProps<TItem extends MediaGalleryItem = MediaG
     reducedMotionOverride?: boolean | undefined;
     // (undocumented)
     title?: string;
+}
+
+// @public
+export interface MediaGalleryHandle<Id extends string = string> {
+    // (undocumented)
+    readonly activeId: Id | undefined;
+    // (undocumented)
+    readonly dialog: HTMLDialogElement | undefined;
+    // (undocumented)
+    navigateTo(id: Id): boolean;
+    // (undocumented)
+    next(): void;
+    // (undocumented)
+    previous(): void;
+    // (undocumented)
+    requestClose(reason?: CloseReason): void;
+    // (undocumented)
+    resetToFit(): void;
+    // (undocumented)
+    readonly settledId: Id | undefined;
+    // (undocumented)
+    synchronizeTo(id: Id): boolean;
 }
 
 // @public (undocumented)
@@ -170,7 +207,7 @@ export interface MediaGalleryMessages {
 }
 
 // @public (undocumented)
-export interface MediaGalleryOpenChangeDetails<Id extends string = string> extends OpenChangeDetails {
+export interface MediaGalleryOpenRequestDetails<Id extends string = string> extends OpenRequestDetails {
     readonly activeId: Id | undefined;
 }
 

@@ -4,7 +4,7 @@
 
 ```ts
 
-import { ActiveIdChangeDetails } from '@snap-motion/core';
+import { ActiveIdRequestDetails } from '@snap-motion/core';
 import type { CloseReason as CloseReason_2 } from '@snap-motion/vue/dialog';
 import { ComponentOptionsMixin } from 'vue';
 import { ComponentProvideOptions } from 'vue';
@@ -18,7 +18,7 @@ import type { ElasticityOptions } from '@snap-motion/core';
 import type { FocusReturnOptions as FocusReturnOptions_2 } from '@snap-motion/vue/dialog';
 import type { InitialFocus as InitialFocus_2 } from '@snap-motion/vue/dialog';
 import { NavigationReason } from '@snap-motion/core';
-import type { OpenChangeDetails as OpenChangeDetails_2 } from '@snap-motion/vue/dialog';
+import type { OpenRequestDetails as OpenRequestDetails_2 } from '@snap-motion/vue/dialog';
 import { PaginationIndicatorState } from '@snap-motion/core';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
@@ -41,7 +41,7 @@ import { StackedDeckTuning } from '@snap-motion/core';
 import { SurfaceMotionDiagnostics as SurfaceMotionDiagnostics_2 } from '@snap-motion/vue/motion';
 import { VNode } from 'vue';
 
-export { ActiveIdChangeDetails }
+export { ActiveIdRequestDetails }
 
 //
 // @public (undocumented)
@@ -124,13 +124,14 @@ export const CarouselRoot: <Id extends string>(__VLS_props: NonNullable<Awaited<
         messages?: Partial<SnapMotionMessages_2>;
         reducedMotionOverride?: boolean;
     } & {
-        onActiveIdChange?: (id: Id, details: ActiveIdChangeDetails) => any;
+        onActiveIdRequest?: (id: Id, details: ActiveIdRequestDetails) => any;
         onSettled?: (id: Id, details: SettlementDetails) => any;
         "onUpdate:activeId"?: (id: Id) => any;
     }> & (typeof globalThis extends {
         __VLS_PROPS_FALLBACK: infer P;
     } ? P : {});
     expose: (exposed: ShallowUnwrapRef<    {
+    activeId: ComputedRef<Id>;
     navigateTo: (id: Id) => boolean;
     next: () => boolean;
     previous: () => boolean;
@@ -143,7 +144,7 @@ export const CarouselRoot: <Id extends string>(__VLS_props: NonNullable<Awaited<
     };
     emit: {
         (event: "update:activeId", id: Id): void;
-        (event: "activeIdChange", id: Id, details: ActiveIdChangeDetails): void;
+        (event: "activeIdRequest", id: Id, details: ActiveIdRequestDetails): void;
         (event: "settled", id: Id, details: SettlementDetails): void;
     };
 }>) => VNode & {
@@ -206,7 +207,7 @@ export const Coverflow: <TItem extends {
         releasePolicy?: Partial<ReleaseTargetPolicy>;
         spring?: SpringConfiguration;
     } & {
-        onActiveIdChange?: (id: TItem["id"] | undefined, details: ActiveIdChangeDetails) => any;
+        onActiveIdRequest?: (id: TItem["id"] | undefined, details: ActiveIdRequestDetails) => any;
         onSettled?: (id: TItem["id"], details: SettlementDetails) => any;
         "onUpdate:activeId"?: (id: TItem["id"] | undefined) => any;
         onActivate?: (item: TItem, index: number) => any;
@@ -214,6 +215,7 @@ export const Coverflow: <TItem extends {
         __VLS_PROPS_FALLBACK: infer P;
     } ? P : {});
     expose: (exposed: ShallowUnwrapRef<    {
+    activeId: ComputedRef<TItem["id"] | undefined>;
     canNext: ComputedRef<boolean>;
     canPrevious: ComputedRef<boolean>;
     compositing: ComputedRef<boolean>;
@@ -250,7 +252,7 @@ export const Coverflow: <TItem extends {
     };
     emit: {
         (event: "update:activeId", id: TItem["id"] | undefined): void;
-        (event: "activeIdChange", id: TItem["id"] | undefined, details: ActiveIdChangeDetails): void;
+        (event: "activeIdRequest", id: TItem["id"] | undefined, details: ActiveIdRequestDetails): void;
         (event: "settled", id: TItem["id"], details: SettlementDetails): void;
         (event: "activate", item: TItem, index: number): void;
     };
@@ -306,6 +308,7 @@ export interface CoverflowCardState<TItem, TId extends string> {
 
 // @public
 export interface CoverflowHandle<Id extends string> {
+    readonly activeId: Id | undefined;
     // (undocumented)
     readonly canNext: boolean;
     // (undocumented)
@@ -358,7 +361,7 @@ export const ModalDialog: __VLS_WithSlots_9<typeof __VLS_base_9, __VLS_Slots_9>;
 export { NavigationReason }
 
 // @public
-export interface OpenChangeDetails {
+export interface OpenRequestDetails {
     // (undocumented)
     readonly reason: CloseReason;
 }
@@ -394,11 +397,11 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
         viewportPolicy?: Partial<SheetViewportPolicy>;
     } & {
         onClosed?: () => any;
-        onActiveIdChange?: (id: Id, details: ActiveIdChangeDetails) => any;
+        onActiveIdRequest?: (id: Id, details: ActiveIdRequestDetails) => any;
         onSettled?: (id: Id, details: SettlementDetails) => any;
         "onUpdate:activeId"?: (id: Id) => any;
         "onUpdate:open"?: (open: boolean) => any;
-        onOpenChange?: (open: false, details: OpenChangeDetails_2) => any;
+        onOpenRequest?: (open: false, details: OpenRequestDetails_2) => any;
         onOpened?: () => any;
     }> & (typeof globalThis extends {
         __VLS_PROPS_FALLBACK: infer P;
@@ -433,8 +436,8 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
     emit: {
         (event: "update:open", open: boolean): void;
         (event: "update:activeId", id: Id): void;
-        (event: "openChange", open: false, details: OpenChangeDetails_2): void;
-        (event: "activeIdChange", id: Id, details: ActiveIdChangeDetails): void;
+        (event: "openRequest", open: false, details: OpenRequestDetails_2): void;
+        (event: "activeIdRequest", id: Id, details: ActiveIdRequestDetails): void;
         (event: "opened"): void;
         (event: "closed"): void;
         (event: "settled", id: Id, details: SettlementDetails): void;
@@ -657,7 +660,7 @@ export const StackedDeck: <TItem extends {
         releasePolicy?: StackedDeckReleasePolicy;
         spring?: SpringConfiguration;
     } & {
-        onActiveIdChange?: (id: TItem["id"] | undefined, details: ActiveIdChangeDetails) => any;
+        onActiveIdRequest?: (id: TItem["id"] | undefined, details: ActiveIdRequestDetails) => any;
         onSettled?: (id: TItem["id"], details: SettlementDetails) => any;
         "onUpdate:activeId"?: (id: TItem["id"] | undefined) => any;
         onActivate?: (item: TItem, index: number) => any;
@@ -665,6 +668,7 @@ export const StackedDeck: <TItem extends {
         __VLS_PROPS_FALLBACK: infer P;
     } ? P : {});
     expose: (exposed: ShallowUnwrapRef<    {
+    activeId: ComputedRef<TItem["id"] | undefined>;
     canNext: ComputedRef<boolean>;
     canPrevious: ComputedRef<boolean>;
     compositing: ComputedRef<boolean>;
@@ -714,7 +718,7 @@ export const StackedDeck: <TItem extends {
     };
     emit: {
         (event: "update:activeId", id: TItem["id"] | undefined): void;
-        (event: "activeIdChange", id: TItem["id"] | undefined, details: ActiveIdChangeDetails): void;
+        (event: "activeIdRequest", id: TItem["id"] | undefined, details: ActiveIdRequestDetails): void;
         (event: "settled", id: TItem["id"], details: SettlementDetails): void;
         (event: "activate", item: TItem, index: number): void;
     };
@@ -741,6 +745,7 @@ export interface StackedDeckCardState<TItem, TId extends string> {
 
 // @public
 export interface StackedDeckHandle<Id extends string> {
+    readonly activeId: Id | undefined;
     // (undocumented)
     readonly canNext: boolean;
     // (undocumented)
@@ -794,13 +799,12 @@ export interface StackedDeckPileLayerSlotState<TItem extends {
 // @public
 export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {
     // (undocumented)
-    readonly activeId: Id | undefined;
-    // (undocumented)
     readonly anchors: readonly SnapAnchor<Id>[];
     // (undocumented)
     readonly bounds: ScalarBounds;
     // (undocumented)
     readonly isAnimating: boolean;
+    readonly nearestId: Id | undefined;
     // (undocumented)
     readonly phase: ControllerPhase;
     // (undocumented)

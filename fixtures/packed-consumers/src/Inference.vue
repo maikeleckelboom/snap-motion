@@ -14,6 +14,11 @@ import {
   type CoverflowHandle,
 } from "@snap-motion/vue/coverflow";
 import {
+  MediaGalleryDialog,
+  type MediaGalleryHandle,
+  type MediaGalleryItem,
+} from "@snap-motion/vue/media-gallery";
+import {
   StackedDeck,
   type StackedDeckHandle,
   type StackedDeckPose,
@@ -45,8 +50,59 @@ const chapters: Chapter[] = [
 const activeScreen = ref<ScreenId>("system");
 const activeChapter = ref<ChapterId>("body");
 
+const galleryItems = [
+  {
+    id: "wide",
+    title: "Wide view",
+    alt: "Wide project view",
+    previewSrc: "/wide.jpg",
+    width: 1_600,
+    height: 900,
+  },
+  {
+    id: "detail",
+    title: "Detail view",
+    alt: "Project detail",
+    previewSrc: "/detail.jpg",
+    width: 1_200,
+    height: 1_200,
+  },
+] as const satisfies readonly MediaGalleryItem[];
+type GalleryId = (typeof galleryItems)[number]["id"];
+
+interface MutableMedia extends MediaGalleryItem {
+  id: "draft" | "final";
+  credit: string;
+}
+const mutableGalleryItems: MutableMedia[] = [
+  {
+    id: "draft",
+    title: "Draft",
+    alt: "Draft render",
+    previewSrc: "/draft.jpg",
+    width: 1_200,
+    height: 800,
+    credit: "Studio",
+  },
+  {
+    id: "final",
+    title: "Final",
+    alt: "Final render",
+    previewSrc: "/final.jpg",
+    width: 1_200,
+    height: 800,
+    credit: "Studio",
+  },
+];
+type MutableMediaId = MutableMedia["id"];
+
+const galleryOpen = ref(false);
+const activeGalleryItem = ref<GalleryId>("wide");
+const activeMutableMedia = ref<MutableMediaId>("draft");
+
 const deck = ref<StackedDeckHandle<ScreenId>>();
 const rail = ref<CoverflowHandle<ChapterId>>();
+const gallery = ref<MediaGalleryHandle<GalleryId>>();
 
 /** Accepts the exact domain item, so a widened `TItem` fails to compile here. */
 function screenTitle(screen: Screen): string {
@@ -62,6 +118,12 @@ function onScreenSelected(id: ScreenId): void {
 function onChapterSelected(id: ChapterId | undefined): void {
   if (id !== undefined) activeChapter.value = id;
 }
+function onGalleryRequested(id: GalleryId | undefined): void {
+  if (id !== undefined) activeGalleryItem.value = id;
+}
+function onGallerySettled(id: GalleryId): void {
+  activeGalleryItem.value = id;
+}
 function poseOpacity(pose: StackedDeckPose): number {
   return pose.opacity;
 }
@@ -76,8 +138,13 @@ function driveHandles(): void {
   rail.value?.navigateTo("outro");
   const phase: string = deck.value?.diagnostics.phase ?? "idle";
   const settled: ChapterId | undefined = rail.value?.settledId;
+  gallery.value?.navigateTo("detail");
+  const gallerySemanticId: GalleryId | undefined = gallery.value?.activeId;
+  const gallerySettledId: GalleryId | undefined = gallery.value?.settledId;
   void phase;
   void settled;
+  void gallerySemanticId;
+  void gallerySettledId;
 }
 void driveHandles;
 </script>
@@ -113,7 +180,7 @@ void driveHandles;
       :item-label="(chapter) => chapter.title"
       label="Chapters"
       reduced-motion-override
-      @active-id-change="onChapterSelected"
+      @active-id-request="onChapterSelected"
     >
       <template #card="card">
         <p>{{ chapterSummary(card.item) }} · {{ presentationDepth(card.presentation) }}</p>
@@ -125,5 +192,20 @@ void driveHandles;
         <p>{{ chapterSummary(card.item) }}</p>
       </template>
     </Coverflow>
+
+    <MediaGalleryDialog
+      ref="gallery"
+      v-model:open="galleryOpen"
+      v-model:active-id="activeGalleryItem"
+      :items="galleryItems"
+      @active-id-request="onGalleryRequested"
+      @settled="onGallerySettled"
+    />
+
+    <MediaGalleryDialog
+      :open="false"
+      v-model:active-id="activeMutableMedia"
+      :items="mutableGalleryItems"
+    />
   </main>
 </template>

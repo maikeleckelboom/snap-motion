@@ -18,6 +18,7 @@ type Screen = (typeof screens)[number];
 const TypedCoverflow = Coverflow<Screen>;
 
 interface CoverflowInstance {
+  activeId: ScreenId | undefined;
   canNext: boolean;
   canPrevious: boolean;
   isInspectEligible: (index: number) => boolean;
@@ -104,6 +105,11 @@ describe("Coverflow", () => {
     expect(rail.settledId).toBe("overview");
 
     expect(rail.navigateTo("outcome")).toBe(true);
+    expect(wrapper.emitted("activeIdRequest")?.at(-1)).toEqual([
+      "outcome",
+      { reason: "programmatic" },
+    ]);
+    await wrapper.setProps({ activeId: "outcome" });
     await nextTick();
     expect(rail.settledId).toBe("outcome");
     wrapper.unmount();
@@ -118,6 +124,47 @@ describe("Coverflow", () => {
     await nextTick();
     expect(rail.settledId).toBe("overview");
     expect(rail.visualId).toBe("overview");
+    expect(wrapper.get('[data-testid="snap-motion-coverflow-status"]').text()).toBe("");
+    wrapper.unmount();
+  });
+
+  it("keeps controlled semantics authoritative when a navigation request is ignored", async () => {
+    const wrapper = mountCoverflow({ activeId: "system" });
+    await nextTick();
+    const rail = wrapper.vm as unknown as CoverflowInstance;
+
+    expect(rail.next()).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["outcome", { reason: "next" }]]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect(rail.activeId).toBe("system");
+    expect(rail.settledId).toBe("system");
+    expect(wrapper.get('[data-testid="snap-motion-coverflow-status"]').text()).toBe("");
+    expect(rail.synchronizeTo("outcome")).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("rolls back to a valid rail anchor while controlled authority is unavailable", async () => {
+    const wrapper = mountCoverflow({ activeId: "future" });
+    await nextTick();
+    const rail = wrapper.vm as unknown as CoverflowInstance;
+
+    expect(rail.next()).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    expect(rail.next()).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
+      ["outcome", { reason: "next" }],
+      ["outcome", { reason: "next" }],
+    ]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect((rail as unknown as { activeId: string }).activeId).toBe("future");
+    expect(rail.settledId).toBe("system");
     expect(wrapper.get('[data-testid="snap-motion-coverflow-status"]').text()).toBe("");
     wrapper.unmount();
   });

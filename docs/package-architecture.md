@@ -40,7 +40,7 @@ and mixed ownership rather than a source cycle.
   `StackedDeckRole`, `StackedDeckTraversal`, `StackedDeckTraversalPhase`, `StackedDeckTuning`,
   `FixedStageGeometry`, `MeasuredItemBox`, `PagedGridGeometry`, `PagedGridGeometryOptions`,
   `PagedGridPageContext`, `VariableWidthGeometryOptions`.
-- Shared interaction contract: `NavigationReason`, `ActiveIdChangeDetails`, `SettlementDetails`.
+- Shared interaction contract: `NavigationReason`, `ActiveIdRequestDetails`, `SettlementDetails`.
 - Controller: `SnapController`, `SnapControllerOptions`, `ControllerListener`,
   `ControllerConfiguration`, `ControllerConfigurationUpdate`, `ControllerMeasurement`,
   `ControllerDragOptions`, `ControllerMoveByOptions`, `ControllerMoveOptions`, `ControllerPhase`,
@@ -108,7 +108,7 @@ modules but are no longer package exports.
 
 ### `@snap-motion/vue/dialog`
 
-- Component and contracts: `ModalDialog`, `CloseReason`, `OpenChangeDetails`,
+- Component and contracts: `ModalDialog`, `CloseReason`, `OpenRequestDetails`,
   `FocusReturnOptions`, `InitialFocus`.
 
 Native-dialog focus traversal, opener capture, and restoration are implementation details. The
@@ -118,15 +118,17 @@ helpers.
 ### `@snap-motion/vue/media-gallery`
 
 - Component: `MediaGalleryDialog` with stable-ID `activeId` and `open` contracts.
-- Contracts: `MediaGalleryItem`, `MediaGalleryDialogProps`, `MediaGalleryOpenChangeDetails`,
-  `MediaGalleryMessages`, and shared dialog types.
+- Contracts: `MediaGalleryItem`, `MediaGalleryDialogProps`, `MediaGalleryHandle`,
+  `MediaGalleryOpenRequestDetails`, `MediaGalleryMessages`, and shared dialog types. The component
+  carries the exact inferred item ID union through every ID-bearing public surface.
 - Advanced media math: fit/zoom/pan/swipe, transform, slot, loading-visibility, and tuning contracts.
 
 ### `@snap-motion/vue/motion`
 
 - Runtime: `createMotionDriver`, `useBoundedSpringDriver`, `useSnapMotion`.
-- Types: `NavigationReason`, `ActiveIdChangeDetails`, `SettlementDetails`, `PointerIntent`,
-  `SurfaceMotionDiagnostics`, `UseSnapMotionOptions`.
+- Types: `NavigationReason`, `ActiveIdRequestDetails`, `SettlementDetails`, `PointerIntent`,
+  `SurfaceMotionDiagnostics`, `UseSnapMotionOptions`. Low-level diagnostics call the nearest
+  mechanical anchor `nearestId`; `activeId` is reserved for semantic high-level state.
 
 ### `@snap-motion/vue/localization`
 

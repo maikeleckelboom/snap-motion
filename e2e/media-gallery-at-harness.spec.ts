@@ -370,7 +370,7 @@ test("baseline event order ends with a bounded focus-restoration trace entry", a
   await expect
     .poll(() => traceEvents(page))
     .toBe(
-      "open-requested,opened,update:activeId,activeIdChange,settled,update:open,openChange,closed,focus-restored",
+      "open-requested,opened,update:activeId,activeIdRequest,settled,update:open,openRequest,closed,focus-restored",
     );
   await expect(trace(page).locator("li").last()).toContainText("at-open-gallery");
   await expect(trace(page)).toContainText("reason keyboard");
@@ -550,7 +550,7 @@ test("cancelled swipe emits no semantic change and close cancels pending settlem
   const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
   await cancelPointerGesture(page, viewport);
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 3");
-  expect((await traceEvents(page)).split(",")).not.toContain("activeIdChange");
+  expect((await traceEvents(page)).split(",")).not.toContain("activeIdRequest");
   await closeGallery(page);
 
   await page.getByTestId("reduced-motion-mode").selectOption("no-preference");
@@ -568,7 +568,7 @@ test("cancelled swipe emits no semantic change and close cancels pending settlem
   });
   await expect(gallery(page)).not.toBeVisible();
   await expect.poll(() => traceEvents(page)).toContain("focus-restored");
-  expect((await traceEvents(page)).split(",")).toContain("activeIdChange");
+  expect((await traceEvents(page)).split(",")).toContain("activeIdRequest");
   expect((await traceEvents(page)).split(",")).not.toContain("settled");
   await expect(trace(page)).toContainText("closed");
   await expect(trace(page)).toContainText("final id");
@@ -656,7 +656,7 @@ test("a sub-threshold completed swipe does not add a semantic change", async ({ 
     { eventIntervalMs: 20, stepDelay: 0 },
   );
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 3");
-  expect((await traceEvents(page)).split(",")).not.toContain("activeIdChange");
+  expect((await traceEvents(page)).split(",")).not.toContain("activeIdRequest");
 });
 
 test("captures the canonical visual evidence set", async ({ browserName, page }) => {

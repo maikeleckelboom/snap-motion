@@ -132,7 +132,7 @@ it exactly without an entrance spring.
 The maintainer workspace uses TypeScript 7.0.2 for repository `.ts` code and the core package.
 TypeScript 7 intentionally removed the programmatic compiler API, so Vue Language Tools 3.3.9 runs
 Vue SFC declaration/template work through its supported `@typescript/typescript6` bridge. That
-bridge currently resolves TypeScript 6.0.3. Directly pairing `vue-tsc` with TypeScript 7 fails at
+bridge currently resolves TypeScript 6.0.2. Directly pairing `vue-tsc` with TypeScript 7 fails at
 the removed `typescript/lib/tsc` subpath; keeping only Vue-owning workspaces on the supported bridge
 preserves a truthful TypeScript 7 migration without a local loader hack.
 

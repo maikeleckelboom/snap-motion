@@ -91,7 +91,7 @@ const stageStyle = computed(() => ({
 const diagnostics = computed<LabDiagnostics>(() => {
   const measured = geometry();
   return {
-    ...(motion.activeId.value ? { activeId: motion.activeId.value } : {}),
+    ...(motion.nearestId.value ? { nearestId: motion.nearestId.value } : {}),
     anchors: motion.snapshot.value.anchors,
     bounds: motion.snapshot.value.bounds,
     isAnimating: motion.isAnimating.value,
@@ -164,7 +164,7 @@ watch(
       aria-roledescription="carousel"
       class="rail-viewport"
       data-testid="variable-rail"
-      :data-active-id="motion.targetId.value ?? motion.activeId.value"
+      :data-active-id="motion.targetId.value ?? motion.nearestId.value"
       :style="[stageStyle, motion.surfaceStyle]"
       tabindex="0"
       @keydown="motion.onKeyDown"

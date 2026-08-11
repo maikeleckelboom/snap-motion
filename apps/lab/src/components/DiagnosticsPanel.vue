@@ -28,9 +28,11 @@ function scalar(value: number) {
         <dd>{{ diagnostics.phase }}</dd>
       </div>
       <div>
-        <dt>Active / visual</dt>
+        <dt>Nearest / visual</dt>
         <dd>
-          {{ diagnostics.visualIndex ?? diagnostics.visualTopIndex ?? diagnostics.activeId ?? "—" }}
+          {{
+            diagnostics.visualIndex ?? diagnostics.visualTopIndex ?? diagnostics.nearestId ?? "—"
+          }}
         </dd>
       </div>
       <div>
@@ -136,8 +138,8 @@ function scalar(value: number) {
           <dd data-testid="target-index">{{ diagnostics.targetIndex }}</dd>
         </div>
         <div>
-          <dt>Active</dt>
-          <dd data-testid="active-id">{{ diagnostics.activeId ?? "—" }}</dd>
+          <dt>Nearest anchor</dt>
+          <dd data-testid="nearest-id">{{ diagnostics.nearestId ?? "—" }}</dd>
         </div>
         <div v-if="diagnostics.focusedPaginationIndex !== undefined">
           <dt>Focused pagination</dt>

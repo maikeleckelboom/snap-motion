@@ -8,7 +8,7 @@ import {
 import {
   MediaGalleryDialog,
   type FocusReturnOptions,
-  type MediaGalleryOpenChangeDetails,
+  type MediaGalleryOpenRequestDetails,
 } from "@snap-motion/vue/media-gallery";
 import { computed, ref } from "vue";
 
@@ -106,7 +106,7 @@ function openGallery(index: number) {
   galleryOpen.value = true;
 }
 
-function onGalleryOpenChange(_open: false, details: MediaGalleryOpenChangeDetails) {
+function onGalleryOpenRequest(_open: false, details: MediaGalleryOpenRequestDetails) {
   const id = details.activeId as ShowcaseScreenId | undefined;
   if (id !== undefined) {
     activeId.value = id;
@@ -139,7 +139,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
           kineticFocus: focused.kineticFocus,
           settledness: focused.settledness,
         }),
-    ...(motion?.activeId ? { activeId: motion.activeId } : {}),
+    ...(motion?.nearestId ? { nearestId: motion.nearestId } : {}),
     anchors: motion?.anchors ?? [],
     bounds: motion?.bounds ?? { min: 0, max: 0 },
     isAnimating: motion?.isAnimating ?? false,
@@ -370,7 +370,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       :items="screens"
       :reduced-motion-override="rail?.diagnostics.reducedMotion"
       title="Screen gallery"
-      @open-change="onGalleryOpenChange"
+      @open-request="onGalleryOpenRequest"
     />
   </section>
 </template>

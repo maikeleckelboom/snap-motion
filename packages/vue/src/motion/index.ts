@@ -1,7 +1,7 @@
 export { useBoundedSpringDriver } from "./bounded-spring-driver";
 export { createMotionDriver } from "./motion-driver";
 export type {
-  ActiveIdChangeDetails,
+  ActiveIdRequestDetails,
   NavigationReason,
   PointerIntent,
   SettlementDetails,

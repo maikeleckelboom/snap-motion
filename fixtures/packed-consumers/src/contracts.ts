@@ -17,6 +17,7 @@ import {
 import {
   createEnglishMediaGalleryMessages,
   MediaGalleryDialog,
+  type MediaGalleryHandle,
   type MediaGalleryItem,
 } from "@snap-motion/vue/media-gallery";
 import {
@@ -68,10 +69,10 @@ void useCarouselWindow(ids, ref<MediaId>("overview"), {
 });
 void useCarouselContext<MediaId>;
 declare const publicCarousel: PublicCarouselContext<MediaId>;
-publicCarousel.navigate("overview");
+publicCarousel.navigateTo("overview");
 publicCarousel.next();
 // @ts-expect-error public navigation owns its programmatic provenance.
-publicCarousel.navigate("overview", "drag");
+publicCarousel.navigateTo("overview", "drag");
 // @ts-expect-error next is semantically fixed and cannot be relabelled.
 publicCarousel.next("picker");
 void useCarouselMotion<MediaId>;
@@ -95,6 +96,13 @@ const mediaCloseReason: CloseReason = "scrim";
 const mediaNavigationReason: NavigationReason = "drag";
 void mediaCloseReason;
 void mediaNavigationReason;
+type GalleryId = (typeof galleryItems)[number]["id"];
+const galleryHandle = ref<MediaGalleryHandle<GalleryId>>();
+const galleryActiveId: GalleryId | undefined = galleryHandle.value?.activeId;
+void galleryActiveId;
+galleryHandle.value?.navigateTo("preview");
+// @ts-expect-error the gallery handle retains the item collection's semantic ID union.
+galleryHandle.value?.navigateTo("missing");
 
 // The anti-glue contract: typed domain items, inferred slot state, and no casts anywhere.
 const screens = [

@@ -6,7 +6,11 @@ import type {
   SnapAnchor,
 } from "@snap-motion/core";
 
-export type { ActiveIdChangeDetails, NavigationReason, SettlementDetails } from "@snap-motion/core";
+export type {
+  ActiveIdRequestDetails,
+  NavigationReason,
+  SettlementDetails,
+} from "@snap-motion/core";
 
 /** Observable lifecycle of a horizontal pointer before and after the surface claims it. */
 export type PointerIntent = "horizontal" | "pending" | "vertical";
@@ -31,10 +35,11 @@ export type PointerIntent = "horizontal" | "pending" | "vertical";
  * an active pointer interaction (including unresolved touch intent) from pointer ownership/capture.
  */
 export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {
-  readonly activeId: Id | undefined;
   readonly anchors: readonly SnapAnchor<Id>[];
   readonly bounds: ScalarBounds;
   readonly isAnimating: boolean;
+  /** The anchor nearest the current mechanical position. It is not semantic application state. */
+  readonly nearestId: Id | undefined;
   readonly phase: ControllerPhase;
   readonly pointerInteractionActive: boolean;
   readonly pointerOwned: boolean;

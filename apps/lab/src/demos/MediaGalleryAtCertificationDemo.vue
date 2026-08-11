@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { ActiveIdChangeDetails, SettlementDetails } from "@snap-motion/vue";
+import type { ActiveIdRequestDetails, SettlementDetails } from "@snap-motion/vue";
 import {
   MediaGalleryDialog,
   type FocusReturnOptions,
   type MediaGalleryItem,
   type MediaGalleryMessages,
-  type MediaGalleryOpenChangeDetails,
+  type MediaGalleryOpenRequestDetails,
 } from "@snap-motion/vue/media-gallery";
 import { computed, nextTick, ref } from "vue";
 
@@ -334,8 +334,8 @@ function onOpened(id: string | undefined) {
   appendTrace("opened", `id ${id ?? "none"}`);
 }
 
-function onActiveIdChange(id: string | undefined, details: ActiveIdChangeDetails) {
-  appendTrace("activeIdChange", `id ${id ?? "none"}; reason ${details.reason}`);
+function onActiveIdRequest(id: string | undefined, details: ActiveIdRequestDetails) {
+  appendTrace("activeIdRequest", `id ${id ?? "none"}; reason ${details.reason}`);
 }
 
 function onActiveIdUpdate(id: string | undefined) {
@@ -347,8 +347,8 @@ function onSettled(id: string, details: SettlementDetails) {
   appendTrace("settled", `id ${id}; reason ${details.reason}`);
 }
 
-function onOpenChange(_open: false, details: MediaGalleryOpenChangeDetails) {
-  appendTrace("openChange", `final id ${details.activeId ?? "none"}; reason ${details.reason}`);
+function onOpenRequest(_open: false, details: MediaGalleryOpenRequestDetails) {
+  appendTrace("openRequest", `final id ${details.activeId ?? "none"}; reason ${details.reason}`);
 }
 
 async function onClosed(finalId: string | undefined) {
@@ -493,9 +493,9 @@ async function onClosed(finalId: string | undefined) {
       eyebrow="AT certification"
       title="Media gallery certification"
       @closed="onClosed"
-      @active-id-change="onActiveIdChange"
+      @active-id-request="onActiveIdRequest"
       @opened="onOpened"
-      @open-change="onOpenChange"
+      @open-request="onOpenRequest"
       @settled="onSettled"
       @update:active-id="onActiveIdUpdate"
       @update:open="onOpenUpdate"

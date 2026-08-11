@@ -6,6 +6,8 @@ import Sheet from "../src/sheet/components/Sheet.vue";
 interface SheetInstance {
   closeForPresentationChange: () => boolean;
   activeId: string;
+  navigateTo: (id: string) => boolean;
+  synchronizeTo: (id: string) => boolean;
 }
 
 const resolveVisibleExtent = () => 240;
@@ -89,7 +91,33 @@ describe("production Sheet component", () => {
     expect((wrapper.vm as unknown as SheetInstance).closeForPresentationChange()).toBe(true);
     expect(wrapper.get("dialog").attributes()).not.toHaveProperty("open");
     expect(wrapper.emitted("update:open")).toContainEqual([false]);
-    expect(wrapper.emitted("openChange")).toEqual([[false, { reason: "programmatic" }]]);
+    expect(wrapper.emitted("openRequest")).toEqual([[false, { reason: "programmatic" }]]);
+    wrapper.unmount();
+  });
+
+  it("keeps a refused controlled close request open and repeatable", async () => {
+    const wrapper = mount(Sheet, {
+      props: { open: true, reducedMotionOverride: true },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+
+    await wrapper.get(".snap-motion-sheet-close").trigger("click");
+    await wrapper.get(".snap-motion-sheet-close").trigger("click");
+    expect(wrapper.get("dialog").attributes()).toHaveProperty("open");
+    expect(wrapper.get("dialog").attributes("data-sheet-state")).toBe("open");
+    expect(wrapper.emitted("openRequest")).toEqual([
+      [false, { reason: "close-button" }],
+      [false, { reason: "close-button" }],
+    ]);
+    expect(wrapper.emitted("closed")).toBeUndefined();
+
+    await wrapper.setProps({ open: false });
+    await nextTick();
+    expect(wrapper.get("dialog").attributes("open")).toBeUndefined();
+    expect(wrapper.emitted("closed")).toEqual([[]]);
     wrapper.unmount();
   });
 
@@ -119,7 +147,8 @@ describe("production Sheet component", () => {
     expect(wrapper.get(".snap-motion-sheet-body").element).toBe(body);
     expect(wrapper.get("textarea").element).toBe(textarea);
     expect(textarea.value).toBe("preserve me");
-    expect((wrapper.vm as unknown as SheetInstance).activeId).toBe("open");
+    expect((wrapper.vm as unknown as SheetInstance).activeId).toBe("compact");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("open");
     wrapper.unmount();
   });
 
@@ -142,7 +171,7 @@ describe("production Sheet component", () => {
     expect((wrapper.vm as unknown as SheetInstance).activeId).toBe("compact");
     expect(wrapper.get("dialog").attributes("data-sheet-state")).toBe("closed");
     expect(panel.attributes("style")).toBe(closedTransform);
-    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
     expect(wrapper.emitted("settled")).toBeUndefined();
 
     await wrapper.setProps({ open: true });
@@ -150,6 +179,57 @@ describe("production Sheet component", () => {
     await nextTick();
     expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("compact");
     expect(wrapper.get("dialog").attributes("data-sheet-state")).toBe("open");
+  });
+
+  it("rolls an ignored controlled snap request back without a false settlement", async () => {
+    const wrapper = mount(Sheet, {
+      props: { activeId: "comfortable", open: true, reducedMotionOverride: true },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+    const sheet = wrapper.vm as unknown as SheetInstance;
+
+    expect(sheet.navigateTo("compact")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["compact", { reason: "programmatic" }]]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect(sheet.activeId).toBe("comfortable");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("comfortable");
+    expect(sheet.synchronizeTo("compact")).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("retains a valid snap anchor while controlled authority is unavailable", async () => {
+    const wrapper = mount(Sheet, {
+      props: {
+        activeId: "future",
+        open: true,
+        reducedMotionOverride: true,
+        snapPoints: [
+          { id: "current", label: "Current", resolveVisibleExtent },
+          { id: "next", label: "Next", resolveVisibleExtent },
+        ],
+      },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+    const sheet = wrapper.vm as unknown as SheetInstance;
+
+    expect(sheet.navigateTo("next")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["next", { reason: "programmatic" }]]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect(sheet.activeId).toBe("future");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("current");
+    wrapper.unmount();
   });
 
   it("adopts a pending controlled ID when a later snap-point configuration makes it valid", async () => {
@@ -164,7 +244,8 @@ describe("production Sheet component", () => {
       attachTo: document.body,
     });
     await nextTick();
-    expect((wrapper.vm as unknown as SheetInstance).activeId).toBe("current");
+    expect((wrapper.vm as unknown as SheetInstance).activeId).toBe("future");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("current");
 
     await wrapper.setProps({
       snapPoints: [
@@ -174,7 +255,7 @@ describe("production Sheet component", () => {
     });
     await nextTick();
     expect((wrapper.vm as unknown as SheetInstance).activeId).toBe("future");
-    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
     expect(wrapper.emitted("settled")).toBeUndefined();
 
     await wrapper.setProps({ open: true });

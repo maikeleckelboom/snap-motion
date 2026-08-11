@@ -4,7 +4,7 @@
   "type": "module",
   "dependencies": {
     "@snap-motion/vue": "file:__VUE_TARBALL__",
-    "typescript": "7.0.2",
+    "typescript": "__TYPESCRIPT7_VERSION__",
     "vue": "3.5.40"
   }
 }

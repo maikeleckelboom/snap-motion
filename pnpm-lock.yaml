@@ -191,6 +191,9 @@ importers:
       '@snap-motion/vue':
         specifier: workspace:*
         version: link:../../packages/vue
+      '@vueuse/core':
+        specifier: 'catalog:'
+        version: 14.3.0(vue@3.5.40(@typescript/typescript6@6.0.2))
       vue:
         specifier: 'catalog:'
         version: 3.5.40(@typescript/typescript6@6.0.2)

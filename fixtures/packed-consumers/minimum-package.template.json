@@ -6,10 +6,10 @@
     "@snap-motion/vue": "file:__VUE_TARBALL__",
     "@vitejs/plugin-vue": "6.0.8",
     "@vue/server-renderer": "3.5.0",
-    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "typescript": "npm:@typescript/typescript6@__TYPESCRIPT6_VERSION__",
     "vite": "8.1.5",
     "vue": "3.5.0",
-    "vue-router": "4.6.4",
-    "vue-tsc": "3.3.9"
+    "vue-router": "4.5.1",
+    "vue-tsc": "__VUE_TSC_VERSION__"
   }
 }

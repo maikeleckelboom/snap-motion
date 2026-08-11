@@ -4,7 +4,7 @@
 
 ```ts
 
-import { ActiveIdChangeDetails } from '@snap-motion/core';
+import { ActiveIdRequestDetails } from '@snap-motion/core';
 import { ComponentOptionsMixin } from 'vue';
 import { ComponentProvideOptions } from 'vue';
 import { ComputedRef } from 'vue';
@@ -57,8 +57,6 @@ export type CarouselKeyboardScope = "auto" | "carousel" | "dialog" | "off";
 // @public
 export interface CarouselMotion<Id extends string> {
     // (undocumented)
-    readonly activeId: ComputedRef<Id | undefined>;
-    // (undocumented)
     readonly canNext: ComputedRef<boolean>;
     // (undocumented)
     readonly canPrevious: ComputedRef<boolean>;
@@ -79,6 +77,7 @@ export interface CarouselMotion<Id extends string> {
     moveBy(direction: SnapDirection, options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
     // (undocumented)
     moveTo(id: Id, options?: ControllerMoveOptions): SnapAnchor<Id> | null;
+    readonly nearestId: ComputedRef<Id | undefined>;
     // (undocumented)
     next(options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
     // (undocumented)
@@ -178,13 +177,14 @@ export const CarouselRoot: <Id extends string>(__VLS_props: NonNullable<Awaited<
         messages?: Partial<SnapMotionMessages>;
         reducedMotionOverride?: boolean;
     } & {
-        onActiveIdChange?: (id: Id, details: ActiveIdChangeDetails) => any;
+        onActiveIdRequest?: (id: Id, details: ActiveIdRequestDetails) => any;
         onSettled?: (id: Id, details: SettlementDetails) => any;
         "onUpdate:activeId"?: (id: Id) => any;
     }> & (typeof globalThis extends {
         __VLS_PROPS_FALLBACK: infer P;
     } ? P : {});
     expose: (exposed: ShallowUnwrapRef<    {
+    activeId: ComputedRef<Id>;
     navigateTo: (id: Id) => boolean;
     next: () => boolean;
     previous: () => boolean;
@@ -197,7 +197,7 @@ export const CarouselRoot: <Id extends string>(__VLS_props: NonNullable<Awaited<
     };
     emit: {
         (event: "update:activeId", id: Id): void;
-        (event: "activeIdChange", id: Id, details: ActiveIdChangeDetails): void;
+        (event: "activeIdRequest", id: Id, details: ActiveIdRequestDetails): void;
         (event: "settled", id: Id, details: SettlementDetails): void;
     };
 }>) => VNode & {
@@ -289,7 +289,7 @@ export interface PublicCarouselContext<Id extends string = string> {
     readonly direction: ComputedRef<"ltr" | "rtl">;
     // (undocumented)
     readonly ids: ComputedRef<readonly Id[]>;
-    readonly navigate: (id: Id) => boolean;
+    readonly navigateTo: (id: Id) => boolean;
     // (undocumented)
     readonly next: () => boolean;
     // (undocumented)

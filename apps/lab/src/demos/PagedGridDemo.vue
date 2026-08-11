@@ -82,7 +82,7 @@ const motion = useCarouselMotion({
   viewport,
 });
 
-const currentPageId = computed(() => motion.targetId.value ?? motion.activeId.value ?? "page-1");
+const currentPageId = computed(() => motion.targetId.value ?? motion.nearestId.value ?? "page-1");
 const currentPageIndex = computed(() => {
   const index = pages.value.findIndex((page) => page.id === currentPageId.value);
   return index < 0 ? 0 : index;
@@ -98,7 +98,7 @@ const gridStyle = computed(() => ({
 const diagnostics = computed<LabDiagnostics>(() => {
   const measured = geometry();
   return {
-    ...(motion.activeId.value ? { activeId: motion.activeId.value } : {}),
+    ...(motion.nearestId.value ? { nearestId: motion.nearestId.value } : {}),
     anchors: motion.snapshot.value.anchors,
     bounds: motion.snapshot.value.bounds,
     isAnimating: motion.isAnimating.value,
@@ -163,8 +163,8 @@ watch(
   { flush: "post" },
 );
 
-watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
-  if (phase === "idle" && activeId !== undefined && activeId !== previousId) {
+watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
+  if (phase === "idle" && nearestId !== undefined && nearestId !== previousId) {
     announce();
   }
 });

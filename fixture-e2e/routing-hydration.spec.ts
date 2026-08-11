@@ -19,6 +19,44 @@ test("Vue Router owns push, replacement, Back closure, and direct-entry fallback
   await expect(page).toHaveURL(/\/work\/factif$/);
 });
 
+test("Vue Router can delay and refuse controlled navigation and close requests", async ({
+  page,
+}) => {
+  await page.goto("http://127.0.0.1:4174/work/factif");
+  await page.getByRole("button", { name: "Delay requests" }).click();
+  await page.getByRole("button", { name: "Open media" }).click();
+  await expect(page).toHaveURL(/\/work\/factif\/media\/overview$/);
+  await page.getByRole("button", { name: "Next item" }).click();
+
+  await expect(page.getByRole("button", { name: "Resolve pending request" })).toBeEnabled();
+  await expect(page).toHaveURL(/\/work\/factif\/media\/overview$/);
+  await expect(page.getByTestId("router-authority")).toHaveAttribute("data-active-id", "overview");
+  await expect(page.locator(".snap-motion-carousel-viewport")).toHaveAttribute(
+    "data-active-id",
+    "overview",
+  );
+  await expect(page.locator(".snap-motion-carousel [role='status']")).toHaveText("");
+
+  await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
+  await expect(page).toHaveURL(/\/work\/factif\/media\/system$/);
+  await expect(page.getByTestId("router-authority")).toHaveAttribute("data-active-id", "system");
+
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page).toHaveURL(/\/work\/factif\/media\/system$/);
+  await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
+  await expect(page).toHaveURL(/\/work\/factif$/);
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+
+  await page.getByRole("button", { name: "Refuse requests" }).click();
+  await page.getByRole("button", { name: "Open media" }).click();
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page).toHaveURL(/\/work\/factif\/media\/overview$/);
+  await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
+  await expect(page.getByRole("dialog")).toBeVisible();
+});
+
 test("Nuxt hydrates a query-controlled overlay without warnings", async ({ page }) => {
   const hydrationMessages: string[] = [];
   page.on("console", (message) => {
@@ -31,6 +69,40 @@ test("Nuxt hydrates a query-controlled overlay without warnings", async ({ page 
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByText("System detail", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Close gallery" }).click();
+  await expect(page).toHaveURL(/\/work\/factif$/);
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  expect(hydrationMessages).toEqual([]);
+});
+
+test("Nuxt can delay controlled gallery navigation and close without hydration drift", async ({
+  page,
+}) => {
+  const hydrationMessages: string[] = [];
+  page.on("console", (message) => {
+    if (/hydration|mismatch/i.test(message.text())) hydrationMessages.push(message.text());
+  });
+  page.on("pageerror", (error) => hydrationMessages.push(error.message));
+
+  await page.goto("http://127.0.0.1:4175/work/factif");
+  await page.getByRole("button", { name: "Delay requests" }).click();
+  await page.getByRole("button", { name: "Open media overlay" }).click();
+  await expect(page).toHaveURL(/\?media=overview$/);
+  await page.getByRole("button", { name: "Next item" }).click();
+  await expect(page.getByRole("button", { name: "Resolve pending request" })).toBeEnabled();
+  await expect(page).toHaveURL(/\?media=overview$/);
+  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute("data-active-id", "overview");
+  await expect(
+    page.locator('dialog[open][data-testid="snap-motion-media-gallery"]'),
+  ).toHaveAttribute("data-active-id", "overview");
+
+  await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
+  await expect(page).toHaveURL(/\?media=system$/);
+  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute("data-active-id", "system");
+
+  await page.getByRole("button", { name: "Close gallery" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page).toHaveURL(/\?media=system$/);
+  await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
   await expect(page).toHaveURL(/\/work\/factif$/);
   await expect(page.getByRole("dialog")).not.toBeVisible();
   expect(hydrationMessages).toEqual([]);

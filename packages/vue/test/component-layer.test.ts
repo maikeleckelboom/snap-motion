@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { mount, type VueWrapper } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import { h, nextTick } from "vue";
 
@@ -9,16 +9,19 @@ import CarouselSlide from "../src/carousel/components/CarouselSlide.vue";
 import CarouselStatus from "../src/carousel/components/CarouselStatus.vue";
 import CarouselTrack from "../src/carousel/components/CarouselTrack.vue";
 import CarouselViewport from "../src/carousel/components/CarouselViewport.vue";
+import ModalDialog from "../src/dialog/components/ModalDialog.vue";
 
 describe("production carousel components", () => {
   it("owns the APG boundary, native controls, slide groups, inertness, and settled status", async () => {
-    const wrapper = mount(CarouselRoot, {
+    let wrapper: VueWrapper;
+    wrapper = mount(CarouselRoot, {
       attachTo: document.body,
       props: {
         activeId: "one",
         ids: ["one", "two"],
         label: "Featured work",
         reducedMotionOverride: true,
+        "onUpdate:activeId": (id: string) => void wrapper.setProps({ activeId: id }),
       },
       slots: {
         default: () => [
@@ -61,7 +64,8 @@ describe("production carousel components", () => {
     await wrapper.get(".snap-motion-carousel-next").trigger("click");
     await nextTick();
 
-    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["two", { reason: "next" }]);
+    expect(wrapper.emitted("activeIdRequest")?.at(-1)).toEqual(["two", { reason: "next" }]);
+    await nextTick();
     expect(slides[0]?.attributes()).toHaveProperty("inert");
     expect(slides[1]?.attributes("inert")).toBeUndefined();
     expect(wrapper.get('[role="status"]').text()).toBe("Two, 2 of 2");
@@ -98,9 +102,93 @@ describe("production carousel components", () => {
     ).toBe("rtl");
   });
 
+  it("rolls an ignored controlled request back without changing semantics or settling it", async () => {
+    const wrapper = mount(CarouselRoot, {
+      attachTo: document.body,
+      props: {
+        activeId: "one",
+        ids: ["one", "two"],
+        reducedMotionOverride: true,
+      },
+      slots: {
+        default: () => [
+          h(CarouselViewport, null, {
+            default: () =>
+              h(CarouselTrack, null, {
+                default: () => [
+                  h(CarouselSlide, { id: "one", label: "One" }),
+                  h(CarouselSlide, { id: "two", label: "Two" }),
+                ],
+              }),
+          }),
+          h(CarouselNext),
+          h(CarouselStatus),
+        ],
+      },
+    });
+    await nextTick();
+
+    await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([["two", { reason: "next" }]]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-active-id")).toBe("one");
+    expect(wrapper.get('[role="status"]').text()).toBe("");
+    expect((wrapper.vm as unknown as { activeId: string }).activeId).toBe("one");
+    expect(
+      (wrapper.vm as unknown as { synchronizeTo: (id: string) => boolean }).synchronizeTo("two"),
+    ).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("retains a valid mechanical anchor while the controlled ID is unavailable", async () => {
+    const wrapper = mount(CarouselRoot, {
+      props: {
+        activeId: "future",
+        ids: ["one", "two"],
+        reducedMotionOverride: true,
+      },
+      slots: {
+        default: () => [
+          h(CarouselViewport, null, {
+            default: () =>
+              h(CarouselTrack, null, {
+                default: () => [
+                  h(CarouselSlide, { id: "one", label: "One" }),
+                  h(CarouselSlide, { id: "two", label: "Two" }),
+                ],
+              }),
+          }),
+          h(CarouselNext),
+          h(CarouselStatus),
+        ],
+      },
+    });
+    await nextTick();
+
+    await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await Promise.resolve();
+    await nextTick();
+    await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
+      ["two", { reason: "next" }],
+      ["two", { reason: "next" }],
+    ]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect((wrapper.vm as unknown as { activeId: string }).activeId).toBe("future");
+    expect(wrapper.get('[role="status"]').text()).toBe("");
+    wrapper.unmount();
+  });
+
   it("mirrors arrow keys as soon as the page's own direction changes, without remounting", async () => {
     document.documentElement.dir = "ltr";
-    const wrapper = mount(CarouselRoot, {
+    let wrapper: VueWrapper;
+    wrapper = mount(CarouselRoot, {
       attachTo: document.body,
       props: {
         activeId: "two",
@@ -109,6 +197,7 @@ describe("production carousel components", () => {
         ids: ["one", "two", "three"],
         label: "Inherited direction",
         reducedMotionOverride: true,
+        "onUpdate:activeId": (id: string) => void wrapper.setProps({ activeId: id }),
       },
       slots: {
         default: () =>
@@ -131,7 +220,7 @@ describe("production carousel components", () => {
 
     press("ArrowRight");
     await nextTick();
-    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["three", { reason: "keyboard" }]);
+    expect(wrapper.emitted("activeIdRequest")?.at(-1)).toEqual(["three", { reason: "keyboard" }]);
 
     // The page turns around under a carousel that is already mounted. Nothing reactive tracks
     // computed style, so this is exactly the case a memoized direction would get wrong.
@@ -141,10 +230,10 @@ describe("production carousel components", () => {
     await nextTick();
     press("ArrowRight");
     await nextTick();
-    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["two", { reason: "keyboard" }]);
+    expect(wrapper.emitted("activeIdRequest")?.at(-1)).toEqual(["two", { reason: "keyboard" }]);
     press("ArrowLeft");
     await nextTick();
-    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["three", { reason: "keyboard" }]);
+    expect(wrapper.emitted("activeIdRequest")?.at(-1)).toEqual(["three", { reason: "keyboard" }]);
 
     // An `auto` carousel imposes no direction of its own, so its slides keep inheriting the
     // page's — rather than being stamped with whatever it resolved once.
@@ -209,7 +298,7 @@ describe("production carousel components", () => {
     expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-active-id")).toBe(
       "three",
     );
-    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
 
     await wrapper.setProps({ ids: ["two"] });
     await nextTick();
@@ -253,5 +342,31 @@ describe("production carousel components", () => {
     await wrapper.setProps({ ids: ["two"] });
     await nextTick();
     expect(document.activeElement).toBe(wrapper.get(".snap-motion-carousel-viewport").element);
+  });
+});
+
+describe("production modal dialog", () => {
+  it("keeps a refused controlled close request open and repeatable", async () => {
+    const wrapper = mount(ModalDialog, {
+      attachTo: document.body,
+      props: { open: true },
+      slots: { title: () => "Dialog title", default: () => "Dialog body" },
+    });
+    await nextTick();
+
+    await wrapper.get(".snap-motion-dialog-close").trigger("click");
+    await wrapper.get(".snap-motion-dialog-close").trigger("click");
+    expect(wrapper.get("dialog").attributes()).toHaveProperty("open");
+    expect(wrapper.emitted("openRequest")).toEqual([
+      [false, { reason: "close-button" }],
+      [false, { reason: "close-button" }],
+    ]);
+    expect(wrapper.emitted("closed")).toBeUndefined();
+
+    await wrapper.setProps({ open: false });
+    await nextTick();
+    expect(wrapper.get("dialog").attributes("open")).toBeUndefined();
+    expect(wrapper.emitted("closed")).toEqual([[]]);
+    wrapper.unmount();
   });
 });
