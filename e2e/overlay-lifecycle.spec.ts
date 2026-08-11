@@ -1,26 +1,34 @@
 import { expect, test, type Page } from "@playwright/test";
 
 interface OverlayProof {
+  readonly closeName: string;
   readonly id: "gallery" | "modal" | "sheet";
   readonly dialog: string;
   readonly focusTarget: string;
+  readonly followUp: string;
 }
 
 const overlays: readonly OverlayProof[] = [
   {
+    closeName: "Close dialog",
     id: "modal",
     dialog: "[data-testid='modal-lifecycle-dialog']",
     focusTarget: "[data-testid='modal-focus-target']",
+    followUp: "[data-testid='modal-follow-up']",
   },
   {
+    closeName: "Close sheet",
     id: "sheet",
     dialog: ".snap-motion-sheet",
     focusTarget: "[data-testid='sheet-focus-target']",
+    followUp: "[data-testid='sheet-follow-up']",
   },
   {
+    closeName: "Close gallery",
     id: "gallery",
     dialog: "[data-testid='gallery-lifecycle-dialog']",
     focusTarget: ".snap-motion-media-gallery-header h2",
+    followUp: "[data-testid='gallery-follow-up']",
   },
 ];
 
@@ -113,6 +121,44 @@ test.describe("overlay lifecycle generations", () => {
           .toBe("hidden");
       }
     });
+
+    test(`${overlay.id} hands returned focus to immediate keyboard, pointer, and application owners`, async ({
+      page,
+    }) => {
+      await page.goto("./?demo=overlay-lifecycle");
+      const dialog = page.locator(overlay.dialog);
+      const opener = page.getByTestId(`${overlay.id}-open`);
+      const followUp = page.locator(overlay.followUp);
+      const close = () => dialog.getByRole("button", { name: overlay.closeName, exact: true });
+
+      await opener.click();
+      await expect(dialog).toHaveAttribute("open", "");
+      await close().click();
+      await expect(dialog).not.toHaveAttribute("open", "");
+      await expect(opener).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(followUp).toBeFocused();
+      await yieldTwoRenderOpportunities(page);
+      await expect(followUp).toBeFocused();
+
+      await opener.click();
+      await expect(dialog).toHaveAttribute("open", "");
+      await close().click();
+      await expect(dialog).not.toHaveAttribute("open", "");
+      await expect(opener).toBeFocused();
+      await followUp.click();
+      await yieldTwoRenderOpportunities(page);
+      await expect(followUp).toBeFocused();
+
+      await opener.click();
+      await expect(dialog).toHaveAttribute("open", "");
+      await close().click();
+      await expect(dialog).not.toHaveAttribute("open", "");
+      await expect(opener).toBeFocused();
+      await followUp.evaluate((element) => (element as HTMLElement).focus());
+      await yieldTwoRenderOpportunities(page);
+      await expect(followUp).toBeFocused();
+    });
   }
 
   test("a gallery can close back into an underlying modal without losing either focus return", async ({
@@ -142,7 +188,13 @@ test.describe("overlay lifecycle generations", () => {
     await expect(galleryOpener).toBeFocused();
     await expect.poll(() => page.evaluate(() => document.documentElement.style.overflow)).toBe("");
 
-    await modal.getByRole("button", { name: "Close" }).click();
+    await page.keyboard.press("Tab");
+    const modalClose = modal.getByRole("button", { name: "Close dialog", exact: true });
+    await expect(modalClose).toBeFocused();
+    await yieldTwoRenderOpportunities(page);
+    await expect(modalClose).toBeFocused();
+
+    await modalClose.click();
     await expect(modal).not.toHaveAttribute("open", "");
     await expect(pageOpener).toBeFocused();
   });

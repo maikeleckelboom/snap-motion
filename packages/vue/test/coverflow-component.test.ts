@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { h, nextTick } from "vue";
 
 import Coverflow from "../src/coverflow/components/Coverflow.vue";
@@ -46,6 +46,40 @@ function mountCoverflow(props: Record<string, unknown> = {}) {
         ]),
     },
   });
+}
+
+function useControlledAnimationFrames() {
+  let nextFrame = 1;
+  let timestamp = 0;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => {
+    const frame = nextFrame;
+    nextFrame += 1;
+    callbacks.set(frame, callback);
+    return frame;
+  });
+  vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation((frame) => {
+    callbacks.delete(frame);
+  });
+
+  return {
+    pending: () => callbacks.size,
+    async flushUntilIdle(root: () => ReturnType<typeof mountCoverflow>["element"]) {
+      for (let count = 0; count < 600; count += 1) {
+        if ((root() as HTMLElement).dataset.phase === "idle" && callbacks.size === 0) return;
+        const entry = callbacks.entries().next().value as
+          | [number, FrameRequestCallback]
+          | undefined;
+        if (!entry) throw new Error("Coverflow motion stopped before reaching idle");
+        callbacks.delete(entry[0]);
+        timestamp += 16;
+        entry[1](timestamp);
+        await Promise.resolve();
+        await nextTick();
+      }
+      throw new Error("Coverflow motion did not reach idle within the controlled frame bound");
+    },
+  };
 }
 
 describe("Coverflow", () => {
@@ -302,6 +336,136 @@ describe("Coverflow", () => {
       ["c", { reason: "programmatic" }],
       ["d", { reason: "programmatic" }],
     ]);
+    wrapper.unmount();
+  });
+
+  it("inherits an accepted in-flight uncontrolled destination into a new unavailable controlled epoch", async () => {
+    const frames = useControlledAnimationFrames();
+    const epochItems = [
+      { id: "a", title: "A" },
+      { id: "b", title: "B" },
+      { id: "c", title: "C" },
+      { id: "d", title: "D" },
+    ] as const;
+    const futureItem = { id: "future", title: "Future" } as const;
+    type EpochItem = (typeof epochItems)[number] | typeof futureItem;
+    const EpochCoverflow = Coverflow<EpochItem>;
+    const wrapper = mount(EpochCoverflow, {
+      props: {
+        activeId: "a",
+        items: epochItems,
+        itemLabel: (item: EpochItem) => item.title,
+        reducedMotionOverride: false,
+      },
+      slots: {
+        card: ({ item }: CoverflowCardState<EpochItem, EpochItem["id"]>) => h("div", item.title),
+      },
+    });
+    await nextTick();
+    const rail = wrapper.vm as unknown as {
+      activeId: string | undefined;
+      navigateTo: (id: string) => boolean;
+      settledId: string | undefined;
+    };
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(rail.navigateTo("b")).toBe(true);
+    await nextTick();
+    expect(rail.activeId).toBe("b");
+    expect(rail.settledId).toBe("a");
+    expect(wrapper.get(".snap-motion-coverflow").attributes("data-phase")).not.toBe("idle");
+    expect(frames.pending()).toBeGreaterThan(0);
+
+    await wrapper.setProps({ activeId: "future" } as never);
+    expect(rail.activeId).toBe("future");
+    await frames.flushUntilIdle(() => wrapper.element);
+
+    expect(rail.settledId).toBe("b");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["b", { reason: "programmatic" }]);
+    expect(wrapper.get('[data-testid="snap-motion-coverflow-status"]').text()).not.toContain("B");
+
+    expect(rail.navigateTo("c")).toBe(true);
+    await nextTick();
+    expect(rail.activeId).toBe("future");
+    expect(rail.settledId).toBe("b");
+    await frames.flushUntilIdle(() => wrapper.element);
+    expect(rail.settledId).toBe("b");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["c", { reason: "programmatic" }]);
+    expect(wrapper.get('[data-testid="snap-motion-coverflow-status"]').text()).not.toContain("C");
+
+    const requestsBeforeFuture = wrapper.emitted("activeIdRequest") ?? [];
+    await wrapper.setProps({ items: [...epochItems, futureItem] } as never);
+    await Promise.resolve();
+    await nextTick();
+    expect(rail.activeId).toBe("future");
+    expect(rail.settledId).toBe("future");
+    expect(wrapper.emitted("activeIdRequest") ?? []).toEqual(requestsBeforeFuture);
+    expect(wrapper.get('[data-testid="snap-motion-coverflow-status"]').text()).not.toContain(
+      "Future",
+    );
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(rail.activeId).toBe("future");
+    expect(rail.settledId).toBe("future");
+    expect(rail.navigateTo("d")).toBe(true);
+    await nextTick();
+    expect(rail.activeId).toBe("d");
+    await frames.flushUntilIdle(() => wrapper.element);
+    expect(rail.settledId).toBe("d");
+    wrapper.unmount();
+  });
+
+  it("lets valid controlled authority replace an in-flight uncontrolled destination", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountCoverflow({ activeId: "overview", reducedMotionOverride: false });
+    await nextTick();
+    const rail = wrapper.vm as unknown as CoverflowInstance;
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(rail.navigateTo("system")).toBe(true);
+    await nextTick();
+    expect(rail.activeId).toBe("system");
+    expect(rail.settledId).toBe("overview");
+
+    await wrapper.setProps({ activeId: "outcome" });
+    expect(rail.activeId).toBe("outcome");
+    await frames.flushUntilIdle(() => wrapper.element);
+
+    expect(rail.settledId).toBe("outcome");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual([
+      "system",
+      { reason: "programmatic" },
+    ]);
+    expect(wrapper.get('[data-testid="snap-motion-coverflow-status"]').text()).not.toContain(
+      "System",
+    );
+    wrapper.unmount();
+  });
+
+  it("keeps the latest uncontrolled state when an unavailable controlled epoch is abandoned in flight", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountCoverflow({ activeId: "overview", reducedMotionOverride: false });
+    await nextTick();
+    const rail = wrapper.vm as unknown as CoverflowInstance;
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(rail.navigateTo("system")).toBe(true);
+    await nextTick();
+    expect(rail.settledId).toBe("overview");
+    await wrapper.setProps({ activeId: "future" } as never);
+    await wrapper.setProps({ activeId: undefined } as never);
+    await nextTick();
+    await frames.flushUntilIdle(() => wrapper.element);
+
+    expect(rail.activeId).toBe("system");
+    expect(rail.settledId).toBe("system");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual([
+      "system",
+      { reason: "programmatic" },
+    ]);
+    expect(wrapper.get('[data-testid="snap-motion-coverflow-status"]').text()).not.toContain(
+      "System",
+    );
     wrapper.unmount();
   });
 

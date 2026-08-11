@@ -16,6 +16,19 @@ function useControlledAnimationFrames() {
   });
 
   return {
+    flushAll() {
+      let remaining = 20;
+      while (callbacks.size > 0 && remaining > 0) {
+        const entry = callbacks.entries().next().value as
+          | [number, FrameRequestCallback]
+          | undefined;
+        if (!entry) break;
+        callbacks.delete(entry[0]);
+        entry[1](0);
+        remaining -= 1;
+      }
+      if (callbacks.size > 0) throw new Error("Focus verification exceeded its frame bound");
+    },
     flushNext() {
       const entry = callbacks.entries().next().value as [number, FrameRequestCallback] | undefined;
       if (!entry) return false;
@@ -33,22 +46,81 @@ afterEach(() => {
 });
 
 describe("verified focus restoration", () => {
+  it("completes a stable synchronous handoff within its bounded frame window", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    document.body.append(opener);
+
+    scheduleVerifiedFocusRestore({ isCurrent: () => true, opener, fallback: undefined });
+    expect(document.activeElement).toBe(opener);
+    frames.flushAll();
+
+    expect(document.activeElement).toBe(opener);
+    expect(frames.pending()).toBe(0);
+  });
+
   it("repairs later native cleanup and verifies a stable frame", () => {
     const frames = useControlledAnimationFrames();
     const opener = document.createElement("button");
-    const nativeCleanupTarget = document.createElement("button");
-    document.body.append(opener, nativeCleanupTarget);
+    document.body.append(opener);
 
     scheduleVerifiedFocusRestore({ isCurrent: () => true, opener, fallback: undefined });
     expect(document.activeElement).toBe(opener);
 
-    nativeCleanupTarget.focus();
+    opener.blur();
+    expect(document.activeElement).toBe(document.body);
     expect(frames.flushNext()).toBe(true);
     expect(document.activeElement).toBe(opener);
     expect(frames.flushNext()).toBe(true);
     expect(frames.flushNext()).toBe(true);
     expect(frames.pending()).toBe(0);
     expect(document.activeElement).toBe(opener);
+  });
+
+  it("does not reclaim the opener after a keyboard-like focus handoff", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    const nextControl = document.createElement("button");
+    document.body.append(opener, nextControl);
+
+    scheduleVerifiedFocusRestore({ isCurrent: () => true, opener, fallback: undefined });
+    expect(document.activeElement).toBe(opener);
+
+    opener.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+    nextControl.focus();
+    expect(frames.flushNext()).toBe(true);
+
+    expect(document.activeElement).toBe(nextControl);
+    expect(frames.pending()).toBe(0);
+  });
+
+  it("does not reclaim the opener after a pointer-like focus handoff", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    const clickedControl = document.createElement("button");
+    document.body.append(opener, clickedControl);
+
+    scheduleVerifiedFocusRestore({ isCurrent: () => true, opener, fallback: undefined });
+    clickedControl.dispatchEvent(new PointerEvent("pointerdown"));
+    clickedControl.focus();
+    expect(frames.flushNext()).toBe(true);
+
+    expect(document.activeElement).toBe(clickedControl);
+    expect(frames.pending()).toBe(0);
+  });
+
+  it("does not reclaim the opener after an application focus handoff", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    const applicationTarget = document.createElement("button");
+    document.body.append(opener, applicationTarget);
+
+    scheduleVerifiedFocusRestore({ isCurrent: () => true, opener, fallback: undefined });
+    applicationTarget.focus();
+    expect(frames.flushNext()).toBe(true);
+
+    expect(document.activeElement).toBe(applicationTarget);
+    expect(frames.pending()).toBe(0);
   });
 
   it("retries a temporarily disabled opener before falling back", () => {
@@ -66,6 +138,25 @@ describe("verified focus restoration", () => {
     opener.disabled = false;
     expect(frames.flushNext()).toBe(true);
     expect(document.activeElement).toBe(opener);
+    frames.flushAll();
+    expect(frames.pending()).toBe(0);
+  });
+
+  it("uses fallback only after a connected opener exhausts its bounded recovery", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    const fallback = document.createElement("button");
+    const fallbackResolver = vi.fn<() => HTMLButtonElement>(() => fallback);
+    opener.disabled = true;
+    document.body.append(opener, fallback);
+
+    scheduleVerifiedFocusRestore({ isCurrent: () => true, opener, fallback: fallbackResolver });
+    expect(fallbackResolver).not.toHaveBeenCalled();
+    frames.flushAll();
+
+    expect(fallbackResolver).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(fallback);
+    expect(frames.pending()).toBe(0);
   });
 
   it("evaluates fallback only after a disconnected opener cannot recover", () => {
@@ -96,6 +187,57 @@ describe("verified focus restoration", () => {
     expect(frames.flushNext()).toBe(true);
     expect(frames.pending()).toBe(0);
     expect(document.activeElement).toBe(newerOverlayTarget);
+  });
+
+  it("stops when its lifecycle becomes obsolete after the handoff", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    let current = true;
+    document.body.append(opener);
+
+    scheduleVerifiedFocusRestore({ isCurrent: () => current, opener, fallback: undefined });
+    expect(document.activeElement).toBe(opener);
+    current = false;
+    opener.blur();
+    expect(frames.flushNext()).toBe(true);
+
+    expect(document.activeElement).toBe(document.body);
+    expect(frames.pending()).toBe(0);
+  });
+
+  it("respects focus acquired by another open overlay during verification", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    const newerDialog = document.createElement("dialog");
+    const newerOverlayTarget = document.createElement("button");
+    newerDialog.append(newerOverlayTarget);
+    document.body.append(opener, newerDialog);
+    newerDialog.setAttribute("open", "");
+
+    scheduleVerifiedFocusRestore({ isCurrent: () => true, opener, fallback: undefined });
+    newerOverlayTarget.focus();
+    expect(frames.flushNext()).toBe(true);
+
+    expect(document.activeElement).toBe(newerOverlayTarget);
+    expect(frames.pending()).toBe(0);
+  });
+
+  it("repairs focus stranded in a closed native dialog", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    const closedDialog = document.createElement("dialog");
+    const cleanupTarget = document.createElement("button");
+    closedDialog.append(cleanupTarget);
+    document.body.append(opener, closedDialog);
+
+    scheduleVerifiedFocusRestore({ isCurrent: () => true, opener, fallback: undefined });
+    cleanupTarget.focus();
+    expect(document.activeElement).toBe(cleanupTarget);
+    expect(frames.flushNext()).toBe(true);
+
+    expect(document.activeElement).toBe(opener);
+    frames.flushAll();
+    expect(frames.pending()).toBe(0);
   });
 
   it("cancels scheduled verification work", () => {

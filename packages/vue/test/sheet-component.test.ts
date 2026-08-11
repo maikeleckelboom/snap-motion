@@ -8,6 +8,7 @@ interface SheetInstance {
   activeId: string;
   navigateTo: (id: string) => boolean;
   requestClose: (reason?: "programmatic") => void;
+  sheetState: string;
   synchronizeTo: (id: string) => boolean;
 }
 
@@ -534,6 +535,85 @@ describe("production Sheet component", () => {
       ["c", { reason: "programmatic" }],
       ["d", { reason: "programmatic" }],
     ]);
+    wrapper.unmount();
+  });
+
+  it("inherits an accepted in-flight uncontrolled destination into a new unavailable controlled epoch", async () => {
+    const snapPoints = [
+      { id: "a", label: "A", resolveVisibleExtent: () => 120 },
+      { id: "b", label: "B", resolveVisibleExtent: () => 180 },
+      { id: "c", label: "C", resolveVisibleExtent: () => 240 },
+      { id: "d", label: "D", resolveVisibleExtent: () => 300 },
+    ];
+    const futurePoint = {
+      id: "future",
+      label: "Future",
+      resolveVisibleExtent: () => 360,
+    };
+    const wrapper = mount(Sheet, {
+      props: {
+        activeId: "a",
+        open: true,
+        reducedMotionOverride: true,
+        snapPoints,
+        spring: {
+          damping: 70,
+          mass: 0.5,
+          restDistance: 0.5,
+          restSpeed: 0.5,
+          stiffness: 1_000,
+        },
+      },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+    await wrapper.setProps({ reducedMotionOverride: false });
+    const sheet = wrapper.vm as unknown as SheetInstance;
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(sheet.navigateTo("b")).toBe(true);
+    await nextTick();
+    expect(sheet.activeId).toBe("b");
+    expect(sheet.sheetState).toBe("settling");
+
+    await wrapper.setProps({ activeId: "future" });
+    expect(sheet.activeId).toBe("future");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("b");
+    await vi.waitFor(
+      () => expect(wrapper.get("dialog").attributes("data-sheet-state")).toBe("open"),
+      { timeout: 3_000 },
+    );
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["b", { reason: "programmatic" }]);
+    expect(wrapper.get('[role="status"]').text()).not.toContain("B");
+
+    expect(sheet.navigateTo("c")).toBe(true);
+    await nextTick();
+    expect(sheet.sheetState).toBe("settling");
+    await vi.waitFor(
+      () => expect(wrapper.get("dialog").attributes("data-sheet-state")).toBe("open"),
+      { timeout: 3_000 },
+    );
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("b");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["c", { reason: "programmatic" }]);
+    expect(wrapper.get('[role="status"]').text()).not.toContain("C");
+
+    const requestsBeforeFuture = wrapper.emitted("activeIdRequest") ?? [];
+    await wrapper.setProps({ snapPoints: [...snapPoints, futurePoint] });
+    await nextTick();
+    await nextTick();
+    expect(sheet.activeId).toBe("future");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("future");
+    expect(wrapper.emitted("activeIdRequest") ?? []).toEqual(requestsBeforeFuture);
+    expect(wrapper.get('[role="status"]').text()).not.toContain("Future");
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(sheet.activeId).toBe("future");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("future");
+    expect(sheet.navigateTo("d")).toBe(true);
+    await nextTick();
+    expect(sheet.activeId).toBe("d");
     wrapper.unmount();
   });
 

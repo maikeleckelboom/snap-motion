@@ -198,7 +198,12 @@ const deck = useStackedDeckMotion<TId>({
   },
   onActiveIdRequest(id, _index, reason) {
     if (id === semanticActiveId.value) return;
-    if (props.activeId === undefined) internalActiveId.value = id;
+    if (props.activeId === undefined) {
+      internalActiveId.value = id;
+      // Accepted uncontrolled semantics immediately become this epoch's valid mechanical anchor,
+      // even while the spring that will settle there is still in flight.
+      mechanicalAnchorId.value = id;
+    }
     emit("update:activeId", id);
     emit("activeIdRequest", id, { reason });
   },

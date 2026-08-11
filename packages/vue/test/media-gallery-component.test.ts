@@ -870,6 +870,85 @@ describe("MediaGalleryDialog navigation", () => {
     ]);
   });
 
+  it("inherits an accepted in-flight uncontrolled destination into a new unavailable controlled epoch", async () => {
+    const frames = useControlledAnimationFrames();
+    const epochItems: readonly MediaGalleryItem[] = [
+      { id: "a", title: "A", alt: "A", previewSrc: "/a.jpg", width: 800, height: 500 },
+      { id: "b", title: "B", alt: "B", previewSrc: "/b.jpg", width: 800, height: 500 },
+      { id: "c", title: "C", alt: "C", previewSrc: "/c.jpg", width: 800, height: 500 },
+      { id: "d", title: "D", alt: "D", previewSrc: "/d.jpg", width: 800, height: 500 },
+    ];
+    const futureItem: MediaGalleryItem = {
+      id: "future",
+      title: "Future",
+      alt: "Future",
+      previewSrc: "/future.jpg",
+      width: 800,
+      height: 500,
+    };
+    const wrapper = mountGallery({
+      activeId: "a",
+      items: epochItems,
+      reducedMotionOverride: false,
+    });
+    await flushReactiveTasks();
+    await frames.flushNext();
+    const gallery = wrapper.vm as unknown as {
+      activeId: string | undefined;
+      navigateTo: (id: string) => boolean;
+      settledId: string | undefined;
+    };
+
+    await wrapper.setProps({ activeId: undefined });
+    expect(gallery.navigateTo("b")).toBe(true);
+    await flushReactiveTasks();
+    expect(gallery.activeId).toBe("b");
+    expect(gallery.settledId).toBe("a");
+    expect(frames.pending()).toBeGreaterThan(0);
+
+    await wrapper.setProps({ activeId: "future" });
+    await flushReactiveTasks();
+
+    expect(gallery.activeId).toBe("future");
+    expect(gallery.settledId).toBe("b");
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("1");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["b", { reason: "programmatic" }]);
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-status"]').text()).not.toContain(
+      "B",
+    );
+
+    expect(gallery.navigateTo("c")).toBe(true);
+    await flushReactiveTasks();
+    expect(gallery.activeId).toBe("future");
+    expect(gallery.settledId).toBe("b");
+    expect(await frames.flushNext()).toBe(true);
+    expect(wrapper.get("dialog").attributes("data-track-state")).toBe("settling");
+    await settleTrack(wrapper);
+    await frames.flushAll();
+    expect(gallery.settledId).toBe("b");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["c", { reason: "programmatic" }]);
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-status"]').text()).not.toContain(
+      "C",
+    );
+
+    const requestsBeforeFuture = wrapper.emitted("activeIdRequest") ?? [];
+    await wrapper.setProps({ items: [...epochItems, futureItem] });
+    await flushReactiveTasks();
+    expect(gallery.activeId).toBe("future");
+    expect(gallery.settledId).toBe("future");
+    expect(wrapper.emitted("activeIdRequest") ?? []).toEqual(requestsBeforeFuture);
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-status"]').text()).not.toContain(
+      "Future",
+    );
+
+    await wrapper.setProps({ activeId: undefined });
+    expect(gallery.activeId).toBe("future");
+    expect(gallery.settledId).toBe("future");
+    expect(gallery.navigateTo("d")).toBe(true);
+    await flushReactiveTasks();
+    expect(gallery.activeId).toBe("d");
+  });
+
   it("retains a valid gallery anchor while controlled authority is unavailable", async () => {
     const wrapper = mountGallery({ activeId: "future" });
     await flushReactiveTasks();

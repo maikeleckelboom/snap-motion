@@ -1,5 +1,14 @@
 # @snap-motion/core
 
+## 0.1.0-beta.5
+
+### Minor Changes
+
+- Align core and Vue provenance for the beta.5 private candidate. Core has no runtime or public API
+  change in this candidate. Vue preserves an accepted in-flight uncontrolled destination across a new
+  unavailable controlled epoch and makes verified native-dialog focus return respect later legitimate
+  keyboard, pointer, application, and overlay focus ownership.
+
 ## 0.1.0-beta.4
 
 ### Minor Changes

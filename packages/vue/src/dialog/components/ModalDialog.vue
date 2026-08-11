@@ -65,12 +65,7 @@ function captureLifecycleOpener(target: HTMLDialogElement, generation: number) {
     return;
   }
   const activeElement = captureFocusOpener(target.ownerDocument);
-  if (
-    activeElement &&
-    activeElement !== target.ownerDocument.body &&
-    activeElement !== target.ownerDocument.documentElement &&
-    !target.contains(activeElement)
-  ) {
+  if (activeElement && !target.contains(activeElement)) {
     capturedOpener = activeElement;
   }
 }

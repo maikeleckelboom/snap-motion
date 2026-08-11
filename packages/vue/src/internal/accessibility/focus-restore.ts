@@ -1,5 +1,5 @@
 import type { FocusReturnOptions } from "../../contracts/focus-contracts";
-import { restoreFocus } from "./focus";
+import { captureFocusOpener, restoreFocus } from "./focus";
 
 export interface FocusRestoreVerification {
   cancel(): void;
@@ -40,9 +40,12 @@ export function scheduleVerifiedFocusRestore(options: {
       schedule();
       return;
     }
+    // Focus return is a handoff, not a lease. Body/document focus and focus stranded in a closed
+    // native dialog are browser cleanup worth repairing; another connected element is a new owner.
+    if (captureFocusOpener(view!.document)) return;
     observedStableFrame = false;
     if (opener?.isConnected && remainingAttempts > 0) {
-      remainingAttempts -= 1;
+      remainingAttempts--;
       restoreFocus({ opener });
       schedule();
       return;
@@ -55,7 +58,7 @@ export function scheduleVerifiedFocusRestore(options: {
   return {
     cancel() {
       cancelled = true;
-      if (frame !== undefined) view?.cancelAnimationFrame(frame);
+      if (frame !== undefined) view!.cancelAnimationFrame(frame);
       frame = undefined;
     },
   };

@@ -614,6 +614,8 @@ export function useCoverflowMotion<Id extends string>(
       const itemsChanged =
         nextIds.length !== model.itemCount || nextIds.some((id, index) => model.idAt(index) !== id);
       const controlledChanged = priorState !== undefined && controlledId !== priorState[1];
+      const controlledDestinationAvailable =
+        controlledId !== undefined && model.indexOf(controlledId) >= 0;
       if (!itemsChanged && !controlledChanged) return;
 
       // A controlled host normally confirms the destination this surface just emitted. The
@@ -628,7 +630,7 @@ export function useCoverflowMotion<Id extends string>(
         return;
       }
 
-      if (itemsChanged || (controlledChanged && controlledId !== undefined)) {
+      if (itemsChanged || (controlledChanged && controlledDestinationAvailable)) {
         cancelInteractionRecords();
       }
 
@@ -650,7 +652,7 @@ export function useCoverflowMotion<Id extends string>(
         return;
       }
 
-      if (controlledId !== undefined) applyControlledId(controlledId);
+      if (controlledDestinationAvailable) applyControlledId(controlledId);
     },
     { deep: true },
   );

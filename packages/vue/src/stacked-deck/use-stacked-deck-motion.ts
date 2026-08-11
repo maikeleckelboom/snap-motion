@@ -669,6 +669,8 @@ export function useStackedDeckMotion<Id extends string>(
       const itemsChanged =
         nextIds.length !== model.itemCount || nextIds.some((id, index) => model.idAt(index) !== id);
       const controlledChanged = priorState !== undefined && controlledId !== priorState[1];
+      const controlledDestinationAvailable =
+        controlledId !== undefined && model.indexOf(controlledId) >= 0;
       if (!itemsChanged && !controlledChanged) return;
 
       // A v-model confirmation of the destination already in flight is acknowledgement, not an
@@ -682,7 +684,7 @@ export function useStackedDeckMotion<Id extends string>(
         return;
       }
 
-      if (itemsChanged || (controlledChanged && controlledId !== undefined)) {
+      if (itemsChanged || (controlledChanged && controlledDestinationAvailable)) {
         cancelInteractionRecords();
       }
 
@@ -706,7 +708,7 @@ export function useStackedDeckMotion<Id extends string>(
 
       // An unavailable controlled ID is remembered by this combined source. When item data later
       // makes it available, the same reconciliation path above adopts it without another ID change.
-      if (controlledId !== undefined) applyControlledId(controlledId);
+      if (controlledDestinationAvailable) applyControlledId(controlledId);
     },
     { deep: true },
   );

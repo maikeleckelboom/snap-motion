@@ -43,6 +43,12 @@ controlled epoch cannot outrank intervening uncontrolled state. A later controll
 pending within its new epoch. Rejected requests reconcile to that epoch's latest valid anchor, and
 if the pending ID later appears it is adopted silently without replaying a request.
 
+An uncontrolled destination becomes that epoch's valid anchor when the surface accepts it, not when
+its mechanics later settle. If a new controlled epoch begins with an unavailable ID while the
+uncontrolled spring or track is still travelling, the accepted uncontrolled destination remains the
+mechanical fallback. Arrival at that fallback after controlled semantics changed is silent: it does
+not publish the stale uncontrolled settlement or announcement.
+
 The navigation reasons are `previous`, `next`, `keyboard`, `drag`, `wheel`, `picker`,
 `programmatic`, `reconcile`, and `external`. They live in `@snap-motion/core` because provenance is shared domain
 vocabulary for every future adapter. `external` replaces the router-shaped `route`: routers are one
@@ -73,6 +79,10 @@ If a host refuses an unexpected native close, the same lifecycle generation reop
 reapplies its configured initial-focus policy without emitting a second `opened`. Final focus return
 is generation-scoped and verified across bounded browser cleanup frames so an obsolete lifecycle
 cannot steal focus from a newer overlay.
+
+Focus return is a handoff, not a lease. Bounded verification may repair focus left on the document
+or stranded in a closed native dialog, and may retry an opener that is temporarily unavailable.
+Once another connected element owns focus, verification stops instead of reclaiming the opener.
 
 ## Component contract
 

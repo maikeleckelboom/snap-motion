@@ -113,6 +113,7 @@ useEventListener(window, "snap-motion-overlay-lifecycle", (event) => {
       <button ref="modalOpener" data-testid="modal-open" type="button" @click="modalOpen = true">
         Open modal
       </button>
+      <input data-testid="modal-follow-up" aria-label="Modal follow-up" type="text" />
       <button data-testid="modal-reopen" type="button" @click="reopen('modal')">
         Reopen modal
       </button>
@@ -132,6 +133,7 @@ useEventListener(window, "snap-motion-overlay-lifecycle", (event) => {
       <button ref="sheetOpener" data-testid="sheet-open" type="button" @click="sheetOpen = true">
         Open sheet
       </button>
+      <input data-testid="sheet-follow-up" aria-label="Sheet follow-up" type="text" />
       <button data-testid="sheet-reopen" type="button" @click="reopen('sheet')">
         Reopen sheet
       </button>
@@ -156,6 +158,7 @@ useEventListener(window, "snap-motion-overlay-lifecycle", (event) => {
       >
         Open gallery
       </button>
+      <input data-testid="gallery-follow-up" aria-label="Gallery follow-up" type="text" />
       <button data-testid="gallery-reopen" type="button" @click="reopen('gallery')">
         Reopen gallery
       </button>

@@ -1110,12 +1110,7 @@ function captureLifecycleOpener(target: HTMLDialogElement, generation: number) {
     return;
   }
   const activeElement = captureFocusOpener(target.ownerDocument);
-  if (
-    activeElement &&
-    activeElement !== target.ownerDocument.body &&
-    activeElement !== target.ownerDocument.documentElement &&
-    !target.contains(activeElement)
-  ) {
+  if (activeElement && !target.contains(activeElement)) {
     capturedOpener = activeElement;
   }
 }
@@ -1346,10 +1341,17 @@ watch(
     }
     const index = items.value.findIndex((item) => item.id === id);
     if (index < 0) {
+      const fallbackId = resolveRollbackId();
+      if (fallbackId !== undefined) {
+        // An accepted uncontrolled identity is already committed semantic state even when its
+        // track transition has not settled. Preserve it as this unavailable epoch's mechanics.
+        synchronizeExact(fallbackId, false);
+        return;
+      }
       invalidateNavigation();
       clearPointerState();
-      intendedActiveId.value = activeItem.value?.id;
-      mechanicalAnchorId.value = intendedActiveId.value;
+      intendedActiveId.value = undefined;
+      mechanicalAnchorId.value = undefined;
       return;
     }
     latestValidAuthorityId.value = id;

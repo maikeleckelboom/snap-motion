@@ -68,8 +68,11 @@ export function interactiveElements(container: HTMLElement | undefined) {
 
 export function captureFocusOpener(documentTarget?: Document) {
   const activeElement = documentTarget?.activeElement;
-  return typeof HTMLElement !== "undefined" && activeElement instanceof HTMLElement
-    ? activeElement
+  return activeElement &&
+    "focus" in activeElement &&
+    !activeElement.matches("body, html") &&
+    !activeElement.closest("dialog:not([open])")
+    ? (activeElement as HTMLElement)
     : undefined;
 }
 
