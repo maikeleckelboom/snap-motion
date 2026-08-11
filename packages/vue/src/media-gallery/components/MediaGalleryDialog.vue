@@ -11,6 +11,10 @@ import {
   restoreFocus,
 } from "../../internal/accessibility/focus";
 import {
+  scheduleVerifiedFocusRestore,
+  type FocusRestoreVerification,
+} from "../../internal/accessibility/focus-restore";
+import {
   fittedMediaTransform,
   type GalleryMediaAction,
   type GalleryTap,
@@ -104,7 +108,7 @@ const emit = defineEmits<{
   (event: "settled", id: TId, details: SettlementDetails): void;
 }>();
 
-const items = computed<readonly TItem[]>(() => normalizeMediaGalleryItems(props.items));
+const items = computed(() => normalizeMediaGalleryItems(props.items));
 const messages = computed(() => createEnglishMediaGalleryMessages(props.messages));
 const systemReducedMotion = ref(false);
 const reducedMotionQuery = shallowRef<MediaQueryList>();
@@ -116,11 +120,12 @@ const titleHeading = ref<HTMLElement>();
 const imageViewport = ref<HTMLElement>();
 const intendedActiveId = shallowRef<TId | undefined>(props.activeId ?? items.value[0]?.id);
 const internalActiveId = shallowRef<TId | undefined>(intendedActiveId.value);
-const rollbackAnchorId = shallowRef<TId | undefined>(
+const latestValidAuthorityId = shallowRef<TId | undefined>(
   props.activeId !== undefined && items.value.some((item) => item.id === props.activeId)
     ? props.activeId
-    : intendedActiveId.value,
+    : undefined,
 );
+const mechanicalAnchorId = shallowRef<TId | undefined>(intendedActiveId.value);
 const galleryIndex = ref(indexForId(intendedActiveId.value));
 const dialogState = ref<DialogState>("closed");
 const imageLoadStateByItem = ref<Record<string, ImageLoadState>>({});
@@ -165,8 +170,13 @@ let pendingTrackGeneration: number | undefined;
 let navigationGeneration = 0;
 let closeGeneration = 0;
 let capturedOpener: HTMLElement | undefined;
-let closingIntentionally = false;
-let focusRestoreFrame: number | undefined;
+let capturedOpenerGeneration = 0;
+let focusRestoreVerification: FocusRestoreVerification | undefined;
+let lifecycleGeneration = 0;
+let openedLifecycleGeneration = 0;
+let finalizedLifecycleGeneration = 0;
+let closingLifecycleGeneration: number | undefined;
+const nativeCloseGenerations: number[] = [];
 let geometry = {
   height: 0,
   left: 0,
@@ -330,10 +340,23 @@ function indexForId(id: TId | undefined): number {
   return index < 0 ? 0 : index;
 }
 
+function hasItem(id: TId | undefined): id is TId {
+  return id !== undefined && items.value.some((item) => item.id === id);
+}
+
+function resolveRollbackId(): TId | undefined {
+  if (hasItem(latestValidAuthorityId.value)) return latestValidAuthorityId.value;
+  if (hasItem(mechanicalAnchorId.value)) return mechanicalAnchorId.value;
+  return items.value[0]?.id;
+}
+
 function acceptActiveId(id: TId | undefined, reason: ActiveIdRequestDetails["reason"]): void {
   if (id === intendedActiveId.value) return;
   intendedActiveId.value = id;
-  if (props.activeId === undefined) internalActiveId.value = id;
+  if (props.activeId === undefined) {
+    internalActiveId.value = id;
+    mechanicalAnchorId.value = id;
+  }
   emit("update:activeId", id);
   emit("activeIdRequest", id, { reason });
 }
@@ -650,10 +673,11 @@ async function completeTrackSettlement(generation = pendingTrackGeneration) {
     pendingTrackGeneration = undefined;
     const id = items.value[galleryIndex.value]?.id;
     if (props.activeId !== undefined && id !== props.activeId) {
-      const authoritativeId = rollbackAnchorId.value;
+      const authoritativeId = resolveRollbackId();
       if (authoritativeId !== undefined) synchronizeExact(authoritativeId, false);
       return;
     }
+    mechanicalAnchorId.value = id;
     if (id && reason) emit("settled", id, { reason });
     if (announcement) announceCurrent();
   });
@@ -678,10 +702,11 @@ async function changeIndex(
     acceptActiveId(id, reason);
     await nextTick();
     if (props.activeId === undefined || props.activeId === id) {
+      mechanicalAnchorId.value = id;
       emit("settled", id, { reason });
       if (announcement) announceCurrent();
     } else {
-      const authoritativeId = rollbackAnchorId.value;
+      const authoritativeId = resolveRollbackId();
       if (authoritativeId !== undefined) synchronizeExact(authoritativeId, false);
     }
     return true;
@@ -729,6 +754,8 @@ function navigateTo(id: TId): boolean {
 function synchronizeExact(id: TId, reportSettlement = true): boolean {
   const index = items.value.findIndex((item) => item.id === id);
   if (index < 0) return false;
+  mechanicalAnchorId.value = id;
+  if (id === props.activeId) latestValidAuthorityId.value = id;
   intendedActiveId.value = id;
   invalidateNavigation();
   clearPointerState();
@@ -1064,32 +1091,45 @@ function unlockDocumentScroll() {
   previousPaddingInlineEnd = "";
 }
 
-function scheduleFocusRestore(opener: HTMLElement | undefined) {
-  let remainingFrames = 4;
-  const restore = () => {
-    focusRestoreFrame = undefined;
-    if (!mounted.value || props.open) return;
-    if (restoreFocus({ opener })) return;
-    if (opener?.isConnected && --remainingFrames > 0) {
-      focusRestoreFrame = requestAnimationFrame(restore);
-    } else restoreFocus({ fallback: props.focusReturn?.fallback });
-  };
-  focusRestoreFrame = requestAnimationFrame(restore);
+function captureLifecycleOpener(target: HTMLDialogElement, generation: number) {
+  if (capturedOpenerGeneration === generation) return;
+  capturedOpenerGeneration = generation;
+  const explicitOpener = props.focusReturn?.opener;
+  if (explicitOpener) {
+    capturedOpener = explicitOpener;
+    return;
+  }
+  const activeElement = captureFocusOpener(target.ownerDocument);
+  if (
+    activeElement &&
+    activeElement !== target.ownerDocument.body &&
+    activeElement !== target.ownerDocument.documentElement &&
+    !target.contains(activeElement)
+  ) {
+    capturedOpener = activeElement;
+  }
 }
 
-async function openDialog() {
+function emitCloseRequest(reason: CloseReason) {
+  emit("update:open", false);
+  emit("openRequest", false, { activeId: semanticActiveId.value, reason });
+}
+
+async function openDialog(lifecycle: number) {
   const target = dialog.value;
-  if (!mounted.value || !target || target.open) return;
-  if (focusRestoreFrame !== undefined) {
-    cancelAnimationFrame(focusRestoreFrame);
-    focusRestoreFrame = undefined;
+  if (!mounted.value || !props.open || lifecycle !== lifecycleGeneration || !target) return;
+  if (target.open && dialogState.value === "open" && openedLifecycleGeneration === lifecycle) {
+    return;
   }
+  focusRestoreVerification?.cancel();
+  focusRestoreVerification = undefined;
   const generation = invalidateOpenCycle();
   invalidateNavigation();
   invalidateClose();
-  capturedOpener ??= props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
+  closingLifecycleGeneration = undefined;
+  captureLifecycleOpener(target, lifecycle);
   if (items.value.length === 0) {
-    requestClose("programmatic");
+    emitCloseRequest("programmatic");
     return;
   }
   const requestedIndex = items.value.findIndex((item) => item.id === intendedActiveId.value);
@@ -1101,7 +1141,7 @@ async function openDialog() {
   mediaTransitionMode.value = "direct";
   resetTransform();
   dialogState.value = "opening";
-  target.showModal();
+  if (!target.open) target.showModal();
   lockDocumentScroll();
   for (const slot of trackSlots.value) ensureImageState(slot.item, true);
   await nextTick();
@@ -1114,7 +1154,10 @@ async function openDialog() {
   });
   if (!isOpenCycleCurrent(generation, target)) return;
   announceCurrent();
-  emit("opened", semanticActiveId.value);
+  if (openedLifecycleGeneration !== lifecycle) {
+    openedLifecycleGeneration = lifecycle;
+    emit("opened", semanticActiveId.value);
+  }
   if (!isOpenCycleCurrent(generation, target)) return;
 
   if (reducedMotion.value) {
@@ -1130,10 +1173,14 @@ async function openDialog() {
   });
 }
 
+function beginOpenLifecycle() {
+  lifecycleGeneration += 1;
+  void openDialog(lifecycleGeneration);
+}
+
 function requestClose(reason: CloseReason = "programmatic") {
-  if (!dialog.value?.open && !props.open) return;
-  emit("update:open", false);
-  emit("openRequest", false, { activeId: semanticActiveId.value, reason });
+  if (!props.open || !dialog.value?.open) return;
+  emitCloseRequest(reason);
 }
 
 function onCancel(event: Event) {
@@ -1143,7 +1190,7 @@ function onCancel(event: Event) {
 
 function startClose() {
   if (!dialog.value?.open || dialogState.value === "closing") return;
-  closingIntentionally = true;
+  closingLifecycleGeneration = lifecycleGeneration;
   invalidateOpenCycle();
   invalidateNavigation();
   const generation = invalidateClose();
@@ -1158,15 +1205,21 @@ function startClose() {
 }
 
 function finishClose(generation = closeGeneration) {
+  const lifecycle = closingLifecycleGeneration;
   if (
     !mounted.value ||
     generation !== closeGeneration ||
+    lifecycle === undefined ||
+    lifecycle !== lifecycleGeneration ||
+    props.open ||
     dialogState.value !== "closing" ||
     !dialog.value?.open
   ) {
     return;
   }
   stopCloseFallback();
+  closingLifecycleGeneration = undefined;
+  nativeCloseGenerations.push(lifecycle);
   dialog.value.close();
 }
 
@@ -1181,9 +1234,23 @@ function onShellTransitionEnd(event: TransitionEvent) {
 }
 
 async function onClose() {
-  const wasIntentional = closingIntentionally;
-  closingIntentionally = false;
+  const closeLifecycle = nativeCloseGenerations.shift();
   if (dialog.value?.open) return;
+  if (closeLifecycle !== undefined && closeLifecycle !== lifecycleGeneration) return;
+  if (!mounted.value) return;
+  // A reduced or very short close can beat Vue's parent-to-child prop flush. The same flush also
+  // re-enables an opener disabled while the modal is present, so focus restoration waits for it.
+  await nextTick();
+  if (props.open && closeLifecycle === undefined) {
+    emitCloseRequest("programmatic");
+    await nextTick();
+  }
+  if (props.open) {
+    await openDialog(lifecycleGeneration);
+    return;
+  }
+  if (finalizedLifecycleGeneration === lifecycleGeneration) return;
+  finalizedLifecycleGeneration = lifecycleGeneration;
   invalidateOpenCycle();
   invalidateNavigation();
   invalidateClose();
@@ -1192,25 +1259,14 @@ async function onClose() {
   mediaTransitionMode.value = "direct";
   resetTransform();
   unlockDocumentScroll();
-  if (!mounted.value) return;
-  // A reduced or very short close can beat Vue's parent-to-child prop flush. The same flush also
-  // re-enables an opener disabled while the modal is present, so focus restoration waits for it.
-  await nextTick();
-  if (props.open) {
-    if (!wasIntentional) {
-      emit("update:open", false);
-      emit("openRequest", false, { activeId: semanticActiveId.value, reason: "programmatic" });
-      await nextTick();
-    }
-  }
-  if (props.open) {
-    if (wasIntentional) emit("closed", semanticActiveId.value);
-    await openDialog();
-    return;
-  }
   const opener = capturedOpener ?? props.focusReturn?.opener;
+  const focusGeneration = lifecycleGeneration;
   capturedOpener = undefined;
-  scheduleFocusRestore(opener);
+  focusRestoreVerification = scheduleVerifiedFocusRestore({
+    fallback: props.focusReturn?.fallback,
+    isCurrent: () => mounted.value && !props.open && focusGeneration === lifecycleGeneration,
+    opener,
+  });
   emit("closed", semanticActiveId.value);
 }
 
@@ -1248,13 +1304,13 @@ onMounted(() => {
     reducedMotionQuery.value = ownerWindow.matchMedia("(prefers-reduced-motion: reduce)");
     systemReducedMotion.value = reducedMotionQuery.value.matches;
   }
-  if (props.open) void openDialog();
+  if (props.open) beginOpenLifecycle();
 });
 
 watch(
   () => props.open,
   (open) => {
-    if (open) void openDialog();
+    if (open) beginOpenLifecycle();
     else {
       startClose();
     }
@@ -1263,11 +1319,15 @@ watch(
 
 watch(
   () => props.activeId,
-  (id) => {
+  (id, previousId) => {
     // A host confirming the stable ID emitted by this navigation is acknowledgement, not an
     // external takeover. Keep the transition and its provenance intact.
     if (id === undefined) {
-      internalActiveId.value = intendedActiveId.value ?? activeItem.value?.id;
+      const releasedId = resolveRollbackId() ?? intendedActiveId.value ?? activeItem.value?.id;
+      internalActiveId.value = releasedId;
+      if (previousId !== undefined && releasedId !== intendedActiveId.value && releasedId) {
+        synchronizeExact(releasedId, false);
+      }
       return;
     }
     const index = items.value.findIndex((item) => item.id === id);
@@ -1275,13 +1335,14 @@ watch(
       invalidateNavigation();
       clearPointerState();
       intendedActiveId.value = activeItem.value?.id;
-      rollbackAnchorId.value = intendedActiveId.value;
+      mechanicalAnchorId.value = intendedActiveId.value;
       return;
     }
-    rollbackAnchorId.value = id;
+    latestValidAuthorityId.value = id;
+    mechanicalAnchorId.value = id;
     if (id !== intendedActiveId.value) synchronizeExact(id);
   },
-  { immediate: true },
+  { flush: "sync", immediate: true },
 );
 
 watch(items, (nextItems, previousItems) => {
@@ -1311,7 +1372,7 @@ watch(items, (nextItems, previousItems) => {
     }
     if (props.open) {
       invalidateOpenCycle();
-      requestClose("programmatic");
+      emitCloseRequest("programmatic");
     }
     galleryIndex.value = 0;
     return;
@@ -1327,18 +1388,19 @@ watch(items, (nextItems, previousItems) => {
       : nextItems.findIndex((candidate) => candidate.id === intendedActiveId.value);
   if (controlledIndex >= 0) {
     intendedActiveId.value = props.activeId;
-    rollbackAnchorId.value = props.activeId;
+    latestValidAuthorityId.value = props.activeId;
+    mechanicalAnchorId.value = props.activeId;
     galleryIndex.value = controlledIndex;
   } else if (semanticIndex >= 0) {
     galleryIndex.value = semanticIndex;
-    if (props.activeId !== undefined) rollbackAnchorId.value = intendedActiveId.value;
+    if (props.activeId !== undefined) mechanicalAnchorId.value = intendedActiveId.value;
   } else {
     galleryIndex.value = resolvePreservedGalleryIndex(previousId, galleryIndex.value, nextItems);
     const fallbackId = nextItems[galleryIndex.value]?.id;
     if (props.activeId === undefined) acceptActiveId(fallbackId, "reconcile");
     else {
       intendedActiveId.value = fallbackId;
-      rollbackAnchorId.value = fallbackId;
+      mechanicalAnchorId.value = fallbackId;
     }
   }
   resetTransform();
@@ -1351,7 +1413,7 @@ watch(items, (nextItems, previousItems) => {
       openGeneration === openCycleGeneration.value &&
       navigation === navigationGeneration
     ) {
-      if (props.open && !dialog.value?.open) void openDialog();
+      if (props.open && !dialog.value?.open) void openDialog(lifecycleGeneration);
       else measureGeometry();
     }
   })();
@@ -1359,6 +1421,7 @@ watch(items, (nextItems, previousItems) => {
 
 onBeforeUnmount(() => {
   mounted.value = false;
+  lifecycleGeneration += 1;
   invalidateOpenCycle();
   invalidateNavigation();
   invalidateClose();
@@ -1366,10 +1429,8 @@ onBeforeUnmount(() => {
   unlockDocumentScroll();
   mediaTransformElements.clear();
   if (dialog.value?.open) dialog.value.close();
-  if (focusRestoreFrame !== undefined) {
-    cancelAnimationFrame(focusRestoreFrame);
-    focusRestoreFrame = undefined;
-  }
+  focusRestoreVerification?.cancel();
+  focusRestoreVerification = undefined;
   restoreFocus({
     fallback: props.focusReturn?.fallback,
     opener: capturedOpener ?? props.focusReturn?.opener,

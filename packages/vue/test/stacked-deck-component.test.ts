@@ -91,6 +91,91 @@ describe("StackedDeck", () => {
     wrapper.unmount();
   });
 
+  it("anchors rejection to the latest accepted controlled identity", async () => {
+    const wrapper = mountDeck({ activeId: "overview" });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+
+    expect(deck.next()).toBe(true);
+    await wrapper.setProps({ activeId: "system" });
+    await Promise.resolve();
+    await nextTick();
+    expect(deck.settledId).toBe("system");
+
+    expect(deck.next()).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    expect(deck.next()).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
+      ["system", { reason: "next" }],
+      ["outcome", { reason: "next" }],
+      ["outcome", { reason: "next" }],
+    ]);
+    expect(deck.activeId).toBe("system");
+    expect(deck.visualId).toBe("system");
+    expect(deck.settledId).toBe("system");
+    wrapper.unmount();
+  });
+
+  it("lets external authority replace a pending request after an accepted destination", async () => {
+    let acceptedFirstRequest = false;
+    let wrapper: ReturnType<typeof mountDeck>;
+    wrapper = mountDeck({
+      activeId: "overview",
+      "onUpdate:activeId": (id: ScreenId) => {
+        if (!acceptedFirstRequest && id === "system") {
+          acceptedFirstRequest = true;
+          void wrapper.setProps({ activeId: "system" });
+        } else if (id === "outcome") {
+          void wrapper.setProps({ activeId: "overview" });
+        }
+      },
+    });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+
+    expect(deck.next()).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    expect(deck.settledId).toBe("system");
+
+    expect(deck.next()).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(deck.activeId).toBe("overview");
+    expect(deck.visualId).toBe("overview");
+    expect(deck.settledId).toBe("overview");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["outcome", { reason: "next" }]);
+    expect(wrapper.get('[data-testid="snap-motion-stacked-deck-status"]').text()).not.toContain(
+      "Outcome",
+    );
+    wrapper.unmount();
+  });
+
+  it("hands controlled ownership off from the latest authority, not a pending request", async () => {
+    const wrapper = mountDeck({ activeId: "overview" });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+
+    expect(deck.next()).toBe(true);
+    // Vue Test Utils has no removeProp API; undefined models an omitted optional runtime prop.
+    await wrapper.setProps({ activeId: undefined } as never);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(deck.activeId).toBe("overview");
+    expect(deck.visualId).toBe("overview");
+    expect(deck.settledId).toBe("overview");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["system", { reason: "next" }]);
+    wrapper.unmount();
+  });
+
   it("rolls back to a valid deck anchor while controlled authority is unavailable", async () => {
     const wrapper = mountDeck({ activeId: "future" });
     await nextTick();

@@ -9,6 +9,10 @@ import {
   restoreFocus,
 } from "../../internal/accessibility/focus";
 import {
+  scheduleVerifiedFocusRestore,
+  type FocusRestoreVerification,
+} from "../../internal/accessibility/focus-restore";
+import {
   createEnglishSnapMotionMessages,
   type SnapMotionMessages,
 } from "../../localization/messages";
@@ -44,30 +48,73 @@ const generatedTitleId = `snap-motion-dialog-title-${useId()}`;
 const resolvedTitleId = props.titleId ?? generatedTitleId;
 const messages = computed(() => createEnglishSnapMotionMessages(props.messages));
 let capturedOpener: HTMLElement | undefined;
+let capturedOpenerGeneration = 0;
 let mounted = false;
-let closingIntentionally = false;
+let lifecycleGeneration = 0;
+let openedGeneration = 0;
+let finalizedGeneration = 0;
+const nativeCloseGenerations: number[] = [];
+let focusRestoreVerification: FocusRestoreVerification | undefined;
 
-async function show() {
+function captureLifecycleOpener(target: HTMLDialogElement, generation: number) {
+  if (capturedOpenerGeneration === generation) return;
+  capturedOpenerGeneration = generation;
+  const explicitOpener = props.focusReturn?.opener;
+  if (explicitOpener) {
+    capturedOpener = explicitOpener;
+    return;
+  }
+  const activeElement = captureFocusOpener(target.ownerDocument);
+  if (
+    activeElement &&
+    activeElement !== target.ownerDocument.body &&
+    activeElement !== target.ownerDocument.documentElement &&
+    !target.contains(activeElement)
+  ) {
+    capturedOpener = activeElement;
+  }
+}
+
+async function show(generation: number) {
   const target = dialog.value;
-  if (!mounted || !target || target.open) return;
-  capturedOpener ??= props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
-  target.showModal();
+  if (!mounted || !props.open || generation !== lifecycleGeneration || !target) return;
+  focusRestoreVerification?.cancel();
+  focusRestoreVerification = undefined;
+  captureLifecycleOpener(target, generation);
+  if (!target.open) target.showModal();
   await nextTick();
+  if (
+    !mounted ||
+    !props.open ||
+    generation !== lifecycleGeneration ||
+    !target.open ||
+    openedGeneration === generation
+  ) {
+    return;
+  }
   focusInitial(props.initialFocus, {
     close: closeButton.value,
     container: content.value,
     title: title.value,
   });
+  openedGeneration = generation;
   emit("opened");
 }
 
+function beginOpenLifecycle() {
+  lifecycleGeneration += 1;
+  void show(lifecycleGeneration);
+}
+
 function closeNative() {
-  if (!dialog.value?.open) return;
-  closingIntentionally = true;
-  dialog.value.close();
+  const target = dialog.value;
+  if (!target?.open) return;
+  nativeCloseGenerations.push(lifecycleGeneration);
+  target.close();
 }
 
 function requestClose(reason: CloseReason) {
+  if (!props.open || !dialog.value?.open) return;
   emit("update:open", false);
   emit("openRequest", false, { reason });
 }
@@ -77,19 +124,28 @@ function onCancel(event: Event) {
   requestClose("escape");
 }
 
-function onClose() {
-  const wasIntentional = closingIntentionally;
-  closingIntentionally = false;
-  if (!wasIntentional && props.open) {
+async function onClose() {
+  const target = dialog.value;
+  const closeGeneration = nativeCloseGenerations.shift();
+  if (target?.open) return;
+  if (!mounted) return;
+  if (closeGeneration !== undefined && closeGeneration !== lifecycleGeneration) return;
+  if (props.open) {
+    if (closeGeneration !== undefined) return;
     emit("update:open", false);
     emit("openRequest", false, { reason: "programmatic" });
-    void nextTick().then(() => {
-      return props.open ? show() : undefined;
-    });
-    return;
+    await nextTick();
+    if (props.open) {
+      await show(lifecycleGeneration);
+      return;
+    }
   }
-  restoreFocus({
+  if (finalizedGeneration === lifecycleGeneration) return;
+  finalizedGeneration = lifecycleGeneration;
+  const focusGeneration = lifecycleGeneration;
+  focusRestoreVerification = scheduleVerifiedFocusRestore({
     fallback: props.focusReturn?.fallback,
+    isCurrent: () => mounted && !props.open && focusGeneration === lifecycleGeneration,
     opener: capturedOpener ?? props.focusReturn?.opener,
   });
   capturedOpener = undefined;
@@ -99,22 +155,24 @@ function onClose() {
 watch(
   () => props.open,
   (open) => {
-    if (open) void show();
+    if (open) beginOpenLifecycle();
     else closeNative();
   },
 );
 
 onMounted(() => {
   mounted = true;
-  if (props.open) void show();
+  if (props.open) beginOpenLifecycle();
 });
 
 onBeforeUnmount(() => {
   mounted = false;
+  lifecycleGeneration += 1;
   if (dialog.value?.open) {
-    closingIntentionally = true;
     dialog.value.close();
   }
+  focusRestoreVerification?.cancel();
+  focusRestoreVerification = undefined;
   restoreFocus({
     fallback: props.focusReturn?.fallback,
     opener: capturedOpener ?? props.focusReturn?.opener,

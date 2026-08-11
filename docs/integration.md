@@ -59,9 +59,10 @@ history behavior:
 
 Back/Forward and query updates are authoritative prop changes. Snap Motion adopts them without
 emitting the same semantic request back. `apps/router-fixture` certifies history behavior plus
-accepted, delayed, and refused requests; `apps/nuxt-fixture` certifies the same authority boundary
-for a query-controlled SSR gallery, initially open valid IDs, hydration, and direct-entry fallback.
-Neither fixture uses `ClientOnly`.
+accepted, delayed, and refused requests, including an accepted B destination followed by a refused
+C destination and rollback to B. `apps/nuxt-fixture` certifies the same multi-step authority
+boundary for a query-controlled SSR gallery, initially open valid IDs, hydration, and direct-entry
+fallback. Neither fixture uses `ClientOnly`.
 
 The host must not add CSS transitions, native smooth scrolling, native scroll snap, or another
 animation library to the same transform. Private integration does not authorize public activation;

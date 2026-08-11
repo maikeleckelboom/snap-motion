@@ -325,9 +325,16 @@ export function clampGalleryIndex(index: number, itemCount: number): number {
   return clamp(Math.round(finiteOr(index, 0)), 0, Math.max(0, itemCount - 1));
 }
 
+export type NormalizedMediaGalleryItem<TItem extends MediaGalleryItem> = Omit<
+  TItem,
+  keyof MediaGalleryItem
+> &
+  Omit<MediaGalleryItem, "id"> &
+  Pick<TItem, "id">;
+
 export function normalizeMediaGalleryItems<TItem extends MediaGalleryItem>(
   items: readonly TItem[],
-): Array<MediaGalleryItem & TItem> {
+): Array<NormalizedMediaGalleryItem<TItem>> {
   const ids = new Set<string>();
   items.forEach((item, index) => {
     const trimmedId = item.id.trim();
@@ -361,7 +368,7 @@ export function normalizeMediaGalleryItems<TItem extends MediaGalleryItem>(
       width: intrinsicSize.width,
       height: intrinsicSize.height,
       ...(fullSrc ? { fullSrc } : {}),
-    } as MediaGalleryItem & TItem;
+    } as NormalizedMediaGalleryItem<TItem>;
   });
 }
 

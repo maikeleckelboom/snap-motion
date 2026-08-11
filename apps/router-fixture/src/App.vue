@@ -31,6 +31,8 @@ type PendingRequest =
   | { readonly kind: "close" };
 const requestPolicy = ref<RequestPolicy>("accept");
 const pendingRequest = ref<PendingRequest>();
+const activeRequestSequence = ref<MediaId[]>([]);
+const settledSequence = ref<MediaId[]>([]);
 
 declare global {
   interface WindowEventMap {
@@ -60,6 +62,7 @@ function acceptClose() {
 }
 
 function changeActiveId(id: MediaId, _details: ActiveIdRequestDetails) {
+  activeRequestSequence.value = [...activeRequestSequence.value, id];
   if (requestPolicy.value === "refuse") return;
   if (requestPolicy.value === "delay") {
     pendingRequest.value = { kind: "active", id };
@@ -75,6 +78,10 @@ function changeOpen(_open: false, _details: OpenRequestDetails) {
     return;
   }
   acceptClose();
+}
+
+function recordSettlement(id: MediaId) {
+  settledSequence.value = [...settledSequence.value, id];
 }
 
 function resolvePendingRequest() {
@@ -110,6 +117,8 @@ useEventListener("snap-motion:resolve-pending", resolvePendingRequest);
         data-testid="router-authority"
         :data-active-id="activeId"
         :data-policy="requestPolicy"
+        :data-request-sequence="activeRequestSequence.join(',')"
+        :data-settled-sequence="settledSequence.join(',')"
       >
         {{ activeId }}
       </output>
@@ -122,6 +131,7 @@ useEventListener("snap-motion:resolve-pending", resolvePendingRequest);
         :ids="media.map((item) => item.id)"
         label="Case study media"
         @active-id-request="changeActiveId"
+        @settled="recordSettlement"
       >
         <CarouselPrevious />
         <CarouselViewport>

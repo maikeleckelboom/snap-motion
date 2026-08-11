@@ -32,6 +32,10 @@ import {
   maintainModalTabOrder,
   restoreFocus,
 } from "../../internal/accessibility/focus";
+import {
+  scheduleVerifiedFocusRestore,
+  type FocusRestoreVerification,
+} from "../../internal/accessibility/focus-restore";
 import { createEnglishSnapMotionMessages } from "../../localization/messages";
 import { sheetContextKey, type SheetContext } from "../sheet-context";
 import type { SheetSide } from "../sheet-contracts";
@@ -133,26 +137,43 @@ function retainedConfiguredId() {
 const intendedId = ref<Id>(preferredIdForSide());
 const internalActiveId = ref<Id>(intendedId.value);
 const semanticActiveId = computed<Id>(() => props.activeId ?? internalActiveId.value);
-const rollbackAnchorId = ref<Id | undefined>(
-  props.activeId !== undefined && hasConfiguredPoint(props.activeId)
-    ? props.activeId
-    : intendedId.value,
+const latestValidAuthorityId = ref<Id | undefined>(
+  props.activeId !== undefined && hasConfiguredPoint(props.activeId) ? props.activeId : undefined,
 );
+const mechanicalAnchorId = ref<Id | undefined>(intendedId.value);
 let mounted = false;
 let capturedOpener: HTMLElement | undefined;
+let capturedOpenerGeneration = 0;
 let closeReason: CloseReason = "programmatic";
 let targetGeneration = 0;
 let settledGeneration = 0;
-let focusRestoreFrame: number | undefined;
-let suppressNextFocusRestore = false;
-let presentationChangeClosing = false;
-let closingIntentionally = false;
+let focusRestoreVerification: FocusRestoreVerification | undefined;
+let lifecycleGeneration = 0;
+let openedGeneration = 0;
+let finalizedGeneration = 0;
+let closingGeneration: number | undefined;
+const nativeCloseGenerations: number[] = [];
+const presentationCloseGenerations = new Set<number>();
+let suppressedFocusRestoreGeneration: number | undefined;
 
 let settlementReason: NavigationReason = "external";
+
+function resolveRollbackId(): Id | undefined {
+  if (
+    latestValidAuthorityId.value !== undefined &&
+    hasConfiguredPoint(latestValidAuthorityId.value)
+  ) {
+    return latestValidAuthorityId.value;
+  }
+  return mechanicalAnchorId.value !== undefined && hasConfiguredPoint(mechanicalAnchorId.value)
+    ? mechanicalAnchorId.value
+    : configuredPoints.value[0]?.id;
+}
 
 function acceptTarget(id: Id, reason: NavigationReason, componentOriginated: boolean) {
   if (id === intendedId.value) return false;
   intendedId.value = id;
+  if (props.activeId === undefined) mechanicalAnchorId.value = id;
   settlementReason = reason;
   targetGeneration += 1;
   if (componentOriginated && reason !== "external") {
@@ -175,10 +196,11 @@ const motion = useSheetMotion<Id>({
       if (id !== intendedId.value || settledGeneration === targetGeneration) return;
       if (props.activeId !== undefined && id !== props.activeId) {
         settledGeneration = targetGeneration;
-        const authoritativeId = rollbackAnchorId.value;
+        const authoritativeId = resolveRollbackId();
         if (authoritativeId !== undefined) synchronizeExact(authoritativeId, false);
         return;
       }
+      mechanicalAnchorId.value = id;
       settledGeneration = targetGeneration;
       const label =
         props.snapLabels?.[id] ??
@@ -242,30 +264,55 @@ const diagnostics = computed<SheetDiagnostics<Id>>(() => {
   };
 });
 
-async function show() {
-  const target = dialog.value;
-  if (!mounted || !target || target.open) return;
-  if (focusRestoreFrame !== undefined) {
-    window.cancelAnimationFrame(focusRestoreFrame);
-    focusRestoreFrame = undefined;
+function captureLifecycleOpener(target: HTMLDialogElement, generation: number) {
+  if (capturedOpenerGeneration === generation) return;
+  capturedOpenerGeneration = generation;
+  const explicitOpener = props.focusReturn?.opener;
+  if (explicitOpener) {
+    capturedOpener = explicitOpener;
+    return;
   }
-  suppressNextFocusRestore = false;
-  capturedOpener ??= props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
-  target.showModal();
+  const activeElement = captureFocusOpener(target.ownerDocument);
+  if (
+    activeElement &&
+    activeElement !== target.ownerDocument.body &&
+    activeElement !== target.ownerDocument.documentElement &&
+    !target.contains(activeElement)
+  ) {
+    capturedOpener = activeElement;
+  }
+}
+
+async function show(generation: number) {
+  const target = dialog.value;
+  if (!mounted || !props.open || generation !== lifecycleGeneration || !target) return;
+  focusRestoreVerification?.cancel();
+  focusRestoreVerification = undefined;
+  closingGeneration = undefined;
+  captureLifecycleOpener(target, generation);
+  if (!target.open) target.showModal();
   await nextTick();
+  if (!mounted || !props.open || generation !== lifecycleGeneration || !target.open) return;
   body.value?.scrollTo(0, 0);
   motion.remeasure(intendedId.value);
   motion.open(intendedId.value);
+  if (openedGeneration === generation) return;
   focusInitial(props.initialFocus, {
     close: closeButton.value,
     container: panel.value,
     title: title.value,
   });
+  openedGeneration = generation;
   emit("opened");
 }
 
+function beginOpenLifecycle() {
+  lifecycleGeneration += 1;
+  void show(lifecycleGeneration);
+}
+
 function requestClose(reason: CloseReason) {
-  if (!dialog.value?.open) return;
+  if (!props.open || !dialog.value?.open) return;
   closeReason = reason;
   emit("update:open", false);
   emit("openRequest", false, { reason });
@@ -273,13 +320,24 @@ function requestClose(reason: CloseReason) {
 
 function beginClose() {
   if (dialog.value?.open && motion.sheetState.value !== "closing") {
-    closingIntentionally = true;
+    closingGeneration = lifecycleGeneration;
     motion.close();
   }
 }
 
 function completeClose() {
-  if (dialog.value?.open) dialog.value.close();
+  const target = dialog.value;
+  if (!target?.open) return;
+  const generation = closingGeneration ?? lifecycleGeneration;
+  if (generation !== lifecycleGeneration) return;
+  if (props.open) {
+    closeReason = "programmatic";
+    emit("update:open", false);
+    emit("openRequest", false, { reason: closeReason });
+  }
+  closingGeneration = undefined;
+  nativeCloseGenerations.push(generation);
+  target.close();
 }
 
 /** Immediate host-swap path: no exit animation and no focus return to an unmounting trigger. */
@@ -287,16 +345,15 @@ function closeForPresentationChange() {
   const target = dialog.value;
   if (!target?.open) return false;
   const focusedInside = target.contains(target.ownerDocument.activeElement);
-  suppressNextFocusRestore = true;
-  presentationChangeClosing = true;
   closeReason = "programmatic";
   motion.interrupt();
   motion.sheetState.value = "closed";
+  const generation = lifecycleGeneration;
+  suppressedFocusRestoreGeneration = generation;
+  presentationCloseGenerations.add(generation);
+  nativeCloseGenerations.push(generation);
   target.close();
-  if (props.open) {
-    emit("update:open", false);
-    emit("openRequest", false, { reason: "programmatic" });
-  }
+  if (props.open) emit("update:open", false);
   return focusedInside;
 }
 
@@ -306,21 +363,22 @@ function onCancel(event: Event) {
 }
 
 async function onClose() {
-  const wasIntentional = closingIntentionally;
-  closingIntentionally = false;
+  const target = dialog.value;
+  const closeGeneration = nativeCloseGenerations.shift();
+  const presentationChange =
+    closeGeneration !== undefined && presentationCloseGenerations.delete(closeGeneration);
+  if (target?.open) return;
   if (!mounted) {
-    capturedOpener = undefined;
-    suppressNextFocusRestore = false;
-    presentationChangeClosing = false;
     return;
   }
-  motion.interrupt();
-  body.value?.scrollTo(0, 0);
-  const presentationChange = presentationChangeClosing;
+  if (closeGeneration !== undefined && closeGeneration !== lifecycleGeneration) return;
   if (presentationChange) {
-    presentationChangeClosing = false;
+    if (finalizedGeneration === lifecycleGeneration) return;
+    finalizedGeneration = lifecycleGeneration;
+    if (suppressedFocusRestoreGeneration === lifecycleGeneration) {
+      suppressedFocusRestoreGeneration = undefined;
+    }
     capturedOpener = undefined;
-    suppressNextFocusRestore = false;
     emit("closed");
     return;
   }
@@ -328,27 +386,28 @@ async function onClose() {
   // accepted `update:open(false)` arrive before classifying the native close as unexpected.
   if (props.open) await nextTick();
   if (props.open) {
-    if (!wasIntentional) {
+    if (closeGeneration === undefined) {
       emit("update:open", false);
       emit("openRequest", false, { reason: closeReason });
       await nextTick();
     }
   }
   if (props.open) {
-    if (wasIntentional) emit("closed");
-    await show();
+    await show(lifecycleGeneration);
     return;
   }
+  if (finalizedGeneration === lifecycleGeneration) return;
+  finalizedGeneration = lifecycleGeneration;
+  motion.interrupt();
+  body.value?.scrollTo(0, 0);
   const opener = capturedOpener ?? props.focusReturn?.opener;
-  const shouldRestoreFocus = !suppressNextFocusRestore;
+  const focusGeneration = lifecycleGeneration;
   capturedOpener = undefined;
-  if (!presentationChange) suppressNextFocusRestore = false;
-  if (shouldRestoreFocus) {
-    focusRestoreFrame = window.requestAnimationFrame(() => {
-      focusRestoreFrame = undefined;
-      restoreFocus({ fallback: props.focusReturn?.fallback, opener });
-    });
-  }
+  focusRestoreVerification = scheduleVerifiedFocusRestore({
+    fallback: props.focusReturn?.fallback,
+    isCurrent: () => mounted && !props.open && focusGeneration === lifecycleGeneration,
+    opener,
+  });
   emit("closed");
 }
 
@@ -366,6 +425,8 @@ function navigateTo(id: Id) {
 
 function synchronizeExact(id: Id, reportSettlement = true) {
   if (!hasConfiguredPoint(id)) return false;
+  mechanicalAnchorId.value = id;
+  if (id === props.activeId) latestValidAuthorityId.value = id;
   settlementReason = "external";
   const changed = acceptTarget(id, "external", false);
   if (!reportSettlement) settledGeneration = targetGeneration;
@@ -385,7 +446,7 @@ function synchronizeTo(id: Id) {
 watch(
   () => props.open,
   (open) => {
-    if (open) void show();
+    if (open) beginOpenLifecycle();
     else beginClose();
   },
 );
@@ -396,12 +457,16 @@ watch(
     // A v-model confirmation of the semantic destination already accepted by the Sheet is not an
     // external takeover. Re-synchronizing would cancel the spring and lose its original reason.
     if (id !== undefined && hasConfiguredPoint(id)) {
-      rollbackAnchorId.value = id;
+      latestValidAuthorityId.value = id;
+      mechanicalAnchorId.value = id;
       if (id !== intendedId.value) synchronizeExact(id);
     } else if (id === undefined) {
-      internalActiveId.value = intendedId.value;
+      const releasedId = resolveRollbackId() ?? intendedId.value;
+      internalActiveId.value = releasedId;
+      if (releasedId !== intendedId.value) synchronizeExact(releasedId);
     }
   },
+  { flush: "sync" },
 );
 
 watch(
@@ -409,7 +474,7 @@ watch(
   async (side) => {
     const retained = retainedConfiguredId();
     if (props.activeId !== undefined && !hasConfiguredPoint(props.activeId)) {
-      rollbackAnchorId.value = retained;
+      mechanicalAnchorId.value = retained;
     }
     if (retained !== intendedId.value) {
       acceptTarget(
@@ -422,6 +487,7 @@ watch(
     await nextTick();
     const target = motion.remeasure(retained);
     if (target && target.id !== intendedId.value) {
+      mechanicalAnchorId.value = target.id;
       acceptTarget(
         target.id,
         props.activeId === undefined ? "reconcile" : "external",
@@ -437,7 +503,7 @@ watch(
   () => {
     const retained = retainedConfiguredId();
     if (props.activeId !== undefined && !hasConfiguredPoint(props.activeId)) {
-      rollbackAnchorId.value = retained;
+      mechanicalAnchorId.value = retained;
     }
     if (retained !== intendedId.value) {
       acceptTarget(
@@ -448,6 +514,7 @@ watch(
     }
     const target = motion.remeasure(retained);
     if (target && target.id !== intendedId.value) {
+      mechanicalAnchorId.value = target.id;
       acceptTarget(
         target.id,
         props.activeId === undefined ? "reconcile" : "external",
@@ -483,18 +550,18 @@ provide(sheetContextKey, {
 
 onMounted(() => {
   mounted = true;
-  if (props.open) void show();
+  if (props.open) beginOpenLifecycle();
 });
 
 onBeforeUnmount(() => {
+  const suppressFocusRestore = suppressedFocusRestoreGeneration === lifecycleGeneration;
   mounted = false;
+  lifecycleGeneration += 1;
   motion.interrupt();
   if (dialog.value?.open) dialog.value.close();
-  if (focusRestoreFrame !== undefined) {
-    window.cancelAnimationFrame(focusRestoreFrame);
-    focusRestoreFrame = undefined;
-  }
-  if (!suppressNextFocusRestore) {
+  focusRestoreVerification?.cancel();
+  focusRestoreVerification = undefined;
+  if (!suppressFocusRestore) {
     restoreFocus({
       fallback: props.focusReturn?.fallback,
       opener: capturedOpener ?? props.focusReturn?.opener,

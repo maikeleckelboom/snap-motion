@@ -1,5 +1,6 @@
+import { createFixedStageGeometry } from "@snap-motion/core";
 import { mount, type VueWrapper } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { h, nextTick } from "vue";
 
 import CarouselNext from "../src/carousel/components/CarouselNext.vue";
@@ -10,6 +11,11 @@ import CarouselStatus from "../src/carousel/components/CarouselStatus.vue";
 import CarouselTrack from "../src/carousel/components/CarouselTrack.vue";
 import CarouselViewport from "../src/carousel/components/CarouselViewport.vue";
 import ModalDialog from "../src/dialog/components/ModalDialog.vue";
+
+const fixedStageGeometry = {
+  measure: ({ ids }: { ids: readonly string[] }) =>
+    createFixedStageGeometry({ itemIds: ids, viewportSize: 320 }),
+};
 
 describe("production carousel components", () => {
   it("owns the APG boundary, native controls, slide groups, inertness, and settled status", async () => {
@@ -140,6 +146,207 @@ describe("production carousel components", () => {
     expect(
       (wrapper.vm as unknown as { synchronizeTo: (id: string) => boolean }).synchronizeTo("two"),
     ).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("rolls a rejected request back to the latest accepted controlled authority", async () => {
+    let acceptedFirstRequest = false;
+    let wrapper: VueWrapper;
+    wrapper = mount(CarouselRoot, {
+      attachTo: document.body,
+      props: {
+        activeId: "one",
+        ids: ["one", "two", "three"],
+        reducedMotionOverride: true,
+        "onUpdate:activeId": (id: string) => {
+          if (!acceptedFirstRequest && id === "two") {
+            acceptedFirstRequest = true;
+            void wrapper.setProps({ activeId: id });
+          }
+        },
+      },
+      slots: {
+        default: () => [
+          h(CarouselViewport, null, {
+            default: () =>
+              h(CarouselTrack, null, {
+                default: () => [
+                  h(CarouselSlide, { id: "one", label: "One" }),
+                  h(CarouselSlide, { id: "two", label: "Two" }),
+                  h(CarouselSlide, { id: "three", label: "Three" }),
+                ],
+              }),
+          }),
+          h(CarouselNext),
+          h(CarouselStatus),
+        ],
+      },
+    });
+    await nextTick();
+
+    await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await Promise.resolve();
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-active-id")).toBe("two");
+    expect(wrapper.get('[role="status"]').text()).toBe("Two");
+    expect(wrapper.emitted("settled")).toEqual([["two", { reason: "next" }]]);
+
+    await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await Promise.resolve();
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+    await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
+      ["two", { reason: "next" }],
+      ["three", { reason: "next" }],
+      ["three", { reason: "next" }],
+    ]);
+    expect(wrapper.emitted("settled")).toEqual([["two", { reason: "next" }]]);
+    expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-active-id")).toBe("two");
+    expect(wrapper.get('[role="status"]').text()).toBe("Two");
+    wrapper.unmount();
+  });
+
+  it("retains request provenance when a second destination is confirmed after a delay", async () => {
+    let acceptedFirstRequest = false;
+    let wrapper: VueWrapper;
+    wrapper = mount(CarouselRoot, {
+      attachTo: document.body,
+      props: {
+        activeId: "one",
+        geometryStrategy: fixedStageGeometry,
+        ids: ["one", "two", "three"],
+        reducedMotionOverride: false,
+        "onUpdate:activeId": (id: string) => {
+          if (!acceptedFirstRequest && id === "two") {
+            acceptedFirstRequest = true;
+            void wrapper.setProps({ activeId: id });
+          }
+        },
+      },
+      slots: {
+        default: () => [
+          h(CarouselViewport, null, {
+            default: () =>
+              h(CarouselTrack, null, {
+                default: () => [
+                  h(CarouselSlide, { id: "one", label: "One" }),
+                  h(CarouselSlide, { id: "two", label: "Two" }),
+                  h(CarouselSlide, { id: "three", label: "Three" }),
+                ],
+              }),
+          }),
+          h(CarouselNext),
+          h(CarouselStatus),
+        ],
+      },
+    });
+    await nextTick();
+
+    await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await nextTick();
+    await vi.waitFor(() => {
+      expect(wrapper.emitted("settled")).toEqual([["two", { reason: "next" }]]);
+    });
+
+    await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await nextTick();
+    expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-phase")).not.toBe("idle");
+    expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-active-id")).toBe("two");
+    expect(wrapper.emitted("settled")).toEqual([["two", { reason: "next" }]]);
+
+    await wrapper.setProps({ activeId: "three" });
+    await vi.waitFor(() => {
+      expect(wrapper.emitted("settled")).toEqual([
+        ["two", { reason: "next" }],
+        ["three", { reason: "next" }],
+      ]);
+    });
+    expect(wrapper.get('[role="status"]').text()).toBe("Three");
+    wrapper.unmount();
+  });
+
+  it("invalidates a pending second request when authority or the collection replaces it", async () => {
+    let acceptedFirstRequest = false;
+    let wrapper: VueWrapper;
+    wrapper = mount(CarouselRoot, {
+      attachTo: document.body,
+      props: {
+        activeId: "one",
+        geometryStrategy: fixedStageGeometry,
+        ids: ["one", "two", "three"],
+        reducedMotionOverride: false,
+        "onUpdate:activeId": (id: string) => {
+          if (!acceptedFirstRequest && id === "two") {
+            acceptedFirstRequest = true;
+            void wrapper.setProps({ activeId: id });
+          }
+        },
+      },
+      slots: {
+        default: () => [
+          h(CarouselViewport, null, {
+            default: () =>
+              h(CarouselTrack, null, {
+                default: () => [
+                  h(CarouselSlide, { id: "one", label: "One" }),
+                  h(CarouselSlide, { id: "two", label: "Two" }),
+                  h(CarouselSlide, { id: "three", label: "Three" }),
+                ],
+              }),
+          }),
+          h(CarouselNext),
+          h(CarouselStatus),
+        ],
+      },
+    });
+    await nextTick();
+
+    await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await nextTick();
+    await vi.waitFor(() => {
+      expect(wrapper.emitted("settled")).toEqual([["two", { reason: "next" }]]);
+    });
+
+    await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await nextTick();
+    expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-phase")).not.toBe("idle");
+    await wrapper.setProps({ activeId: "one" });
+    await vi.waitFor(() => {
+      expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-phase")).toBe("idle");
+      expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-active-id")).toBe(
+        "one",
+      );
+    });
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["three", { reason: "next" }]);
+    expect(wrapper.get('[role="status"]').text()).not.toBe("Three");
+
+    await wrapper.setProps({ activeId: "two" });
+    await vi.waitFor(() => {
+      expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-phase")).toBe("idle");
+      expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-active-id")).toBe(
+        "two",
+      );
+    });
+    await wrapper.get(".snap-motion-carousel-next").trigger("click");
+    await nextTick();
+    expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-phase")).not.toBe("idle");
+    await wrapper.setProps({ ids: ["one", "two"] });
+    await vi.waitFor(() => {
+      expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-phase")).toBe("idle");
+    });
+    await wrapper.setProps({ ids: ["one", "two", "three"] });
+    await nextTick();
+    expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-active-id")).toBe("two");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["three", { reason: "next" }]);
+    expect(wrapper.get('[role="status"]').text()).not.toBe("Three");
     wrapper.unmount();
   });
 
@@ -346,6 +553,128 @@ describe("production carousel components", () => {
 });
 
 describe("production modal dialog", () => {
+  it("no-ops a public close request after controlled and native closure", async () => {
+    const wrapper = mount(ModalDialog, {
+      props: { open: false },
+      slots: { title: () => "Dialog title", default: () => "Dialog body" },
+    });
+    await nextTick();
+
+    (wrapper.vm as unknown as { requestClose: (reason: "programmatic") => void }).requestClose(
+      "programmatic",
+    );
+    expect(wrapper.emitted("update:open")).toBeUndefined();
+    expect(wrapper.emitted("openRequest")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("unmounts an open lifecycle without publishing a close request", async () => {
+    const opener = document.createElement("button");
+    opener.textContent = "Open dialog";
+    document.body.append(opener);
+    opener.focus();
+    const wrapper = mount(ModalDialog, {
+      attachTo: document.body,
+      props: { open: true },
+      slots: { title: () => "Dialog title", default: () => "Dialog body" },
+    });
+    await nextTick();
+
+    wrapper.unmount();
+    expect(wrapper.emitted("update:open")).toBeUndefined();
+    expect(wrapper.emitted("openRequest")).toBeUndefined();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it("finalizes an accepted unexpected native close exactly once", async () => {
+    const opener = document.createElement("button");
+    opener.textContent = "Open dialog";
+    document.body.append(opener);
+    opener.focus();
+    let wrapper: VueWrapper;
+    wrapper = mount(ModalDialog, {
+      attachTo: document.body,
+      props: {
+        open: true,
+        "onUpdate:open": (open: boolean) => void wrapper.setProps({ open }),
+      },
+      slots: { title: () => "Dialog title", default: () => "Dialog body" },
+    });
+    await nextTick();
+
+    const dialog = wrapper.get("dialog").element as HTMLDialogElement;
+    dialog.removeAttribute("open");
+    dialog.dispatchEvent(new Event("close"));
+    await Promise.resolve();
+    await nextTick();
+    await Promise.resolve();
+
+    expect(wrapper.emitted("openRequest")).toEqual([[false, { reason: "programmatic" }]]);
+    expect(wrapper.emitted("closed")).toEqual([[]]);
+    expect(document.activeElement).toBe(opener);
+    wrapper.unmount();
+    opener.remove();
+  });
+
+  it("repairs a refused unexpected native close without publishing closed", async () => {
+    const wrapper = mount(ModalDialog, {
+      attachTo: document.body,
+      props: { open: true },
+      slots: { title: () => "Dialog title", default: () => "Dialog body" },
+    });
+    await nextTick();
+
+    const dialog = wrapper.get("dialog").element as HTMLDialogElement;
+    dialog.removeAttribute("open");
+    dialog.dispatchEvent(new Event("close"));
+    await Promise.resolve();
+    await nextTick();
+    await Promise.resolve();
+
+    expect(wrapper.emitted("openRequest")).toEqual([[false, { reason: "programmatic" }]]);
+    expect(wrapper.emitted("closed")).toBeUndefined();
+    expect(wrapper.get("dialog").attributes()).toHaveProperty("open");
+    wrapper.unmount();
+  });
+
+  it("lets only the latest close generation finalize a rapid reopen and reclose", async () => {
+    const opener = document.createElement("button");
+    opener.textContent = "Open dialog";
+    document.body.append(opener);
+    opener.focus();
+    const wrapper = mount(ModalDialog, {
+      attachTo: document.body,
+      props: { open: true },
+      slots: { title: () => "Dialog title", default: () => "Dialog body" },
+    });
+    await nextTick();
+
+    const dialog = wrapper.get("dialog").element as HTMLDialogElement;
+    const pendingCloseEvents: Array<() => void> = [];
+    vi.spyOn(dialog, "close").mockImplementation(() => {
+      dialog.removeAttribute("open");
+      pendingCloseEvents.push(() => dialog.dispatchEvent(new Event("close")));
+    });
+
+    await wrapper.setProps({ open: false });
+    await wrapper.setProps({ open: true });
+    await wrapper.setProps({ open: false });
+    expect(pendingCloseEvents).toHaveLength(2);
+
+    pendingCloseEvents[0]!();
+    await nextTick();
+    expect(wrapper.emitted("closed")).toBeUndefined();
+    expect(document.activeElement).not.toBe(opener);
+
+    pendingCloseEvents[1]!();
+    await nextTick();
+    expect(wrapper.emitted("closed")).toEqual([[]]);
+    expect(document.activeElement).toBe(opener);
+    wrapper.unmount();
+    opener.remove();
+  });
+
   it("keeps a refused controlled close request open and repeatable", async () => {
     const wrapper = mount(ModalDialog, {
       attachTo: document.body,

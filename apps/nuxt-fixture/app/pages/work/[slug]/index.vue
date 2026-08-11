@@ -12,6 +12,8 @@ type PendingRequest =
   | { readonly kind: "close" };
 const requestPolicy = ref<RequestPolicy>("accept");
 const pendingRequest = ref<PendingRequest>();
+const activeRequestSequence = ref<MediaId[]>([]);
+const settledSequence = ref<MediaId[]>([]);
 
 declare global {
   interface WindowEventMap {
@@ -36,6 +38,7 @@ function acceptClose() {
 }
 function changeActiveId(id: MediaId | undefined, _details: ActiveIdRequestDetails) {
   if (id === undefined) return;
+  activeRequestSequence.value = [...activeRequestSequence.value, id];
   if (requestPolicy.value === "refuse") return;
   if (requestPolicy.value === "delay") {
     pendingRequest.value = { kind: "active", id };
@@ -50,6 +53,10 @@ function changeOpen(_open: false, _details: OpenRequestDetails) {
     return;
   }
   acceptClose();
+}
+
+function recordSettlement(id: MediaId) {
+  settledSequence.value = [...settledSequence.value, id];
 }
 function resolvePendingRequest() {
   const pending = pendingRequest.value;
@@ -74,7 +81,13 @@ useEventListener("snap-motion:resolve-pending", resolvePendingRequest);
         Resolve pending request
       </button>
     </fieldset>
-    <output data-testid="nuxt-authority" :data-active-id="activeId" :data-policy="requestPolicy">
+    <output
+      data-testid="nuxt-authority"
+      :data-active-id="activeId"
+      :data-policy="requestPolicy"
+      :data-request-sequence="activeRequestSequence.join(',')"
+      :data-settled-sequence="settledSequence.join(',')"
+    >
       {{ activeId }}
     </output>
     <MediaOverlay
@@ -82,6 +95,7 @@ useEventListener("snap-motion:resolve-pending", resolvePendingRequest);
       :open="open"
       @active-id-request="changeActiveId"
       @open-request="changeOpen"
+      @settled="recordSettlement"
     />
   </main>
 </template>

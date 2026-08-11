@@ -32,6 +32,11 @@ reconciled exactly to the last valid authority at the settlement boundary and em
 adoption: it interrupts conflicting work, is never echoed through either request event, and remains
 silent in the live region.
 
+The last valid authority is recorded before the acknowledgement early-return, including when a
+host confirms the destination the component just requested. It is distinct from the current
+mechanical fallback used while that authority is absent from a reconfigured collection. Targets,
+visual dominance, fallbacks, and stale settlements never overwrite the authority anchor.
+
 The navigation reasons are `previous`, `next`, `keyboard`, `drag`, `wheel`, `picker`,
 `programmatic`, `reconcile`, and `external`. They live in `@snap-motion/core` because provenance is shared domain
 vocabulary for every future adapter. `external` replaces the router-shaped `route`: routers are one
@@ -49,6 +54,14 @@ begins close and emits no request echo. The shared close reasons are `close-butt
 `scrim`, and `programmatic`.
 `scrim` replaces the gallery-only `backdrop`. Collection exhaustion is state reconciliation, not a
 new user close reason. `ModalDialog` intentionally has no item selection.
+
+Each native-dialog opening has a monotonic lifecycle generation. Intentional native closes retain
+the generation that initiated them, and a queued `close` event can finalize focus return, scroll
+unlock, cleanup, or `closed` only when it still owns the current closed lifecycle. A close event
+from an older generation is inert even when a newer lifecycle has already closed again. Public
+close requests no-op after controlled or native closure. The Sheet's
+`closeForPresentationChange()` is a committed host swap: it emits `update:open(false)` but no
+refusable `openRequest`.
 
 ## Component contract
 

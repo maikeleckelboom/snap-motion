@@ -77,9 +77,10 @@ const initialMechanicalId = props.ids.includes(props.activeId)
   : (props.ids[0] ?? props.activeId);
 const intendedId = ref<Id>(initialMechanicalId);
 const semanticActiveId = computed(() => props.activeId);
-const rollbackAnchorId = ref<Id | undefined>(
-  props.ids.includes(props.activeId) ? props.activeId : props.ids[0],
+const latestValidAuthorityId = ref<Id | undefined>(
+  props.ids.includes(props.activeId) ? props.activeId : undefined,
 );
+const mechanicalAnchorId = ref<Id | undefined>(initialMechanicalId);
 let latestSnapshot: ControllerSnapshot<Id>;
 let targetGeneration = 0;
 let settledGeneration = 0;
@@ -138,6 +139,18 @@ function measure() {
   });
 }
 
+function resolveRollbackId(): Id | undefined {
+  if (
+    latestValidAuthorityId.value !== undefined &&
+    props.ids.includes(latestValidAuthorityId.value)
+  ) {
+    return latestValidAuthorityId.value;
+  }
+  return mechanicalAnchorId.value !== undefined && props.ids.includes(mechanicalAnchorId.value)
+    ? mechanicalAnchorId.value
+    : props.ids[0];
+}
+
 function publishSettlement() {
   settleCheckQueued = false;
   const snapshot = latestSnapshot;
@@ -151,7 +164,7 @@ function publishSettlement() {
     return;
   }
   if (active.id !== props.activeId) {
-    const authoritativeId = rollbackAnchorId.value;
+    const authoritativeId = resolveRollbackId();
     if (authoritativeId !== undefined) {
       queueMicrotask(() => synchronizeExact(authoritativeId, false));
     }
@@ -228,6 +241,8 @@ function navigateTo(id: Id): boolean {
 /** Adopts authoritative state exactly, without replaying navigation or announcing it. */
 function synchronizeExact(id: Id, reportSettlement = true): boolean {
   if (!props.ids.includes(id)) return false;
+  mechanicalAnchorId.value = id;
+  if (id === props.activeId) latestValidAuthorityId.value = id;
   motion.interrupt();
   acceptTarget(id, "external", false);
   if (!reportSettlement) settledGeneration = targetGeneration;
@@ -310,6 +325,10 @@ watch(
     const idsChanged = priorState === undefined || idsKey !== priorState[0];
     const controlledChanged = priorState !== undefined && controlledId !== priorState[1];
     if (!idsChanged && !controlledChanged) return;
+    if (nextIds.includes(controlledId)) {
+      latestValidAuthorityId.value = controlledId;
+      mechanicalAnchorId.value = controlledId;
+    }
     // A host confirming the destination just emitted by this component is not an external
     // takeover. Let the accepted motion finish and retain its original provenance.
     if (!idsChanged && controlledId === intendedId.value) return;
@@ -325,17 +344,17 @@ watch(
     await nextTick();
     if (unmounted) return;
     if (nextIds.includes(controlledId)) {
-      rollbackAnchorId.value = controlledId;
       acceptTarget(controlledId, "external", false);
       motion.controller.remeasure({ ...measure(), activeId: controlledId });
       return;
     }
     const target = motion.remeasure();
     if (target) {
-      rollbackAnchorId.value = target.id;
+      mechanicalAnchorId.value = target.id;
       if (target.id !== intendedId.value) acceptTarget(target.id, "external", false);
     }
   },
+  { flush: "sync" },
 );
 
 watch(() => props.geometryStrategy, scheduleRemeasure);

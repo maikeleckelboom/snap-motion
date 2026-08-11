@@ -78,21 +78,44 @@ const initialMechanicalId =
     : props.items[Math.floor(props.items.length / 2)]?.id;
 const internalActiveId = ref<TId | undefined>(initialMechanicalId);
 const semanticActiveId = computed<TId | undefined>(() => props.activeId ?? internalActiveId.value);
-const rollbackAnchorId = ref<TId | undefined>(initialMechanicalId);
+const latestValidAuthorityId = ref<TId | undefined>(
+  props.activeId !== undefined && ids.value.includes(props.activeId) ? props.activeId : undefined,
+);
+const mechanicalAnchorId = ref<TId | undefined>(initialMechanicalId);
 
-watch([ids, () => props.activeId] as const, ([nextIds, controlledId], previousState) => {
-  if (controlledId !== undefined && nextIds.includes(controlledId)) {
-    rollbackAnchorId.value = controlledId;
-  } else if (controlledId === undefined && previousState?.[1] !== undefined) {
-    internalActiveId.value = rollbackAnchorId.value;
+function resolveRollbackId(): TId | undefined {
+  if (
+    latestValidAuthorityId.value !== undefined &&
+    ids.value.includes(latestValidAuthorityId.value)
+  ) {
+    return latestValidAuthorityId.value;
   }
-});
+  return mechanicalAnchorId.value !== undefined && ids.value.includes(mechanicalAnchorId.value)
+    ? mechanicalAnchorId.value
+    : ids.value[Math.floor(ids.value.length / 2)];
+}
+
+watch(
+  [ids, () => props.activeId] as const,
+  ([nextIds, controlledId], previousState) => {
+    if (controlledId !== undefined && nextIds.includes(controlledId)) {
+      latestValidAuthorityId.value = controlledId;
+      mechanicalAnchorId.value = controlledId;
+    } else if (controlledId === undefined && previousState?.[1] !== undefined) {
+      const releasedId = resolveRollbackId();
+      internalActiveId.value = releasedId;
+      if (releasedId !== undefined) coverflow.synchronizeTo(releasedId);
+    }
+  },
+  { flush: "sync" },
+);
 
 watch(ids, (nextIds, previousIds) => {
   if (props.activeId !== undefined || nextIds.includes(internalActiveId.value as TId)) return;
   const previousIndex = Math.max(0, previousIds.indexOf(internalActiveId.value as TId));
   const nextId = nextIds[Math.min(previousIndex, Math.max(0, nextIds.length - 1))];
   internalActiveId.value = nextId;
+  mechanicalAnchorId.value = nextId;
   emit("update:activeId", nextId);
   emit("activeIdRequest", nextId, { reason: "reconcile" });
 });
@@ -105,6 +128,8 @@ function labelFor(item: TItem, index: number): string {
 function synchronizeTo(id: TId) {
   if (props.activeId !== undefined && id !== props.activeId) return false;
   if (props.activeId === undefined) internalActiveId.value = id;
+  mechanicalAnchorId.value = id;
+  if (id === props.activeId) latestValidAuthorityId.value = id;
   return coverflow.synchronizeTo(id);
 }
 
@@ -126,11 +151,11 @@ function publishSettlement(id: TId, index: number, reason: NavigationReason) {
       return;
     }
     if (props.activeId !== undefined && id !== props.activeId) {
-      if (reason === "reconcile" && ids.value.includes(id)) {
-        rollbackAnchorId.value = id;
+      if (reason === "reconcile" && ids.value.includes(id) && !ids.value.includes(props.activeId)) {
+        mechanicalAnchorId.value = id;
         return;
       }
-      const authoritativeId = rollbackAnchorId.value;
+      const authoritativeId = resolveRollbackId();
       if (authoritativeId !== undefined) {
         rollbackSettlementId = authoritativeId;
         const synchronized = coverflow.synchronizeTo(authoritativeId);
@@ -143,6 +168,7 @@ function publishSettlement(id: TId, index: number, reason: NavigationReason) {
       }
       return;
     }
+    mechanicalAnchorId.value = id;
     if (reason !== "external") statusText.value = positionLabel(index);
     emit("settled", id, { reason });
   });

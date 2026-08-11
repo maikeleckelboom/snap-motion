@@ -101,8 +101,10 @@ Responsive presentation belongs to the host. Mount either an inline `<aside>` or
 the feature state above both hosts, and never keep two live copies hidden with CSS. When replacing
 an open modal with an inline pane, `closeForPresentationChange()` provides the focused-inside signal,
 closes immediately without an exit spring, and suppresses focus return to an unmounting trigger.
-The host can then focus the corresponding inline heading. Narrowing from inline leaves the modal
-closed. The lab and Nuxt fixtures certify this composition.
+This committed host swap emits `update:open(false)` without `openRequest`; refusing the close would
+leave two presentation hosts live and is therefore not a supported policy branch. The host can then
+focus the corresponding inline heading. Narrowing from inline leaves the modal closed. The lab and
+Nuxt fixtures certify this composition.
 
 ## Carousel inside a sheet
 

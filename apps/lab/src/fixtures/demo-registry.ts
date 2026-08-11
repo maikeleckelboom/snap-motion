@@ -6,6 +6,7 @@ import CoverflowDemo from "@/demos/CoverflowDemo.vue";
 import DefaultSurfacesDemo from "@/demos/DefaultSurfacesDemo.vue";
 import MediaGalleryAtCertificationDemo from "@/demos/MediaGalleryAtCertificationDemo.vue";
 import MediaLightboxDemo from "@/demos/MediaLightboxDemo.vue";
+import OverlayLifecycleFixture from "@/demos/OverlayLifecycleFixture.vue";
 import PagedGridDemo from "@/demos/PagedGridDemo.vue";
 import RenderWindowFixture from "@/demos/RenderWindowFixture.vue";
 import SheetDemo from "@/demos/SheetDemo.vue";
@@ -148,6 +149,19 @@ export const demos = [
     component: AdaptiveSupportingPaneDemo,
     capabilities: {
       motionPreference: true,
+      physics: false,
+      stageWidth: false,
+    },
+  },
+  {
+    id: "overlay-lifecycle",
+    label: "Overlay Lifecycle",
+    description: "Native dialog close-generation, focus-return, and scroll-lock race proof.",
+    group: "Certification",
+    audience: "fixture",
+    component: OverlayLifecycleFixture,
+    capabilities: {
+      motionPreference: false,
       physics: false,
       stageWidth: false,
     },

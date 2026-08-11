@@ -1,4 +1,5 @@
 ﻿import { describe, expect, it } from "vitest";
+import { expectTypeOf } from "vitest";
 
 import {
   type GallerySwipeInput,
@@ -408,6 +409,35 @@ describe("gallery boundary invariants", () => {
 });
 
 describe("gallery item normalization", () => {
+  it("widens normalized fields while preserving literal identity and custom metadata", () => {
+    const source = {
+      id: "wide" as const,
+      title: "Wide",
+      alt: "Wide",
+      previewSrc: "/wide.jpg",
+      fullSrc: "/wide.jpg",
+      width: 0 as const,
+      height: -1 as const,
+      attribution: { source: "archive" as const },
+    };
+    const normalized = normalizeMediaGalleryItems([source])[0]!;
+
+    expectTypeOf(normalized.id).toEqualTypeOf<"wide">();
+    expectTypeOf(normalized.width).toEqualTypeOf<number>();
+    expectTypeOf(normalized.height).toEqualTypeOf<number>();
+    expectTypeOf(normalized.fullSrc).toEqualTypeOf<string | undefined>();
+    expectTypeOf(normalized.attribution.source).toEqualTypeOf<"archive">();
+    expect(normalized).not.toBe(source);
+    expect(normalized).toMatchObject({
+      attribution: { source: "archive" },
+      height: 1,
+      id: "wide",
+      width: 1,
+    });
+    expect(normalized).not.toHaveProperty("fullSrc");
+    expect(source).toMatchObject({ fullSrc: "/wide.jpg", height: -1, width: 0 });
+  });
+
   it("clamps invalid and out-of-range indices", () => {
     expect(clampGalleryIndex(Number.NaN, 3)).toBe(0);
     expect(clampGalleryIndex(-8, 3)).toBe(0);

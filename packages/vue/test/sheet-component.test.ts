@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { h, nextTick } from "vue";
 
 import Sheet from "../src/sheet/components/Sheet.vue";
@@ -7,12 +7,26 @@ interface SheetInstance {
   closeForPresentationChange: () => boolean;
   activeId: string;
   navigateTo: (id: string) => boolean;
+  requestClose: (reason: "programmatic") => void;
   synchronizeTo: (id: string) => boolean;
 }
 
 const resolveVisibleExtent = () => 240;
 
 describe("production Sheet component", () => {
+  it("no-ops a public close request after controlled and native closure", async () => {
+    const wrapper = mount(Sheet, {
+      props: { open: false, reducedMotionOverride: true },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+    });
+    await nextTick();
+
+    (wrapper.vm as unknown as SheetInstance).requestClose("programmatic");
+    expect(wrapper.emitted("update:open")).toBeUndefined();
+    expect(wrapper.emitted("openRequest")).toBeUndefined();
+    wrapper.unmount();
+  });
+
   it.each([
     ["top", "y"],
     ["right", "x"],
@@ -79,7 +93,7 @@ describe("production Sheet component", () => {
     wrapper.unmount();
   });
 
-  it("closes a presentation swap immediately without broadening public close reasons", async () => {
+  it("closes a presentation swap immediately without publishing a refusable request", async () => {
     const wrapper = mount(Sheet, {
       props: { open: true, reducedMotionOverride: false },
       slots: { title: () => "Sheet title", default: () => h("button", "Inside") },
@@ -91,8 +105,81 @@ describe("production Sheet component", () => {
     expect((wrapper.vm as unknown as SheetInstance).closeForPresentationChange()).toBe(true);
     expect(wrapper.get("dialog").attributes()).not.toHaveProperty("open");
     expect(wrapper.emitted("update:open")).toContainEqual([false]);
-    expect(wrapper.emitted("openRequest")).toEqual([[false, { reason: "programmatic" }]]);
+    expect(wrapper.emitted("openRequest")).toBeUndefined();
     wrapper.unmount();
+  });
+
+  it("does not restore focus to an obsolete trigger when a presentation swap unmounts", async () => {
+    const opener = document.createElement("button");
+    opener.textContent = "Open sheet";
+    document.body.append(opener);
+    opener.focus();
+    const wrapper = mount(Sheet, {
+      props: { open: true, reducedMotionOverride: true },
+      slots: { title: () => "Sheet title", default: () => h("button", "Inside") },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+    const dialog = wrapper.get("dialog").element as HTMLDialogElement;
+    vi.spyOn(dialog, "close").mockImplementation(() => dialog.removeAttribute("open"));
+
+    expect((wrapper.vm as unknown as SheetInstance).closeForPresentationChange()).toBe(true);
+    wrapper.unmount();
+
+    expect(wrapper.emitted("openRequest")).toBeUndefined();
+    expect(document.activeElement).not.toBe(opener);
+    opener.remove();
+  });
+
+  it("lets only the latest close generation finalize a rapid reopen and reclose", async () => {
+    const opener = document.createElement("button");
+    opener.textContent = "Open sheet";
+    document.body.append(opener);
+    opener.focus();
+    const wrapper = mount(Sheet, {
+      props: { open: true, reducedMotionOverride: true },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+
+    const dialog = wrapper.get("dialog").element as HTMLDialogElement;
+    const pendingCloseEvents: Array<() => void> = [];
+    const pendingFocusFrames: FrameRequestCallback[] = [];
+    const closeSpy = vi.spyOn(dialog, "close").mockImplementation(() => {
+      dialog.removeAttribute("open");
+      pendingCloseEvents.push(() => dialog.dispatchEvent(new Event("close")));
+    });
+    const requestFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        pendingFocusFrames.push(callback);
+        return pendingFocusFrames.length;
+      });
+
+    await wrapper.setProps({ open: false });
+    await wrapper.setProps({ open: true });
+    await wrapper.setProps({ open: false });
+    expect(pendingCloseEvents).toHaveLength(2);
+
+    pendingCloseEvents[0]!();
+    await nextTick();
+    expect(wrapper.emitted("closed")).toBeUndefined();
+    expect(pendingFocusFrames).toHaveLength(0);
+
+    pendingCloseEvents[1]!();
+    await nextTick();
+    expect(wrapper.emitted("closed")).toEqual([[]]);
+    expect(pendingFocusFrames).toHaveLength(1);
+    pendingFocusFrames[0]!(0);
+    expect(document.activeElement).toBe(opener);
+
+    requestFrameSpy.mockRestore();
+    closeSpy.mockRestore();
+    wrapper.unmount();
+    opener.remove();
   });
 
   it("keeps a refused controlled close request open and repeatable", async () => {
@@ -200,6 +287,135 @@ describe("production Sheet component", () => {
     expect(sheet.activeId).toBe("comfortable");
     expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("comfortable");
     expect(sheet.synchronizeTo("compact")).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("anchors rejection to the latest accepted controlled snap", async () => {
+    let acceptedFirstRequest = false;
+    let wrapper: ReturnType<typeof mount>;
+    wrapper = mount(Sheet, {
+      props: {
+        activeId: "a",
+        open: true,
+        reducedMotionOverride: true,
+        snapPoints: [
+          { id: "a", label: "A", resolveVisibleExtent: () => 120 },
+          { id: "b", label: "B", resolveVisibleExtent: () => 240 },
+          { id: "c", label: "C", resolveVisibleExtent: () => 360 },
+        ],
+        "onUpdate:activeId": (id: string) => {
+          if (!acceptedFirstRequest && id === "b") {
+            acceptedFirstRequest = true;
+            void wrapper.setProps({ activeId: id });
+          }
+        },
+      },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+    const sheet = wrapper.vm as unknown as SheetInstance;
+
+    expect(sheet.navigateTo("b")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("b");
+
+    expect(sheet.navigateTo("c")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    expect(sheet.navigateTo("c")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
+      ["b", { reason: "programmatic" }],
+      ["c", { reason: "programmatic" }],
+      ["c", { reason: "programmatic" }],
+    ]);
+    expect(sheet.activeId).toBe("b");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("b");
+    expect(wrapper.emitted("settled")).toEqual([["b", { reason: "programmatic" }]]);
+    wrapper.unmount();
+  });
+
+  it("lets external authority replace a pending snap after an accepted destination", async () => {
+    let acceptedFirstRequest = false;
+    let wrapper: ReturnType<typeof mount>;
+    wrapper = mount(Sheet, {
+      props: {
+        activeId: "a",
+        open: true,
+        reducedMotionOverride: true,
+        snapPoints: [
+          { id: "a", label: "A", resolveVisibleExtent: () => 120 },
+          { id: "b", label: "B", resolveVisibleExtent: () => 240 },
+          { id: "c", label: "C", resolveVisibleExtent: () => 360 },
+        ],
+        "onUpdate:activeId": (id: string) => {
+          if (!acceptedFirstRequest && id === "b") {
+            acceptedFirstRequest = true;
+            void wrapper.setProps({ activeId: "b" });
+          } else if (id === "c") {
+            void wrapper.setProps({ activeId: "a" });
+          }
+        },
+      },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+    const sheet = wrapper.vm as unknown as SheetInstance;
+
+    expect(sheet.navigateTo("b")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("b");
+
+    expect(sheet.navigateTo("c")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(sheet.activeId).toBe("a");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("a");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["c", { reason: "programmatic" }]);
+    expect(wrapper.get('[role="status"]').text()).not.toContain("C");
+    wrapper.unmount();
+  });
+
+  it("hands controlled ownership off from the latest authority, not a pending snap", async () => {
+    const wrapper = mount(Sheet, {
+      props: {
+        activeId: "a",
+        open: true,
+        reducedMotionOverride: true,
+        snapPoints: [
+          { id: "a", label: "A", resolveVisibleExtent: () => 120 },
+          { id: "b", label: "B", resolveVisibleExtent: () => 240 },
+        ],
+      },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+    const sheet = wrapper.vm as unknown as SheetInstance;
+
+    expect(sheet.navigateTo("b")).toBe(true);
+    // Vue Test Utils has no removeProp API; undefined models an omitted optional runtime prop.
+    await wrapper.setProps({ activeId: undefined } as never);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(sheet.activeId).toBe("a");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("a");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["b", { reason: "programmatic" }]);
     wrapper.unmount();
   });
 

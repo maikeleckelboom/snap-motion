@@ -40,10 +40,66 @@ test("Vue Router can delay and refuse controlled navigation and close requests",
   await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
   await expect(page).toHaveURL(/\/work\/factif\/media\/system$/);
   await expect(page.getByTestId("router-authority")).toHaveAttribute("data-active-id", "system");
+  await expect(page.locator(".snap-motion-carousel [role='status']")).toContainText(
+    "System detail",
+  );
+  await expect(page.getByTestId("router-authority")).toHaveAttribute(
+    "data-settled-sequence",
+    "system",
+  );
+
+  await page.getByRole("button", { name: "Refuse requests" }).evaluate((element) => {
+    (element as HTMLButtonElement).click();
+  });
+  await page.getByRole("button", { name: "Next item" }).click();
+  await expect(page.getByTestId("router-authority")).toHaveAttribute(
+    "data-request-sequence",
+    "system,outcome",
+  );
+  await expect(page).toHaveURL(/\/work\/factif\/media\/system$/);
+  await expect(page.locator(".snap-motion-carousel-viewport")).toHaveAttribute(
+    "data-active-id",
+    "system",
+  );
+  await expect(page.locator(".snap-motion-carousel [role='status']")).toContainText(
+    "System detail",
+  );
+  await expect(page.getByTestId("router-authority")).toHaveAttribute(
+    "data-settled-sequence",
+    "system",
+  );
+
+  await page.getByRole("button", { name: "Delay requests" }).evaluate((element) => {
+    (element as HTMLButtonElement).click();
+  });
+  await page.getByRole("button", { name: "Next item" }).click();
+  await expect(page.getByTestId("router-authority")).toHaveAttribute(
+    "data-request-sequence",
+    "system,outcome,outcome",
+  );
+  await expect(page).toHaveURL(/\/work\/factif\/media\/system$/);
+  await expect(page.locator(".snap-motion-carousel-viewport")).toHaveAttribute(
+    "data-active-id",
+    "system",
+  );
+  await expect(page.getByTestId("router-authority")).toHaveAttribute(
+    "data-settled-sequence",
+    "system",
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
+  await expect(page).toHaveURL(/\/work\/factif\/media\/outcome$/);
+  await expect(page.locator(".snap-motion-carousel-viewport")).toHaveAttribute(
+    "data-active-id",
+    "outcome",
+  );
+  await expect(page.getByTestId("router-authority")).toHaveAttribute(
+    "data-settled-sequence",
+    "system,outcome",
+  );
 
   await page.getByRole("button", { name: "Close dialog" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page).toHaveURL(/\/work\/factif\/media\/system$/);
+  await expect(page).toHaveURL(/\/work\/factif\/media\/outcome$/);
   await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
   await expect(page).toHaveURL(/\/work\/factif$/);
   await expect(page.getByRole("dialog")).not.toBeVisible();
@@ -98,10 +154,62 @@ test("Nuxt can delay controlled gallery navigation and close without hydration d
   await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
   await expect(page).toHaveURL(/\?media=system$/);
   await expect(page.getByTestId("nuxt-authority")).toHaveAttribute("data-active-id", "system");
+  const gallery = page.locator('dialog[open][data-testid="snap-motion-media-gallery"]');
+  await expect(gallery).toHaveAttribute("data-settled-id", "system");
+  await expect(gallery).toHaveAttribute("data-track-state", "idle");
+  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute(
+    "data-settled-sequence",
+    "system",
+  );
+
+  await page.getByRole("button", { name: "Refuse requests" }).evaluate((element) => {
+    (element as HTMLButtonElement).click();
+  });
+  await page.getByRole("button", { name: "Next item" }).click();
+  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute(
+    "data-request-sequence",
+    "system,outcome",
+  );
+  await expect(page).toHaveURL(/\?media=system$/);
+  await expect(
+    page.locator('dialog[open][data-testid="snap-motion-media-gallery"]'),
+  ).toHaveAttribute("data-active-id", "system");
+  await expect(gallery.getByTestId("snap-motion-media-gallery-status")).not.toContainText(
+    "Measured outcome",
+  );
+  await expect(gallery).toHaveAttribute("data-settled-id", "system");
+  await expect(gallery).toHaveAttribute("data-track-state", "idle");
+  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute(
+    "data-settled-sequence",
+    "system",
+  );
+
+  await page.getByRole("button", { name: "Delay requests" }).evaluate((element) => {
+    (element as HTMLButtonElement).click();
+  });
+  await page.getByRole("button", { name: "Next item" }).click();
+  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute(
+    "data-request-sequence",
+    "system,outcome,outcome",
+  );
+  await expect(page).toHaveURL(/\?media=system$/);
+  await expect(gallery).toHaveAttribute("data-active-id", "system");
+  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute(
+    "data-settled-sequence",
+    "system",
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
+  await expect(page).toHaveURL(/\?media=outcome$/);
+  await expect(gallery).toHaveAttribute("data-active-id", "outcome");
+  await expect(gallery).toHaveAttribute("data-settled-id", "outcome");
+  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute(
+    "data-settled-sequence",
+    "system,outcome",
+  );
 
   await page.getByRole("button", { name: "Close gallery" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page).toHaveURL(/\?media=system$/);
+  await expect(page).toHaveURL(/\?media=outcome$/);
   await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
   await expect(page).toHaveURL(/\/work\/factif$/);
   await expect(page.getByRole("dialog")).not.toBeVisible();
