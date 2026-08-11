@@ -1,4 +1,9 @@
-import type { FocusReturnOptions, InitialFocus } from "@snap-motion/vue/dialog";
+import type {
+  CloseReason,
+  FocusReturnOptions,
+  InitialFocus,
+  OpenChangeDetails,
+} from "@snap-motion/vue/dialog";
 
 export interface MediaGalleryItem {
   readonly id: string;
@@ -11,9 +16,12 @@ export interface MediaGalleryItem {
   readonly description?: string;
 }
 
-export type MediaGalleryCloseReason = "backdrop" | "close-button" | "escape" | "programmatic";
-
-export type MediaGalleryNavigationReason = "previous" | "next" | "swipe" | "home" | "end";
+export interface MediaGalleryOpenChangeDetails<
+  Id extends string = string,
+> extends OpenChangeDetails {
+  /** Final semantic media identity, independent of collection order. */
+  readonly activeId: Id | undefined;
+}
 
 export interface MediaGalleryMessages {
   closeGallery: string;
@@ -34,10 +42,11 @@ export interface MediaGalleryMessages {
   gestureInstructions: string;
 }
 
-export interface MediaGalleryDialogProps {
+export interface MediaGalleryDialogProps<TItem extends MediaGalleryItem = MediaGalleryItem> {
   open: boolean;
-  items: readonly MediaGalleryItem[];
-  initialIndex?: number;
+  items: readonly TItem[];
+  /** Application-authoritative semantic media identity. Controlled when supplied. */
+  activeId?: TItem["id"];
   reducedMotionOverride?: boolean | undefined;
   messages?: Partial<MediaGalleryMessages>;
   focusReturn?: FocusReturnOptions;
@@ -47,7 +56,7 @@ export interface MediaGalleryDialogProps {
   descriptionId?: string;
 }
 
-export type { FocusReturnOptions, InitialFocus };
+export type { CloseReason, FocusReturnOptions, InitialFocus, OpenChangeDetails };
 
 export interface MediaSize {
   height: number;

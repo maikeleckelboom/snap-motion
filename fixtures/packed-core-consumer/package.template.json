@@ -4,6 +4,6 @@
   "type": "module",
   "dependencies": {
     "@snap-motion/core": "file:__CORE_TARBALL__",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   }
 }

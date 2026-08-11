@@ -10,18 +10,8 @@ import { DefineComponent } from 'vue';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
 
-// @public (undocumented)
-export function captureFocusOpener(documentTarget?: Document): HTMLElement | undefined;
-
-// @public (undocumented)
-export type CloseReason = "close-button" | "escape" | "scrim" | "route" | "programmatic";
-
-// @public (undocumented)
-export function focusInitial(policy: InitialFocus, targets: {
-    close?: HTMLElement | undefined;
-    container?: HTMLElement | undefined;
-    title?: HTMLElement | undefined;
-}): boolean;
+// @public
+export type CloseReason = "close-button" | "escape" | "scrim" | "programmatic";
 
 // @public
 export interface FocusReturnOptions {
@@ -34,18 +24,15 @@ export interface FocusReturnOptions {
 // @public
 export type InitialFocus = "close" | "title" | "first-interactive" | HTMLElement | (() => HTMLElement | undefined);
 
-// @public (undocumented)
-export function maintainModalTabOrder(event: KeyboardEvent, container: HTMLElement | undefined): boolean;
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_base" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_Slots" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const ModalDialog: __VLS_WithSlots<typeof __VLS_base, __VLS_Slots>;
 
-// @public (undocumented)
-export function restoreFocus(options: FocusReturnOptions | HTMLElement | undefined): boolean;
+// @public
+export interface OpenChangeDetails {
+    // (undocumented)
+    readonly reason: CloseReason;
+}
 
 // (No @packageDocumentation comment for this package)
 

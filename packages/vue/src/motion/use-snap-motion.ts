@@ -74,13 +74,15 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
 
   const velocityTracker = new VelocityTracker();
   let dragOrigin = snapshot.value.position;
+  let dragOriginId: Id | undefined;
 
   const pointer = usePointerDrag({
     axis,
     intent: pointerIntent,
     onBegin(sample) {
-      const originId = resolveDragOrigin?.();
-      controller.beginDrag(originId === undefined ? {} : { originId });
+      const current = controller.getSnapshot();
+      dragOriginId = resolveDragOrigin?.() ?? current.target?.id ?? current.active?.id;
+      controller.beginDrag(dragOriginId === undefined ? {} : { originId: dragOriginId });
       dragOrigin = controller.getSnapshot().position;
       velocityTracker.reset();
       velocityTracker.add(sample.position, sample.time);
@@ -99,16 +101,20 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
       });
       if (targetId === undefined) {
         const target = controller.release(releaseVelocity);
+        dragOriginId = undefined;
         onReleaseTargetSelected?.(target?.id);
       } else {
         const target = controller.moveTo(targetId, { initialVelocity: releaseVelocity });
+        dragOriginId = undefined;
         onReleaseTargetSelected?.(target?.id);
       }
     },
     onCancel() {
       velocityTracker.reset();
-      const target = controller.release(0);
-      onReleaseTargetSelected?.(target?.id);
+      const originId = dragOriginId;
+      dragOriginId = undefined;
+      if (originId === undefined) controller.release(0);
+      else controller.moveTo(originId, { initialVelocity: 0 });
     },
   });
 
@@ -140,6 +146,7 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     configure: controller.configure.bind(controller),
     controller,
     interrupt: () => {
+      dragOriginId = undefined;
       pointer.stop();
       controller.interrupt();
     },

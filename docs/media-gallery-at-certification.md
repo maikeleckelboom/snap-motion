@@ -57,9 +57,9 @@ package API change.
 
 ### Non-live event trace
 
-The event trace records `open-requested`, `opened`, `indexChanged`, `requestClose`, `update:open`,
-`closed`, and a bounded post-close `focus-restored` sample, including index and reason where the
-public event supplies them. `focus-restored` must identify `at-open-gallery` for a normal close. It has
+The event trace records `open-requested`, `opened`, `activeIdChange`, `settled`, `openChange`,
+`update:open`, `closed`, and a bounded post-close `focus-restored` sample, including stable ID and
+reason where the public event supplies them. `focus-restored` must identify `at-open-gallery` for a normal close. It has
 `aria-live="off"` and no `status`, `alert`, or `log` role. It must not compete with the primitive's
 own status output. Read it after a run and compare it with the operator's timestamped notes.
 
@@ -181,8 +181,8 @@ must not open the dialog or move focus away from the selected radio.
    the focused control's exact speech.
 2. If NVDA remains in browse mode, use `NVDA+Space` to enter focus mode and record that transition.
    With `Close gallery` still focused, press Right Arrow once. Verify `Tall document, 3 of 3` is
-   announced once after the visual/semantic commit, focus remains on Close, and trace order is
-   `indexChanged` after `opened` (C04-C06).
+   announced once after visual settlement, focus remains on Close, and trace order is
+   `activeIdChange` then `settled` after `opened` (C04-C06).
 3. Press Left Arrow once and verify `Wide timeline, 2 of 3` once. Repeat with Motion set to
    `Reduced`; no prior-item message may arrive after the new committed item.
 4. Tab forward through the dialog, naming every stop. Confirm background controls are absent,
@@ -193,7 +193,7 @@ must not open the dialog or move focus away from the selected radio.
 6. With focus on a dialog control, press Home and End. Record boundary behavior, message count, and
    whether NVDA intercepted either key.
 7. Press Escape. Verify the dialog closes, focus returns to the exact opener, and the trace ends
-   with `requestClose` reason `escape`, `update:open false`, `closed`, then `focus-restored`
+   with `update:open false`, `openChange` reason `escape`, `closed`, then `focus-restored`
    identifying `at-open-gallery` (C10).
 8. Complete the required scenario sweep above and record C05 and C08-C14 separately.
 

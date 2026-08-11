@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { createFixedStageGeometry } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
-import {
-  captureFocusOpener,
-  focusInitial,
-  maintainModalTabOrder,
-  restoreFocus,
-} from "@snap-motion/vue/dialog";
 import type { MediaSize } from "@snap-motion/vue/media-gallery";
 import { until, useElementSize, useImage, useTimeoutFn } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
@@ -22,6 +16,12 @@ import { mediaFixtures, type MediaFixture, type MediaFixtureId } from "@/fixture
 import { runMediaTransition, supportsMediaTransition } from "@/media-inspection/media-transition";
 import MediaZoomControls from "@/media-inspection/MediaZoomControls.vue";
 import { useMediaTransform } from "@/media-inspection/use-media-transform";
+import {
+  captureFocusOpener,
+  focusCloseButton,
+  maintainModalTabOrder,
+  restoreFocus,
+} from "@/utils/dialogFocus";
 
 type MediaLoadState = "pending" | "loaded" | "failed";
 
@@ -361,7 +361,7 @@ async function openLightbox(fixtureId?: MediaFixtureId) {
           destinationReady = fixtureLoadState(fixture) === "loaded";
         }
         motion.remeasure();
-        focusInitial("close", { close: closeButton.value, container: target });
+        focusCloseButton(closeButton.value, target);
         announceCurrent();
       },
     });

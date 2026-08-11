@@ -3,13 +3,12 @@ import { describe, expect, it } from "vitest";
 import { h, nextTick } from "vue";
 
 import Sheet from "../src/sheet/components/Sheet.vue";
-import type { SheetOpenSnapId } from "../src/sheet/sheet-policy";
-import type { UseSheetMotionReturn } from "../src/sheet/use-sheet-motion";
-
 interface SheetInstance {
   closeForPresentationChange: () => boolean;
-  motion: UseSheetMotionReturn<SheetOpenSnapId>;
+  activeId: string;
 }
+
+const resolveVisibleExtent = () => 240;
 
 describe("production Sheet component", () => {
   it.each([
@@ -90,7 +89,7 @@ describe("production Sheet component", () => {
     expect((wrapper.vm as unknown as SheetInstance).closeForPresentationChange()).toBe(true);
     expect(wrapper.get("dialog").attributes()).not.toHaveProperty("open");
     expect(wrapper.emitted("update:open")).toContainEqual([false]);
-    expect(wrapper.emitted("requestClose")).toBeUndefined();
+    expect(wrapper.emitted("openChange")).toEqual([[false, { reason: "programmatic" }]]);
     wrapper.unmount();
   });
 
@@ -112,7 +111,7 @@ describe("production Sheet component", () => {
     textarea.value = "preserve me";
     await wrapper.setProps({ activeId: "compact" });
     await nextTick();
-    expect((wrapper.vm as unknown as SheetInstance).motion.activeSnapId.value).toBe("compact");
+    expect((wrapper.vm as unknown as SheetInstance).activeId).toBe("compact");
 
     await wrapper.setProps({ side: "right" });
     await nextTick();
@@ -120,7 +119,67 @@ describe("production Sheet component", () => {
     expect(wrapper.get(".snap-motion-sheet-body").element).toBe(body);
     expect(wrapper.get("textarea").element).toBe(textarea);
     expect(textarea.value).toBe("preserve me");
-    expect((wrapper.vm as unknown as SheetInstance).motion.activeSnapId.value).toBe("open");
+    expect((wrapper.vm as unknown as SheetInstance).activeId).toBe("open");
     wrapper.unmount();
+  });
+
+  it("stores authoritative snap changes while closed and opens there without hidden motion", async () => {
+    const wrapper = mount(Sheet, {
+      props: {
+        activeId: "comfortable",
+        open: false,
+        reducedMotionOverride: true,
+      },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+      attachTo: document.body,
+    });
+    await nextTick();
+    const panel = wrapper.get(".snap-motion-sheet-panel");
+    const closedTransform = panel.attributes("style");
+
+    await wrapper.setProps({ activeId: "compact" });
+    await nextTick();
+    expect((wrapper.vm as unknown as SheetInstance).activeId).toBe("compact");
+    expect(wrapper.get("dialog").attributes("data-sheet-state")).toBe("closed");
+    expect(panel.attributes("style")).toBe(closedTransform);
+    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("settled")).toBeUndefined();
+
+    await wrapper.setProps({ open: true });
+    await nextTick();
+    await nextTick();
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("compact");
+    expect(wrapper.get("dialog").attributes("data-sheet-state")).toBe("open");
+  });
+
+  it("adopts a pending controlled ID when a later snap-point configuration makes it valid", async () => {
+    const wrapper = mount(Sheet, {
+      props: {
+        activeId: "future",
+        open: false,
+        reducedMotionOverride: true,
+        snapPoints: [{ id: "current", label: "Current", resolveVisibleExtent }],
+      },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+      attachTo: document.body,
+    });
+    await nextTick();
+    expect((wrapper.vm as unknown as SheetInstance).activeId).toBe("current");
+
+    await wrapper.setProps({
+      snapPoints: [
+        { id: "current", label: "Current", resolveVisibleExtent },
+        { id: "future", label: "Future", resolveVisibleExtent },
+      ],
+    });
+    await nextTick();
+    expect((wrapper.vm as unknown as SheetInstance).activeId).toBe("future");
+    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("settled")).toBeUndefined();
+
+    await wrapper.setProps({ open: true });
+    await nextTick();
+    await nextTick();
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("future");
   });
 });

@@ -59,8 +59,8 @@ function chapterSummary(chapter: Chapter): string {
 function onScreenSelected(id: ScreenId): void {
   activeScreen.value = id;
 }
-function onChapterSelected(id: ChapterId): void {
-  activeChapter.value = id;
+function onChapterSelected(id: ChapterId | undefined): void {
+  if (id !== undefined) activeChapter.value = id;
 }
 function poseOpacity(pose: StackedDeckPose): number {
   return pose.opacity;
@@ -71,9 +71,9 @@ function presentationDepth(presentation: CoverflowCardPresentation): number {
 
 function driveHandles(): void {
   // Handle methods are keyed by the same inferred ID union.
-  deck.value?.requestId("outcome");
-  deck.value?.synchronizeId("overview", true);
-  rail.value?.requestId("outro");
+  deck.value?.navigateTo("outcome");
+  deck.value?.synchronizeTo("overview");
+  rail.value?.navigateTo("outro");
   const phase: string = deck.value?.diagnostics.phase ?? "idle";
   const settled: ChapterId | undefined = rail.value?.settledId;
   void phase;
@@ -113,7 +113,7 @@ void driveHandles;
       :item-label="(chapter) => chapter.title"
       label="Chapters"
       reduced-motion-override
-      @request-active-id="onChapterSelected"
+      @active-id-change="onChapterSelected"
     >
       <template #card="card">
         <p>{{ chapterSummary(card.item) }} · {{ presentationDepth(card.presentation) }}</p>

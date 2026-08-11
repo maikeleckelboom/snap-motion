@@ -1,296 +1,127 @@
 # Spatial surfaces
 
-Two surfaces ship as complete products rather than as parts to assemble: a **stacked deck**, where
-one physical interaction exchanges exactly one adjacent card, and a **coverflow** rail, where
-neighbours park in perspective on either side of a focused face.
-
-```ts
-import "@snap-motion/vue/style.css";
-```
-
-```ts
-import { StackedDeck } from "@snap-motion/vue/stacked-deck";
-import { Coverflow } from "@snap-motion/vue/coverflow";
-```
-
-An application supplies domain items, stable IDs, controlled state, content, and theme. Snap Motion
-supplies physics, gestures, navigation, selection, interaction authority, keyboard semantics,
-reduced motion, motion styles, and accessibility structure. Nothing about physical indices,
-traversal frames, interaction envelopes, anchor skip, controller phases, authority migration, or
-synchronization internals is part of ordinary integration.
-
-## Stacked deck
+`Coverflow` and `StackedDeck` are complete typed product surfaces. An application supplies domain
+items and card content; the component owns geometry, motion, input arbitration, focus, semantic
+state, accessibility, and projection.
 
 ```vue
-<script setup lang="ts">
-import { StackedDeck } from "@snap-motion/vue/stacked-deck";
-import { ref } from "vue";
-
-const screens = [
-  { id: "overview", title: "Overview" },
-  { id: "system", title: "System" },
-  { id: "outcome", title: "Outcome" },
-] as const;
-
-const activeId = ref<(typeof screens)[number]["id"]>("system");
-</script>
-
-<template>
-  <StackedDeck
-    v-model:active-id="activeId"
-    :items="screens"
-    :item-label="(screen) => screen.title"
-    label="Project screens"
-  >
-    <template #pile-layer="{ item }">
-      <ProjectScreenPileSurface :screen="item" />
-    </template>
-    <template #card="{ item, active }">
-      <ProjectScreen :screen="item" :current="active" />
-    </template>
-  </StackedDeck>
-</template>
-```
-
-That is the whole integration. `activeId` keeps the semantic ID union, `item` inside the slot keeps
-the consumer's own item type, and neither requires a cast or an explicit generic argument.
-`#pile-layer` is optional; omit it to keep the default empty decorative surface.
-
-### What the deck guarantees
-
-- One gesture, flick, wheel burst, or command resolves **at most one adjacent card**, however far it
-  travels. Travel past that card becomes bounded elastic resistance rather than a second exchange —
-  including with no `elasticity` supplied, because the deck states its own interior resistance.
-  Supplying `elasticity` customizes that resistance; nothing weakens the one-card invariant.
-- Direct manipulation stays 1:1 while the surface is held.
-- The next interaction starts on the card already on top. A spring the user can no longer see is
-  never a cooldown, so a re-grab during settlement is a new gesture with its own envelope.
-- Distinct rapid Previous/Next commands chain one card each; commands issued inside one event-loop
-  turn coalesce, because the deck had not answered the first yet.
-- A destination further than one card **synchronizes** rather than animating through every
-  intermediate card, and announces itself immediately because it is not a traversal.
-- The pile behind the current card is exactly the screens the deck is not drawing, placed from item
-  order alone. Each layer retains the ordered item it visually represents, so its visual treatment
-  retraces with geometry instead of mirroring or following gesture direction.
-
-## Coverflow
-
-```vue
-<Coverflow v-model:active-id="activeId" :items="screens" :item-label="(s) => s.title">
-  <template #card="{ item, presentation }">
-    <ProjectScreen :screen="item" :style="{ opacity: presentation.centerInfluence }" />
+<Coverflow
+  v-model:active-id="activeId"
+  :items="screens"
+  label="Project screens"
+  @active-id-change="onActiveIdChange"
+  @settled="onSettled"
+>
+  <template #card="{ item, active, visual, settled, inspectable }">
+    <ProjectScreen
+      :screen="item"
+      :data-active="active"
+      :data-visual="visual"
+      :data-settled="settled"
+      :data-inspectable="inspectable"
+    />
   </template>
 </Coverflow>
 ```
 
-A rail may travel any distance in one command, so Coverflow has no one-card transaction. It names
-two different cards on purpose: `visualIndex` — exposed as `data-visual-id` and as the slot's
-`active` — follows the physical mass through a narrow dead band so a caption tracks the gesture,
-while the durable selection changes only at mechanical rest.
+## State contract
 
-The `presentation` slot prop carries the card's resolved place on the rail plus normalized material
-signals (`depth`, `yaw`, `sheen`, `edgeStrength`, `occlusion`, `settledness`, and friends). Every
-signal is a function of the panel's own orientation, so a theme built on them cannot disagree with
-the geometry.
+Four names describe distinct facts:
 
-## Props, events, and slots
+- `activeId`: the semantic destination accepted by application state;
+- `targetId`: the controller destination in flight, available in advanced diagnostics;
+- `visualId`: the item currently dominant in the projection;
+- `settledId`: the item at mechanical rest.
 
-Both surfaces share the same shape.
+User interaction follows Model A: `activeId` changes immediately through `update:activeId` and
+`activeIdChange(id, { reason })`; motion then catches up and emits `settled(id, { reason })` at rest.
+The slot's `active`, `visual`, and `settled` booleans preserve the same distinction. `aria-current`
+follows visual authority in DOM metadata; cards remain inert and accessibility-hidden while a
+pointer owns the surface, then the one current card is exposed on release. Live announcements remain
+settlement-based so early semantic state is not announced twice.
 
-| Prop                                                           | Meaning                                                                              |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `items`                                                        | Domain items. Each must carry the stable `id` it is keyed by.                        |
-| `activeId`                                                     | Durable selection. Controlled when supplied; it changes only at mechanical rest.     |
-| `itemLabel`                                                    | Accessible name of one item. Defaults to the semantic ID.                            |
-| `label` / `labelledby`                                         | Accessible name of the surface.                                                      |
-| `disabled`                                                     | Refuses every **input**. Controlled `activeId` still applies. See below.             |
-| `landmark`                                                     | Publishes the surface as a `region` landmark instead of a labelled `group`.          |
-| `focusScope`                                                   | Region that already counts as holding focus, when controls sit beside the surface.   |
-| `stageWidth`                                                   | Fallback width used before the surface has been measured.                            |
-| `spring`, `elasticity`, `releasePolicy`, `programmaticImpulse` | Physics. Watched by value.                                                           |
-| `releasePolicy` (deck)                                         | `StackedDeckReleasePolicy`: the generic policy minus the anchor skip the deck fixes. |
-| `reducedMotionOverride`                                        | Overrides the system preference.                                                     |
-| `messages`                                                     | Localized strings.                                                                   |
+The public reasons are `previous`, `next`, `keyboard`, `drag`, `wheel`, `picker`, `programmatic`,
+`reconcile`, and `external`. Component-originated changes never report `external`; external is
+reserved for settlement/diagnostics after exact authoritative adoption.
 
-| Event             | Meaning                                                             |
-| ----------------- | ------------------------------------------------------------------- |
-| `update:activeId` | Durable selection changed.                                          |
-| `requestActiveId` | The same change, with the reason that caused it (see below).        |
-| `settled`         | The surface reached mechanical rest on an item.                     |
-| `activate`        | A tap on the current, unambiguous item: open it on another surface. |
+## Controlled and internal state
 
-Slots are `#card` (required) and, for the deck, `#backdrop` for a decorative stage layer behind the
-pile plus `#pile-layer` for one layer's visual material. `#card` receives
-`{ item, id, index, active, settled, inspectable, … }`; the deck adds `role` and `pose`, the rail
-adds `presentation`. `#pile-layer` receives only `{ item, id, index, side, slot }`, typed as
-`StackedDeckPileLayerSlotState<TItem>`. The `item`, `id`, and `index` always describe the same
-entry in the currently published collection.
+Supplying `activeId` makes the surface controlled. Omitting it gives the component internal state,
+initially the center item. No separate `defaultActiveId` is needed before first publication.
 
-Snap Motion keeps the `#pile-layer` content inside its own transform-bearing outer layer. That
-outer layer remains `aria-hidden`, `inert`, and outside hit testing; it is not another slide and it
-never owns activation, focus, selection, or announcements. Snap Motion retains its physical key,
-transform, z-layer, opacity, and shadow; use the slot for cheap item-associated presentation, not
-for a second semantic card tree.
+Stable IDs, not indices, are application identity. Reorder preserves the active ID. Uncontrolled
+removal falls back to the same ordinal where possible and emits one `reconcile` change. An empty
+collection has no active item. A controlled unknown ID stays pending and is adopted if a later
+`items` update introduces it; it is never silently rewritten to item zero.
 
-The exposed instance — typed as `StackedDeckHandle<TId>` or `CoverflowHandle<TId>` — offers
-`previous()`, `next()`, `requestId(id)`, `synchronizeId(id)`, `isInspectEligible(index)`,
-`onKeyDown(event)`, and read-only state including `state` (the surface's whole published semantics)
-and a `diagnostics` snapshot of its motion (`phase`, `position`, `velocity`, `activeId`, `targetId`,
-`anchors`, `bounds`, `reducedMotion`).
+External prop changes cancel pointer recognition, drag, wheel coalescing, and stale settlement.
+They emit neither `update:activeId` nor `activeIdChange` and do not announce. This makes route/query
+changes, Back/Forward, and cross-surface synchronization loop-free.
 
-`previous()` and `next()` take no arguments. They are semantically fixed operations, not
-parameterised ones: `requestActiveId` exists so an application can trust the reason it is given,
-and a reason a caller chose is not evidence of anything.
+## Navigation and exact synchronization
 
-The handle deliberately exposes **no controller**. A product surface owns a transaction model — the
-deck's one-card exchange most of all — and a handle that returned the controller would be a
-documented way around it. A renderer that genuinely needs that level of control composes
-`useStackedDeckMotion` / `useCoverflowMotion`, which still return `motion` and `model`.
+High-level handles and feature composables use the same verbs:
 
-### Navigation reasons
+- `navigateTo(id)` performs a new programmatic navigation;
+- `synchronizeTo(id)` exactly adopts state already changed by another authority;
+- `previous()` and `next()` perform intrinsic adjacent navigation.
 
-`requestActiveId` carries why the selection changed, and it tells the truth:
-
-| Reason         | What actually happened                                       |
-| -------------- | ------------------------------------------------------------ |
-| `previous`     | `previous()`                                                 |
-| `next`         | `next()`                                                     |
-| `keyboard`     | An Arrow, Home, or End key the surface owned                 |
-| `drag`         | A pointer manipulation the surface **accepted and resolved** |
-| `wheel`        | A wheel burst the surface **accepted and resolved**          |
-| `picker`       | A tap on an item, or a pagination dot                        |
-| `programmatic` | `requestId()` — an imperative request from the application   |
-| `route`        | Authoritative state: `activeId`, or `synchronizeId()`        |
-
-`drag` and `wheel` are claims about movement, not about events. A pointerdown that a nested button
-refuses, a right-click, a vertical page scroll, and a wheel gesture belonging to a descendant all
-reach the surface and none of them renames a settlement that something else caused. A change the
-application itself made through `activeId` or `synchronizeId()` is **not** re-emitted, so a route
-can never receive its own navigation back as a user request.
-
-### Controlled selection is not input
-
-`activeId` is authoritative application state, not an input device. It is applied even while the
-surface is `disabled` or physically held by a pointer, because refusing it would leave the surface
-disagreeing with the application with nothing to retry it. The interruption policy is explicit:
-while the surface is held or refusing input the destination is adopted exactly, since animating out
-from under a hand is worse than arriving; otherwise the surface's own navigation policy applies.
-The same transaction cancels a pending touch recognizer, an accepted pointer drag, and a coalesced
-wheel burst before reconfiguration. A contact that continues after authoritative state arrives can
-therefore never resolve against the previous collection or selection.
-
-### Changing items
-
-`items` may be added to, removed from, replaced, reordered, emptied, and repopulated at any time.
-The surface preserves the **semantic item** it was on wherever that item moved to; if the item is
-gone it holds the same ordinal position, clamped to what remains. Indexes are never carried across
-a reconfiguration, and an `activeId` or `requestId()` naming an item the collection does not contain
-is never resolved to item zero. An imperative `requestId()` is refused immediately. A controlled
-`activeId` remains authoritative pending state: if that ID appears in a later `items` update, the
-surface applies it without requiring the application to emit the same prop value again. Removal and
-reintroduction follow the same rule, including an `items` and `activeId` change in one Vue update.
-
-An empty collection is a supported state with one answer everywhere: ID-valued fields are
-`undefined`, every ordinal on the published `state` is **`-1`**, `canPrevious` and `canNext` are
-false, and every command is refused. No layer substitutes item zero for "no item" — not the model,
-not the composable, not the handle.
-
-## Requesting versus synchronizing
-
-`requestId()` is a navigation the surface performs: the deck traverses an adjacent card and
-synchronizes anything further; the rail simply travels. `synchronizeId()` is for a change another
-surface already made and already reported — returning from an inspection gallery, for instance. It
-adopts the destination exactly, with no travel and no announcement it did not earn.
-
-```vue
-<StackedDeck ref="deck" v-model:active-id="activeId" :items="screens" @activate="openGallery" />
-```
+`StackedDeck` accepts only one adjacent card per interaction. A non-adjacent `navigateTo` is adopted
+exactly instead of animating through intermediate cards. `Coverflow` can target the requested rail
+position directly. `synchronizeTo` cancels conflicting motion and never replays semantic events.
 
 ```ts
-function onGalleryClose(finalId: ScreenId) {
-  deck.value?.synchronizeId(finalId);
+function onGalleryClosed(finalId: string | undefined) {
+  if (finalId) deck.value?.synchronizeTo(finalId);
 }
 ```
 
-## Styling
+Tap activation remains distinct from selection: `activate(item, index)` means the settled,
+unambiguous card was invoked for inspection. It is not emitted for a drag-ending click or a visually
+ambiguous card.
 
-Package CSS owns containment, the stage box, the camera, and the per-card coordinate space —
-structure a rigid-panel projection cannot be correct without. Palette, material, radius, and chrome
-stay with the product.
+## Public high-level props and slots
 
-Stable class names: `snap-motion-stacked-deck`, `-stage`, `-card`, `-card-motion`, `-pile-layer`;
-`snap-motion-coverflow`, `-stage`, `-card`.
+Both components accept `items`, optional `activeId`, `label` / `labelledBy`, `itemLabel`,
+`focusScope`, `disabled`, `landmark`, `fallbackStageWidth`, reduced-motion and physics overrides.
+`fallbackStageWidth` is only the pre-measurement fallback; the component measures the real stage.
 
-Both roots are a labelled `group` with `aria-roledescription="carousel"`, or a `region` landmark
-when `landmark` is set. Each card is a `group` with `aria-roledescription="slide"`, and a card that
-is hidden from assistive technology is also `inert`, so it never leaves focusable content reachable
-by keyboard. A physically visible Coverflow neighbour may still be semantically hidden when it is
-only part of the depth projection; `pointer-events`, `inert`, `aria-hidden`, activation eligibility,
-and focus ownership all follow the same semantic state. If navigation would make a focused card
-non-semantic, focus moves to the surface before inertness is applied. Interactive content a
-consumer puts in a `#card` slot keeps its own clicks, pointer,
-and Arrow keys. Only a manipulation the surface actually **consumed** suppresses the browser click
-it produced — a vertical touch scroll, a tap, a cancelled gesture, and a two-finger gesture all
-leave the following click alone — and that suppression is spent on exactly one click and expires
-rather than waiting for one that never comes. The suppressor also requires the generated click to
-match the drag's origin or release target and release coordinates; a fast unrelated control click
-is not consumed merely because it happened inside a timeout window.
+Both require `#card`. `StackedDeck` also supports a decorative `#backdrop`. Card slot state exposes
+the domain `item`, stable `id`, collection `index`, semantic/visual/settled/inspection state, and the
+surface-specific presentation. These projections are read-only render data, not alternate sources
+of truth.
 
-`will-change` is set on cards only while the surface is being manipulated or is animating, and
-returns to `auto` once it settles.
+`labelledBy` follows the JavaScript/DOM property spelling while rendering `aria-labelledby`.
+`focusScope` identifies a surrounding region that already owns focus; it is not a focus trap.
+`landmark` upgrades the default labelled group to a region only when the surface is a major page
+section.
 
-Stable state attributes on the surface root: `data-phase`, `data-active-id`, `data-reduced-motion`;
-the deck adds `data-settled-id`, `data-authority-stable`, `data-owned`, and `data-profile`, and the
-rail adds `data-visual-id`. Each card carries `data-item-id`; deck cards add `data-deck-role`
-(`top`, `target`, `hidden`), `data-deck-visible`, `data-deck-interactive`, and `data-deck-layer`.
-Decorative pile layers deliberately expose `data-pile-item-id`, `data-pile-item-index`,
-`data-pile-side`, and `data-pile-slot` as inspectable projection state without acquiring slide
-semantics. Other lab telemetry, including the lab-only `data-pile-tone`, is test instrumentation and
-not part of the generic component contract.
+## Input, interruption, and accessibility
 
-Stable custom properties: `--snap-motion-deck-card-width`, `--snap-motion-deck-card-height`,
-`--snap-motion-deck-stage-width`, `--snap-motion-deck-shadow-strength`, and the
-`--snap-motion-coverflow-*` sizing and material signals.
+Keyboard input is accepted only while the surface owns the relevant focus scope. Pointer input
+starts as recognition, becomes an owned horizontal drag only after intent is clear, and otherwise
+leaves vertical page scrolling alone. Descendant controls, right-click, and regions marked
+`data-snap-motion-ignore-drag` do not begin surface drag. Accepted navigation prevents its key or
+wheel default; refused navigation does not.
 
-## Nuxt
+Direct drag preserves one scalar physical position. Re-grab starts from the rendered state rather
+than a stale logical anchor. Rapid commands chain from the accepted semantic destination. Reduced
+motion preserves the same semantic protocol while completing mechanics without a spring-duration
+dependency.
 
-Nothing is client-only. Add the stylesheet through Nuxt so server and client receive the same
-structural contract:
+Only the settled inspectable card is interactive. Hidden and pile-only cards stay inert. Focus is
+preserved before semantic collection changes, status announcements happen once at settlement, and
+external synchronization stays silent.
 
-```ts
-export default defineNuxtConfig({
-  css: ["@snap-motion/vue/style.css"],
-});
-```
+## SSR and advanced composition
 
-Keep a route-provided `activeId` stable across server and client. The surfaces render deterministic
-markup during SSR and take their first measurement after mount.
+Keep route-provided `activeId` stable across server and client. Surfaces render deterministic markup
+without browser-global module initialization and hydrate without `ClientOnly`. Geometry is measured
+after mount without an entrance spring from a different semantic item.
 
-## Lower layers
-
-Advanced consumers may descend without giving up the product behaviour:
-
-1. `StackedDeck` / `Coverflow` — the components above.
-2. `useStackedDeckMotion` / `useCoverflowMotion` — the same behaviour with your own markup. Supply
-   viewport and track refs; receive frames, presentations, input handlers, and the full
-   `StackedDeckPileLayer` physical/compositing projection for custom pile renderers. Its `id` and
-   `index` are visual provenance only and grant no item semantics.
-3. `StackedDeckModel` / `CoverflowModel` in `@snap-motion/core` — the framework-neutral semantics:
-   selection, authority, interaction envelopes, command policy, and announcements, resolved from
-   controller snapshots without touching a controller.
-4. `SnapController` — the generic scalar controller, unchanged and still generic.
-
-`useStackedDeckMotion` and `useCoverflowMotion` publish an explicit
-`UseStackedDeckMotionReturn<Id>` / `UseCoverflowMotionReturn<Id>` — a written contract rather than
-whatever the implementation happens to return. Both include `model` and `motion` as the deliberate
-escape hatches; index-only request and synchronization helpers are not part of it, because they are
-how the capability is built rather than what it offers. Controlled selection is an _option_
-(`controlledId`), not a method: it is state arriving from outside, so it is applied even while the
-surface is disabled or held, and is never echoed back.
-
-Below the models sit the primitives they compose: `resolveStackedDeckTraversal`,
-`resolveStackedDeckFrame`, `resolveStackedDeckPile`, `resolveCoverflowPresentation`,
-`resolvePaginationIndicator`, `advanceBoundedSpring`, and `resolveDirectManipulationGesture`. They
-remain public because a custom renderer may genuinely need them — not because ordinary integration
-does. At that core layer, `StackedDeckPilePose.itemIndex` is only the ordered source index; core has
-no Vue item, ID-to-item lookup, tone, color, CSS, or application material.
+Advanced consumers can import `useCoverflowMotion`, `useStackedDeckMotion`, presentation functions,
+tuning types, geometry, and read-only diagnostics from the corresponding capability subpath. These
+APIs exist for custom renderers; ordinary product integration should use the high-level component.
+Core remains the owner of framework-neutral models, controller mechanics, target policy, and
+allocation-conscious frames. Vue composables own refs, DOM measurement, event listeners, and
+Motion playback.

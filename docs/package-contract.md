@@ -17,7 +17,14 @@ until npm ownership is manually verified.
 - `@snap-motion/vue/localization`
 - `@snap-motion/vue/style.css`
 
-The Vue root re-exports the common stable API. Capability subpaths make feature ownership explicit
+Core intentionally keeps one root entrypoint: its framework-neutral geometry, physics, state
+models, controller, presentation, selection, and tuning primitives all have plausible adapter or
+custom-renderer consumers and tree-shake without runtime dependencies. Capability subpaths would
+add ownership and semver complexity without splitting a runtime graph.
+
+The Vue root is a curated common path: high-level components, common contracts/localization, and
+ordinary carousel composition primitives. Capability-specific composables, geometry, tuning, and
+Media Gallery remain on their explicit subpaths. Capability subpaths make feature ownership explicit
 and allow consumers to depend on a narrower surface. The former implementation-form subpaths
 `components` and `composables` are intentionally absent. No wildcard or package-internal deep import
 is supported.
@@ -65,3 +72,16 @@ consumer's own item type and semantic ID union from `items` alone. Only the SFC 
 
 Tracked reports in `etc/*.api.md` freeze every public entrypoint's TypeScript surface. API changes
 require an intentional report update and a Changeset.
+
+## TypeScript policy
+
+Repository-owned `.ts` code and core declarations are maintained with TypeScript 7.0.2. TypeScript
+7 deliberately no longer exposes the programmatic compiler API used by Vue SFC tooling. Vue
+Language Tools 3.3.9 supports the transition by running SFC declaration and template checks through
+the official `@typescript/typescript6` compatibility package; the resolved compiler is TypeScript
+6.0.3. This is an upstream boundary, not a pin of the whole workspace to TypeScript 6.
+
+Packed declaration consumers cover current TypeScript 7 for ordinary `.ts` entrypoints and the
+TypeScript 6 bridge for actual Vue SFC template inference. TypeScript is neither a runtime nor peer
+dependency. API Extractor 7.58.12 continues to use its own analysis engine after deterministic
+declaration emission; the maintainer compiler and extractor engine are intentionally distinct.

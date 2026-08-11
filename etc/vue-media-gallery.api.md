@@ -4,16 +4,23 @@
 
 ```ts
 
+import type { ActiveIdChangeDetails } from '@snap-motion/core';
+import type { CloseReason } from '@snap-motion/vue/dialog';
 import { ComponentOptionsMixin } from 'vue';
 import { ComponentProvideOptions } from 'vue';
+import { ComputedRef } from 'vue';
 import { DefineComponent } from 'vue';
 import type { FocusReturnOptions } from '@snap-motion/vue/dialog';
 import type { InitialFocus } from '@snap-motion/vue/dialog';
+import type { OpenChangeDetails } from '@snap-motion/vue/dialog';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
+import type { SettlementDetails } from '@snap-motion/core';
 
 // @public (undocumented)
 export function clampMediaScale(scale: number, limits?: MediaTransformLimits): number;
+
+export { CloseReason }
 
 // @public (undocumented)
 export function constrainMediaTransform(transform: MediaTransform, context: MediaTransformContext, limits?: MediaTransformLimits): MediaTransform;
@@ -37,39 +44,44 @@ export function interpolateMediaTransform(from: MediaTransform, to: MediaTransfo
 // @public (undocumented)
 export function isFittedMediaTransform(transform: MediaTransform): boolean;
 
+//
 // @public (undocumented)
-export type MediaGalleryCloseReason = "backdrop" | "close-button" | "escape" | "programmatic";
-
-// @public (undocumented)
-export const MediaGalleryDialog: DefineComponent<MediaGalleryDialogProps, {
+export const MediaGalleryDialog: DefineComponent<__VLS_Props, {
 dialog: Ref<HTMLDialogElement | undefined, HTMLDialogElement | undefined>;
-activeIndex: Ref<number, number>;
-previous: typeof previous;
+activeId: ComputedRef<string | undefined>;
+settledId: ComputedRef<string | undefined>;
+navigateTo: typeof navigateTo;
 next: typeof next;
+previous: typeof previous;
 resetToFit: typeof resetToFit;
 requestClose: typeof requestClose;
+synchronizeTo: typeof synchronizeTo;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {} & {
-closed: (finalIndex: number) => any;
+closed: (finalId: string | undefined) => any;
+activeIdChange: (id: string | undefined, details: ActiveIdChangeDetails) => any;
+settled: (id: string, details: SettlementDetails) => any;
+"update:activeId": (id: string | undefined) => any;
 "update:open": (open: boolean) => any;
-requestClose: (finalIndex: number, reason: MediaGalleryCloseReason) => any;
-opened: (index: number) => any;
-indexChanged: (index: number, reason: MediaGalleryNavigationReason) => any;
-}, string, PublicProps, Readonly<MediaGalleryDialogProps> & Readonly<{
-onClosed?: (finalIndex: number) => any;
+openChange: (open: false, details: MediaGalleryOpenChangeDetails<string>) => any;
+opened: (id: string | undefined) => any;
+}, string, PublicProps, Readonly<__VLS_Props> & Readonly<{
+onClosed?: (finalId: string | undefined) => any;
+onActiveIdChange?: (id: string | undefined, details: ActiveIdChangeDetails) => any;
+onSettled?: (id: string, details: SettlementDetails) => any;
+"onUpdate:activeId"?: (id: string | undefined) => any;
 "onUpdate:open"?: (open: boolean) => any;
-onRequestClose?: (finalIndex: number, reason: MediaGalleryCloseReason) => any;
-onOpened?: (index: number) => any;
-onIndexChanged?: (index: number, reason: MediaGalleryNavigationReason) => any;
+onOpenChange?: (open: false, details: MediaGalleryOpenChangeDetails<string>) => any;
+onOpened?: (id: string | undefined) => any;
 }>, {
 title: string;
 reducedMotionOverride: boolean | undefined;
 initialFocus: InitialFocus;
-initialIndex: number;
 eyebrow: string;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 
 // @public (undocumented)
-export interface MediaGalleryDialogProps {
+export interface MediaGalleryDialogProps<TItem extends MediaGalleryItem = MediaGalleryItem> {
+    activeId?: TItem["id"];
     // (undocumented)
     descriptionId?: string;
     // (undocumented)
@@ -79,9 +91,7 @@ export interface MediaGalleryDialogProps {
     // (undocumented)
     initialFocus?: InitialFocus;
     // (undocumented)
-    initialIndex?: number;
-    // (undocumented)
-    items: readonly MediaGalleryItem[];
+    items: readonly TItem[];
     // (undocumented)
     messages?: Partial<MediaGalleryMessages>;
     // (undocumented)
@@ -160,7 +170,9 @@ export interface MediaGalleryMessages {
 }
 
 // @public (undocumented)
-export type MediaGalleryNavigationReason = "previous" | "next" | "swipe" | "home" | "end";
+export interface MediaGalleryOpenChangeDetails<Id extends string = string> extends OpenChangeDetails {
+    readonly activeId: Id | undefined;
+}
 
 // @public (undocumented)
 export interface MediaPoint {
@@ -223,13 +235,6 @@ export function resolveMediaTransformBounds(context: MediaTransformContext, scal
 
 // @public (undocumented)
 export function zoomMediaTransform(transform: MediaTransform, requestedScale: number, focalPoint: MediaPoint, context: MediaTransformContext, limits?: MediaTransformLimits): MediaTransform;
-
-// Warnings were encountered during analysis:
-//
-// C:/dev/snap-motion/temp/declarations/vue/media-gallery/components/MediaGalleryDialog.d.vue.ts:9:5 - (ae-forgotten-export) The symbol "previous" needs to be exported by the entry point index.d.ts
-// C:/dev/snap-motion/temp/declarations/vue/media-gallery/components/MediaGalleryDialog.d.vue.ts:10:5 - (ae-forgotten-export) The symbol "next" needs to be exported by the entry point index.d.ts
-// C:/dev/snap-motion/temp/declarations/vue/media-gallery/components/MediaGalleryDialog.d.vue.ts:11:5 - (ae-forgotten-export) The symbol "resetToFit" needs to be exported by the entry point index.d.ts
-// C:/dev/snap-motion/temp/declarations/vue/media-gallery/components/MediaGalleryDialog.d.vue.ts:12:5 - (ae-forgotten-export) The symbol "requestClose" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

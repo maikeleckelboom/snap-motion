@@ -72,7 +72,7 @@ function createCertificationApp() {
               height: 1_000,
             },
           ],
-          initialIndex: 8,
+          activeId: "one",
         }),
         h(
           Coverflow,

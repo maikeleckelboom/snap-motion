@@ -1,7 +1,9 @@
 <script setup lang="ts" generic="TItem extends { id: string }">
 import type {
+  ActiveIdChangeDetails,
   ElasticityOptions,
   ReleaseTargetPolicy,
+  SettlementDetails,
   SpringConfiguration,
 } from "@snap-motion/core";
 import type { SnapMotionMessages } from "@snap-motion/vue/localization";
@@ -18,10 +20,10 @@ type TId = TItem["id"];
 const props = withDefaults(
   defineProps<{
     items: readonly TItem[];
-    /** Durable selection. Controlled when supplied; it changes only at mechanical rest. */
+    /** Application-authoritative semantic selection. Controlled when supplied. */
     activeId?: TId;
     label?: string;
-    labelledby?: string;
+    labelledBy?: string;
     /** Accessible name of one item. Defaults to its semantic ID. */
     itemLabel?: (item: TItem, index: number) => string;
     /**
@@ -39,7 +41,7 @@ const props = withDefaults(
      */
     landmark?: boolean;
     /** Fallback stage width, used before the rail has been measured. */
-    stageWidth?: number;
+    fallbackStageWidth?: number;
     elasticity?: ElasticityOptions;
     messages?: Partial<SnapMotionMessages>;
     programmaticImpulse?: number;
@@ -50,14 +52,14 @@ const props = withDefaults(
   {
     disabled: false,
     landmark: false,
-    stageWidth: 1_120,
+    fallbackStageWidth: 1_120,
   },
 );
 
 const emit = defineEmits<{
-  (event: "update:activeId", id: TId): void;
-  (event: "requestActiveId", id: TId, reason: NavigationReason): void;
-  (event: "settled", id: TId): void;
+  (event: "update:activeId", id: TId | undefined): void;
+  (event: "activeIdChange", id: TId | undefined, details: ActiveIdChangeDetails): void;
+  (event: "settled", id: TId, details: SettlementDetails): void;
   /** A tap on the settled card: the request to open it on another surface. */
   (event: "activate", item: TItem, index: number): void;
 }>();
@@ -69,9 +71,27 @@ const messages = computed(() => createEnglishSnapMotionMessages(props.messages))
 const ids = computed<TId[]>(() => props.items.map((item) => item.id));
 const reducedMotionOverride = computed(() => props.reducedMotionOverride);
 const statusText = ref("");
+const internalActiveId = ref<TId | undefined>(
+  props.activeId ?? props.items[Math.floor(props.items.length / 2)]?.id,
+);
+const semanticActiveId = computed(() => props.activeId ?? internalActiveId.value);
+
+watch(ids, (nextIds, previousIds) => {
+  if (props.activeId !== undefined || nextIds.includes(internalActiveId.value as TId)) return;
+  const previousIndex = Math.max(0, previousIds.indexOf(internalActiveId.value as TId));
+  const nextId = nextIds[Math.min(previousIndex, Math.max(0, nextIds.length - 1))];
+  internalActiveId.value = nextId;
+  emit("update:activeId", nextId);
+  emit("activeIdChange", nextId, { reason: "reconcile" });
+});
 
 function labelFor(item: TItem, index: number): string {
   return props.itemLabel?.(item, index) ?? item.id;
+}
+
+/** Exact application-authoritative adoption; the high-level surface always keeps it silent. */
+function synchronizeTo(id: TId) {
+  return coverflow.synchronizeTo(id);
 }
 
 function positionLabel(index: number): string {
@@ -90,7 +110,7 @@ const coverflow = useCoverflowMotion<TId>({
   initialId: props.items[Math.floor(props.items.length / 2)]?.id,
   reducedMotionOverride,
   root: focusScope,
-  stageWidth: () => props.stageWidth,
+  stageWidth: () => props.fallbackStageWidth,
   track,
   viewport: root,
   elasticity: () => props.elasticity,
@@ -101,13 +121,15 @@ const coverflow = useCoverflowMotion<TId>({
     const item = props.items[index];
     if (item) emit("activate", item, index);
   },
-  onSettled(id, index, reason) {
-    statusText.value = positionLabel(index);
-    emit("settled", id);
-    // A settlement the application itself asked for is not a request back to the application.
-    if (reason === "route" || id === props.activeId) return;
-    emit("requestActiveId", id, reason);
+  onActiveIdChange(id, _index, reason) {
+    if (id === semanticActiveId.value) return;
+    internalActiveId.value = id;
     emit("update:activeId", id);
+    emit("activeIdChange", id, { reason });
+  },
+  onSettled(id, index, reason) {
+    if (reason !== "external") statusText.value = positionLabel(index);
+    emit("settled", id, { reason });
   },
 });
 
@@ -117,7 +139,8 @@ const cards = computed<CoverflowCardState<TItem, TId>[]>(() => {
     item,
     id: item.id,
     index,
-    active: index === state.visualIndex,
+    active: item.id === semanticActiveId.value,
+    visual: index === state.visualIndex,
     settled: index === state.settledIndex,
     inspectable: coverflow.isInspectEligible(index),
     presentation: coverflow.presentations.value[index]!,
@@ -125,7 +148,7 @@ const cards = computed<CoverflowCardState<TItem, TId>[]>(() => {
 });
 
 const stageStyle = computed(() => ({
-  "--snap-motion-coverflow-stage-width": `${Math.min(props.stageWidth, 1_280)}px`,
+  "--snap-motion-coverflow-stage-width": `${Math.min(props.fallbackStageWidth, 1_280)}px`,
   "--snap-motion-coverflow-card-width": `${coverflow.tuning.value.cardWidth}px`,
   "--snap-motion-coverflow-card-height": `${coverflow.tuning.value.cardHeight}px`,
   "--snap-motion-coverflow-perspective": `${coverflow.tuning.value.perspective}px`,
@@ -191,12 +214,12 @@ defineExpose({
   presentations: coverflow.presentations,
   pitch: coverflow.pitch,
   previous: coverflow.previous,
-  requestId: coverflow.requestId,
+  navigateTo: coverflow.navigateTo,
   root,
   settledId: coverflow.settledId,
   speedInCards: coverflow.speedInCards,
   state: coverflow.state,
-  synchronizeId: coverflow.synchronizeId,
+  synchronizeTo,
   tuning: coverflow.tuning,
   visualId: coverflow.visualId,
 });
@@ -207,10 +230,10 @@ defineExpose({
     :is="landmark ? 'section' : 'div'"
     ref="root"
     :aria-label="label"
-    :aria-labelledby="labelledby"
+    :aria-labelledby="labelledBy"
     aria-roledescription="carousel"
     class="snap-motion-coverflow"
-    :data-active-id="coverflow.settledId.value"
+    :data-active-id="semanticActiveId"
     :data-phase="coverflow.diagnostics.value.phase"
     :data-reduced-motion="coverflow.diagnostics.value.reducedMotion ? 'true' : 'false'"
     :data-visual-id="coverflow.visualId.value"
@@ -227,7 +250,7 @@ defineExpose({
       <div
         v-for="card in cards"
         :key="card.id"
-        :aria-current="card.active ? 'true' : undefined"
+        :aria-current="card.visual ? 'true' : undefined"
         :aria-hidden="card.presentation.interactive ? undefined : 'true'"
         :aria-label="positionLabel(card.index)"
         aria-roledescription="slide"

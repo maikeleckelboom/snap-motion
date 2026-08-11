@@ -1,3 +1,4 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import {
@@ -67,7 +68,9 @@ function isGeneratedVueForgottenExport(message) {
       .replaceAll("\\", "/")
       .endsWith("/media-gallery/components/MediaGalleryDialog.d.vue.ts") &&
     symbol !== undefined &&
-    new Set(["next", "previous", "requestClose", "resetToFit"]).has(symbol)
+    new Set(["navigateTo", "next", "previous", "requestClose", "resetToFit", "synchronizeTo"]).has(
+      symbol,
+    )
   );
 }
 
@@ -77,6 +80,18 @@ function messageCallback(message) {
     // through private helper symbols. They cannot be entrypoint exports and are not public API.
     // Suppress only those exact generated names from generated SFC declarations; any forgotten
     // source-owned symbol remains a failing warning below.
+    message.logLevel = ExtractorLogLevel.None;
+    return;
+  }
+  if (
+    mode === "check" &&
+    (message.messageId === ConsoleMessageId.ApiReportCopied ||
+      message.messageId === ConsoleMessageId.ApiReportCreated ||
+      message.messageId === ConsoleMessageId.ApiReportDiff)
+  ) {
+    // Check mode deliberately writes the unsanitized report to a disposable folder before the
+    // exact normalization/comparison below. Creating or replacing that disposable file is not a
+    // public API change and should not count as a warning.
     message.logLevel = ExtractorLogLevel.None;
     return;
   }
@@ -94,12 +109,72 @@ function messageCallback(message) {
   );
 }
 
+const generatedVueHelperPattern = /^__VLS_(?:WithSlots|base|Slots|PrettifyLocal|Props)(?:_\d+)?$/;
+const mediaGalleryExposeHelpers = new Set([
+  "navigateTo",
+  "next",
+  "previous",
+  "requestClose",
+  "resetToFit",
+  "synchronizeTo",
+]);
+
+function isGeneratedVueReportWarning(line) {
+  const inlineSymbol = line.match(
+    /^\/\/ Warning: \(ae-forgotten-export\) The symbol "([^"]+)" needs to be exported by the entry point index\.d\.ts$/,
+  )?.[1];
+  if (inlineSymbol && generatedVueHelperPattern.test(inlineSymbol)) return true;
+
+  const generatedDiagnostic = line.match(
+    /^\/\/ (.+\/temp\/declarations\/vue\/.+\.d\.vue\.ts):\d+:\d+ - \(ae-forgotten-export\) The symbol "([^"]+)" needs to be exported by the entry point index\.d\.ts$/,
+  );
+  if (!generatedDiagnostic) return false;
+  const [, sourcePath, symbol] = generatedDiagnostic;
+  return (
+    sourcePath.endsWith("/media-gallery/components/MediaGalleryDialog.d.vue.ts") &&
+    mediaGalleryExposeHelpers.has(symbol)
+  );
+}
+
+function normalizeApiReport(source) {
+  const withoutGeneratedWarnings = source
+    .split(/\r?\n/)
+    .filter((line) => !isGeneratedVueReportWarning(line))
+    .join("\n");
+  const withoutEmptyWarningSection = withoutGeneratedWarnings.replace(
+    /\n\/\/ Warnings were encountered during analysis:\n\/\/\n(?=\n\/\/ \(No @packageDocumentation comment for this package\))/,
+    "",
+  );
+  return `${withoutEmptyWarningSection.trimEnd()}\n`;
+}
+
+async function normalizeAndCompareApiReport(extractorConfig, trackedReportPath) {
+  if (!extractorConfig.apiReportEnabled) return true;
+  const reportPath = extractorConfig.reportFilePath;
+  const normalizedReport = normalizeApiReport(await readFile(reportPath, "utf8"));
+  await writeFile(reportPath, normalizedReport);
+  if (mode === "update") {
+    return true;
+  }
+  return normalizedReport === (await readFile(trackedReportPath, "utf8"));
+}
+
 let failed = false;
 for (const configuration of configurations) {
   const configPath = resolve(repoRoot, configuration.path);
   const configObject = ExtractorConfig.loadFile(configPath);
+  const trackedReportPath = resolve(repoRoot, "etc", configObject.apiReport?.reportFileName ?? "");
   if (mode === "rollup") {
     configObject.apiReport = { ...configObject.apiReport, enabled: false };
+  } else if (mode === "check") {
+    // API Extractor compares reports before its message callback can remove exact generated Vue
+    // diagnostics. Write the raw local-build report to a disposable folder, normalize it, then
+    // compare that result to the tracked contract ourselves.
+    configObject.apiReport = {
+      ...configObject.apiReport,
+      reportFolder: resolve(repoRoot, "temp/api-check"),
+    };
+    await mkdir(configObject.apiReport.reportFolder, { recursive: true });
   }
   const extractorConfig = ExtractorConfig.prepare({
     configObject,
@@ -107,14 +182,16 @@ for (const configuration of configurations) {
     packageJsonFullPath: resolve(repoRoot, `packages/${configuration.packageName}/package.json`),
   });
   const result = Extractor.invoke(extractorConfig, {
-    localBuild: mode === "update",
+    localBuild: mode !== "rollup",
     messageCallback,
     printApiReportDiff: mode === "check",
     showVerboseMessages: false,
   });
+  const apiReportMatches = await normalizeAndCompareApiReport(extractorConfig, trackedReportPath);
   // Updating a checked-in report is itself reported as a warning. It is expected only in update
   // mode; check and rollup modes still fail on every warning that was not explicitly discarded.
-  failed ||= !result.succeeded || (mode !== "update" && result.warningCount > 0);
+  failed ||=
+    result.errorCount > 0 || (mode !== "update" && result.warningCount > 0) || !apiReportMatches;
 }
 
 if (failed) process.exitCode = 1;

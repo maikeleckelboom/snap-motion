@@ -4,6 +4,7 @@
 
 ```ts
 
+import { ActiveIdChangeDetails } from '@snap-motion/core';
 import type { CarouselMotion } from '@snap-motion/vue/carousel';
 import { ComputedRef } from 'vue';
 import { CoverflowModel } from '@snap-motion/core';
@@ -16,6 +17,7 @@ import { PaginationIndicatorState } from '@snap-motion/core';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
 import { ReleaseTargetPolicy } from '@snap-motion/core';
+import type { SettlementDetails } from '@snap-motion/core';
 import { ShallowRef } from 'vue';
 import { ShallowUnwrapRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
@@ -24,7 +26,6 @@ import { SpringConfiguration } from '@snap-motion/core';
 import { SurfaceMotionDiagnostics } from '@snap-motion/vue/motion';
 import { VNode } from 'vue';
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const Coverflow: <TItem extends {
@@ -34,12 +35,12 @@ export const Coverflow: <TItem extends {
         items: readonly TItem[];
         activeId?: TItem["id"];
         label?: string;
-        labelledby?: string;
+        labelledBy?: string;
         itemLabel?: (item: TItem, index: number) => string;
         focusScope?: HTMLElement | undefined;
         disabled?: boolean;
         landmark?: boolean;
-        stageWidth?: number;
+        fallbackStageWidth?: number;
         elasticity?: ElasticityOptions;
         messages?: Partial<SnapMotionMessages>;
         programmaticImpulse?: number;
@@ -47,9 +48,9 @@ export const Coverflow: <TItem extends {
         releasePolicy?: Partial<ReleaseTargetPolicy>;
         spring?: SpringConfiguration;
     } & {
-        "onUpdate:activeId"?: (id: TItem["id"]) => any;
-        onSettled?: (id: TItem["id"]) => any;
-        onRequestActiveId?: (id: TItem["id"], reason: NavigationReason) => any;
+        onActiveIdChange?: (id: TItem["id"] | undefined, details: ActiveIdChangeDetails) => any;
+        onSettled?: (id: TItem["id"], details: SettlementDetails) => any;
+        "onUpdate:activeId"?: (id: TItem["id"] | undefined) => any;
         onActivate?: (item: TItem, index: number) => any;
     }> & (typeof globalThis extends {
         __VLS_PROPS_FALLBACK: infer P;
@@ -67,12 +68,12 @@ export const Coverflow: <TItem extends {
     presentations: ComputedRef<readonly CoverflowCardPresentation[]>;
     pitch: ComputedRef<number>;
     previous: () => boolean;
-    requestId: (id: TItem["id"]) => boolean;
+    navigateTo: (id: TItem["id"]) => boolean;
     root: Ref<HTMLElement | undefined, HTMLElement | undefined>;
     settledId: ComputedRef<TItem["id"] | undefined>;
     speedInCards: ComputedRef<number>;
     state: ShallowRef<CoverflowModelState>;
-    synchronizeId: (id: TItem["id"], announce?: boolean) => boolean;
+    synchronizeTo: (id: TItem["id"]) => boolean;
     tuning: ComputedRef<CoverflowTuning>;
     visualId: ComputedRef<TItem["id"] | undefined>;
     }>) => void;
@@ -83,15 +84,16 @@ export const Coverflow: <TItem extends {
             id: TItem["id"];
             index: number;
             active: boolean;
+            visual: boolean;
             settled: boolean;
             inspectable: boolean;
             presentation: CoverflowCardPresentation;
         }) => any;
     };
     emit: {
-        (event: "update:activeId", id: TItem["id"]): void;
-        (event: "requestActiveId", id: TItem["id"], reason: NavigationReason): void;
-        (event: "settled", id: TItem["id"]): void;
+        (event: "update:activeId", id: TItem["id"] | undefined): void;
+        (event: "activeIdChange", id: TItem["id"] | undefined, details: ActiveIdChangeDetails): void;
+        (event: "settled", id: TItem["id"], details: SettlementDetails): void;
         (event: "activate", item: TItem, index: number): void;
     };
 }>) => VNode & {
@@ -141,6 +143,7 @@ export interface CoverflowCardState<TItem, TId extends string> {
     // (undocumented)
     readonly presentation: CoverflowCardPresentation;
     readonly settled: boolean;
+    readonly visual: boolean;
 }
 
 // @public
@@ -153,6 +156,7 @@ export interface CoverflowHandle<Id extends string> {
     readonly diagnostics: SurfaceMotionDiagnostics<Id>;
     // (undocumented)
     isInspectEligible(index: number): boolean;
+    navigateTo(id: Id): boolean;
     next(): boolean;
     onKeyDown(event: KeyboardEvent): void;
     // (undocumented)
@@ -163,14 +167,13 @@ export interface CoverflowHandle<Id extends string> {
     readonly pitch: number;
     readonly presentations: readonly CoverflowCardPresentation[];
     previous(): boolean;
-    requestId(id: Id): boolean;
     // (undocumented)
     readonly root: HTMLElement | undefined;
     readonly settledId: Id | undefined;
     // (undocumented)
     readonly speedInCards: number;
     readonly state: CoverflowModelState;
-    synchronizeId(id: Id, announce?: boolean): boolean;
+    synchronizeTo(id: Id): boolean;
     // (undocumented)
     readonly tuning: CoverflowTuning;
     readonly visualId: Id | undefined;
@@ -192,6 +195,7 @@ export interface UseCoverflowMotionOptions<Id extends string> {
     // (undocumented)
     readonly initialId?: Id | undefined;
     readonly onActivate?: (id: Id, index: number) => void;
+    readonly onActiveIdChange?: (id: Id, index: number, reason: ActiveIdChangeDetails["reason"]) => void;
     readonly onSettled?: (id: Id, index: number, reason: NavigationReason) => void;
     // (undocumented)
     readonly programmaticImpulse?: MaybeRefOrGetter<number | undefined>;
@@ -222,6 +226,7 @@ export interface UseCoverflowMotionReturn<Id extends string> {
     isInspectEligible(index: number): boolean;
     readonly model: CoverflowModel<Id>;
     readonly motion: CarouselMotion<Id>;
+    navigateTo(id: Id): boolean;
     next(): boolean;
     // (undocumented)
     onClick(event: MouseEvent): void;
@@ -244,7 +249,6 @@ export interface UseCoverflowMotionReturn<Id extends string> {
     previous(): boolean;
     // (undocumented)
     remeasure(): SnapAnchor<Id> | null;
-    requestId(id: Id): boolean;
     readonly settledId: ComputedRef<Id | undefined>;
     // (undocumented)
     readonly speedInCards: ComputedRef<number>;
@@ -252,7 +256,7 @@ export interface UseCoverflowMotionReturn<Id extends string> {
     readonly stageWidth: ComputedRef<number>;
     readonly state: ShallowRef<CoverflowModelState>;
     readonly statusIndex: ComputedRef<number | null>;
-    synchronizeId(id: Id, announce?: boolean): boolean;
+    synchronizeTo(id: Id, announce?: boolean): boolean;
     // (undocumented)
     readonly tuning: ComputedRef<CoverflowTuning>;
     readonly visualId: ComputedRef<Id | undefined>;

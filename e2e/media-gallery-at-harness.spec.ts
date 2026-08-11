@@ -369,9 +369,11 @@ test("baseline event order ends with a bounded focus-restoration trace entry", a
   await expect(opener).toBeFocused();
   await expect
     .poll(() => traceEvents(page))
-    .toBe("open-requested,opened,indexChanged,requestClose,update:open,closed,focus-restored");
+    .toBe(
+      "open-requested,opened,update:activeId,activeIdChange,settled,update:open,openChange,closed,focus-restored",
+    );
   await expect(trace(page).locator("li").last()).toContainText("at-open-gallery");
-  await expect(trace(page)).toContainText("reason next");
+  await expect(trace(page)).toContainText("reason keyboard");
   await expect(trace(page)).toContainText("reason escape");
 });
 
@@ -541,14 +543,14 @@ test("preview-only, delayed full, retry success, and terminal failures are deter
   await expectNoHarnessViolations(page);
 });
 
-test("cancelled swipe and close-during-navigation trace only committed indices", async ({
+test("cancelled swipe emits no semantic change and close cancels pending settlement", async ({
   page,
 }) => {
   await page.getByTestId("at-open-gallery").click();
   const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
   await cancelPointerGesture(page, viewport);
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 3");
-  expect((await traceEvents(page)).split(",")).not.toContain("indexChanged");
+  expect((await traceEvents(page)).split(",")).not.toContain("activeIdChange");
   await closeGallery(page);
 
   await page.getByTestId("reduced-motion-mode").selectOption("no-preference");
@@ -566,9 +568,10 @@ test("cancelled swipe and close-during-navigation trace only committed indices",
   });
   await expect(gallery(page)).not.toBeVisible();
   await expect.poll(() => traceEvents(page)).toContain("focus-restored");
-  expect((await traceEvents(page)).split(",")).not.toContain("indexChanged");
+  expect((await traceEvents(page)).split(",")).toContain("activeIdChange");
+  expect((await traceEvents(page)).split(",")).not.toContain("settled");
   await expect(trace(page)).toContainText("closed");
-  await expect(trace(page)).toContainText("final index 1");
+  await expect(trace(page)).toContainText("final id");
 });
 
 test("long localized content reflows at 320 CSS pixels and 200%-equivalent geometry", async ({
@@ -643,7 +646,7 @@ test("the complete harness remains usable under forced-colors emulation", async 
   await expectNoHarnessViolations(page);
 });
 
-test("a sub-threshold completed swipe does not add an index event", async ({ page }) => {
+test("a sub-threshold completed swipe does not add a semantic change", async ({ page }) => {
   await page.getByTestId("at-open-gallery").click();
   await dragSyntheticPointerBy(
     page,
@@ -653,7 +656,7 @@ test("a sub-threshold completed swipe does not add an index event", async ({ pag
     { eventIntervalMs: 20, stepDelay: 0 },
   );
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 3");
-  expect((await traceEvents(page)).split(",")).not.toContain("indexChanged");
+  expect((await traceEvents(page)).split(",")).not.toContain("activeIdChange");
 });
 
 test("captures the canonical visual evidence set", async ({ browserName, page }) => {

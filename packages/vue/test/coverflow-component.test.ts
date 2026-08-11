@@ -23,9 +23,9 @@ interface CoverflowInstance {
   isInspectEligible: (index: number) => boolean;
   next: () => boolean;
   previous: () => boolean;
-  requestId: (id: ScreenId) => boolean;
+  navigateTo: (id: ScreenId) => boolean;
   settledId: ScreenId | undefined;
-  synchronizeId: (id: ScreenId, announce?: boolean) => boolean;
+  synchronizeTo: (id: ScreenId, announce?: boolean) => boolean;
   visualId: ScreenId | undefined;
 }
 
@@ -88,7 +88,7 @@ describe("Coverflow", () => {
     await nextTick();
     expect(rail.settledId).toBe("outcome");
     expect(rail.visualId).toBe("outcome");
-    expect(wrapper.emitted("settled")).toEqual([["outcome"]]);
+    expect(wrapper.emitted("settled")).toEqual([["outcome", { reason: "next" }]]);
     expect(wrapper.emitted("update:activeId")).toEqual([["outcome"]]);
     expect(wrapper.get('[data-testid="snap-motion-coverflow-status"]').text()).toBe(
       "Outcome, 3 of 3",
@@ -103,7 +103,7 @@ describe("Coverflow", () => {
     const rail = wrapper.vm as unknown as CoverflowInstance;
     expect(rail.settledId).toBe("overview");
 
-    expect(rail.requestId("outcome")).toBe(true);
+    expect(rail.navigateTo("outcome")).toBe(true);
     await nextTick();
     expect(rail.settledId).toBe("outcome");
     wrapper.unmount();
@@ -114,7 +114,7 @@ describe("Coverflow", () => {
     await nextTick();
     const rail = wrapper.vm as unknown as CoverflowInstance;
 
-    expect(rail.synchronizeId("overview")).toBe(true);
+    expect(rail.synchronizeTo("overview")).toBe(true);
     await nextTick();
     expect(rail.settledId).toBe("overview");
     expect(rail.visualId).toBe("overview");

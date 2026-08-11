@@ -129,11 +129,16 @@ it exactly without an entrance spring.
 
 ## Toolchain compatibility
 
-The npm registry's latest TypeScript at repository creation was 7.0.2, but stable `vue-tsc` 3.3.7
-could not load TypeScript 7's removed `./lib/tsc` package subpath. TypeScript 6.0.3 is therefore the
-newest mutually compatible stable combination. Current type-aware Oxlint requires TypeScript 7,
-so ordinary Oxlint is enabled and type checking remains an explicit vue-tsc/tsc gate. Type-aware
-linting should be reconsidered when a stable vue-tsc release supports TypeScript 7.
+The maintainer workspace uses TypeScript 7.0.2 for repository `.ts` code and the core package.
+TypeScript 7 intentionally removed the programmatic compiler API, so Vue Language Tools 3.3.9 runs
+Vue SFC declaration/template work through its supported `@typescript/typescript6` bridge. That
+bridge currently resolves TypeScript 6.0.3. Directly pairing `vue-tsc` with TypeScript 7 fails at
+the removed `typescript/lib/tsc` subpath; keeping only Vue-owning workspaces on the supported bridge
+preserves a truthful TypeScript 7 migration without a local loader hack.
+
+Type-aware Oxlint can use the root TypeScript 7 toolchain. Type checking remains an explicit
+`tsc`/`vue-tsc` gate, and packed fixtures certify both current TypeScript declarations and real SFC
+template inference.
 
 JavaScript remains bundled ESM. TypeScript and Vue declarations are first emitted to a temporary
 graph and then rolled up by API Extractor for every export-map entrypoint. This permits extensionless

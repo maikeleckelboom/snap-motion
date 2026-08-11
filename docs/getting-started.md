@@ -18,8 +18,10 @@ import "@snap-motion/vue/style.css";
 
 ## Basic carousel
 
-Use stable string IDs. A user action emits `targetChanged`, `requestActiveId`, and
-`update:activeId` when the target is selected, followed by `settled` after physical completion.
+Use stable string IDs. A user action emits `update:activeId` and
+`activeIdChange(id, { reason })` as soon as the destination is accepted, followed by
+`settled(id, { reason })` after physical completion. A host-provided `activeId` is authoritative and
+is never echoed through the two change events.
 
 ```vue
 <script setup lang="ts">
@@ -51,6 +53,10 @@ const activeId = ref<(typeof ids)[number]>("a");
   </CarouselRoot>
 </template>
 ```
+
+Use an exposed `navigateTo(id)` for a new programmatic navigation. Use `synchronizeTo(id)` only to
+adopt state that another authority already changed; synchronization cancels conflicting interaction
+without replaying a semantic event or live announcement.
 
 `CarouselTrack` accepts logical `startInset` and `endInset` values as numbers in pixels or CSS
 length strings. Use them with a track-measuring strategy when the first and last unequal-width item

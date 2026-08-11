@@ -48,8 +48,7 @@
     "vite": "catalog:",
     "vitest": "catalog:",
     "vue": "catalog:",
-    "vue-router": "catalog:",
-    "vue-tsc": "catalog:"
+    "vue-router": "catalog:"
   },
   "engines": {
     "node": ">=24.0.0"

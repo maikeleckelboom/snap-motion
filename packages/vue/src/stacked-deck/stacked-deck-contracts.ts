@@ -10,7 +10,9 @@ export interface StackedDeckCardState<TItem, TId extends string> {
    * all mean. Inside a handoff that is the incoming card, before ownership has formally moved.
    */
   readonly active: boolean;
-  /** True for the durable selection, which changes only at mechanical rest. */
+  /** True for the card currently dominant in the physical projection. */
+  readonly visual: boolean;
+  /** True for the card at mechanical rest. */
   readonly settled: boolean;
   /** True when a tap on this card would open it on another surface. */
   readonly inspectable: boolean;

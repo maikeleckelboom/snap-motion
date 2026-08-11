@@ -31,13 +31,8 @@ export {
   toPhysicalSheetPosition,
 } from "./sheet-side";
 export type { SheetSideDescriptor } from "./sheet-side";
-export type {
-  SheetAxis,
-  SheetEdge,
-  SheetNavigationReason,
-  SheetSide,
-  SheetState,
-} from "./sheet-contracts";
+export type { SheetAxis, SheetEdge, SheetSide, SheetState } from "./sheet-contracts";
+export type { SheetDiagnostics } from "./sheetDiagnostics";
 export { useSheetMotion } from "./use-sheet-motion";
 export type {
   SheetViewportDimensions,

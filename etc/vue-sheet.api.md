@@ -4,6 +4,7 @@
 
 ```ts
 
+import type { ActiveIdChangeDetails } from '@snap-motion/core';
 import type { AnimationDriver } from '@snap-motion/core';
 import type { CloseReason } from '@snap-motion/vue/dialog';
 import { ComponentOptionsMixin } from 'vue';
@@ -17,15 +18,17 @@ import type { ElasticityOptions } from '@snap-motion/core';
 import type { FocusReturnOptions } from '@snap-motion/vue/dialog';
 import type { InitialFocus } from '@snap-motion/vue/dialog';
 import { MaybeRefOrGetter } from 'vue';
-import type { NavigationReason } from '@snap-motion/vue/motion';
+import type { OpenChangeDetails } from '@snap-motion/vue/dialog';
 import type { PointerIntent } from '@snap-motion/vue/motion';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
 import type { ReleaseTargetPolicy } from '@snap-motion/core';
+import type { SettlementDetails } from '@snap-motion/core';
 import { ShallowUnwrapRef } from 'vue';
 import type { SnapAnchor } from '@snap-motion/core';
 import type { SnapMotionMessages } from '@snap-motion/vue/localization';
 import type { SpringConfiguration } from '@snap-motion/core';
+import type { SurfaceMotionDiagnostics } from '@snap-motion/vue/motion';
 import { VNode } from 'vue';
 
 // @public (undocumented)
@@ -65,7 +68,6 @@ export function resolveSheetGeometry(input: SheetGeometryInput): SheetGeometry;
 // @public
 export function resolveSheetSnapPoints<Id extends string>(points: readonly SheetSnapPoint<Id>[], context: SheetMeasureContext): ResolvedSheetSnapPoint<Id>[];
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
@@ -92,12 +94,11 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
         viewportPolicy?: Partial<SheetViewportPolicy>;
     } & {
         onClosed?: () => any;
+        onActiveIdChange?: (id: Id, details: ActiveIdChangeDetails) => any;
+        onSettled?: (id: Id, details: SettlementDetails) => any;
         "onUpdate:activeId"?: (id: Id) => any;
-        onSettled?: (id: Id) => any;
-        onRequestActiveId?: (id: Id, reason: SheetNavigationReason) => any;
-        onTargetChanged?: (id: Id, reason: SheetNavigationReason) => any;
         "onUpdate:open"?: (open: boolean) => any;
-        onRequestClose?: (reason: CloseReason) => any;
+        onOpenChange?: (open: false, details: OpenChangeDetails) => any;
         onOpened?: () => any;
     }> & (typeof globalThis extends {
         __VLS_PROPS_FALLBACK: infer P;
@@ -107,11 +108,15 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
     chrome: Ref<HTMLElement | undefined, HTMLElement | undefined>;
     closeForPresentationChange: () => boolean;
     dialog: Ref<HTMLDialogElement | undefined, HTMLDialogElement | undefined>;
+    diagnostics: ComputedRef<SheetDiagnostics<Id>>;
     intrinsicBodyContent: Ref<HTMLElement | undefined, HTMLElement | undefined>;
-    motion: UseSheetMotionReturn<Id>;
     panel: Ref<HTMLElement | undefined, HTMLElement | undefined>;
+    activeId: ComputedRef<Id>;
+    sheetState: Ref<SheetState, SheetState>;
+    side: Ref<SheetEdge, SheetEdge>;
     requestClose: (reason: CloseReason) => void;
-    requestSnap: (id: Id, reason: SheetNavigationReason) => void;
+    navigateTo: (id: Id) => boolean;
+    synchronizeTo: (id: Id) => boolean;
     titleId: string;
     viewport: Ref<HTMLElement | undefined, HTMLElement | undefined>;
     }>) => void;
@@ -128,12 +133,11 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
     emit: {
         (event: "update:open", open: boolean): void;
         (event: "update:activeId", id: Id): void;
-        (event: "requestClose", reason: CloseReason): void;
-        (event: "requestActiveId", id: Id, reason: SheetNavigationReason): void;
+        (event: "openChange", open: false, details: OpenChangeDetails): void;
+        (event: "activeIdChange", id: Id, details: ActiveIdChangeDetails): void;
         (event: "opened"): void;
         (event: "closed"): void;
-        (event: "settled", id: Id): void;
-        (event: "targetChanged", id: Id, reason: SheetNavigationReason): void;
+        (event: "settled", id: Id, details: SettlementDetails): void;
     };
 }>) => VNode & {
     __ctx?: NonNullable<Awaited<typeof __VLS_setup>>;
@@ -141,6 +145,18 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
 
 // @public (undocumented)
 export type SheetAxis = "x" | "y";
+
+// @public
+export interface SheetDiagnostics<Id extends string = string> extends SurfaceMotionDiagnostics<Id> {
+    // (undocumented)
+    readonly geometry: SheetGeometry;
+    // (undocumented)
+    readonly primarySurfaceExtent: number;
+    // (undocumented)
+    readonly sheetState: SheetState;
+    // (undocumented)
+    readonly side: SheetSide;
+}
 
 // @public (undocumented)
 export type SheetEdge = "top" | "right" | "bottom" | "left";
@@ -246,9 +262,6 @@ export interface SheetMeasureContext {
 }
 
 // @public (undocumented)
-export type SheetNavigationReason = NavigationReason | "side-change";
-
-// @public (undocumented)
 export type SheetOpenSnapId = SheetViewportSnapId | SheetFixedSnapId;
 
 // @public (undocumented)
@@ -288,7 +301,6 @@ export const sheetSideDescriptors: Readonly<Record<SheetSide, SheetSideDescripto
 // @public (undocumented)
 export const sheetSides: readonly ["top", "right", "bottom", "left"];
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_Props" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const SheetSnapPicker: DefineComponent<__VLS_Props, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<__VLS_Props> & Readonly<{}>, {}, {}, {}, {}, string, ComponentProvideOptions, false, {}>;

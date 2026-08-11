@@ -1,5 +1,7 @@
 /**
- * Accessible, interruptible Vue carousel, dialog, and multi-edge sheet primitives.
+ * High-level Vue surfaces and the common contracts used to compose them.
+ *
+ * Capability-specific composables, geometry, and advanced helpers live on explicit subpaths.
  *
  * @packageDocumentation
  */
@@ -16,94 +18,46 @@ export {
   CarouselStatus,
   CarouselTrack,
   CarouselViewport,
-  createFixedStageCarouselGeometryStrategy,
-  createVariableWidthCenteredCarouselGeometryStrategy,
-  useCarouselContext,
-  useCarouselMotion,
-  useCarouselWindow,
 } from "./carousel";
 export type {
-  CarouselGeometryMeasureContext,
   CarouselGeometryStrategy,
+  CarouselGeometryMeasureContext,
   CarouselKeyboardScope,
-  CarouselMotion,
-  CarouselWindowOptions,
-  CarouselWindowState,
-  FixedStageCarouselGeometryOptions,
-  PublicCarouselContext,
   SnapMotionDirection,
-  UseCarouselMotionOptions,
-  VariableWidthCenteredCarouselGeometryOptions,
 } from "./carousel";
-export { Coverflow, useCoverflowMotion } from "./coverflow";
-export type {
-  CoverflowCardPresentation,
-  CoverflowCardState,
-  CoverflowHandle,
-  CoverflowTuning,
-  UseCoverflowMotionOptions,
-  UseCoverflowMotionReturn,
-} from "./coverflow";
-export { StackedDeck, useStackedDeckMotion } from "./stacked-deck";
+export { Coverflow } from "./coverflow";
+export type { CoverflowCardPresentation, CoverflowCardState, CoverflowHandle } from "./coverflow";
+export { StackedDeck } from "./stacked-deck";
 export type {
   StackedDeckCardState,
   StackedDeckHandle,
-  StackedDeckPileLayer,
   StackedDeckPileLayerSlotState,
-  StackedDeckPose,
-  StackedDeckRole,
-  UseStackedDeckMotionOptions,
-  UseStackedDeckMotionReturn,
 } from "./stacked-deck";
-export {
-  Sheet,
-  SheetSnapPicker,
-  createDefaultSheetSnapPoints,
-  createFixedSheetSnapPoints,
-  createViewportSheetSnapPoints,
-  defaultSheetOpenSnapId,
-  getSheetSideDescriptor,
-  resolveSheetGeometry,
-  resolveSheetSnapPoints,
-  sheetMaximumVisibleExtent,
-  sheetSideDescriptors,
-  sheetSides,
-  sheetSnapVisibleExtent,
-  sheetTransform,
-  toCanonicalSheetDelta,
-  toPhysicalSheetPosition,
-  useSheetMotion,
-} from "./sheet";
+export { Sheet, SheetSnapPicker } from "./sheet";
 export type {
-  ResolvedSheetSnapPoint,
   SheetAxis,
   SheetEdge,
+  SheetDiagnostics,
   SheetFixedSnapId,
   SheetGeometry,
-  SheetGeometryInput,
   SheetMeasureContext,
-  SheetNavigationReason,
   SheetOpenSnapId,
   SheetSafeAreaInsets,
   SheetSide,
-  SheetSideDescriptor,
   SheetSnapPoint,
-  SheetSnapResolver,
   SheetState,
   SheetViewportDimensions,
   SheetViewportPolicy,
   SheetViewportSnapId,
-  UseSheetMotionOptions,
-  UseSheetMotionReturn,
 } from "./sheet";
 export { ModalDialog } from "./dialog";
-export type { CloseReason, FocusReturnOptions, InitialFocus } from "./dialog";
+export type { CloseReason, FocusReturnOptions, InitialFocus, OpenChangeDetails } from "./dialog";
 export { createEnglishSnapMotionMessages } from "./localization";
 export type { SnapMotionMessages } from "./localization";
-export { createMotionDriver, useBoundedSpringDriver, useSnapMotion } from "./motion";
 export type {
+  ActiveIdChangeDetails,
   NavigationReason,
   PointerIntent,
+  SettlementDetails,
   SurfaceMotionDiagnostics,
-  UseSnapMotionOptions,
 } from "./motion";

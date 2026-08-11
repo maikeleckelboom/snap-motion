@@ -11,5 +11,9 @@
     "@snap-motion/vue": "workspace:*",
     "@vueuse/core": "catalog:",
     "nuxt": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:typescript6",
+    "vue-tsc": "catalog:"
   }
 }

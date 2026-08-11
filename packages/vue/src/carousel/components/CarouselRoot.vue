@@ -1,5 +1,10 @@
 <script setup lang="ts" generic="Id extends string">
-import { createFixedStageGeometry, type ControllerSnapshot } from "@snap-motion/core";
+import {
+  createFixedStageGeometry,
+  type ActiveIdChangeDetails,
+  type ControllerSnapshot,
+  type SettlementDetails,
+} from "@snap-motion/core";
 import type { SnapMotionMessages } from "@snap-motion/vue/localization";
 import type { NavigationReason } from "@snap-motion/vue/motion";
 import { useEventListener, useMutationObserver } from "@vueuse/core";
@@ -31,7 +36,7 @@ const props = withDefaults(
     keyboardPrimary?: boolean;
     keyboardScope?: CarouselKeyboardScope;
     label?: string;
-    labelledby?: string;
+    labelledBy?: string;
     landmark?: boolean;
     messages?: Partial<SnapMotionMessages>;
     reducedMotionOverride?: boolean;
@@ -47,9 +52,8 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (event: "update:activeId", id: Id): void;
-  (event: "requestActiveId", id: Id, reason: NavigationReason): void;
-  (event: "settled", id: Id): void;
-  (event: "targetChanged", id: Id, reason: NavigationReason): void;
+  (event: "activeIdChange", id: Id, details: ActiveIdChangeDetails): void;
+  (event: "settled", id: Id, details: SettlementDetails): void;
 }>();
 
 const root = ref<HTMLElement>();
@@ -74,6 +78,7 @@ let targetGeneration = 0;
 let settledGeneration = 0;
 let settleCheckQueued = false;
 let unmounted = false;
+let settlementReason: NavigationReason = "external";
 
 function refreshContentDirection() {
   if (props.direction !== "auto") {
@@ -141,13 +146,15 @@ function publishSettlement() {
   moveFocusOutsideOutgoingSlide(active.id);
   settledGeneration = targetGeneration;
   const label = slideRegistrations.get(active.id)?.label;
-  statusText.value = messages.value.itemStatus({
-    id: active.id,
-    index: active.order,
-    count: snapshot.anchors.length,
-    ...(label ? { label } : {}),
-  });
-  emit("settled", active.id);
+  if (settlementReason !== "external") {
+    statusText.value = messages.value.itemStatus({
+      id: active.id,
+      index: active.order,
+      count: snapshot.anchors.length,
+      ...(label ? { label } : {}),
+    });
+  }
+  emit("settled", active.id, { reason: settlementReason });
 }
 
 function onControllerChange(snapshot: ControllerSnapshot<Id>) {
@@ -161,11 +168,11 @@ function onControllerChange(snapshot: ControllerSnapshot<Id>) {
 function acceptTarget(id: Id, reason: NavigationReason, userOriginated: boolean) {
   if (id === intendedId.value) return false;
   intendedId.value = id;
+  settlementReason = reason;
   targetGeneration += 1;
-  emit("targetChanged", id, reason);
-  if (userOriginated) {
-    emit("requestActiveId", id, reason);
+  if (userOriginated && reason !== "external") {
     emit("update:activeId", id);
+    emit("activeIdChange", id, { reason });
   }
   return true;
 }
@@ -200,8 +207,17 @@ function navigateWithReason(id: Id, reason: NavigationReason, userOriginated = t
 }
 
 /** Public imperative navigation has one truthful provenance. */
-function navigate(id: Id): boolean {
+function navigateTo(id: Id): boolean {
   return navigateWithReason(id, "programmatic");
+}
+
+/** Adopts authoritative state exactly, without replaying navigation or announcing it. */
+function synchronizeTo(id: Id): boolean {
+  if (!props.ids.includes(id)) return false;
+  motion.interrupt();
+  acceptTarget(id, "external", false);
+  motion.controller.remeasure({ ...measure(), activeId: id });
+  return true;
 }
 
 /** Internal picker navigation used by pagination controls and slots. */
@@ -275,6 +291,9 @@ watch(
     const idsChanged = priorState === undefined || idsKey !== priorState[0];
     const controlledChanged = priorState !== undefined && controlledId !== priorState[1];
     if (!idsChanged && !controlledChanged) return;
+    // A host confirming the destination just emitted by this component is not an external
+    // takeover. Let the accepted motion finish and retain its original provenance.
+    if (!idsChanged && controlledId === intendedId.value) return;
 
     const activeElement = viewport.value?.ownerDocument.activeElement;
     const focusNeedsFallback =
@@ -287,12 +306,12 @@ watch(
     await nextTick();
     if (unmounted) return;
     if (nextIds.includes(controlledId)) {
-      acceptTarget(controlledId, "route", false);
+      acceptTarget(controlledId, "external", false);
       motion.controller.remeasure({ ...measure(), activeId: controlledId });
       return;
     }
     const target = motion.remeasure();
-    if (target && target.id !== intendedId.value) acceptTarget(target.id, "route", false);
+    if (target && target.id !== intendedId.value) acceptTarget(target.id, "external", false);
   },
 );
 
@@ -314,7 +333,7 @@ provide(carouselContextKey, {
   phase: motion.phase,
   pick,
   previous,
-  request: navigate,
+  request: navigateTo,
   registerSlide(id, label, element) {
     slideRegistrations.set(id as Id, { label, ...(element ? { element } : {}) });
     if (element) scheduleRemeasure();
@@ -334,7 +353,7 @@ provide(carouselContextKey, {
   trackStyle: motion.trackStyle,
 } satisfies CarouselContext<Id> as unknown as CarouselContext);
 
-defineExpose({ motion, navigate, next, previous });
+defineExpose({ navigateTo, next, previous, remeasure: motion.remeasure, synchronizeTo });
 
 onBeforeUnmount(() => {
   unmounted = true;
@@ -346,7 +365,7 @@ onBeforeUnmount(() => {
     :is="landmark ? 'section' : 'div'"
     ref="root"
     :aria-label="label"
-    :aria-labelledby="labelledby"
+    :aria-labelledby="labelledBy"
     aria-roledescription="carousel"
     class="snap-motion-carousel"
     data-snap-motion-carousel-root

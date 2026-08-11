@@ -36,7 +36,6 @@ export {
   createCoverflowGeometry,
   createCoverflowKineticState,
   resolveCoverflowKinetics,
-  resolveCoverflowModularProgress,
   resolveCoverflowPresentation,
   resolveCoverflowProgress,
   resolveCoverflowTuning,
@@ -45,7 +44,6 @@ export type {
   CoverflowGeometry,
   CoverflowGeometryOptions,
   CoverflowKineticState,
-  CoverflowModularProgressOptions,
   CoverflowPresentation,
   CoverflowPresentationOptions,
   CoverflowProgressOptions,
@@ -79,6 +77,11 @@ export {
   resolveSpeedInCards,
 } from "./kinetics";
 export type { MutableSpringState } from "./kinetics";
+export type {
+  ActiveIdChangeDetails,
+  NavigationReason,
+  SettlementDetails,
+} from "./interactionContracts";
 export {
   createPaginationIndicatorState,
   PAGINATION_INDICATOR_TUNING,

@@ -10,7 +10,7 @@
  * against this rather than against a tuned rig.
  */
 import { Coverflow } from "@snap-motion/vue/coverflow";
-import type { NavigationReason } from "@snap-motion/vue/motion";
+import type { ActiveIdChangeDetails, NavigationReason } from "@snap-motion/vue/motion";
 import { StackedDeck } from "@snap-motion/vue/stacked-deck";
 import { ref } from "vue";
 
@@ -28,12 +28,12 @@ const railReason = ref<NavigationReason | "none">("none");
 const deckCovered = ref(false);
 const activations = ref(0);
 
-function onDeckRequest(_id: ShowcaseScreenId, reason: NavigationReason) {
-  deckReason.value = reason;
+function onDeckRequest(_id: ShowcaseScreenId | undefined, details: ActiveIdChangeDetails) {
+  deckReason.value = details.reason;
 }
 
-function onRailRequest(_id: ShowcaseScreenId, reason: NavigationReason) {
-  railReason.value = reason;
+function onRailRequest(_id: ShowcaseScreenId | undefined, details: ActiveIdChangeDetails) {
+  railReason.value = details.reason;
 }
 
 /**
@@ -95,7 +95,7 @@ function navigateAsRoute(id: ShowcaseScreenId) {
       :item-label="(screen) => screen.title"
       label="Default stacked deck"
       :reduced-motion-override="reducedMotionOverride"
-      @request-active-id="onDeckRequest"
+      @active-id-change="onDeckRequest"
     >
       <template #card="card">
         <article class="defaults-card">
@@ -132,7 +132,7 @@ function navigateAsRoute(id: ShowcaseScreenId) {
       :item-label="(screen) => screen.title"
       label="Default coverflow"
       :reduced-motion-override="reducedMotionOverride"
-      @request-active-id="onRailRequest"
+      @active-id-change="onRailRequest"
     >
       <template #card="card">
         <article class="defaults-card">

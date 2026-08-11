@@ -9,6 +9,11 @@ the tracked blocker details. Candidate generation never publishes.
 Public API changes first run `pnpm api:update` to regenerate the root and capability reports. CI
 uses `pnpm api:check`; package builds create declaration rollups without modifying tracked reports.
 
+Every changed package byte receives a new immutable version through Changesets prerelease mode.
+The private `0.1.0-beta.0` candidate is historical provenance; this contract freeze produces
+`0.1.0-beta.1` tarballs and never overwrites or republishes the earlier version. Core and Vue move
+together so Vue's packed dependency range resolves the candidate's exact compatible core line.
+
 ## Hard blockers
 
 1. Verify ownership of both intended npm names.

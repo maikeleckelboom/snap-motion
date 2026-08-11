@@ -4,6 +4,7 @@
 
 ```ts
 
+import { ActiveIdChangeDetails } from '@snap-motion/core';
 import { AnimationDriver } from '@snap-motion/core';
 import { ComputedRef } from 'vue';
 import { ControllerConfigurationUpdate } from '@snap-motion/core';
@@ -12,23 +13,28 @@ import { ControllerMoveByOptions } from '@snap-motion/core';
 import { ControllerMoveOptions } from '@snap-motion/core';
 import { ControllerPhase } from '@snap-motion/core';
 import { ControllerSnapshot } from '@snap-motion/core';
+import { NavigationReason } from '@snap-motion/core';
 import { Ref } from 'vue';
 import type { ScalarBounds } from '@snap-motion/core';
 import type { SemanticId } from '@snap-motion/core';
+import { SettlementDetails } from '@snap-motion/core';
 import { ShallowRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
 import { SnapController } from '@snap-motion/core';
 import { SnapControllerOptions } from '@snap-motion/core';
 import { SnapDirection } from '@snap-motion/core';
 
+export { ActiveIdChangeDetails }
+
 // @public (undocumented)
 export function createMotionDriver(): AnimationDriver;
 
-// @public
-export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "programmatic" | "route";
+export { NavigationReason }
 
 // @public
 export type PointerIntent = "horizontal" | "pending" | "vertical";
+
+export { SettlementDetails }
 
 // @public
 export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {

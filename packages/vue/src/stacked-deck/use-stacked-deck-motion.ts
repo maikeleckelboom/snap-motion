@@ -12,6 +12,7 @@ import {
   STACKED_DECK_INTERIOR_ELASTICITY,
   StackedDeckModel,
   tightPreset,
+  type ActiveIdChangeDetails,
   type ControllerConfiguration,
   type ElasticityOptions,
   type SnapAnchor,
@@ -89,6 +90,12 @@ export interface UseStackedDeckMotionOptions<Id extends string> {
    * it always does. It never reports back as a user request.
    */
   readonly controlledId?: MaybeRefOrGetter<Id | undefined>;
+  /** Fires when this surface accepts a semantic destination, before mechanical settlement. */
+  readonly onActiveIdChange?: (
+    id: Id,
+    index: number,
+    reason: ActiveIdChangeDetails["reason"],
+  ) => void;
   /** Announces the durable selection. Fires only at mechanical rest, with what initiated it. */
   readonly onSettled?: (id: Id, index: number, reason: NavigationReason) => void;
   /** A tap on the current, unambiguous card: the request to open it on another surface. */
@@ -129,7 +136,7 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
   /** True while the deck is being manipulated or is animating on its own. */
   readonly compositing: ComputedRef<boolean>;
   /** The card the deck names, which leads the visual top through a handoff. */
-  readonly currentId: ComputedRef<Id | undefined>;
+  readonly visualId: ComputedRef<Id | undefined>;
   /** Read-only motion telemetry. Observation only: nothing here can move the deck. */
   readonly diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
   readonly frame: ShallowRef<StackedDeckFrame>;
@@ -168,9 +175,9 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
    * Navigates to a destination, traversing it when adjacent and synchronizing when it is not.
    * Returns `false` for an ID the deck does not contain. Reported as `programmatic`.
    */
-  requestId(id: Id): boolean;
-  /** Adopts a destination exactly, with no traversal. Silent unless `announce` is true. */
-  synchronizeId(id: Id, announce?: boolean): boolean;
+  navigateTo(id: Id): boolean;
+  /** Adopts a destination exactly. `announce` is an advanced renderer opt-in. */
+  synchronizeTo(id: Id, announce?: boolean): boolean;
 }
 
 /**
@@ -237,7 +244,13 @@ export function useStackedDeckMotion<Id extends string>(
    * What initiated the movement now in flight. It is opened by whichever entry point started it and
    * read at settlement, so a surface reports what actually happened rather than assuming a drag.
    */
-  let pendingReason: NavigationReason = "route";
+  let pendingReason: NavigationReason = "external";
+
+  function acceptDestination(id: Id, reason: ActiveIdChangeDetails["reason"]): void {
+    pendingReason = reason;
+    const index = model.indexOf(id);
+    if (index >= 0) options.onActiveIdChange?.(id, index, reason);
+  }
   function currentConfiguration() {
     const elasticity = toValue(options.elasticity);
     return resolveSurfaceConfiguration(
@@ -261,8 +274,8 @@ export function useStackedDeckMotion<Id extends string>(
     resolveDragOrigin: () => ids.value[model.beginInteraction()],
     track,
     viewport: options.viewport,
-    onTargetSelected(_id, reason) {
-      pendingReason = reason;
+    onTargetSelected(id, reason) {
+      acceptDestination(id, reason);
     },
     ...(initialId === undefined ? {} : { initialTargetId: initialId }),
     ...(options.reducedMotionOverride === undefined
@@ -347,7 +360,7 @@ export function useStackedDeckMotion<Id extends string>(
   const activeTuning = computed<StackedDeckTuning>(() =>
     motion.reducedMotion.value ? reducedTuning.value : naturalTuning.value,
   );
-  const currentId = computed(() => model.idAt(state.value.currentIndex));
+  const visualId = computed(() => model.idAt(state.value.currentIndex));
   const settledId = computed(() => model.idAt(state.value.settledIndex));
 
   let frameStorage = createStackedDeckFrame(ids.value.length);
@@ -470,6 +483,7 @@ export function useStackedDeckMotion<Id extends string>(
     // An announced adoption already carries its announcement, so publishing the state publishes it
     // too — there is no later idle snapshot this could be waiting for.
     publish(model.state);
+    if (!announce) options.onSettled?.(id, index, reason);
     return true;
   }
 
@@ -481,23 +495,27 @@ export function useStackedDeckMotion<Id extends string>(
     return true;
   }
 
-  function requestRelative(direction: -1 | 1, reason: NavigationReason): boolean {
+  function requestRelative(direction: -1 | 1, reason: ActiveIdChangeDetails["reason"]): boolean {
     if (disabled()) return false;
     const command = model.resolveRelativeCommand(direction, { owned: owned.value });
     if (command.kind !== "traverse") return false;
-    pendingReason = reason;
+    const id = model.idAt(command.targetIndex);
+    if (id === undefined) return false;
+    acceptDestination(id, reason);
     return traverse(command.originIndex, command.targetIndex);
   }
 
-  function requestIndex(index: number, reason: NavigationReason): boolean {
+  function requestIndex(index: number, reason: ActiveIdChangeDetails["reason"]): boolean {
     if (disabled()) return false;
     const command = model.resolveAbsoluteCommand(index, {
       owned: owned.value,
       atRest: atRest.value,
     });
     if (command.kind === "none") return false;
+    const id = model.idAt(command.targetIndex);
+    if (id === undefined) return false;
+    acceptDestination(id, reason);
     if (command.kind === "traverse") {
-      pendingReason = reason;
       return traverse(command.originIndex, command.targetIndex);
     }
     return synchronizeIndex(command.targetIndex, reason, command.announce);
@@ -510,37 +528,34 @@ export function useStackedDeckMotion<Id extends string>(
    * It reports `programmatic`: this is the general imperative entry point, and an application
    * calling it is not the same event as a person tapping a card or a pagination dot.
    */
-  function requestId(id: Id): boolean {
+  function navigateTo(id: Id): boolean {
     const index = model.indexOf(id);
     return index < 0 ? false : requestIndex(index, "programmatic");
   }
 
-  function synchronizeId(id: Id, announce = false): boolean {
+  function synchronizeTo(id: Id, announce = false): boolean {
     const index = model.indexOf(id);
-    return index < 0 ? false : synchronizeIndex(index, "route", announce);
+    return index < 0 ? false : synchronizeIndex(index, "external", announce);
   }
 
   /** Applies authoritative selection that did not come from this surface. See `controlledId`. */
   function applyControlledId(id: Id): boolean {
     const index = model.indexOf(id);
     if (index < 0) return false;
-    if (disabled() || owned.value) return synchronizeIndex(index, "route", false);
+    if (disabled() || owned.value) return synchronizeIndex(index, "external", false);
     const command = model.resolveAbsoluteCommand(index, { owned: false, atRest: atRest.value });
     if (command.kind === "traverse") {
-      pendingReason = "route";
+      pendingReason = "external";
       return traverse(command.originIndex, command.targetIndex);
     }
     if (command.kind === "synchronize")
-      return synchronizeIndex(command.targetIndex, "route", false);
+      return synchronizeIndex(command.targetIndex, "external", false);
     return true;
   }
 
   /**
-   * Previous and Next are semantically fixed operations, not parameterised ones.
-   *
-   * A consumer must not be able to claim that `next()` was a drag, or that `previous()` was a
-   * route: `requestActiveId` exists so an application can trust the reason it is given, and a
-   * reason a caller chose is not evidence of anything. The reason-taking helper stays internal.
+   * Previous and Next are semantically fixed operations, not parameterised ones. A consumer cannot
+   * relabel them; the reason-taking helper stays internal so provenance remains trustworthy.
    */
   function previous(): boolean {
     return requestRelative(-1, "previous");
@@ -656,11 +671,23 @@ export function useStackedDeckMotion<Id extends string>(
       const controlledChanged = priorState !== undefined && controlledId !== priorState[1];
       if (!itemsChanged && !controlledChanged) return;
 
+      // A v-model confirmation of the destination already in flight is acknowledgement, not an
+      // external takeover. Let the accepted exchange finish with its original provenance.
+      if (
+        !itemsChanged &&
+        controlledChanged &&
+        controlledId !== undefined &&
+        motion.targetId.value === controlledId
+      ) {
+        return;
+      }
+
       if (itemsChanged || (controlledChanged && controlledId !== undefined)) {
         cancelInteractionRecords();
       }
 
       if (itemsChanged) {
+        const previousSettledId = model.idAt(model.state.settledIndex);
         const preservedIndex = model.reconfigure(nextIds);
         const controlledIndex = controlledId === undefined ? -1 : model.indexOf(controlledId);
         const finalIndex =
@@ -671,6 +698,9 @@ export function useStackedDeckMotion<Id extends string>(
           ...measure(),
           ...(finalId === undefined ? {} : { activeId: finalId }),
         });
+        if (finalId !== undefined && finalId !== previousSettledId) {
+          options.onSettled?.(finalId, finalIndex, controlledIndex >= 0 ? "external" : "reconcile");
+        }
         return;
       }
 
@@ -694,7 +724,7 @@ export function useStackedDeckMotion<Id extends string>(
     canNext: computed(() => state.value.canNext),
     canPrevious: computed(() => state.value.canPrevious),
     compositing,
-    currentId,
+    visualId,
     diagnostics,
     frame,
     isInspectEligible,
@@ -715,13 +745,13 @@ export function useStackedDeckMotion<Id extends string>(
     pitch,
     previous,
     remeasure: motion.remeasure,
-    requestId,
+    navigateTo,
     settledId,
     speedInCards,
     stageWidth,
     state,
     statusIndex: computed(() => statusIndex.value),
-    synchronizeId,
+    synchronizeTo,
     tuning: activeTuning,
     tuningProfile: computed(() => naturalTuning.value.profile),
   };
@@ -734,7 +764,7 @@ export function useStackedDeckMotion<Id extends string>(
  * It is deliberately a *product* handle. Navigation goes through the deck's own transaction model,
  * and observation goes through read-only telemetry — there is no controller here, because a
  * generic `moveTo` would be a way around the one-card exchange the component exists to guarantee.
- * Consumers who want that level of control compose {@link useStackedDeckMotion} instead.
+ * Consumers who want that level of control compose `useStackedDeckMotion` instead.
  */
 export interface StackedDeckHandle<Id extends string> {
   readonly canNext: boolean;
@@ -742,7 +772,7 @@ export interface StackedDeckHandle<Id extends string> {
   /** True while the surface is being manipulated or is animating on its own. */
   readonly compositing: boolean;
   /** The card the deck currently names, which leads the visual top through a handoff. */
-  readonly currentId: Id | undefined;
+  readonly visualId: Id | undefined;
   /** Read-only motion telemetry. Observation only: nothing here can move the deck. */
   readonly diagnostics: SurfaceMotionDiagnostics<Id>;
   readonly frame: StackedDeckFrame;
@@ -762,7 +792,7 @@ export interface StackedDeckHandle<Id extends string> {
   /**
    * One adjacent card forward.
    *
-   * It takes no reason, and that is the point: `requestActiveId` reports why a selection changed,
+   * It takes no reason, and that is the point: `activeIdChange` reports why a selection changed,
    * and an application can only trust that report if a caller cannot author it. Next is next.
    */
   next(): boolean;
@@ -774,7 +804,7 @@ export interface StackedDeckHandle<Id extends string> {
    * Navigates to a destination, traversing it when adjacent and synchronizing when it is not.
    * Returns `false` for an ID the deck does not contain. Reported as `programmatic`.
    */
-  requestId(id: Id): boolean;
-  /** Adopts a destination exactly, with no traversal. Silent unless `announce` is true. */
-  synchronizeId(id: Id, announce?: boolean): boolean;
+  navigateTo(id: Id): boolean;
+  /** Adopts a destination exactly, with no traversal, semantic echo, or announcement. */
+  synchronizeTo(id: Id): boolean;
 }

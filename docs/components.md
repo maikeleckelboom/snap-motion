@@ -37,14 +37,14 @@ Right Arrow work while the close button retains focus.
 
 ## Route-controlled state
 
-Routing stays outside the package. Treat `requestActiveId` as the request to replace route state;
-the resulting prop change is a `route` target and is not echoed back.
+Routing stays outside the package. A component-originated destination emits one semantic change as
+Vue model plumbing plus provenance; the resulting authoritative prop change is not echoed back.
 
 ```vue
 <CarouselRoot
   :active-id="routeMediaId"
   :ids="ids"
-  @request-active-id="(id) => router.replace({ query: { media: id } })"
+  @active-id-change="(id) => router.replace({ query: { media: id } })"
 />
 ```
 
@@ -90,6 +90,11 @@ The handle is the only drag surface and sits on the inner movable edge. The body
 vertical scrollport. Dynamic `side` changes interrupt current motion, retain the active semantic
 snap ID when the new point set contains it, remeasure, and atomically remap the scalar. Otherwise
 the side default, then the first configured point, is used.
+
+A valid externally controlled snap received while closed is stored semantically without hidden
+motion. The next open begins at that snap. An unknown ID remains pending and is adopted if a later
+snap-point configuration introduces it. External changes during opening, dragging, settlement, or
+closing interrupt stale work and emit no semantic request back to the host.
 
 Responsive presentation belongs to the host. Mount either an inline `<aside>` or a `Sheet`, hoist
 the feature state above both hosts, and never keep two live copies hidden with CSS. When replacing

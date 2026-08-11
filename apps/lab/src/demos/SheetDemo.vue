@@ -5,11 +5,10 @@ import {
   createFixedSheetSnapPoints,
   createViewportSheetSnapPoints,
   sheetSnapVisibleExtent,
-  type SheetNavigationReason,
+  type SheetDiagnostics,
   type SheetOpenSnapId,
   type SheetSide,
   type SheetSnapPoint,
-  type UseSheetMotionReturn,
 } from "@snap-motion/vue/sheet";
 import { computed, ref, watch } from "vue";
 
@@ -21,8 +20,8 @@ type ContentMode = "prose" | "short" | "tall";
 type SnapMode = "custom" | "default";
 
 interface SheetInstance {
-  motion: UseSheetMotionReturn<SheetOpenSnapId>;
-  requestSnap: (id: SheetOpenSnapId, reason: SheetNavigationReason) => void;
+  diagnostics: SheetDiagnostics<SheetOpenSnapId>;
+  navigateTo: (id: SheetOpenSnapId) => boolean;
 }
 
 const props = defineProps<{
@@ -87,7 +86,7 @@ const snapPoints = computed<readonly SheetSnapPoint<SheetOpenSnapId>[]>(() => {
   );
 });
 const diagnostics = computed<LabDiagnostics>(() => {
-  const motion = sheet.value?.motion;
+  const motion = sheet.value?.diagnostics;
   if (!motion) {
     return {
       anchors: [],
@@ -103,30 +102,30 @@ const diagnostics = computed<LabDiagnostics>(() => {
     };
   }
 
-  const geometry = motion.geometry.value;
+  const geometry = motion.geometry;
   return {
-    ...(motion.activeId.value ? { activeId: motion.activeId.value } : {}),
-    anchors: motion.snapshot.value.anchors,
+    ...(motion.activeId ? { activeId: motion.activeId } : {}),
+    anchors: motion.anchors,
     bodyClientBlockExtent: geometry.bodyClientBlockExtent,
     bodyScrollBlockExtent: geometry.bodyScrollBlockExtent,
     bodyScrollOffset: geometry.bodyScrollOffset,
-    bounds: motion.snapshot.value.bounds,
+    bounds: motion.bounds,
     canonicalPosition: geometry.canonicalPosition,
     intrinsicContentPrimaryExtent: geometry.intrinsicContentPrimaryExtent,
-    isAnimating: motion.isAnimating.value,
+    isAnimating: motion.isAnimating,
     maximumBodyScrollOffset: geometry.maximumBodyScrollOffset,
     measuredChromeBlockExtent: geometry.measuredChromeBlockExtent,
-    phase: motion.sheetState.value,
+    phase: motion.sheetState,
     physicalTransform: geometry.physicalTransform,
-    pointerOwned: motion.pointerOwned.value,
-    position: motion.position.value,
-    reducedMotion: motion.reducedMotion.value,
-    ...(motion.targetId.value ? { targetId: motion.targetId.value } : {}),
-    trackExtent: motion.primarySurfaceExtent.value,
-    velocity: motion.velocity.value,
-    viewportSize: motion.primarySurfaceExtent.value,
+    pointerOwned: motion.pointerOwned,
+    position: motion.position,
+    reducedMotion: motion.reducedMotion,
+    ...(motion.targetId ? { targetId: motion.targetId } : {}),
+    trackExtent: motion.primarySurfaceExtent,
+    velocity: motion.velocity,
+    viewportSize: motion.primarySurfaceExtent,
     visiblePrimaryExtent: geometry.visiblePrimaryExtent,
-    visualViewportPrimaryExtent: motion.primarySurfaceExtent.value,
+    visualViewportPrimaryExtent: motion.primarySurfaceExtent,
   };
 });
 
@@ -142,7 +141,7 @@ function openSheet() {
 }
 
 function snapTo(id: SheetOpenSnapId) {
-  sheet.value?.requestSnap(id, "picker");
+  sheet.value?.navigateTo(id);
 }
 </script>
 

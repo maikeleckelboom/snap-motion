@@ -27,11 +27,11 @@ and mixed ownership rather than a source cycle.
   `ScalarBounds`.
 - Geometry: `calculateFixedCellSize`, `createFixedStageGeometry`, `createPagedGridGeometry`,
   `createVariableWidthGeometry`, `createCoverflowGeometry`, `resolveCoverflowProgress`,
-  `resolveCoverflowModularProgress`, `resolveCoverflowPresentation`,
+  `resolveCoverflowPresentation`,
   `createStackedDeckFrame`, `createStackedDeckTraversal`, `resolveStackedDeckFrame`,
   `resolveStackedDeckPile`, `resolveStackedDeckTraversal`, `resolveStackedDeckTuning`,
   `CarouselGeometry`,
-  `CoverflowGeometry`, `CoverflowGeometryOptions`, `CoverflowModularProgressOptions`,
+  `CoverflowGeometry`, `CoverflowGeometryOptions`,
   `CoverflowPresentation`, `CoverflowPresentationOptions`, `CoverflowProgressOptions`,
   `MutableStackedDeckFrame`, `MutableStackedDeckPose`, `MutableStackedDeckTraversal`,
   `ResolveStackedDeckFrameOptions`, `ResolveStackedDeckTraversalOptions`,
@@ -40,9 +40,11 @@ and mixed ownership rather than a source cycle.
   `StackedDeckRole`, `StackedDeckTraversal`, `StackedDeckTraversalPhase`, `StackedDeckTuning`,
   `FixedStageGeometry`, `MeasuredItemBox`, `PagedGridGeometry`, `PagedGridGeometryOptions`,
   `PagedGridPageContext`, `VariableWidthGeometryOptions`.
+- Shared interaction contract: `NavigationReason`, `ActiveIdChangeDetails`, `SettlementDetails`.
 - Controller: `SnapController`, `SnapControllerOptions`, `ControllerListener`,
   `ControllerConfiguration`, `ControllerConfigurationUpdate`, `ControllerMeasurement`,
-  `ControllerMoveByOptions`, `ControllerMoveOptions`, `ControllerPhase`, `ControllerSnapshot`.
+  `ControllerDragOptions`, `ControllerMoveByOptions`, `ControllerMoveOptions`, `ControllerPhase`,
+  `ControllerSnapshot`.
 - Physics and targets: `applyElasticity`, `createSymmetricElasticity`,
   `nonlinearElasticDistance`, `projectPosition`, `clampAnchorsToBounds`, `directionalAnchor`,
   `findAnchorById`, `nearestAnchor`, `resolveProgrammaticTarget`, `resolveReleaseTarget`,
@@ -99,23 +101,32 @@ modules but are no longer package exports.
 - Side normalization: `sheetSides`, `sheetSideDescriptors`, `getSheetSideDescriptor`,
   `toCanonicalSheetDelta`, `toPhysicalSheetPosition`, and `sheetTransform`.
 - Types: `SheetAxis`, `SheetEdge`, `SheetSide`, `SheetSideDescriptor`, `SheetMeasureContext`,
-  `SheetOpenSnapId`, `SheetSnapResolver`, `SheetSnapPoint`, `SheetState`, `SheetViewportPolicy`,
-  `ResolvedSheetSnapPoint`, `UseSheetMotionOptions`, `UseSheetMotionReturn`, and
-  `SheetNavigationReason`.
+  `SheetOpenSnapId`, `SheetFixedSnapId`, `SheetViewportSnapId`, `SheetSnapResolver`,
+  `SheetSnapPoint`, `SheetState`, `SheetViewportPolicy`, `SheetGeometry`, `SheetGeometryInput`,
+  `SheetDiagnostics`, `ResolvedSheetSnapPoint`, `UseSheetMotionOptions`, and
+  `UseSheetMotionReturn`.
 
 ### `@snap-motion/vue/dialog`
 
-- Component and contracts: `ModalDialog`, `CloseReason`, `FocusReturnOptions`, `InitialFocus`.
-- Headless native-dialog policy: `captureFocusOpener`, `focusInitial`, `maintainModalTabOrder`,
-  `restoreFocus`.
+- Component and contracts: `ModalDialog`, `CloseReason`, `OpenChangeDetails`,
+  `FocusReturnOptions`, `InitialFocus`.
 
-The four functions are intentional support for custom native-dialog fixtures. DOM candidate
-enumeration and focus-target resolution remain internal.
+Native-dialog focus traversal, opener capture, and restoration are implementation details. The
+component exposes its dialog ref, title ID, and `requestClose`; it does not publish private focus
+helpers.
+
+### `@snap-motion/vue/media-gallery`
+
+- Component: `MediaGalleryDialog` with stable-ID `activeId` and `open` contracts.
+- Contracts: `MediaGalleryItem`, `MediaGalleryDialogProps`, `MediaGalleryOpenChangeDetails`,
+  `MediaGalleryMessages`, and shared dialog types.
+- Advanced media math: fit/zoom/pan/swipe, transform, slot, loading-visibility, and tuning contracts.
 
 ### `@snap-motion/vue/motion`
 
 - Runtime: `createMotionDriver`, `useBoundedSpringDriver`, `useSnapMotion`.
-- Types: `NavigationReason`, `PointerIntent`, `SurfaceMotionDiagnostics`, `UseSnapMotionOptions`.
+- Types: `NavigationReason`, `ActiveIdChangeDetails`, `SettlementDetails`, `PointerIntent`,
+  `SurfaceMotionDiagnostics`, `UseSnapMotionOptions`.
 
 ### `@snap-motion/vue/localization`
 
@@ -123,8 +134,11 @@ enumeration and focus-target resolution remain internal.
 
 ### `@snap-motion/vue`
 
-The root re-exports the stable component, policy, composable, geometry, localization, and motion API
-listed above. The dialog focus functions are intentionally available only from the dialog subpath.
+The root is deliberately smaller than the union of subpaths. It re-exports high-level components,
+ordinary carousel composition primitives, common localization/interaction contracts, and the
+transitive public prop/handle types needed to consume those components. Capability-specific
+composables, tuning, geometry implementation, Media Gallery, and dialog focus implementation remain
+off the root.
 
 ## Removed or relocated API
 
@@ -135,10 +149,12 @@ listed above. The dialog focus functions are intentionally available only from t
   `firstInteractive`, `focusInside`, `interactiveElements`, `resolveInitialFocus`,
   `useReducedMotionPreference`, `ReducedMotionOptions`, and former feature-specific default release
   and viewport policy constants.
-- Relocated from the Vue root to `@snap-motion/vue/dialog`: `captureFocusOpener`, `focusInitial`,
+- Removed dialog implementation exports: `captureFocusOpener`, `focusInitial`,
   `maintainModalTabOrder`, `restoreFocus`.
 - Removed core implementation helpers: `assertFiniteNumber`, `assertNonNegative`,
   `validateElasticityOptions`, `validateReleaseTargetPolicy`.
+- Removed the pre-publication deprecated core aliases `resolveCoverflowModularProgress` and
+  `CoverflowModularProgressOptions`; `resolveCoverflowProgress` is the one supported primitive.
 
 These packages are private and unpublished, so correcting accidental beta API does not require a
 compatibility facade.

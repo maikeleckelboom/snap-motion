@@ -27,7 +27,7 @@ const TypedCoverflow = Coverflow<Screen>;
 interface DeckInstance {
   canNext: boolean;
   canPrevious: boolean;
-  currentId: ScreenId | undefined;
+  visualId: ScreenId | undefined;
   diagnostics: { phase: string; targetId: ScreenId | undefined };
   owned: boolean;
   physicalIndex: number;
@@ -111,7 +111,7 @@ describe("stacked deck default physics", () => {
     await nextTick();
 
     // One whole pitch of travel exchanges exactly one screen...
-    expect(deck.currentId).toBe("d");
+    expect(deck.visualId).toBe("d");
     // ...and everything past it is bounded resistance, not free travel and not a wall.
     const boundary = STACKED_DECK_INTERIOR_ELASTICITY.min as ElasticBoundaryOptions;
     const resisted = nonlinearElasticDistance(302, boundary);
@@ -148,7 +148,7 @@ describe("stacked deck default physics", () => {
       nonlinearElasticDistance(302, STACKED_DECK_INTERIOR_ELASTICITY.min as ElasticBoundaryOptions),
     );
     expect(deck.physicalIndex).toBeCloseTo(3 + softer / deck.pitch, 5);
-    expect(deck.currentId).toBe("d");
+    expect(deck.visualId).toBe("d");
     expect(deck.state.traversal.segmentTargetIndex).toBeNull();
 
     releaseAt(wrapper.element as HTMLElement, -travel);
@@ -530,6 +530,7 @@ describe("gesture lifecycle ownership", () => {
 
     expect(deck.owned).toBe(false);
     expect(deck.diagnostics.targetId).toBe("c");
+    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -554,6 +555,7 @@ describe("gesture lifecycle ownership", () => {
     // still be read as a selection, scheduling a deferred move.
     expect(frames).toHaveLength(0);
     expect((wrapper.vm as unknown as RailInstance).settledId).toBe("c");
+    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
     wrapper.unmount();
   });
 

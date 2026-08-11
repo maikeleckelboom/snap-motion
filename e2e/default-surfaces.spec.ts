@@ -78,7 +78,9 @@ test.describe("zero-configuration surfaces", () => {
     // Far past the adjacent anchor: the surface resists rather than chaining a second exchange.
     await dragMouseBy(page, deck, -900, 0, {
       beforeRelease: async () => {
-        await expect(deck).toHaveAttribute("data-active-id", "team");
+        // The browser may deliver capture loss before this hook when a mouse leaves its viewport,
+        // so this cross-browser fixture asserts projection here and semantic acceptance below.
+        await expect(deck).toHaveAttribute("data-visual-id", "team");
       },
     });
     await expect(deck).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });

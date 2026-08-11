@@ -174,12 +174,12 @@ afterEach(() => {
 
 describe("MediaGalleryDialog lifecycle", () => {
   it("opens at a clamped initial index, focuses close, and emits opened", async () => {
-    const wrapper = mountGallery({ initialIndex: 99 });
+    const wrapper = mountGallery({ activeId: "three" });
     await nextTick();
 
     expect(wrapper.get("dialog").attributes()).toHaveProperty("open");
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("2");
-    expect(wrapper.emitted("opened")).toEqual([[2]]);
+    expect(wrapper.emitted("opened")).toEqual([["three"]]);
     expect(document.activeElement).toBe(
       wrapper.get('[data-testid="snap-motion-media-gallery-close"]').element,
     );
@@ -200,12 +200,12 @@ describe("MediaGalleryDialog lifecycle", () => {
     expect(wrapper.get('[data-testid="snap-motion-media-gallery-track"]').classes()).not.toContain(
       "transitioning",
     );
-    expect(wrapper.emitted("indexChanged")?.at(-1)).toEqual([1, "next"]);
+    expect(wrapper.emitted("settled")?.at(-1)).toEqual(["two", { reason: "next" }]);
 
     await wrapper.setProps({ open: false });
     await nextTick();
     expect(wrapper.get("dialog").attributes("open")).toBeUndefined();
-    expect(wrapper.emitted("closed")?.at(-1)).toEqual([1]);
+    expect(wrapper.emitted("closed")?.at(-1)).toEqual(["two"]);
     matchMedia.mockRestore();
   });
 
@@ -214,7 +214,9 @@ describe("MediaGalleryDialog lifecycle", () => {
     await nextTick();
 
     expect(wrapper.get("dialog").attributes("open")).toBeUndefined();
-    expect(wrapper.emitted("requestClose")).toEqual([[0, "programmatic"]]);
+    expect(wrapper.emitted("openChange")).toEqual([
+      [false, { activeId: undefined, reason: "programmatic" }],
+    ]);
     expect(wrapper.emitted("update:open")).toEqual([[false]]);
   });
 
@@ -229,12 +231,15 @@ describe("MediaGalleryDialog lifecycle", () => {
     await settleTrack(wrapper);
     await wrapper.get('[data-testid="snap-motion-media-gallery-close"]').trigger("click");
 
-    expect(wrapper.emitted("requestClose")?.at(-1)).toEqual([1, "close-button"]);
+    expect(wrapper.emitted("openChange")?.at(-1)).toEqual([
+      false,
+      { activeId: "two", reason: "close-button" },
+    ]);
     expect(wrapper.emitted("update:open")?.at(-1)).toEqual([false]);
     await wrapper.setProps({ open: false });
     await nextTick();
 
-    expect(wrapper.emitted("closed")?.at(-1)).toEqual([1]);
+    expect(wrapper.emitted("closed")?.at(-1)).toEqual(["two"]);
     expect(document.activeElement).toBe(opener);
     expect(document.documentElement.style.overflow).toBe("");
   });
@@ -302,9 +307,9 @@ describe("MediaGalleryDialog lifecycle", () => {
     await frames.flushAll();
 
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("0");
-    expect(wrapper.emitted("indexChanged")).toBeUndefined();
-    expect(wrapper.emitted("requestClose")?.at(-1)).toEqual([0, "programmatic"]);
-    expect(wrapper.emitted("closed")?.at(-1)).toEqual([0]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect(wrapper.emitted("openChange")).toBeUndefined();
+    expect(wrapper.emitted("closed")?.at(-1)).toEqual(["two"]);
     expect(wrapper.get('[data-testid="snap-motion-media-gallery-status"]').text()).toBe(
       "One, 1 of 3",
     );
@@ -325,7 +330,7 @@ describe("MediaGalleryDialog lifecycle", () => {
 
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("1");
     expect(wrapper.get('[data-testid="snap-motion-media-gallery-title"]').text()).toBe("One");
-    expect(wrapper.emitted("indexChanged")).toBeUndefined();
+    expect(wrapper.emitted("settled")).toBeUndefined();
     expect(wrapper.get("dialog").attributes("data-track-state")).toBe("idle");
   });
 
@@ -347,7 +352,7 @@ describe("MediaGalleryDialog lifecycle", () => {
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("0");
     expect(wrapper.get('[data-testid="snap-motion-media-gallery-title"]').text()).toBe("One");
     expect(wrapper.get("dialog").attributes("data-track-state")).toBe("idle");
-    expect(wrapper.emitted("indexChanged")).toBeUndefined();
+    expect(wrapper.emitted("settled")).toBeUndefined();
   });
 
   it("requests one programmatic close for an empty replacement during opening", async () => {
@@ -358,7 +363,9 @@ describe("MediaGalleryDialog lifecycle", () => {
     await flushReactiveTasks();
     await frames.flushAll();
 
-    expect(wrapper.emitted("requestClose")).toEqual([[0, "programmatic"]]);
+    expect(wrapper.emitted("openChange")).toEqual([
+      [false, { activeId: undefined, reason: "programmatic" }],
+    ]);
     expect(wrapper.emitted("update:open")).toEqual([[false]]);
     expect(wrapper.emitted("opened")).toBeUndefined();
     expect(wrapper.get("dialog").attributes("data-track-state")).toBe("idle");
@@ -386,7 +393,7 @@ describe("MediaGalleryDialog lifecycle", () => {
 
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("1");
     expect(wrapper.get("dialog").attributes("data-track-state")).toBe("recentering");
-    expect(wrapper.emitted("indexChanged")).toBeUndefined();
+    expect(wrapper.emitted("settled")).toBeUndefined();
     expect(frames.pending()).toBe(1);
 
     await wrapper.setProps({ open: false });
@@ -395,8 +402,8 @@ describe("MediaGalleryDialog lifecycle", () => {
     });
     await frames.flushAll();
 
-    expect(wrapper.emitted("indexChanged")).toBeUndefined();
-    expect(wrapper.emitted("closed")?.at(-1)).toEqual([1]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect(wrapper.emitted("closed")?.at(-1)).toEqual(["two"]);
     expect(wrapper.get('[data-testid="snap-motion-media-gallery-status"]').text()).toBe(
       "One, 1 of 3",
     );
@@ -413,15 +420,15 @@ describe("MediaGalleryDialog lifecycle", () => {
     expect(frames.pending()).toBe(1);
 
     await wrapper.setProps({ open: false });
-    await wrapper.setProps({ initialIndex: 2 });
+    await wrapper.setProps({ activeId: "three" });
     await wrapper.setProps({ open: true });
     await flushReactiveTasks();
     await frames.flushAll();
 
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("2");
     expect(wrapper.get('[data-testid="snap-motion-media-gallery-title"]').text()).toBe("Three");
-    expect(wrapper.emitted("opened")).toEqual([[0], [2]]);
-    expect(wrapper.emitted("indexChanged")).toBeUndefined();
+    expect(wrapper.emitted("opened")).toEqual([["one"], ["three"]]);
+    expect(wrapper.emitted("settled")).toBeUndefined();
   });
 
   it("cancels scheduled opening and navigation work before unmount cleanup", async () => {
@@ -455,27 +462,92 @@ describe("MediaGalleryDialog lifecycle", () => {
     navigationWrapper.unmount();
     await navigationFrames.flushAll();
     expect(navigationFrames.pending()).toBe(0);
-    expect(navigationWrapper.emitted("indexChanged")).toBeUndefined();
+    expect(navigationWrapper.emitted("settled")).toBeUndefined();
     expect(document.documentElement.style.overflow).toBe("");
   });
 });
 
 describe("MediaGalleryDialog navigation", () => {
+  it("adopts a valid external ID while open without echoing a semantic request", async () => {
+    const wrapper = mountGallery({ activeId: "one" });
+    await flushReactiveTasks();
+
+    await wrapper.setProps({ activeId: "three" });
+    await flushReactiveTasks();
+
+    expect(wrapper.get("dialog").attributes("data-active-id")).toBe("three");
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("2");
+    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+    expect(wrapper.emitted("update:activeId")).toBeUndefined();
+    expect(wrapper.emitted("settled")?.at(-1)).toEqual(["three", { reason: "external" }]);
+  });
+
+  it("stores external ID changes while closed and opens directly on the latest identity", async () => {
+    const wrapper = mountGallery({ activeId: "one", open: false });
+    await flushReactiveTasks();
+    const dialog = wrapper.get("dialog");
+    expect(dialog.attributes("open")).toBeUndefined();
+
+    await wrapper.setProps({ activeId: "three" });
+    await flushReactiveTasks();
+    expect(dialog.attributes("data-gallery-index")).toBe("2");
+    expect(wrapper.emitted("settled")).toBeUndefined();
+
+    await wrapper.setProps({ open: true });
+    await flushReactiveTasks();
+    expect(dialog.attributes()).toHaveProperty("open");
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-title"]').text()).toBe("Three");
+    expect(wrapper.emitted("opened")?.at(-1)).toEqual(["three"]);
+  });
+
+  it("preserves stable identity across reorder and reconciles a removed active item", async () => {
+    const wrapper = mountGallery({ activeId: "two" });
+    await flushReactiveTasks();
+
+    await wrapper.setProps({ items: [items[2]!, items[1]!, items[0]!] });
+    await flushReactiveTasks();
+    expect(wrapper.get("dialog").attributes("data-active-id")).toBe("two");
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("1");
+    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
+
+    await wrapper.setProps({ items: [items[2]!, items[0]!] });
+    await flushReactiveTasks();
+    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["one", { reason: "reconcile" }]);
+    expect(wrapper.get("dialog").attributes("data-active-id")).toBe("one");
+  });
+
+  it("lets external authority interrupt pending track work without stale settlement", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountGallery({ activeId: "one", reducedMotionOverride: false });
+    await flushReactiveTasks();
+    await frames.flushNext();
+
+    await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
+    await flushReactiveTasks();
+    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["two", { reason: "next" }]);
+
+    await wrapper.setProps({ activeId: "three" });
+    await flushReactiveTasks();
+    await frames.flushAll();
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("2");
+    expect(wrapper.emitted("settled")).toEqual([["three", { reason: "external" }]]);
+  });
+
   it("uses one centralized track settlement for buttons, Home, and End", async () => {
-    const wrapper = mountGallery({ initialIndex: 1 });
+    const wrapper = mountGallery({ activeId: "two" });
     await nextTick();
 
     await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
     await settleTrack(wrapper);
-    expect(wrapper.emitted("indexChanged")?.at(-1)).toEqual([2, "next"]);
+    expect(wrapper.emitted("settled")?.at(-1)).toEqual(["three", { reason: "next" }]);
 
     await wrapper.get("dialog").trigger("keydown", { key: "Home" });
     await settleTrack(wrapper);
-    expect(wrapper.emitted("indexChanged")?.at(-1)).toEqual([0, "home"]);
+    expect(wrapper.emitted("settled")?.at(-1)).toEqual(["one", { reason: "keyboard" }]);
 
     await wrapper.get("dialog").trigger("keydown", { key: "End" });
     await settleTrack(wrapper);
-    expect(wrapper.emitted("indexChanged")?.at(-1)).toEqual([2, "end"]);
+    expect(wrapper.emitted("settled")?.at(-1)).toEqual(["three", { reason: "keyboard" }]);
   });
 
   it("keeps one-item boundaries disabled without hiding focused controls", async () => {
@@ -553,10 +625,10 @@ describe("MediaGalleryDialog navigation", () => {
     await flushReactiveTasks();
     expect(exposedSlots(wrapper)).toHaveLength(1);
     expect(exposedSlots(wrapper)[0]?.attributes("data-item-id")).toBe("two");
-    expect(wrapper.emitted("indexChanged")).toBeUndefined();
+    expect(wrapper.emitted("settled")).toBeUndefined();
 
     await frames.flushNext();
-    expect(wrapper.emitted("indexChanged")?.at(-1)).toEqual([1, "next"]);
+    expect(wrapper.emitted("settled")?.at(-1)).toEqual(["two", { reason: "next" }]);
     expect(wrapper.get('[data-testid="snap-motion-media-gallery-status"]').text()).toBe(
       "Two, 2 of 3",
     );
@@ -564,7 +636,7 @@ describe("MediaGalleryDialog navigation", () => {
 
   it("keeps navigation availability boundary-driven throughout settlement", async () => {
     const frames = useControlledAnimationFrames();
-    const wrapper = mountGallery({ initialIndex: 1, reducedMotionOverride: false });
+    const wrapper = mountGallery({ activeId: "two", reducedMotionOverride: false });
     await flushReactiveTasks();
     await frames.flushNext();
 

@@ -5,6 +5,12 @@
 ```ts
 
 // @public
+export interface ActiveIdChangeDetails {
+    // (undocumented)
+    readonly reason: Exclude<NavigationReason, "external">;
+}
+
+// @public
 export function advanceBoundedSpring(state: MutableSpringState, target: number, spring: SpringConfiguration, cardPitchPx: number, deltaTime: number): void;
 
 // @public (undocumented)
@@ -268,18 +274,6 @@ export interface CoverflowModelState {
     readonly settledIndex: number;
     // (undocumented)
     readonly visualIndex: number;
-}
-
-// @public @deprecated (undocumented)
-export interface CoverflowModularProgressOptions {
-    // (undocumented)
-    readonly count: number;
-    // (undocumented)
-    readonly index: number;
-    // (undocumented)
-    readonly pitch: number;
-    // (undocumented)
-    readonly position: number;
 }
 
 // @public (undocumented)
@@ -735,6 +729,9 @@ export interface MutableStackedDeckTraversal {
     visualTopIndex: number;
 }
 
+// @public
+export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "programmatic" | "reconcile" | "external";
+
 // @public (undocumented)
 export function nearestAnchor<Id extends SemanticId>(anchors: readonly SnapAnchor<Id>[], position: number, options?: NearestAnchorOptions<Id>): SnapAnchor<Id> | null;
 
@@ -877,9 +874,6 @@ export function resolveCommandOriginIndex(currentIndex: number, pendingTargetInd
 
 // @public
 export function resolveCoverflowKinetics(relativePosition: number, velocityPxPerSecond: number, cardPitchPx: number, output: CoverflowKineticState): CoverflowKineticState;
-
-// @public @deprecated (undocumented)
-export function resolveCoverflowModularProgress(options: CoverflowModularProgressOptions): number;
 
 // @public
 export function resolveCoverflowPresentation(options: CoverflowPresentationOptions): CoverflowPresentation;
@@ -1045,6 +1039,12 @@ export interface SettledSelectionUpdate {
     // (undocumented)
     readonly phase: ControllerPhase;
     readonly targetIndex: number | null;
+}
+
+// @public
+export interface SettlementDetails {
+    // (undocumented)
+    readonly reason: NavigationReason;
 }
 
 // @public (undocumented)

@@ -61,7 +61,7 @@ describe("production carousel components", () => {
     await wrapper.get(".snap-motion-carousel-next").trigger("click");
     await nextTick();
 
-    expect(wrapper.emitted("requestActiveId")?.at(-1)).toEqual(["two", "next"]);
+    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["two", { reason: "next" }]);
     expect(slides[0]?.attributes()).toHaveProperty("inert");
     expect(slides[1]?.attributes("inert")).toBeUndefined();
     expect(wrapper.get('[role="status"]').text()).toBe("Two, 2 of 2");
@@ -131,7 +131,7 @@ describe("production carousel components", () => {
 
     press("ArrowRight");
     await nextTick();
-    expect(wrapper.emitted("requestActiveId")?.at(-1)).toEqual(["three", "keyboard"]);
+    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["three", { reason: "keyboard" }]);
 
     // The page turns around under a carousel that is already mounted. Nothing reactive tracks
     // computed style, so this is exactly the case a memoized direction would get wrong.
@@ -141,10 +141,10 @@ describe("production carousel components", () => {
     await nextTick();
     press("ArrowRight");
     await nextTick();
-    expect(wrapper.emitted("requestActiveId")?.at(-1)).toEqual(["two", "keyboard"]);
+    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["two", { reason: "keyboard" }]);
     press("ArrowLeft");
     await nextTick();
-    expect(wrapper.emitted("requestActiveId")?.at(-1)).toEqual(["three", "keyboard"]);
+    expect(wrapper.emitted("activeIdChange")?.at(-1)).toEqual(["three", { reason: "keyboard" }]);
 
     // An `auto` carousel imposes no direction of its own, so its slides keep inheriting the
     // page's — rather than being stamped with whatever it resolved once.
@@ -209,7 +209,7 @@ describe("production carousel components", () => {
     expect(wrapper.get(".snap-motion-carousel-viewport").attributes("data-active-id")).toBe(
       "three",
     );
-    expect(wrapper.emitted("requestActiveId")).toBeUndefined();
+    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
 
     await wrapper.setProps({ ids: ["two"] });
     await nextTick();

@@ -17,11 +17,14 @@ import {
 import {
   createEnglishMediaGalleryMessages,
   MediaGalleryDialog,
-  type MediaGalleryCloseReason,
   type MediaGalleryItem,
-  type MediaGalleryNavigationReason,
 } from "@snap-motion/vue/media-gallery";
-import { createMotionDriver, useBoundedSpringDriver, useSnapMotion } from "@snap-motion/vue/motion";
+import {
+  createMotionDriver,
+  useBoundedSpringDriver,
+  useSnapMotion,
+  type NavigationReason,
+} from "@snap-motion/vue/motion";
 import { Sheet, sheetSnapVisibleExtent, type SheetSnapPoint } from "@snap-motion/vue/sheet";
 import {
   StackedDeck,
@@ -88,8 +91,8 @@ const galleryItems = [
 ] as const satisfies readonly MediaGalleryItem[];
 void h(MediaGalleryDialog, { items: galleryItems, open: false });
 void createEnglishMediaGalleryMessages({ closeGallery: "Sluit galerij" });
-const mediaCloseReason: MediaGalleryCloseReason = "backdrop";
-const mediaNavigationReason: MediaGalleryNavigationReason = "swipe";
+const mediaCloseReason: CloseReason = "scrim";
+const mediaNavigationReason: NavigationReason = "drag";
 void mediaCloseReason;
 void mediaNavigationReason;
 
@@ -109,15 +112,15 @@ const railHandle = ref<CoverflowHandle<ScreenId>>();
 void h(StackedDeck, { items: screens, activeId: "system", label: "Project screens" });
 void h(Coverflow, { items: screens, activeId: "system" });
 void h(StackedDeck, { items: screens });
-void deckHandle.value?.requestId("outcome");
-void railHandle.value?.synchronizeId("overview");
+void deckHandle.value?.navigateTo("outcome");
+void railHandle.value?.synchronizeTo("overview");
 // A product handle publishes read-only telemetry, never a controller to navigate around it with.
 const deckPhase: string | undefined = deckHandle.value?.diagnostics.phase;
 void deckPhase;
 // @ts-expect-error the high-level handle deliberately exposes no raw motion surface.
 void deckHandle.value?.motion;
 // @ts-expect-error a semantic ID this collection does not contain is not a destination.
-void deckHandle.value?.requestId("chapter-one");
+void deckHandle.value?.navigateTo("chapter-one");
 void useStackedDeckMotion<ScreenId>;
 void useCoverflowMotion<ScreenId>;
 void useBoundedSpringDriver;
@@ -129,7 +132,7 @@ void h(StackedDeck, { items: screens, releasePolicy: { maxAnchorSkip: 3 } });
 // @ts-expect-error a product method names its own operation; a caller cannot relabel it.
 void deckHandle.value?.next("drag");
 // @ts-expect-error the same holds for an imperative request, which is always `programmatic`.
-void railHandle.value?.requestId("system", "picker");
+void railHandle.value?.navigateTo("system", "picker");
 
 // @ts-expect-error A stacked deck item must carry the semantic ID it is keyed by.
 void h(StackedDeck, { items: [{ title: "No ID" }] });

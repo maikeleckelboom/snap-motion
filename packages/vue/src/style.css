@@ -388,7 +388,7 @@
   --snap-motion-gallery-control-border: ButtonBorder;
   --snap-motion-gallery-focus: Highlight;
   --snap-motion-gallery-radius: 1rem;
-  --snap-motion-gallery-backdrop: color-mix(in srgb, CanvasText 82%, transparent);
+  --snap-motion-gallery-scrim: color-mix(in srgb, CanvasText 82%, transparent);
   --snap-motion-gallery-chrome-surface: var(--snap-motion-gallery-surface);
   --snap-motion-gallery-control-hover-surface: color-mix(
     in srgb,
@@ -420,7 +420,7 @@
 }
 
 .snap-motion-media-gallery::backdrop {
-  background: var(--snap-motion-gallery-backdrop);
+  background: var(--snap-motion-gallery-scrim);
   transition: background-color 220ms cubic-bezier(0.22, 0.8, 0.2, 1);
 }
 

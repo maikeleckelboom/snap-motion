@@ -24,13 +24,13 @@ const TypedStackedDeck = StackedDeck<Screen>;
 interface DeckInstance {
   canNext: boolean;
   canPrevious: boolean;
-  currentId: ScreenId | undefined;
+  visualId: ScreenId | undefined;
   isInspectEligible: (index: number) => boolean;
   next: () => boolean;
   previous: () => boolean;
-  requestId: (id: ScreenId) => boolean;
+  navigateTo: (id: ScreenId) => boolean;
   settledId: ScreenId | undefined;
-  synchronizeId: (id: ScreenId, announce?: boolean) => boolean;
+  synchronizeTo: (id: ScreenId, announce?: boolean) => boolean;
 }
 
 function mountDeck(props: Record<string, unknown> = {}) {
@@ -314,7 +314,7 @@ describe("StackedDeck", () => {
     // Reduced motion completes the settle synchronously, so this is the settled result.
     expect(deck.settledId).toBe("outcome");
     expect(wrapper.emitted("update:activeId")).toEqual([["outcome"]]);
-    expect(wrapper.emitted("settled")).toEqual([["outcome"]]);
+    expect(wrapper.emitted("settled")).toEqual([["outcome", { reason: "next" }]]);
     expect(wrapper.get('[data-testid="snap-motion-stacked-deck-status"]').text()).toBe(
       "Outcome, 3 of 3",
     );
@@ -329,10 +329,10 @@ describe("StackedDeck", () => {
     await nextTick();
     const deck = wrapper.vm as unknown as DeckInstance;
 
-    expect(deck.synchronizeId("overview")).toBe(true);
+    expect(deck.synchronizeTo("overview")).toBe(true);
     await nextTick();
     expect(deck.settledId).toBe("overview");
-    expect(deck.currentId).toBe("overview");
+    expect(deck.visualId).toBe("overview");
     expect(wrapper.get('[data-testid="snap-motion-stacked-deck-status"]').text()).toBe("");
     wrapper.unmount();
   });
@@ -343,7 +343,7 @@ describe("StackedDeck", () => {
     const deck = wrapper.vm as unknown as DeckInstance;
 
     expect(deck.next()).toBe(false);
-    expect(deck.requestId("overview")).toBe(false);
+    expect(deck.navigateTo("overview")).toBe(false);
     expect(deck.isInspectEligible(1)).toBe(false);
     expect(deck.settledId).toBe("system");
     wrapper.unmount();

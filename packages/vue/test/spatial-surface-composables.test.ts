@@ -19,7 +19,7 @@ interface SurfaceHarness {
   readonly ids: Ref<readonly string[]>;
   readonly programmaticImpulse: Ref<number | undefined>;
   readonly releasePolicy: Ref<Partial<ReleaseTargetPolicy> | undefined>;
-  readonly requestId: (id: string) => boolean;
+  readonly navigateTo: (id: string) => boolean;
   readonly settledId: ComputedRef<string | undefined>;
   readonly spring: Ref<SpringConfiguration | undefined>;
   readonly configuration: () => ControllerConfiguration;
@@ -71,7 +71,7 @@ function mountSurface(
     ids,
     programmaticImpulse,
     releasePolicy,
-    requestId: (id) => surface.requestId(id),
+    navigateTo: (id) => surface.navigateTo(id),
     settledId: computed(() => surface.settledId.value),
     spring,
     wrapper,
@@ -100,7 +100,8 @@ describe.each([
     await nextTick();
 
     expect(harness.settledId.value).toBe("c");
-    expect(settled).not.toHaveBeenCalled();
+    expect(settled).toHaveBeenCalledOnce();
+    expect(settled).toHaveBeenCalledWith("c", 2, "external");
     harness.wrapper.unmount();
   });
 
@@ -127,7 +128,7 @@ describe.each([
     await nextTick();
 
     expect(harness.settledId.value).toBe("c");
-    expect(harness.requestId("missing")).toBe(false);
+    expect(harness.navigateTo("missing")).toBe(false);
     harness.wrapper.unmount();
   });
 

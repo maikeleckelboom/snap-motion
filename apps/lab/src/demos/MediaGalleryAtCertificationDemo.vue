@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import type { ActiveIdChangeDetails, SettlementDetails } from "@snap-motion/vue";
 import {
   MediaGalleryDialog,
   type FocusReturnOptions,
-  type MediaGalleryCloseReason,
   type MediaGalleryItem,
   type MediaGalleryMessages,
-  type MediaGalleryNavigationReason,
+  type MediaGalleryOpenChangeDetails,
 } from "@snap-motion/vue/media-gallery";
 import { computed, nextTick, ref } from "vue";
 
@@ -291,6 +291,9 @@ const selectedScenario = computed(
   () => scenarios.find((scenario) => scenario.id === selectedScenarioId.value) ?? scenarios[0]!,
 );
 const selectedMessages = computed(() => selectedScenario.value.messages ?? {});
+const selectedActiveId = ref<string>(
+  selectedScenario.value.items[selectedScenario.value.initialIndex]!.id,
+);
 const focusReturn = computed<FocusReturnOptions>(() => ({
   opener: opener.value,
   fallback: () => harness.value,
@@ -308,6 +311,7 @@ function clearTrace() {
 
 function selectScenario(id: ScenarioId) {
   selectedScenarioId.value = id;
+  selectedActiveId.value = selectedScenario.value.items[selectedScenario.value.initialIndex]!.id;
   clearTrace();
   appendTrace("scenario-selected", `${id}; initial index ${selectedScenario.value.initialIndex}`);
 }
@@ -326,26 +330,29 @@ function onOpenUpdate(nextOpen: boolean) {
   open.value = nextOpen;
 }
 
-function onOpened(index: number) {
-  appendTrace(
-    "opened",
-    `index ${index}; ${selectedScenario.value.items[index]?.title ?? "unknown"}`,
-  );
+function onOpened(id: string | undefined) {
+  appendTrace("opened", `id ${id ?? "none"}`);
 }
 
-function onIndexChanged(index: number, reason: MediaGalleryNavigationReason) {
-  appendTrace(
-    "indexChanged",
-    `index ${index}; reason ${reason}; ${selectedScenario.value.items[index]?.title ?? "unknown"}`,
-  );
+function onActiveIdChange(id: string | undefined, details: ActiveIdChangeDetails) {
+  appendTrace("activeIdChange", `id ${id ?? "none"}; reason ${details.reason}`);
 }
 
-function onRequestClose(finalIndex: number, reason: MediaGalleryCloseReason) {
-  appendTrace("requestClose", `final index ${finalIndex}; reason ${reason}`);
+function onActiveIdUpdate(id: string | undefined) {
+  if (id !== undefined) selectedActiveId.value = id;
+  appendTrace("update:activeId", `id ${id ?? "none"}`);
 }
 
-async function onClosed(finalIndex: number) {
-  appendTrace("closed", `final index ${finalIndex}`);
+function onSettled(id: string, details: SettlementDetails) {
+  appendTrace("settled", `id ${id}; reason ${details.reason}`);
+}
+
+function onOpenChange(_open: false, details: MediaGalleryOpenChangeDetails) {
+  appendTrace("openChange", `final id ${details.activeId ?? "none"}; reason ${details.reason}`);
+}
+
+async function onClosed(finalId: string | undefined) {
+  appendTrace("closed", `final id ${finalId ?? "none"}`);
   await nextTick();
   const activeElement = opener.value?.ownerDocument.activeElement;
   const focusTarget =
@@ -478,7 +485,7 @@ async function onClosed(finalIndex: number) {
 
     <MediaGalleryDialog
       :focus-return="focusReturn"
-      :initial-index="selectedScenario.initialIndex"
+      :active-id="selectedActiveId"
       :items="selectedScenario.items"
       :messages="selectedMessages"
       :open="open"
@@ -486,9 +493,11 @@ async function onClosed(finalIndex: number) {
       eyebrow="AT certification"
       title="Media gallery certification"
       @closed="onClosed"
-      @index-changed="onIndexChanged"
+      @active-id-change="onActiveIdChange"
       @opened="onOpened"
-      @request-close="onRequestClose"
+      @open-change="onOpenChange"
+      @settled="onSettled"
+      @update:active-id="onActiveIdUpdate"
       @update:open="onOpenUpdate"
     />
   </section>

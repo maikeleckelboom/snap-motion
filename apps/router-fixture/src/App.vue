@@ -8,8 +8,8 @@ import {
   CarouselTrack,
   CarouselViewport,
   ModalDialog,
-  type CloseReason,
-  type NavigationReason,
+  type ActiveIdChangeDetails,
+  type OpenChangeDetails,
 } from "@snap-motion/vue";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -36,11 +36,11 @@ function openMedia() {
   void router.push(`${basePath.value}/media/${media[0].id}`);
 }
 
-function requestActiveId(id: MediaId, _reason: NavigationReason) {
+function changeActiveId(id: MediaId, _details: ActiveIdChangeDetails) {
   void router.replace(`${basePath.value}/media/${id}`);
 }
 
-function requestClose(_reason: CloseReason) {
+function changeOpen(_open: false, _details: OpenChangeDetails) {
   const historyBack = window.history.state.back as string | null | undefined;
   if (historyBack === basePath.value) router.back();
   else void router.replace(basePath.value);
@@ -55,13 +55,13 @@ function requestClose(_reason: CloseReason) {
       <button ref="opener" type="button" @click="openMedia">Open media</button>
     </article>
 
-    <ModalDialog :focus-return="{ opener }" :open="open" @request-close="requestClose">
+    <ModalDialog :focus-return="{ opener }" :open="open" @open-change="changeOpen">
       <template #title>{{ media.find((item) => item.id === activeId)?.title }}</template>
       <CarouselRoot
         :active-id="activeId"
         :ids="media.map((item) => item.id)"
         label="Case study media"
-        @request-active-id="requestActiveId"
+        @active-id-change="changeActiveId"
       >
         <CarouselPrevious />
         <CarouselViewport>

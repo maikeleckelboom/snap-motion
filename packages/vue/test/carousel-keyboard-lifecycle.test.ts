@@ -158,9 +158,9 @@ describe("carousel scoped keyboard and controlled lifecycle", () => {
         activeId: "one",
         ids: ["one", "two", "three"],
         reducedMotionOverride: true,
-        onRequestActiveId: (id: string, reason: string) => events.push(`request:${id}:${reason}`),
+        onActiveIdChange: (id: string, details: { reason: string }) =>
+          events.push(`change:${id}:${details.reason}`),
         onSettled: (id: string) => events.push(`settled:${id}`),
-        onTargetChanged: (id: string, reason: string) => events.push(`target:${id}:${reason}`),
         "onUpdate:activeId": (id: string) => events.push(`update:${id}`),
       },
       slots: {
@@ -175,24 +175,19 @@ describe("carousel scoped keyboard and controlled lifecycle", () => {
 
     await wrapper.get(".snap-motion-carousel-next").trigger("click");
     await flushSettlement();
-    expect(events).toEqual(["target:two:next", "request:two:next", "update:two", "settled:two"]);
+    expect(events).toEqual(["update:two", "change:two:next", "settled:two"]);
 
     await wrapper.setProps({ activeId: "two" });
     await flushSettlement();
-    expect(events).toHaveLength(4);
+    expect(events).toHaveLength(3);
 
     await wrapper.get(".snap-motion-carousel-pagination-item").trigger("click");
     await flushSettlement();
-    expect(events.slice(4)).toEqual([
-      "target:three:picker",
-      "request:three:picker",
-      "update:three",
-      "settled:three",
-    ]);
+    expect(events.slice(3)).toEqual(["update:three", "change:three:picker", "settled:three"]);
 
     await wrapper.setProps({ activeId: "one" });
     await flushSettlement();
-    expect(events.slice(8)).toEqual(["target:one:route", "settled:one"]);
+    expect(events.slice(6)).toEqual(["settled:one"]);
     wrapper.unmount();
   });
 
@@ -210,17 +205,16 @@ describe("carousel scoped keyboard and controlled lifecycle", () => {
     await nextTick();
     const viewport = wrapper.get(".snap-motion-carousel-viewport").element as HTMLElement;
     Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 100 });
-    (wrapper.vm as unknown as { motion: { remeasure: () => void } }).motion.remeasure();
+    (wrapper.vm as unknown as { remeasure: () => void }).remeasure();
 
     viewport.dispatchEvent(
       new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 80 }),
     );
     vi.advanceTimersByTime(90);
     await flushSettlement();
-    expect(wrapper.emitted("targetChanged")).toEqual([["two", "wheel"]]);
-    expect(wrapper.emitted("requestActiveId")).toEqual([["two", "wheel"]]);
+    expect(wrapper.emitted("activeIdChange")).toEqual([["two", { reason: "wheel" }]]);
     expect(wrapper.emitted("update:activeId")).toEqual([["two"]]);
-    expect(wrapper.emitted("settled")).toEqual([["two"]]);
+    expect(wrapper.emitted("settled")).toEqual([["two", { reason: "wheel" }]]);
     wrapper.unmount();
   });
 

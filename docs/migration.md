@@ -8,7 +8,19 @@
 
 - Import structural CSS once from `@snap-motion/vue/style.css`.
 - Replace numeric indices with stable string IDs.
-- Treat `requestActiveId` as the controlled-state request and `settled` as physical completion.
+- Replace `requestActiveId` and `targetChanged` with
+  `activeIdChange(id, { reason })`; keep `update:activeId` as Vue `v-model` plumbing and treat
+  `settled(id, { reason })` as physical completion.
+- Replace `requestId()` / `navigate()` with `navigateTo()`, and replace `synchronizeId()` with
+  `synchronizeTo()`.
+- Replace `currentId` with `visualId` where the value is the physically dominant item. Semantic
+  application state is consistently `activeId`.
+- Replace `labelledby` with `labelledBy` and the high-level spatial `stageWidth` fallback prop with
+  `fallbackStageWidth`.
+- Replace overlay `requestClose` events with `openChange(false, { reason })`; `scrim` is the shared
+  reason for clicking the non-content modal layer.
+- Replace Media Gallery's `initialIndex`, `indexChanged`, and index-based close state with stable
+  `activeId`, `activeIdChange`, `settled`, and ID-bearing `openChange` details.
 - Use `keyboardScope="auto"` for the default modal behavior; remove dialog-level duplicate listeners.
 - Use `direction="auto" | "ltr" | "rtl"` instead of local key-only inversion.
 - Replace hard-coded accessibility strings with an instance `messages` object.

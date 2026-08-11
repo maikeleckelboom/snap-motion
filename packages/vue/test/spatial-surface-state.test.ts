@@ -27,24 +27,24 @@ const TypedCoverflow = Coverflow<Screen>;
 interface DeckInstance {
   canNext: boolean;
   canPrevious: boolean;
-  currentId: string | undefined;
+  visualId: string | undefined;
   diagnostics: { pointerInteractionActive: boolean };
   next: () => boolean;
   previous: () => boolean;
-  requestId: (id: string) => boolean;
+  navigateTo: (id: string) => boolean;
   settledId: string | undefined;
   state: { settledIndex: number; currentIndex: number; commandOriginIndex: number };
-  synchronizeId: (id: string, announce?: boolean) => boolean;
+  synchronizeTo: (id: string) => boolean;
 }
 
 interface RailInstance {
   canNext: boolean;
   canPrevious: boolean;
   next: () => boolean;
-  requestId: (id: string) => boolean;
+  navigateTo: (id: string) => boolean;
   settledId: string | undefined;
   state: { settledIndex: number; visualIndex: number; commandIndex: number };
-  synchronizeId: (id: string, announce?: boolean) => boolean;
+  synchronizeTo: (id: string) => boolean;
   visualId: string | undefined;
 }
 
@@ -185,7 +185,7 @@ describe("item reconfiguration through the public component", () => {
     await wrapper.setProps({ items: [screens[2]!, screens[0]!] });
     await nextTick();
     expect(rail.settledId).toBe("c");
-    expect(rail.requestId("a")).toBe(true);
+    expect(rail.navigateTo("a")).toBe(true);
     await nextTick();
     expect(rail.settledId).toBe("a");
     wrapper.unmount();
@@ -200,7 +200,7 @@ describe("empty collections name no item, at every layer", () => {
 
     expect(wrapper.findAll(".snap-motion-stacked-deck-card")).toHaveLength(0);
     expect(deck.settledId).toBeUndefined();
-    expect(deck.currentId).toBeUndefined();
+    expect(deck.visualId).toBeUndefined();
     expect(deck.canNext).toBe(false);
     expect(deck.canPrevious).toBe(false);
     // One convention, all the way down: `-1` is "no item", never item zero.
@@ -210,8 +210,8 @@ describe("empty collections name no item, at every layer", () => {
     // And a command while empty is refused rather than resolved against something imaginary.
     expect(deck.next()).toBe(false);
     expect(deck.previous()).toBe(false);
-    expect(deck.requestId("a")).toBe(false);
-    expect(deck.synchronizeId("a")).toBe(false);
+    expect(deck.navigateTo("a")).toBe(false);
+    expect(deck.synchronizeTo("a")).toBe(false);
     wrapper.unmount();
   });
 
@@ -229,7 +229,7 @@ describe("empty collections name no item, at every layer", () => {
     expect(rail.state.visualIndex).toBe(-1);
     expect(rail.state.commandIndex).toBe(-1);
     expect(rail.next()).toBe(false);
-    expect(rail.requestId("a")).toBe(false);
+    expect(rail.navigateTo("a")).toBe(false);
     wrapper.unmount();
   });
 
@@ -251,8 +251,11 @@ describe("empty collections name no item, at every layer", () => {
     expect(rail.state.settledIndex).toBe(0);
     expect(rail.settledId).toBe("a");
     expect(rail.canNext).toBe(true);
-    // Repopulating is not a navigation the user made, so nobody is told one happened.
-    expect(wrapper.emitted("requestActiveId")).toBeUndefined();
+    // Collection reconciliation is explicit and cannot be mistaken for user navigation.
+    expect(wrapper.emitted("activeIdChange")).toEqual([
+      [undefined, { reason: "reconcile" }],
+      ["a", { reason: "reconcile" }],
+    ]);
     expect(rail.next()).toBe(true);
     await nextTick();
     expect(rail.settledId).toBe("b");
@@ -266,11 +269,11 @@ describe("unknown semantic identifiers", () => {
     await nextTick();
     const deck = wrapper.vm as unknown as DeckInstance;
 
-    expect(deck.requestId("nope")).toBe(false);
-    expect(deck.synchronizeId("nope")).toBe(false);
+    expect(deck.navigateTo("nope")).toBe(false);
+    expect(deck.synchronizeTo("nope")).toBe(false);
     await nextTick();
     expect(deck.settledId).toBe("c");
-    expect(deck.currentId).toBe("c");
+    expect(deck.visualId).toBe("c");
     expect(wrapper.emitted("update:activeId")).toBeUndefined();
     wrapper.unmount();
   });
@@ -280,8 +283,8 @@ describe("unknown semantic identifiers", () => {
     await nextTick();
     const rail = wrapper.vm as unknown as RailInstance;
 
-    expect(rail.requestId("nope")).toBe(false);
-    expect(rail.synchronizeId("nope")).toBe(false);
+    expect(rail.navigateTo("nope")).toBe(false);
+    expect(rail.synchronizeTo("nope")).toBe(false);
     await nextTick();
     expect(rail.settledId).toBe("c");
     expect(rail.visualId).toBe("c");
@@ -308,13 +311,13 @@ describe("controlled selection is not user input", () => {
 
     // A user command is still refused while disabled...
     expect(deck.next()).toBe(false);
-    expect(deck.requestId("a")).toBe(false);
+    expect(deck.navigateTo("a")).toBe(false);
 
     // ...and the application's own state is not a user command.
     await wrapper.setProps({ activeId: "e" });
     await nextTick();
     expect(deck.settledId).toBe("e");
-    expect(deck.currentId).toBe("e");
+    expect(deck.visualId).toBe("e");
     wrapper.unmount();
   });
 
@@ -371,7 +374,7 @@ describe("controlled selection is not user input", () => {
     await nextTick();
 
     expect(deck.settledId).toBe("a");
-    expect(wrapper.emitted("requestActiveId")).toBeUndefined();
+    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
     expect(wrapper.emitted("activate")).toBeUndefined();
     wrapper.unmount();
   });
@@ -408,7 +411,7 @@ describe("controlled selection is not user input", () => {
     );
     await nextTick();
     expect(deck.settledId).toBe("c");
-    expect(wrapper.emitted("requestActiveId")).toBeUndefined();
+    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -434,7 +437,7 @@ describe("controlled selection is not user input", () => {
     await nextTick();
 
     expect((wrapper.vm as unknown as DeckInstance).settledId).toBe("a");
-    expect(wrapper.emitted("requestActiveId")).toBeUndefined();
+    expect(wrapper.emitted("activeIdChange")).toBeUndefined();
     expect(wrapper.emitted("update:activeId")).toBeUndefined();
     wrapper.unmount();
   });
@@ -454,15 +457,15 @@ describe("navigation reasons tell the truth", () => {
       new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "ArrowRight" }),
     );
     await nextTick();
-    deck.requestId("a");
+    deck.navigateTo("a");
     await nextTick();
 
-    expect(wrapper.emitted("requestActiveId")).toEqual([
-      ["d", "next"],
-      ["c", "previous"],
-      ["d", "keyboard"],
+    expect(wrapper.emitted("activeIdChange")).toEqual([
+      ["d", { reason: "next" }],
+      ["c", { reason: "previous" }],
+      ["d", { reason: "keyboard" }],
       // An imperative request is not a person choosing a card. `picker` is reserved for that.
-      ["a", "programmatic"],
+      ["a", { reason: "programmatic" }],
     ]);
     wrapper.unmount();
   });
@@ -477,7 +480,7 @@ describe("navigation reasons tell the truth", () => {
     root.dispatchEvent(pointerEvent("pointerup", { clientX: -400 }));
     await nextTick();
 
-    expect(wrapper.emitted("requestActiveId")).toEqual([["d", "drag"]]);
+    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "drag" }]]);
     wrapper.unmount();
   });
 
@@ -492,7 +495,7 @@ describe("navigation reasons tell the truth", () => {
     vi.advanceTimersByTime(150);
     await nextTick();
 
-    expect(wrapper.emitted("requestActiveId")).toEqual([["d", "wheel"]]);
+    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "wheel" }]]);
     wrapper.unmount();
   });
 
@@ -507,13 +510,13 @@ describe("navigation reasons tell the truth", () => {
       new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Home" }),
     );
     await nextTick();
-    rail.requestId("e");
+    rail.navigateTo("e");
     await nextTick();
 
-    expect(wrapper.emitted("requestActiveId")).toEqual([
-      ["d", "next"],
-      ["a", "keyboard"],
-      ["e", "programmatic"],
+    expect(wrapper.emitted("activeIdChange")).toEqual([
+      ["d", { reason: "next" }],
+      ["a", { reason: "keyboard" }],
+      ["e", { reason: "programmatic" }],
     ]);
     wrapper.unmount();
   });
@@ -534,7 +537,7 @@ describe("navigation reasons tell the truth", () => {
     frames.forEach((frame) => frame(0));
     await nextTick();
 
-    expect(wrapper.emitted("requestActiveId")).toEqual([["b", "picker"]]);
+    expect(wrapper.emitted("activeIdChange")).toEqual([["b", { reason: "picker" }]]);
     wrapper.unmount();
   });
 });
@@ -561,7 +564,7 @@ describe("navigation reasons cannot be forged", () => {
     await Promise.resolve();
     await nextTick();
 
-    expect(wrapper.emitted("requestActiveId")).toEqual([["d", "next"]]);
+    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "next" }]]);
     wrapper.unmount();
   });
 
@@ -578,7 +581,7 @@ describe("navigation reasons cannot be forged", () => {
     await Promise.resolve();
     await nextTick();
 
-    expect(wrapper.emitted("requestActiveId")).toEqual([["d", "next"]]);
+    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "next" }]]);
     wrapper.unmount();
   });
 
@@ -596,7 +599,7 @@ describe("navigation reasons cannot be forged", () => {
     await nextTick();
 
     // The rail never took the wheel, so the settlement is still the one `next()` asked for.
-    expect(wrapper.emitted("requestActiveId")).toEqual([["d", "next"]]);
+    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "next" }]]);
     wrapper.unmount();
   });
 
@@ -619,7 +622,7 @@ describe("navigation reasons cannot be forged", () => {
     vi.advanceTimersByTime(200);
     await nextTick();
 
-    expect(wrapper.emitted("requestActiveId")).toEqual([["d", "next"]]);
+    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "next" }]]);
     wrapper.unmount();
   });
 
@@ -628,17 +631,17 @@ describe("navigation reasons cannot be forged", () => {
     await nextTick();
     const deck = wrapper.vm as unknown as DeckInstance;
 
-    // Something the user did is in flight, and then authoritative state arrives and announces.
+    // Something the user did is in flight, and then authoritative state arrives.
     deck.next();
-    expect(deck.synchronizeId("a", true)).toBe(true);
+    expect(deck.synchronizeTo("a")).toBe(true);
     await nextTick();
 
-    // The announcement is published by the adoption itself, so it happens at all...
-    expect(wrapper.emitted("settled")).toEqual([["a"]]);
+    // Mechanical settlement is published by the adoption itself, without a live announcement.
+    expect(wrapper.emitted("settled")).toEqual([["a", { reason: "external" }]]);
     expect(deck.settledId).toBe("a");
-    // ...and it carries `route`, so it is never echoed back as a user request — least of all as
+    // ...and it carries `external`, so it is never echoed back as a user request — least of all as
     // the `next` that the adoption interrupted.
-    expect(wrapper.emitted("requestActiveId")).toBeUndefined();
+    expect(wrapper.emitted("activeIdChange")).toEqual([["d", { reason: "next" }]]);
     wrapper.unmount();
   });
 });

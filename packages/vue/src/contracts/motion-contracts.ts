@@ -6,6 +6,8 @@ import type {
   SnapAnchor,
 } from "@snap-motion/core";
 
+export type { ActiveIdChangeDetails, NavigationReason, SettlementDetails } from "@snap-motion/core";
+
 /** Observable lifecycle of a horizontal pointer before and after the surface claims it. */
 export type PointerIntent = "horizontal" | "pending" | "vertical";
 
@@ -18,19 +20,10 @@ export type PointerIntent = "horizontal" | "pending" | "vertical";
  * resolving", which is a question only the motion layer can answer.
  *
  * `picker` is a discrete selection: a tap on an item, a pagination dot. `programmatic` is an
- * imperative request from the application — `requestId()` and friends — which is a different thing
- * from a person choosing an item, and `route` is authoritative state the application already had.
+ * imperative request from the application — `navigateTo()` and friends — which is a different
+ * thing from a person choosing an item. `reconcile` is collection repair and `external` is
+ * authoritative state the application already had.
  */
-export type NavigationReason =
-  | "previous"
-  | "next"
-  | "keyboard"
-  | "drag"
-  | "wheel"
-  | "picker"
-  | "programmatic"
-  | "route";
-
 /**
  * A read-only view of what a spatial surface's motion is doing right now.
  *

@@ -4,58 +4,45 @@
 
 ```ts
 
-import { AnimationDriver } from '@snap-motion/core';
-import type { CarouselMotion as CarouselMotion_2 } from '@snap-motion/vue/carousel';
+import { ActiveIdChangeDetails } from '@snap-motion/core';
 import type { CloseReason as CloseReason_2 } from '@snap-motion/vue/dialog';
 import { ComponentOptionsMixin } from 'vue';
 import { ComponentProvideOptions } from 'vue';
 import { ComputedRef } from 'vue';
-import { ControllerConfigurationUpdate } from '@snap-motion/core';
 import { ControllerMeasurement } from '@snap-motion/core';
-import { ControllerMoveByOptions } from '@snap-motion/core';
-import { ControllerMoveOptions } from '@snap-motion/core';
-import { ControllerPhase } from '@snap-motion/core';
-import { ControllerSnapshot } from '@snap-motion/core';
-import { CoverflowModel } from '@snap-motion/core';
+import type { ControllerPhase } from '@snap-motion/core';
 import { CoverflowModelState } from '@snap-motion/core';
 import { CoverflowTuning } from '@snap-motion/core';
-import { CSSProperties } from 'vue';
 import { DefineComponent } from 'vue';
-import { ElasticityOptions } from '@snap-motion/core';
+import type { ElasticityOptions } from '@snap-motion/core';
 import type { FocusReturnOptions as FocusReturnOptions_2 } from '@snap-motion/vue/dialog';
 import type { InitialFocus as InitialFocus_2 } from '@snap-motion/vue/dialog';
-import { MaybeRefOrGetter } from 'vue';
-import type { NavigationReason as NavigationReason_2 } from '@snap-motion/vue/motion';
+import { NavigationReason } from '@snap-motion/core';
+import type { OpenChangeDetails as OpenChangeDetails_2 } from '@snap-motion/vue/dialog';
 import { PaginationIndicatorState } from '@snap-motion/core';
-import type { PointerIntent as PointerIntent_2 } from '@snap-motion/vue/motion';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
-import { ReleaseTargetPolicy } from '@snap-motion/core';
+import type { ReleaseTargetPolicy } from '@snap-motion/core';
 import type { ScalarBounds } from '@snap-motion/core';
 import type { SemanticId } from '@snap-motion/core';
+import { SettlementDetails } from '@snap-motion/core';
 import { ShallowRef } from 'vue';
 import { ShallowUnwrapRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
-import { SnapController } from '@snap-motion/core';
-import { SnapControllerOptions } from '@snap-motion/core';
-import { SnapDirection } from '@snap-motion/core';
 import type { SnapMotionMessages as SnapMotionMessages_2 } from '@snap-motion/vue/localization';
-import { SpringConfiguration } from '@snap-motion/core';
+import type { SpringConfiguration } from '@snap-motion/core';
 import { StackedDeckFrame } from '@snap-motion/core';
-import { StackedDeckModel } from '@snap-motion/core';
 import { StackedDeckModelState } from '@snap-motion/core';
 import { StackedDeckPose } from '@snap-motion/core';
 import { StackedDeckProfile } from '@snap-motion/core';
-import { StackedDeckReleasePolicy } from '@snap-motion/core';
+import type { StackedDeckReleasePolicy } from '@snap-motion/core';
 import { StackedDeckRole } from '@snap-motion/core';
 import { StackedDeckTuning } from '@snap-motion/core';
 import { SurfaceMotionDiagnostics as SurfaceMotionDiagnostics_2 } from '@snap-motion/vue/motion';
-import type { UseSnapMotionOptions as UseSnapMotionOptions_2 } from '@snap-motion/vue/motion';
 import { VNode } from 'vue';
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_base" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_Slots" needs to be exported by the entry point index.d.ts
+export { ActiveIdChangeDetails }
+
 //
 // @public (undocumented)
 export const CarouselActivePosition: __VLS_WithSlots<typeof __VLS_base, __VLS_Slots>;
@@ -81,89 +68,14 @@ export interface CarouselGeometryStrategy<Id extends string> {
 // @public
 export type CarouselKeyboardScope = "auto" | "carousel" | "dialog" | "off";
 
-// @public
-export interface CarouselMotion<Id extends string> {
-    // (undocumented)
-    readonly activeId: ComputedRef<Id | undefined>;
-    // (undocumented)
-    readonly canNext: ComputedRef<boolean>;
-    // (undocumented)
-    readonly canPrevious: ComputedRef<boolean>;
-    // (undocumented)
-    configure(update: ControllerConfigurationUpdate): void;
-    // (undocumented)
-    readonly controller: SnapController<Id>;
-    readonly direction: ComputedRef<"ltr" | "rtl">;
-    // (undocumented)
-    interrupt(): void;
-    // (undocumented)
-    readonly isAnimating: ComputedRef<boolean>;
-    // (undocumented)
-    readonly isDragging: Ref<boolean>;
-    // (undocumented)
-    readonly isWheeling: Ref<boolean>;
-    // (undocumented)
-    moveBy(direction: SnapDirection, options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
-    // (undocumented)
-    moveTo(id: Id, options?: ControllerMoveOptions): SnapAnchor<Id> | null;
-    // (undocumented)
-    next(options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
-    // (undocumented)
-    onKeyDown(event: KeyboardEvent): void;
-    // (undocumented)
-    onNativeDragStart(event: DragEvent): void;
-    // (undocumented)
-    onPointerDown(event: PointerEvent): void;
-    // (undocumented)
-    onWheel(event: WheelEvent): void;
-    // (undocumented)
-    readonly phase: ComputedRef<ControllerPhase>;
-    // (undocumented)
-    readonly pointerIntent: Ref<PointerIntent_2>;
-    readonly pointerInteractionActive: Ref<boolean>;
-    // (undocumented)
-    readonly pointerOwned: Ref<boolean>;
-    // (undocumented)
-    readonly position: ComputedRef<number>;
-    // (undocumented)
-    previous(options?: ControllerMoveByOptions): SnapAnchor<Id> | null;
-    // (undocumented)
-    readonly reducedMotion: ComputedRef<boolean>;
-    // (undocumented)
-    remeasure(): SnapAnchor<Id> | null;
-    resolveDirection(): "ltr" | "rtl";
-    // (undocumented)
-    readonly snapshot: ShallowRef<ControllerSnapshot<Id>>;
-    // (undocumented)
-    readonly surfaceStyle: {
-        readonly touchAction: string;
-    };
-    // (undocumented)
-    readonly targetId: ComputedRef<Id | undefined>;
-    // (undocumented)
-    readonly trackStyle: ComputedRef<{
-        transform: string;
-        willChange: string;
-    }>;
-    // (undocumented)
-    readonly velocity: ComputedRef<number>;
-}
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_2" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_base_2" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_2" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const CarouselNext: __VLS_WithSlots_2<typeof __VLS_base_2, __VLS_Slots_2>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_3" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_base_3" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_3" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const CarouselPagination: __VLS_WithSlots_3<typeof __VLS_base_3, __VLS_Slots_3>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const CarouselPaginationItem: <Id extends string>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
@@ -186,21 +98,14 @@ export const CarouselPaginationItem: <Id extends string>(__VLS_props: NonNullabl
     __ctx?: NonNullable<Awaited<typeof __VLS_setup>>;
 };
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_4" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_base_4" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_4" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const CarouselPrevious: __VLS_WithSlots_4<typeof __VLS_base_4, __VLS_Slots_4>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_5" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_base_5" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_5" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const CarouselProgress: __VLS_WithSlots_5<typeof __VLS_base_5, __VLS_Slots_5>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal_2" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const CarouselRoot: <Id extends string>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal_2<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
@@ -214,23 +119,23 @@ export const CarouselRoot: <Id extends string>(__VLS_props: NonNullable<Awaited<
         keyboardPrimary?: boolean;
         keyboardScope?: CarouselKeyboardScope;
         label?: string;
-        labelledby?: string;
+        labelledBy?: string;
         landmark?: boolean;
         messages?: Partial<SnapMotionMessages_2>;
         reducedMotionOverride?: boolean;
     } & {
+        onActiveIdChange?: (id: Id, details: ActiveIdChangeDetails) => any;
+        onSettled?: (id: Id, details: SettlementDetails) => any;
         "onUpdate:activeId"?: (id: Id) => any;
-        onSettled?: (id: Id) => any;
-        onRequestActiveId?: (id: Id, reason: NavigationReason_2) => any;
-        onTargetChanged?: (id: Id, reason: NavigationReason_2) => any;
     }> & (typeof globalThis extends {
         __VLS_PROPS_FALLBACK: infer P;
     } ? P : {});
     expose: (exposed: ShallowUnwrapRef<    {
-    motion: CarouselMotion<Id>;
-    navigate: (id: Id) => boolean;
+    navigateTo: (id: Id) => boolean;
     next: () => boolean;
     previous: () => boolean;
+    remeasure: () => SnapAnchor<Id> | null;
+    synchronizeTo: (id: Id) => boolean;
     }>) => void;
     attrs: any;
     slots: {
@@ -238,15 +143,13 @@ export const CarouselRoot: <Id extends string>(__VLS_props: NonNullable<Awaited<
     };
     emit: {
         (event: "update:activeId", id: Id): void;
-        (event: "requestActiveId", id: Id, reason: NavigationReason_2): void;
-        (event: "settled", id: Id): void;
-        (event: "targetChanged", id: Id, reason: NavigationReason_2): void;
+        (event: "activeIdChange", id: Id, details: ActiveIdChangeDetails): void;
+        (event: "settled", id: Id, details: SettlementDetails): void;
     };
 }>) => VNode & {
     __ctx?: NonNullable<Awaited<typeof __VLS_setup>>;
 };
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal_3" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const CarouselSlide: <Id extends string>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal_3<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
@@ -266,59 +169,21 @@ export const CarouselSlide: <Id extends string>(__VLS_props: NonNullable<Awaited
     __ctx?: NonNullable<Awaited<typeof __VLS_setup>>;
 };
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_6" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_base_6" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_6" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const CarouselStatus: __VLS_WithSlots_6<typeof __VLS_base_6, __VLS_Slots_6>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_7" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_base_7" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_7" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const CarouselTrack: __VLS_WithSlots_7<typeof __VLS_base_7, __VLS_Slots_7>;
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_8" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_base_8" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_8" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const CarouselViewport: __VLS_WithSlots_8<typeof __VLS_base_8, __VLS_Slots_8>;
 
-// @public (undocumented)
-export interface CarouselWindowOptions {
-    // (undocumented)
-    readonly mountAfter: number;
-    // (undocumented)
-    readonly mountBefore: number;
-    // (undocumented)
-    readonly preloadAfter: number;
-    // (undocumented)
-    readonly preloadBefore: number;
-    // (undocumented)
-    readonly wrap?: boolean;
-}
+// @public
+export type CloseReason = "close-button" | "escape" | "scrim" | "programmatic";
 
-// @public (undocumented)
-export interface CarouselWindowState<Id extends string> {
-    // (undocumented)
-    readonly activeId: Id | undefined;
-    // (undocumented)
-    readonly mountedIds: ReadonlySet<Id>;
-    // (undocumented)
-    readonly nextIds: readonly Id[];
-    // (undocumented)
-    readonly preloadIds: ReadonlySet<Id>;
-    // (undocumented)
-    readonly previousIds: readonly Id[];
-}
-
-// @public (undocumented)
-export type CloseReason = "close-button" | "escape" | "scrim" | "route" | "programmatic";
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal_4" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const Coverflow: <TItem extends {
@@ -328,12 +193,12 @@ export const Coverflow: <TItem extends {
         items: readonly TItem[];
         activeId?: TItem["id"];
         label?: string;
-        labelledby?: string;
+        labelledBy?: string;
         itemLabel?: (item: TItem, index: number) => string;
         focusScope?: HTMLElement | undefined;
         disabled?: boolean;
         landmark?: boolean;
-        stageWidth?: number;
+        fallbackStageWidth?: number;
         elasticity?: ElasticityOptions;
         messages?: Partial<SnapMotionMessages_2>;
         programmaticImpulse?: number;
@@ -341,9 +206,9 @@ export const Coverflow: <TItem extends {
         releasePolicy?: Partial<ReleaseTargetPolicy>;
         spring?: SpringConfiguration;
     } & {
-        "onUpdate:activeId"?: (id: TItem["id"]) => any;
-        onSettled?: (id: TItem["id"]) => any;
-        onRequestActiveId?: (id: TItem["id"], reason: NavigationReason_2) => any;
+        onActiveIdChange?: (id: TItem["id"] | undefined, details: ActiveIdChangeDetails) => any;
+        onSettled?: (id: TItem["id"], details: SettlementDetails) => any;
+        "onUpdate:activeId"?: (id: TItem["id"] | undefined) => any;
         onActivate?: (item: TItem, index: number) => any;
     }> & (typeof globalThis extends {
         __VLS_PROPS_FALLBACK: infer P;
@@ -361,12 +226,12 @@ export const Coverflow: <TItem extends {
     presentations: ComputedRef<readonly CoverflowCardPresentation[]>;
     pitch: ComputedRef<number>;
     previous: () => boolean;
-    requestId: (id: TItem["id"]) => boolean;
+    navigateTo: (id: TItem["id"]) => boolean;
     root: Ref<HTMLElement | undefined, HTMLElement | undefined>;
     settledId: ComputedRef<TItem["id"] | undefined>;
     speedInCards: ComputedRef<number>;
     state: ShallowRef<CoverflowModelState>;
-    synchronizeId: (id: TItem["id"], announce?: boolean) => boolean;
+    synchronizeTo: (id: TItem["id"]) => boolean;
     tuning: ComputedRef<CoverflowTuning>;
     visualId: ComputedRef<TItem["id"] | undefined>;
     }>) => void;
@@ -377,15 +242,16 @@ export const Coverflow: <TItem extends {
             id: TItem["id"];
             index: number;
             active: boolean;
+            visual: boolean;
             settled: boolean;
             inspectable: boolean;
             presentation: CoverflowCardPresentation;
         }) => any;
     };
     emit: {
-        (event: "update:activeId", id: TItem["id"]): void;
-        (event: "requestActiveId", id: TItem["id"], reason: NavigationReason_2): void;
-        (event: "settled", id: TItem["id"]): void;
+        (event: "update:activeId", id: TItem["id"] | undefined): void;
+        (event: "activeIdChange", id: TItem["id"] | undefined, details: ActiveIdChangeDetails): void;
+        (event: "settled", id: TItem["id"], details: SettlementDetails): void;
         (event: "activate", item: TItem, index: number): void;
     };
 }>) => VNode & {
@@ -435,6 +301,7 @@ export interface CoverflowCardState<TItem, TId extends string> {
     // (undocumented)
     readonly presentation: CoverflowCardPresentation;
     readonly settled: boolean;
+    readonly visual: boolean;
 }
 
 // @public
@@ -447,6 +314,7 @@ export interface CoverflowHandle<Id extends string> {
     readonly diagnostics: SurfaceMotionDiagnostics_2<Id>;
     // (undocumented)
     isInspectEligible(index: number): boolean;
+    navigateTo(id: Id): boolean;
     next(): boolean;
     onKeyDown(event: KeyboardEvent): void;
     // (undocumented)
@@ -457,50 +325,20 @@ export interface CoverflowHandle<Id extends string> {
     readonly pitch: number;
     readonly presentations: readonly CoverflowCardPresentation[];
     previous(): boolean;
-    requestId(id: Id): boolean;
     // (undocumented)
     readonly root: HTMLElement | undefined;
     readonly settledId: Id | undefined;
     // (undocumented)
     readonly speedInCards: number;
     readonly state: CoverflowModelState;
-    synchronizeId(id: Id, announce?: boolean): boolean;
+    synchronizeTo(id: Id): boolean;
     // (undocumented)
     readonly tuning: CoverflowTuning;
     readonly visualId: Id | undefined;
 }
 
-export { CoverflowTuning }
-
-// @public (undocumented)
-export function createDefaultSheetSnapPoints(side: SheetSide, overrides?: Partial<SheetViewportPolicy>): readonly SheetSnapPoint<SheetOpenSnapId>[];
-
 // @public
 export function createEnglishSnapMotionMessages(overrides?: Partial<SnapMotionMessages>): SnapMotionMessages;
-
-// @public
-export function createFixedSheetSnapPoints(): readonly SheetSnapPoint<SheetFixedSnapId>[];
-
-// @public
-export function createFixedStageCarouselGeometryStrategy<Id extends string>(options?: FixedStageCarouselGeometryOptions): CarouselGeometryStrategy<Id>;
-
-// @public (undocumented)
-export function createMotionDriver(): AnimationDriver;
-
-// @public
-export function createVariableWidthCenteredCarouselGeometryStrategy<Id extends string>(options?: VariableWidthCenteredCarouselGeometryOptions): CarouselGeometryStrategy<Id>;
-
-// @public
-export function createViewportSheetSnapPoints(overrides?: Partial<SheetViewportPolicy>): readonly SheetSnapPoint<SheetViewportSnapId>[];
-
-// @public (undocumented)
-export function defaultSheetOpenSnapId(side: SheetSide): SheetOpenSnapId;
-
-// @public (undocumented)
-export interface FixedStageCarouselGeometryOptions {
-    // (undocumented)
-    readonly gap?: number;
-}
 
 // @public
 export interface FocusReturnOptions {
@@ -510,71 +348,26 @@ export interface FocusReturnOptions {
     opener?: HTMLElement | undefined;
 }
 
-// @public (undocumented)
-export function getSheetSideDescriptor(side: SheetSide): SheetSideDescriptor;
-
 // @public
 export type InitialFocus = "close" | "title" | "first-interactive" | HTMLElement | (() => HTMLElement | undefined);
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_WithSlots_9" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_base_9" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "__VLS_Slots_9" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const ModalDialog: __VLS_WithSlots_9<typeof __VLS_base_9, __VLS_Slots_9>;
 
+export { NavigationReason }
+
 // @public
-export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "programmatic" | "route";
+export interface OpenChangeDetails {
+    // (undocumented)
+    readonly reason: CloseReason;
+}
 
 // @public
 export type PointerIntent = "horizontal" | "pending" | "vertical";
 
-// @public (undocumented)
-export interface PublicCarouselContext<Id extends string = string> {
-    // (undocumented)
-    readonly activeId: ComputedRef<Id | undefined>;
-    // (undocumented)
-    readonly canNext: ComputedRef<boolean>;
-    // (undocumented)
-    readonly canPrevious: ComputedRef<boolean>;
-    // (undocumented)
-    readonly count: ComputedRef<number>;
-    // (undocumented)
-    readonly direction: ComputedRef<"ltr" | "rtl">;
-    // (undocumented)
-    readonly ids: ComputedRef<readonly Id[]>;
-    readonly navigate: (id: Id) => boolean;
-    // (undocumented)
-    readonly next: () => boolean;
-    // (undocumented)
-    readonly phase: ComputedRef<ControllerPhase>;
-    // (undocumented)
-    readonly previous: () => boolean;
-}
+export { SettlementDetails }
 
-// @public (undocumented)
-export interface ResolvedSheetSnapPoint<Id extends string> {
-    // (undocumented)
-    readonly disabled: boolean;
-    // (undocumented)
-    readonly id: Id;
-    // (undocumented)
-    readonly label: string;
-    // (undocumented)
-    readonly order: number;
-    // (undocumented)
-    readonly position: number;
-    // (undocumented)
-    readonly visibleExtent: number;
-}
-
-// @public
-export function resolveSheetGeometry(input: SheetGeometryInput): SheetGeometry;
-
-// @public
-export function resolveSheetSnapPoints<Id extends string>(points: readonly SheetSnapPoint<Id>[], context: SheetMeasureContext): ResolvedSheetSnapPoint<Id>[];
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal_6" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal_6<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
@@ -601,12 +394,11 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
         viewportPolicy?: Partial<SheetViewportPolicy>;
     } & {
         onClosed?: () => any;
+        onActiveIdChange?: (id: Id, details: ActiveIdChangeDetails) => any;
+        onSettled?: (id: Id, details: SettlementDetails) => any;
         "onUpdate:activeId"?: (id: Id) => any;
-        onSettled?: (id: Id) => any;
-        onRequestActiveId?: (id: Id, reason: SheetNavigationReason) => any;
-        onTargetChanged?: (id: Id, reason: SheetNavigationReason) => any;
         "onUpdate:open"?: (open: boolean) => any;
-        onRequestClose?: (reason: CloseReason_2) => any;
+        onOpenChange?: (open: false, details: OpenChangeDetails_2) => any;
         onOpened?: () => any;
     }> & (typeof globalThis extends {
         __VLS_PROPS_FALLBACK: infer P;
@@ -616,11 +408,15 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
     chrome: Ref<HTMLElement | undefined, HTMLElement | undefined>;
     closeForPresentationChange: () => boolean;
     dialog: Ref<HTMLDialogElement | undefined, HTMLDialogElement | undefined>;
+    diagnostics: ComputedRef<SheetDiagnostics<Id>>;
     intrinsicBodyContent: Ref<HTMLElement | undefined, HTMLElement | undefined>;
-    motion: UseSheetMotionReturn<Id>;
     panel: Ref<HTMLElement | undefined, HTMLElement | undefined>;
+    activeId: ComputedRef<Id>;
+    sheetState: Ref<SheetState, SheetState>;
+    side: Ref<SheetEdge, SheetEdge>;
     requestClose: (reason: CloseReason_2) => void;
-    requestSnap: (id: Id, reason: SheetNavigationReason) => void;
+    navigateTo: (id: Id) => boolean;
+    synchronizeTo: (id: Id) => boolean;
     titleId: string;
     viewport: Ref<HTMLElement | undefined, HTMLElement | undefined>;
     }>) => void;
@@ -637,12 +433,11 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
     emit: {
         (event: "update:open", open: boolean): void;
         (event: "update:activeId", id: Id): void;
-        (event: "requestClose", reason: CloseReason_2): void;
-        (event: "requestActiveId", id: Id, reason: SheetNavigationReason): void;
+        (event: "openChange", open: false, details: OpenChangeDetails_2): void;
+        (event: "activeIdChange", id: Id, details: ActiveIdChangeDetails): void;
         (event: "opened"): void;
         (event: "closed"): void;
-        (event: "settled", id: Id): void;
-        (event: "targetChanged", id: Id, reason: SheetNavigationReason): void;
+        (event: "settled", id: Id, details: SettlementDetails): void;
     };
 }>) => VNode & {
     __ctx?: NonNullable<Awaited<typeof __VLS_setup>>;
@@ -650,6 +445,18 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
 
 // @public (undocumented)
 export type SheetAxis = "x" | "y";
+
+// @public
+export interface SheetDiagnostics<Id extends string = string> extends SurfaceMotionDiagnostics_2<Id> {
+    // (undocumented)
+    readonly geometry: SheetGeometry;
+    // (undocumented)
+    readonly primarySurfaceExtent: number;
+    // (undocumented)
+    readonly sheetState: SheetState;
+    // (undocumented)
+    readonly side: SheetSide;
+}
 
 // @public (undocumented)
 export type SheetEdge = "top" | "right" | "bottom" | "left";
@@ -695,34 +502,6 @@ export interface SheetGeometry {
 }
 
 // @public (undocumented)
-export interface SheetGeometryInput {
-    // (undocumented)
-    readonly bodyClientBlockExtent?: number;
-    // (undocumented)
-    readonly bodyScrollBlockExtent?: number;
-    // (undocumented)
-    readonly bodyScrollOffset?: number;
-    // (undocumented)
-    readonly canonicalPosition: number;
-    // (undocumented)
-    readonly intrinsicBodyContentBlockExtent?: number;
-    readonly intrinsicContentPrimaryExtent?: number;
-    // (undocumented)
-    readonly measuredChromeBlockExtent?: number;
-    // (undocumented)
-    readonly primarySurfaceExtent: number;
-    // (undocumented)
-    readonly side: SheetSide;
-    // (undocumented)
-    readonly viewportBlockSize: number;
-    // (undocumented)
-    readonly viewportInlineSize: number;
-}
-
-// @public (undocumented)
-export function sheetMaximumVisibleExtent(context: SheetMeasureContext): number;
-
-// @public (undocumented)
 export interface SheetMeasureContext {
     // (undocumented)
     readonly axis: SheetAxis;
@@ -755,9 +534,6 @@ export interface SheetMeasureContext {
 }
 
 // @public (undocumented)
-export type SheetNavigationReason = NavigationReason_2 | "side-change";
-
-// @public (undocumented)
 export type SheetOpenSnapId = SheetViewportSnapId | SheetFixedSnapId;
 
 // @public (undocumented)
@@ -775,29 +551,6 @@ export interface SheetSafeAreaInsets {
 // @public (undocumented)
 export type SheetSide = SheetEdge;
 
-// @public (undocumented)
-export interface SheetSideDescriptor {
-    // (undocumented)
-    readonly attachedEdge: SheetEdge;
-    // (undocumented)
-    readonly axis: SheetAxis;
-    // (undocumented)
-    readonly handleEdge: SheetEdge;
-    // (undocumented)
-    readonly oppositeEdge: SheetEdge;
-    // (undocumented)
-    readonly side: SheetSide;
-    // (undocumented)
-    readonly transformSign: 1 | -1;
-}
-
-// @public (undocumented)
-export const sheetSideDescriptors: Readonly<Record<SheetSide, SheetSideDescriptor>>;
-
-// @public (undocumented)
-export const sheetSides: readonly ["top", "right", "bottom", "left"];
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_Props_6" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const SheetSnapPicker: DefineComponent<__VLS_Props_6, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<__VLS_Props_6> & Readonly<{}>, {}, {}, {}, {}, string, ComponentProvideOptions, false, {}>;
@@ -815,23 +568,7 @@ export interface SheetSnapPoint<Id extends string> {
 }
 
 // @public (undocumented)
-export type SheetSnapResolver = (context: SheetMeasureContext) => number;
-
-// @public (undocumented)
-export const sheetSnapVisibleExtent: {
-    readonly pixels: (extent: number) => SheetSnapResolver;
-    readonly viewportFraction: (visibleFraction: number) => SheetSnapResolver;
-    readonly intrinsicContent: (context: SheetMeasureContext) => number;
-    readonly safeArea: (resolver: SheetSnapResolver) => SheetSnapResolver;
-    readonly min: (...resolvers: readonly SheetSnapResolver[]) => SheetSnapResolver;
-    readonly max: (...resolvers: readonly SheetSnapResolver[]) => SheetSnapResolver;
-};
-
-// @public (undocumented)
 export type SheetState = "closed" | "closing" | "dragging" | "open" | "opening" | "settling";
-
-// @public (undocumented)
-export function sheetTransform(side: SheetSide, canonicalPosition: number): string;
 
 // @public (undocumented)
 export interface SheetViewportDimensions {
@@ -898,7 +635,6 @@ export interface SnapMotionMessages {
     }): string;
 }
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal_5" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const StackedDeck: <TItem extends {
@@ -908,12 +644,12 @@ export const StackedDeck: <TItem extends {
         items: readonly TItem[];
         activeId?: TItem["id"];
         label?: string;
-        labelledby?: string;
+        labelledBy?: string;
         itemLabel?: (item: TItem, index: number) => string;
         focusScope?: HTMLElement | undefined;
         disabled?: boolean;
         landmark?: boolean;
-        stageWidth?: number;
+        fallbackStageWidth?: number;
         elasticity?: ElasticityOptions;
         messages?: Partial<SnapMotionMessages_2>;
         programmaticImpulse?: number;
@@ -921,9 +657,9 @@ export const StackedDeck: <TItem extends {
         releasePolicy?: StackedDeckReleasePolicy;
         spring?: SpringConfiguration;
     } & {
-        "onUpdate:activeId"?: (id: TItem["id"]) => any;
-        onSettled?: (id: TItem["id"]) => any;
-        onRequestActiveId?: (id: TItem["id"], reason: NavigationReason_2) => any;
+        onActiveIdChange?: (id: TItem["id"] | undefined, details: ActiveIdChangeDetails) => any;
+        onSettled?: (id: TItem["id"], details: SettlementDetails) => any;
+        "onUpdate:activeId"?: (id: TItem["id"] | undefined) => any;
         onActivate?: (item: TItem, index: number) => any;
     }> & (typeof globalThis extends {
         __VLS_PROPS_FALLBACK: infer P;
@@ -932,7 +668,7 @@ export const StackedDeck: <TItem extends {
     canNext: ComputedRef<boolean>;
     canPrevious: ComputedRef<boolean>;
     compositing: ComputedRef<boolean>;
-    currentId: ComputedRef<TItem["id"] | undefined>;
+    visualId: ComputedRef<TItem["id"] | undefined>;
     diagnostics: ComputedRef<SurfaceMotionDiagnostics_2<TItem["id"]>>;
     frame: ShallowRef<StackedDeckFrame>;
     isInspectEligible: (index: number) => boolean;
@@ -943,12 +679,12 @@ export const StackedDeck: <TItem extends {
     physicalIndex: ComputedRef<number>;
     pitch: ComputedRef<number>;
     previous: () => boolean;
-    requestId: (id: TItem["id"]) => boolean;
+    navigateTo: (id: TItem["id"]) => boolean;
     root: Ref<HTMLElement | undefined, HTMLElement | undefined>;
     settledId: ComputedRef<TItem["id"] | undefined>;
     speedInCards: ComputedRef<number>;
     state: ShallowRef<StackedDeckModelState>;
-    synchronizeId: (id: TItem["id"], announce?: boolean) => boolean;
+    synchronizeTo: (id: TItem["id"]) => boolean;
     tuning: ComputedRef<StackedDeckTuning>;
     tuningProfile: ComputedRef<StackedDeckProfile>;
     }>) => void;
@@ -969,6 +705,7 @@ export const StackedDeck: <TItem extends {
             id: TItem["id"];
             index: number;
             active: boolean;
+            visual: boolean;
             settled: boolean;
             inspectable: boolean;
             role: StackedDeckRole;
@@ -976,9 +713,9 @@ export const StackedDeck: <TItem extends {
         }) => any;
     };
     emit: {
-        (event: "update:activeId", id: TItem["id"]): void;
-        (event: "requestActiveId", id: TItem["id"], reason: NavigationReason_2): void;
-        (event: "settled", id: TItem["id"]): void;
+        (event: "update:activeId", id: TItem["id"] | undefined): void;
+        (event: "activeIdChange", id: TItem["id"] | undefined, details: ActiveIdChangeDetails): void;
+        (event: "settled", id: TItem["id"], details: SettlementDetails): void;
         (event: "activate", item: TItem, index: number): void;
     };
 }>) => VNode & {
@@ -999,6 +736,7 @@ export interface StackedDeckCardState<TItem, TId extends string> {
     readonly pose: StackedDeckPose;
     readonly role: StackedDeckRole;
     readonly settled: boolean;
+    readonly visual: boolean;
 }
 
 // @public
@@ -1008,12 +746,12 @@ export interface StackedDeckHandle<Id extends string> {
     // (undocumented)
     readonly canPrevious: boolean;
     readonly compositing: boolean;
-    readonly currentId: Id | undefined;
     readonly diagnostics: SurfaceMotionDiagnostics_2<Id>;
     // (undocumented)
     readonly frame: StackedDeckFrame;
     // (undocumented)
     isInspectEligible(index: number): boolean;
+    navigateTo(id: Id): boolean;
     next(): boolean;
     onKeyDown(event: KeyboardEvent): void;
     // (undocumented)
@@ -1025,39 +763,18 @@ export interface StackedDeckHandle<Id extends string> {
     // (undocumented)
     readonly pitch: number;
     previous(): boolean;
-    requestId(id: Id): boolean;
     // (undocumented)
     readonly root: HTMLElement | undefined;
     readonly settledId: Id | undefined;
     // (undocumented)
     readonly speedInCards: number;
     readonly state: StackedDeckModelState;
-    synchronizeId(id: Id, announce?: boolean): boolean;
+    synchronizeTo(id: Id): boolean;
     // (undocumented)
     readonly tuning: StackedDeckTuning;
     // (undocumented)
     readonly tuningProfile: StackedDeckProfile;
-}
-
-// @public
-export interface StackedDeckPileLayer<Id extends string = string> {
-    // (undocumented)
-    readonly id: Id;
-    // (undocumented)
-    readonly index: number;
-    readonly key: string;
-    // (undocumented)
-    readonly layer: number;
-    // (undocumented)
-    readonly opacity: number;
-    // (undocumented)
-    readonly shadowStrength: number;
-    // (undocumented)
-    readonly side: -1 | 1;
-    // (undocumented)
-    readonly slot: number;
-    // (undocumented)
-    readonly transform: string;
+    readonly visualId: Id | undefined;
 }
 
 // @public
@@ -1073,10 +790,6 @@ export interface StackedDeckPileLayerSlotState<TItem extends {
     // (undocumented)
     readonly slot: number;
 }
-
-export { StackedDeckPose }
-
-export { StackedDeckRole }
 
 // @public
 export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {
@@ -1102,412 +815,6 @@ export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {
     readonly targetId: Id | undefined;
     // (undocumented)
     readonly velocity: number;
-}
-
-// @public (undocumented)
-export function toCanonicalSheetDelta(side: SheetSide, physicalDelta: number): number;
-
-// @public (undocumented)
-export function toPhysicalSheetPosition(side: SheetSide, canonicalPosition: number): number;
-
-// @public
-export function useBoundedSpringDriver(cardPitchPx: () => number): AnimationDriver;
-
-// @public
-export function useCarouselContext<Id extends string = string>(): PublicCarouselContext<Id>;
-
-// @public (undocumented)
-export function useCarouselMotion<Id extends string>(options: UseCarouselMotionOptions<Id>): CarouselMotion<Id>;
-
-// @public (undocumented)
-export interface UseCarouselMotionOptions<Id extends string> extends Omit<UseSnapMotionOptions_2<Id>, "axis" | "pointerIntent"> {
-    // (undocumented)
-    direction?: SnapMotionDirection | Readonly<Ref<SnapMotionDirection>>;
-    // (undocumented)
-    measure: () => ControllerMeasurement<Id>;
-    // (undocumented)
-    onTargetSelected?: (id: Id, reason: "drag" | "wheel") => void;
-    // (undocumented)
-    track?: Ref<HTMLElement | undefined>;
-    // (undocumented)
-    viewport: Ref<HTMLElement | undefined>;
-    // (undocumented)
-    wheelSettleDelay?: number;
-}
-
-// @public
-export function useCarouselWindow<Id extends string>(idsSource: MaybeRefOrGetter<readonly Id[]>, activeIdSource: MaybeRefOrGetter<Id | undefined>, optionsSource: MaybeRefOrGetter<CarouselWindowOptions>): {
-    activeId: ComputedRef<Id | undefined>;
-    mountedIds: ComputedRef<ReadonlySet<Id>>;
-    nextIds: ComputedRef<readonly Id[]>;
-    preloadIds: ComputedRef<ReadonlySet<Id>>;
-    previousIds: ComputedRef<readonly Id[]>;
-};
-
-// @public
-export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotionOptions<Id>): UseCoverflowMotionReturn<Id>;
-
-// @public (undocumented)
-export interface UseCoverflowMotionOptions<Id extends string> {
-    readonly controlledId?: MaybeRefOrGetter<Id | undefined>;
-    readonly disabled?: () => boolean;
-    // (undocumented)
-    readonly elasticity?: MaybeRefOrGetter<ElasticityOptions | undefined>;
-    // (undocumented)
-    readonly ids: MaybeRefOrGetter<readonly Id[]>;
-    // (undocumented)
-    readonly initialId?: Id | undefined;
-    readonly onActivate?: (id: Id, index: number) => void;
-    readonly onSettled?: (id: Id, index: number, reason: NavigationReason_2) => void;
-    // (undocumented)
-    readonly programmaticImpulse?: MaybeRefOrGetter<number | undefined>;
-    // (undocumented)
-    readonly reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
-    // (undocumented)
-    readonly releasePolicy?: MaybeRefOrGetter<Partial<ReleaseTargetPolicy> | undefined>;
-    readonly root?: Ref<HTMLElement | undefined>;
-    // (undocumented)
-    readonly spring?: MaybeRefOrGetter<SpringConfiguration | undefined>;
-    readonly stageWidth?: MaybeRefOrGetter<number>;
-    // (undocumented)
-    readonly track?: Ref<HTMLElement | undefined>;
-    // (undocumented)
-    readonly viewport: Ref<HTMLElement | undefined>;
-}
-
-// @public
-export interface UseCoverflowMotionReturn<Id extends string> {
-    readonly anchorsById: ComputedRef<Map<Id, number>>;
-    // (undocumented)
-    readonly canNext: ComputedRef<boolean>;
-    // (undocumented)
-    readonly canPrevious: ComputedRef<boolean>;
-    readonly compositing: ComputedRef<boolean>;
-    readonly diagnostics: ComputedRef<SurfaceMotionDiagnostics_2<Id>>;
-    // (undocumented)
-    isInspectEligible(index: number): boolean;
-    readonly model: CoverflowModel<Id>;
-    readonly motion: CarouselMotion_2<Id>;
-    next(): boolean;
-    // (undocumented)
-    onClick(event: MouseEvent): void;
-    // (undocumented)
-    onKeyDown(event: KeyboardEvent): void;
-    // (undocumented)
-    onLostPointerCapture(event: PointerEvent): void;
-    // (undocumented)
-    onPointerDown(event: PointerEvent): void;
-    // (undocumented)
-    onWheel(event: WheelEvent): void;
-    readonly owned: ComputedRef<boolean>;
-    // (undocumented)
-    readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
-    // (undocumented)
-    readonly physicalIndex: ComputedRef<number>;
-    // (undocumented)
-    readonly pitch: ComputedRef<number>;
-    readonly presentations: ComputedRef<readonly CoverflowCardPresentation[]>;
-    previous(): boolean;
-    // (undocumented)
-    remeasure(): SnapAnchor<Id> | null;
-    requestId(id: Id): boolean;
-    readonly settledId: ComputedRef<Id | undefined>;
-    // (undocumented)
-    readonly speedInCards: ComputedRef<number>;
-    // (undocumented)
-    readonly stageWidth: ComputedRef<number>;
-    readonly state: ShallowRef<CoverflowModelState>;
-    readonly statusIndex: ComputedRef<number | null>;
-    synchronizeId(id: Id, announce?: boolean): boolean;
-    // (undocumented)
-    readonly tuning: ComputedRef<CoverflowTuning>;
-    readonly visualId: ComputedRef<Id | undefined>;
-}
-
-// @public (undocumented)
-export function useSheetMotion<Id extends string = SheetOpenSnapId>(options: UseSheetMotionOptions<Id>): UseSheetMotionReturn<Id>;
-
-// @public (undocumented)
-export interface UseSheetMotionOptions<Id extends string = SheetOpenSnapId> {
-    // (undocumented)
-    body?: Readonly<Ref<HTMLElement | undefined>>;
-    // (undocumented)
-    chrome?: Readonly<Ref<HTMLElement | undefined>>;
-    // (undocumented)
-    defaultOpenSnapId?: Id;
-    // (undocumented)
-    driver?: AnimationDriver;
-    // (undocumented)
-    elasticity?: ElasticityOptions;
-    // (undocumented)
-    getMeasureContext?: () => Partial<SheetMeasureContext>;
-    // (undocumented)
-    initialSnapId?: Id | "hidden";
-    // (undocumented)
-    initialViewportDimensions?: Partial<SheetViewportDimensions>;
-    // (undocumented)
-    intrinsicBodyContent?: Readonly<Ref<HTMLElement | undefined>>;
-    // (undocumented)
-    maximumScrimOpacity?: number;
-    // (undocumented)
-    onHidden?: () => void;
-    // (undocumented)
-    onSnap?: (id: Id) => void;
-    // (undocumented)
-    onTargetSelected?: (id: Id) => void;
-    // (undocumented)
-    panel: Ref<HTMLElement | undefined>;
-    // (undocumented)
-    programmaticImpulse?: number;
-    // (undocumented)
-    reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
-    // (undocumented)
-    releasePolicy?: Partial<ReleaseTargetPolicy>;
-    // (undocumented)
-    side?: SheetSide;
-    // (undocumented)
-    snapPoints?: MaybeRefOrGetter<readonly SheetSnapPoint<Id>[] | undefined>;
-    // (undocumented)
-    spring?: SpringConfiguration;
-    // (undocumented)
-    viewportPolicy?: Partial<SheetViewportPolicy>;
-}
-
-// @public (undocumented)
-export interface UseSheetMotionReturn<Id extends string = SheetOpenSnapId> {
-    // (undocumented)
-    readonly activeId: ComputedRef<Id | undefined>;
-    // (undocumented)
-    readonly activeSnapId: ComputedRef<Id | undefined>;
-    // (undocumented)
-    readonly axis: ComputedRef<SheetAxis>;
-    readonly bodyClientBlockExtent: Ref<number>;
-    readonly bodyScrollBlockExtent: Ref<number>;
-    readonly bodyScrollOffset: Ref<number>;
-    // (undocumented)
-    readonly canonicalPosition: ComputedRef<number>;
-    // (undocumented)
-    readonly close: () => void;
-    // (undocumented)
-    readonly configure: (update: ControllerConfigurationUpdate) => void;
-    readonly geometry: ComputedRef<SheetGeometry>;
-    // (undocumented)
-    readonly interrupt: () => void;
-    // (undocumented)
-    readonly intrinsicBodyContentBlockExtent: Ref<number>;
-    // (undocumented)
-    readonly intrinsicContentPrimaryExtent: Ref<number>;
-    // (undocumented)
-    readonly isAnimating: ComputedRef<boolean>;
-    // (undocumented)
-    readonly isDragging: Ref<boolean>;
-    // (undocumented)
-    readonly maximumBodyScrollOffset: ComputedRef<number>;
-    // (undocumented)
-    readonly measuredChromeBlockExtent: Ref<number>;
-    // (undocumented)
-    readonly mostOpenPosition: ComputedRef<number>;
-    // (undocumented)
-    readonly onNativeDragStart: (event: DragEvent) => void;
-    // (undocumented)
-    readonly onPointerDown: (event: PointerEvent) => void;
-    // (undocumented)
-    readonly open: (id?: Id) => SnapAnchor<Id> | null;
-    // (undocumented)
-    readonly panelStyle: ComputedRef<CSSProperties>;
-    // (undocumented)
-    readonly phase: ComputedRef<ControllerSnapshot<Id>["phase"]>;
-    // (undocumented)
-    readonly physicalPosition: ComputedRef<number>;
-    // (undocumented)
-    readonly pointerIntent: Ref<PointerIntent_2>;
-    // (undocumented)
-    readonly pointerOwned: Ref<boolean>;
-    // (undocumented)
-    readonly position: ComputedRef<number>;
-    // (undocumented)
-    readonly primarySurfaceExtent: ComputedRef<number>;
-    // (undocumented)
-    readonly reducedMotion: ComputedRef<boolean>;
-    // (undocumented)
-    readonly remeasure: (preferredId?: Id) => SnapAnchor<Id> | null;
-    // (undocumented)
-    readonly resolvedSnapPoints: ComputedRef<readonly ResolvedSheetSnapPoint<Id>[]>;
-    // (undocumented)
-    readonly scrimOpacity: ComputedRef<number>;
-    // (undocumented)
-    readonly setSide: (side: SheetSide, preferredId?: Id) => SnapAnchor<Id> | null;
-    // (undocumented)
-    readonly sheetState: Ref<SheetState>;
-    // (undocumented)
-    readonly side: Ref<SheetSide>;
-    // (undocumented)
-    readonly snapshot: ComputedRef<ControllerSnapshot<Id>>;
-    // (undocumented)
-    readonly snapTo: (id: Id) => SnapAnchor<Id> | null;
-    // (undocumented)
-    readonly snapToNearest: () => SnapAnchor<Id> | null;
-    // (undocumented)
-    readonly surfaceStyle: {
-        readonly touchAction: string;
-    };
-    // (undocumented)
-    readonly targetId: ComputedRef<Id | undefined>;
-    // (undocumented)
-    readonly transform: ComputedRef<string>;
-    // (undocumented)
-    readonly velocity: ComputedRef<number>;
-    // (undocumented)
-    readonly viewportBlockSize: Ref<number>;
-    // (undocumented)
-    readonly viewportInlineSize: Ref<number>;
-    // (undocumented)
-    readonly visibleBodyBlockExtent: ComputedRef<number>;
-    // (undocumented)
-    readonly visiblePrimaryExtent: ComputedRef<number>;
-}
-
-// @public (undocumented)
-export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<Id>): {
-    activeId: ComputedRef<Id | undefined>;
-    configure: (update: ControllerConfigurationUpdate) => void;
-    controller: SnapController<Id>;
-    interrupt: () => void;
-    isAnimating: ComputedRef<boolean>;
-    isDragging: Ref<boolean, boolean>;
-    moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions) => SnapAnchor<Id> | null;
-    moveTo: (id: Id, options?: ControllerMoveOptions) => SnapAnchor<Id> | null;
-    next: (options?: ControllerMoveByOptions) => SnapAnchor<Id> | null;
-    onNativeDragStart: (event: DragEvent) => void;
-    onPointerDown: (event: PointerEvent) => void;
-    phase: ComputedRef<ControllerPhase>;
-    pointerInteractionActive: Ref<boolean, boolean>;
-    pointerIntent: Ref<PointerIntent, PointerIntent>;
-    pointerOwned: Ref<boolean, boolean>;
-    position: ComputedRef<number>;
-    previous: (options?: ControllerMoveByOptions) => SnapAnchor<Id> | null;
-    reducedMotion: ComputedRef<boolean>;
-    remeasure: (measurement: ControllerMeasurement<Id>) => SnapAnchor<Id> | null;
-    snapshot: ShallowRef<ControllerSnapshot<Id>>;
-    targetId: ComputedRef<Id | undefined>;
-    velocity: ComputedRef<number>;
-};
-
-// @public (undocumented)
-export interface UseSnapMotionOptions<Id extends string> extends Omit<SnapControllerOptions<Id>, "driver" | "onChange" | "reducedMotion"> {
-    // (undocumented)
-    axis: "x" | "y" | (() => "x" | "y");
-    // (undocumented)
-    driver?: AnimationDriver;
-    // (undocumented)
-    onChange?: (snapshot: ControllerSnapshot<Id>) => void;
-    // (undocumented)
-    onReleaseTargetSelected?: (id: Id | undefined) => void;
-    // (undocumented)
-    pointerDeltaMultiplier?: () => number;
-    // (undocumented)
-    pointerIntent?: "horizontal" | "immediate";
-    // (undocumented)
-    reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
-    resolveDragOrigin?: () => Id | undefined;
-    // (undocumented)
-    resolveReleaseTarget?: (context: {
-        controller: SnapController<Id>;
-        snapshot: ControllerSnapshot<Id>;
-        velocity: number;
-    }) => Id | undefined;
-}
-
-// @public
-export function useStackedDeckMotion<Id extends string>(options: UseStackedDeckMotionOptions<Id>): UseStackedDeckMotionReturn<Id>;
-
-// @public (undocumented)
-export interface UseStackedDeckMotionOptions<Id extends string> {
-    readonly controlledId?: MaybeRefOrGetter<Id | undefined>;
-    readonly disabled?: () => boolean;
-    readonly elasticity?: MaybeRefOrGetter<ElasticityOptions | undefined>;
-    // (undocumented)
-    readonly ids: MaybeRefOrGetter<readonly Id[]>;
-    // (undocumented)
-    readonly initialId?: Id | undefined;
-    readonly onActivate?: (id: Id, index: number) => void;
-    readonly onSettled?: (id: Id, index: number, reason: NavigationReason_2) => void;
-    // (undocumented)
-    readonly programmaticImpulse?: MaybeRefOrGetter<number | undefined>;
-    // (undocumented)
-    readonly reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
-    readonly releasePolicy?: MaybeRefOrGetter<StackedDeckReleasePolicy | undefined>;
-    readonly root?: Ref<HTMLElement | undefined>;
-    // (undocumented)
-    readonly spring?: MaybeRefOrGetter<SpringConfiguration | undefined>;
-    readonly stageWidth?: MaybeRefOrGetter<number>;
-    // (undocumented)
-    readonly track?: Ref<HTMLElement | undefined>;
-    // (undocumented)
-    readonly viewport: Ref<HTMLElement | undefined>;
-}
-
-// @public
-export interface UseStackedDeckMotionReturn<Id extends string> {
-    readonly anchorsById: ComputedRef<Map<Id, number>>;
-    readonly atRest: ComputedRef<boolean>;
-    // (undocumented)
-    readonly canNext: ComputedRef<boolean>;
-    // (undocumented)
-    readonly canPrevious: ComputedRef<boolean>;
-    readonly compositing: ComputedRef<boolean>;
-    readonly currentId: ComputedRef<Id | undefined>;
-    readonly diagnostics: ComputedRef<SurfaceMotionDiagnostics_2<Id>>;
-    // (undocumented)
-    readonly frame: ShallowRef<StackedDeckFrame>;
-    // (undocumented)
-    isInspectEligible(index: number): boolean;
-    readonly model: StackedDeckModel<Id>;
-    readonly motion: CarouselMotion_2<Id>;
-    next(): boolean;
-    // (undocumented)
-    onClick(event: MouseEvent): void;
-    // (undocumented)
-    onKeyDown(event: KeyboardEvent): void;
-    // (undocumented)
-    onLostPointerCapture(event: PointerEvent): void;
-    // (undocumented)
-    onPointerDown(event: PointerEvent): void;
-    // (undocumented)
-    onWheel(event: WheelEvent): void;
-    readonly owned: ComputedRef<boolean>;
-    // (undocumented)
-    readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
-    // (undocumented)
-    readonly physicalIndex: ComputedRef<number>;
-    readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer<Id>[]>;
-    // (undocumented)
-    readonly pitch: ComputedRef<number>;
-    previous(): boolean;
-    // (undocumented)
-    remeasure(): SnapAnchor<Id> | null;
-    requestId(id: Id): boolean;
-    readonly settledId: ComputedRef<Id | undefined>;
-    // (undocumented)
-    readonly speedInCards: ComputedRef<number>;
-    // (undocumented)
-    readonly stageWidth: ComputedRef<number>;
-    // (undocumented)
-    readonly state: ShallowRef<StackedDeckModelState>;
-    readonly statusIndex: ComputedRef<number | null>;
-    synchronizeId(id: Id, announce?: boolean): boolean;
-    // (undocumented)
-    readonly tuning: ComputedRef<StackedDeckTuning>;
-    // (undocumented)
-    readonly tuningProfile: ComputedRef<StackedDeckProfile>;
-}
-
-// @public (undocumented)
-export interface VariableWidthCenteredCarouselGeometryOptions {
-    // (undocumented)
-    readonly endGutter?: number;
-    // (undocumented)
-    readonly startGutter?: number;
 }
 
 ```

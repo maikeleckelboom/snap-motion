@@ -1,11 +1,8 @@
 # Media gallery
 
-`MediaGalleryDialog` is a complete, responsive lightbox composition with a native dialog boundary,
-previous and next navigation, swipe navigation at fit, zoom and pan, preview-to-full-image loading,
-failure recovery, reduced-motion support, and focus restoration.
-
-Import the capability from its dedicated entrypoint and import the shared structural stylesheet
-once in the application:
+`MediaGalleryDialog` is a responsive native-dialog lightbox with stable-ID navigation, previous and
+next controls, swipe navigation at fit, zoom and pan, preview-to-full-image loading, failure recovery,
+reduced-motion support, and focus restoration.
 
 ```ts
 import { MediaGalleryDialog } from "@snap-motion/vue/media-gallery";
@@ -16,107 +13,67 @@ import "@snap-motion/vue/style.css";
 ```vue
 <MediaGalleryDialog
   v-model:open="open"
+  v-model:active-id="activeId"
   :items="items"
-  :initial-index="selectedIndex"
-  :focus-return="{ target: opener, fallback: viewport }"
-  @index-changed="(index, reason) => syncSelection(index, reason)"
-  @request-close="(index, reason) => syncBeforeClose(index, reason)"
+  :focus-return="{ opener, fallback: viewport }"
+  @active-id-change="(id, details) => replaceRouteMedia(id, details.reason)"
+  @open-change="(_open, details) => closeRouteOverlay(details.activeId, details.reason)"
 />
 ```
 
-## Item contract
+## Item and identity contract
 
 Every item requires a stable non-empty `id`, `title`, `alt`, `previewSrc`, `width`, and `height`.
-`fullSrc` and `description` are optional. IDs are trimmed, and the complete collection must contain
-unique, non-empty IDs after trimming. An empty or duplicate ID is a consumer error and throws
-`RangeError`; items are never silently filtered.
+`fullSrc` and `description` are optional. IDs are trimmed and must be unique. Invalid IDs throw a
+`RangeError`; they are never silently filtered. Public navigation and close state use IDs, never
+collection indices.
 
-Intrinsic dimensions reserve the media ratio before images load. Width and height are accepted only
-as one positive finite pair. If either axis is invalid, both axes fall back to `1 × 1`, producing a
-finite, positive square ratio instead of preserving a potentially destructive partial dimension.
-
-Mixed-aspect items share one stable `16 / 10` media viewport. Intrinsic dimensions determine each
-image's contained fit inside that viewport; they do not resize the stage when the semantic index
-commits. The persistent outgoing and incoming slots therefore keep the same containing block for
-the complete horizontal transition.
-
-The preview remains mounted while an optional distinct full image decodes. A failed full image is
-removed without hiding the preview and can be retried. A `fullSrc` equal to `previewSrc` is treated
-as preview-only. While full media is pending or failed, the preview owns the accessible name. After
-successful decode, the full image owns the name and the preview is hidden from assistive technology.
-
-The persistent previous and next slots remain mounted as visual preload surfaces for directional
-continuity, but are `aria-hidden`. Only the item at the committed gallery index is semantically
-exposed. During settlement, the incoming destination stays hidden until the index commits; the live
-announcement and `indexChanged` event follow that semantic commit.
+Intrinsic dimensions reserve layout before loading. Invalid dimensions fall back as one `1 x 1`
+pair. Mixed-aspect media uses a stable containing viewport. A preview stays mounted while a distinct
+full image decodes; a failed full image is removed without hiding the preview and can be retried.
+Only the mechanically settled item is exposed to assistive technology.
 
 ## Controlled lifecycle
 
-`open` is controlled through `v-model:open`. `initialIndex` is clamped when the dialog opens.
-Changing `items` preserves the active item by ID when possible, clamps when it is removed, and
-closes safely when the collection becomes empty.
+`open` is controlled through `v-model:open`. `activeId` is optionally controlled through
+`v-model:active-id`; without it, the component starts at the first item and owns semantic state.
+Unknown controlled IDs remain pending and are adopted if they later appear. Reorder preserves the
+same ID. Removing the active item falls back to the same ordinal where possible. Emptying the
+collection clears semantic identity and requests a programmatic close.
 
-Opening, navigation, track settlement, image decode, and item-replacement work is generation
-guarded. Closing, replacement, reopening, or unmounting invalidates scheduled work before it can
-publish focus, state, measurements, announcements, or events. Body-lock and media work owned by a
-prior open cycle cannot publish into a later cycle.
+A component-originated destination emits `update:activeId` and
+`activeIdChange(id, { reason })` immediately, then `settled(id, { reason })` at mechanical rest. A
+component-originated close emits `update:open(false)` and
+`openChange(false, { activeId, reason })`. `opened(id)` and `closed(finalId)` report native-dialog
+lifecycle completion.
 
-The component emits:
+Close reasons are `scrim`, `close-button`, `escape`, and `programmatic`. Gallery navigation uses the
+family reasons `previous`, `next`, `keyboard`, `drag`, `programmatic`, `reconcile`, and `external`.
+Externally supplied `activeId` and `open=false` are authoritative: they cancel conflicting
+swipe/zoom/load work without change-event or live-announcement echo.
 
-- `requestClose(finalIndex, reason)` before `update:open(false)` so a consumer can synchronize its
-  underlying selection before focus returns
-- `opened(index)` and `closed(finalIndex)` for native-dialog lifecycle completion
-- `indexChanged(index, reason)` for previous, next, swipe, Home, and End navigation
+The exposed handle contains `activeId`, `settledId`, `navigateTo`, `synchronizeTo`, `previous`,
+`next`, `resetToFit`, `requestClose`, and `dialog`. `navigateTo` performs a new programmatic action;
+`synchronizeTo` exactly adopts state already changed by another authority.
 
-Close reasons are `backdrop`, `close-button`, `escape`, and `programmatic`. Navigation reasons are
-`previous`, `next`, `swipe`, `home`, and `end`.
+Opening, navigation, settlement, image decode, item replacement, closing, and reopening are
+generation-guarded. Work from a stale open cycle cannot publish focus, state, measurements,
+announcements, or events into a later cycle. `focusReturn` accepts a preferred opener and optional
+fallback. Server markup reflects the supplied semantic ID while the native dialog opens only after
+mount.
 
-`focusReturn` accepts a preferred target plus an optional fallback. `initialFocus` defaults to the
-close button. The server-rendered result stays closed even when `open` is true; the native dialog is
-opened only after mount.
+## Runtime and theme boundary
 
-## Messages and reduced motion
+The entrypoint runtime graph contains Vue, VueUse listeners/measurement/scroll lock/timers, and the
+shared focus helper. Its core provenance import is type-only and disappears at runtime. It does not
+import Motion, Carousel, Sheet, Router, Nuxt, or lab code.
 
-English labels are supplied by `createEnglishMediaGalleryMessages()`. Pass a partial `messages`
-object to replace labels or formatter functions. System reduced motion is honored by default;
-`reducedMotionOverride` provides an explicit application override.
-
-## Theme contract
-
-The stylesheet owns geometry, safe areas, target sizes, responsive composition, high-contrast
-fallbacks, and motion-state structure. Consumers can theme the composition at the dialog or an
-ancestor through:
-
-- `--snap-motion-gallery-surface`
-- `--snap-motion-gallery-canvas`
-- `--snap-motion-gallery-text`
-- `--snap-motion-gallery-muted`
-- `--snap-motion-gallery-line`
-- `--snap-motion-gallery-control-surface`
-- `--snap-motion-gallery-control-border`
-- `--snap-motion-gallery-control-hover-surface`
-- `--snap-motion-gallery-disabled-surface`
-- `--snap-motion-gallery-disabled-text`
-- `--snap-motion-gallery-focus`
-- `--snap-motion-gallery-backdrop`
-- `--snap-motion-gallery-chrome-surface`
-- `--snap-motion-gallery-radius`
-
-The `@snap-motion/vue/media-gallery` runtime graph contains Vue, VueUse listeners/measurement/scroll
-lock/timers, and the shared focus helper. It does not import Motion, Snap Motion core, the carousel,
-the sheet, Router, Nuxt, or lab code.
+Consumers can theme the component with its documented `--snap-motion-gallery-*` custom properties;
+the package stylesheet owns structural geometry, safe areas, focus targets, and motion state.
 
 ## Assistive-technology certification
 
-> Prepared for manual assistive-technology certification
-
-The dedicated lab harness is available at `?demo=gallery-at`. It supplies ten deterministic
-scenarios covering baseline navigation, exact boundary starts, preview-only media, delayed loading,
-retry failure-to-success, terminal failures, and long localized content. Its deliberately non-live
-component event trace includes a bounded post-close focus-target sample.
-
-Use the
-[media gallery assistive-technology certification dossier](media-gallery-at-certification.md) and
-[results template](media-gallery-at-results-template.md) for physical NVDA, VoiceOver, and TalkBack
-runs. Automated DOM, focus, event, axe, and accessibility-tree coverage does not establish spoken
-output or a real assistive-technology certification result.
+The lab harness at `?demo=gallery-at` and the
+[media gallery assistive-technology certification dossier](media-gallery-at-certification.md)
+remain prepared, not completed. Automated DOM, focus, event, axe, and accessibility-tree coverage
+does not establish spoken output on physical NVDA, VoiceOver, or TalkBack setups.

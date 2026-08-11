@@ -29,12 +29,16 @@ catalog:
   oxfmt: 0.59.0
   oxlint: 1.75.0
   publint: 0.3.22
-  typescript: 6.0.3
+  typescript: 7.0.2
   vite: 8.1.5
   vitest: 4.1.10
   vue: 3.5.40
   vue-router: 5.2.0
-  vue-tsc: 3.3.8
+  vue-tsc: 3.3.9
+
+catalogs:
+  typescript6:
+    typescript: npm:@typescript/typescript6@6.0.2
 
 minimumReleaseAgeExclude:
   - "@microsoft/api-extractor-model@7.33.10"

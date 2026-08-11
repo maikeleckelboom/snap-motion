@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CloseReason, NavigationReason } from "@snap-motion/vue";
+import type { ActiveIdChangeDetails, OpenChangeDetails } from "@snap-motion/vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -13,10 +13,11 @@ const open = computed(() => typeof route.query.media === "string");
 function openMedia() {
   void router.push({ query: { ...route.query, media: mediaIds[0] } });
 }
-function requestActiveId(id: string, _reason: NavigationReason) {
+function changeActiveId(id: string | undefined, _details: ActiveIdChangeDetails) {
+  if (id === undefined) return;
   void router.replace({ query: { ...route.query, media: id } });
 }
-function requestClose(_reason: CloseReason) {
+function changeOpen(_open: false, _details: OpenChangeDetails) {
   const { media: _media, ...query } = route.query;
   void router.replace({ query });
 }
@@ -29,8 +30,8 @@ function requestClose(_reason: CloseReason) {
     <MediaOverlay
       :active-id="activeId"
       :open="open"
-      @request-active-id="requestActiveId"
-      @request-close="requestClose"
+      @active-id-change="changeActiveId"
+      @open-change="changeOpen"
     />
   </main>
 </template>

@@ -14,6 +14,7 @@ import {
   type CoverflowTuning,
   type PaginationIndicatorState,
   type ElasticityOptions,
+  type ActiveIdChangeDetails,
   type ReleaseTargetPolicy,
   type SnapAnchor,
   type SpringConfiguration,
@@ -88,6 +89,12 @@ export interface UseCoverflowMotionOptions<Id extends string> {
    * request.
    */
   readonly controlledId?: MaybeRefOrGetter<Id | undefined>;
+  /** Fires when this surface accepts a semantic destination, before mechanical settlement. */
+  readonly onActiveIdChange?: (
+    id: Id,
+    index: number,
+    reason: ActiveIdChangeDetails["reason"],
+  ) => void;
   /**
    * Announces the durable selection. Fires only at mechanical rest, never on a visual change, and
    * reports what initiated the change rather than assuming a drag.
@@ -155,9 +162,9 @@ export interface UseCoverflowMotionReturn<Id extends string> {
    * Navigates to a destination. Returns `false` for an ID the rail does not contain. Reported as
    * `programmatic`.
    */
-  requestId(id: Id): boolean;
-  /** Adopts a destination exactly, with no travel. Silent unless `announce` is true. */
-  synchronizeId(id: Id, announce?: boolean): boolean;
+  navigateTo(id: Id): boolean;
+  /** Adopts a destination exactly. `announce` is an advanced renderer opt-in. */
+  synchronizeTo(id: Id, announce?: boolean): boolean;
 }
 
 /**
@@ -211,7 +218,13 @@ export function useCoverflowMotion<Id extends string>(
    * What initiated the movement now in flight. It is opened by whichever entry point started it and
    * read at settlement, so a surface reports what actually happened rather than assuming a drag.
    */
-  let pendingReason: NavigationReason = "route";
+  let pendingReason: NavigationReason = "external";
+
+  function acceptDestination(id: Id, reason: ActiveIdChangeDetails["reason"]): void {
+    pendingReason = reason;
+    const index = model.indexOf(id);
+    if (index >= 0) options.onActiveIdChange?.(id, index, reason);
+  }
 
   function measure() {
     return createCoverflowGeometry({
@@ -240,8 +253,8 @@ export function useCoverflowMotion<Id extends string>(
     measure,
     track: options.track ?? ref<HTMLElement>(),
     viewport: options.viewport,
-    onTargetSelected(_id, reason) {
-      pendingReason = reason;
+    onTargetSelected(id, reason) {
+      acceptDestination(id, reason);
     },
     ...(model.idAt(initialIndex) === undefined
       ? {}
@@ -420,17 +433,17 @@ export function useCoverflowMotion<Id extends string>(
     ),
   );
 
-  function moveToIndex(index: number, reason: NavigationReason): boolean {
+  function moveToIndex(index: number, reason: ActiveIdChangeDetails["reason"]): boolean {
     const command = model.resolveNavigationCommand(index, { owned: owned.value });
     if (disabled() || command.kind !== "move") return false;
     const id = model.idAt(command.targetIndex);
     if (id === undefined) return false;
-    pendingReason = reason;
+    acceptDestination(id, reason);
     motion.moveTo(id);
     return true;
   }
 
-  function moveRelative(direction: -1 | 1, reason: NavigationReason): boolean {
+  function moveRelative(direction: -1 | 1, reason: ActiveIdChangeDetails["reason"]): boolean {
     const command = model.resolveRelativeCommand(direction, { owned: owned.value });
     return command.kind === "move" && moveToIndex(command.targetIndex, reason);
   }
@@ -442,17 +455,14 @@ export function useCoverflowMotion<Id extends string>(
    * It reports `programmatic`: this is the general imperative entry point, and an application
    * calling it is not the same event as a person tapping a card or a pagination dot.
    */
-  function requestId(id: Id): boolean {
+  function navigateTo(id: Id): boolean {
     const index = model.indexOf(id);
     return index < 0 ? false : moveToIndex(index, "programmatic");
   }
 
   /**
-   * Previous and Next are semantically fixed operations, not parameterised ones.
-   *
-   * A consumer must not be able to claim that `next()` was a drag, or that `previous()` was a
-   * route: `requestActiveId` exists so an application can trust the reason it is given, and a
-   * reason a caller chose is not evidence of anything. The reason-taking helper stays internal.
+   * Previous and Next are semantically fixed operations, not parameterised ones. A consumer cannot
+   * relabel them; the reason-taking helper stays internal so provenance remains trustworthy.
    */
   function previous(): boolean {
     return moveRelative(-1, "previous");
@@ -491,24 +501,25 @@ export function useCoverflowMotion<Id extends string>(
     // An announced adoption already carries its announcement, so publishing the state publishes it
     // too — there is no later idle snapshot this could be waiting for.
     publish(model.state);
+    if (!announce) options.onSettled?.(id, index, reason);
     return true;
   }
 
-  function synchronizeId(id: Id, announce = false): boolean {
+  function synchronizeTo(id: Id, announce = false): boolean {
     const index = model.indexOf(id);
-    return index < 0 ? false : synchronizeIndex(index, "route", announce);
+    return index < 0 ? false : synchronizeIndex(index, "external", announce);
   }
 
   /** Applies authoritative selection that did not come from this surface. See `controlledId`. */
   function applyControlledId(id: Id): boolean {
     const index = model.indexOf(id);
     if (index < 0) return false;
-    if (disabled() || owned.value) return synchronizeIndex(index, "route", false);
+    if (disabled() || owned.value) return synchronizeIndex(index, "external", false);
     const command = model.resolveNavigationCommand(index, { owned: false });
     if (command.kind !== "move") return true;
     const targetId = model.idAt(command.targetIndex);
     if (targetId === undefined) return false;
-    pendingReason = "route";
+    pendingReason = "external";
     motion.moveTo(targetId);
     return true;
   }
@@ -605,11 +616,24 @@ export function useCoverflowMotion<Id extends string>(
       const controlledChanged = priorState !== undefined && controlledId !== priorState[1];
       if (!itemsChanged && !controlledChanged) return;
 
+      // A controlled host normally confirms the destination this surface just emitted. The
+      // controller is already travelling there, so treating that confirmation as an external
+      // takeover would interrupt the gesture, erase its provenance, and snap the rail to rest.
+      if (
+        !itemsChanged &&
+        controlledChanged &&
+        controlledId !== undefined &&
+        motion.targetId.value === controlledId
+      ) {
+        return;
+      }
+
       if (itemsChanged || (controlledChanged && controlledId !== undefined)) {
         cancelInteractionRecords();
       }
 
       if (itemsChanged) {
+        const previousSettledId = model.idAt(model.state.settledIndex);
         const preservedIndex = model.reconfigure(nextIds);
         const controlledIndex = controlledId === undefined ? -1 : model.indexOf(controlledId);
         const finalIndex =
@@ -620,6 +644,9 @@ export function useCoverflowMotion<Id extends string>(
           ...measure(),
           ...(finalId === undefined ? {} : { activeId: finalId }),
         });
+        if (finalId !== undefined && finalId !== previousSettledId) {
+          options.onSettled?.(finalId, finalIndex, controlledIndex >= 0 ? "external" : "reconcile");
+        }
         return;
       }
 
@@ -668,13 +695,13 @@ export function useCoverflowMotion<Id extends string>(
     presentations,
     previous,
     remeasure: motion.remeasure,
-    requestId,
+    navigateTo,
     settledId,
     speedInCards,
     stageWidth,
     state,
     statusIndex: computed(() => statusIndex.value),
-    synchronizeId,
+    synchronizeTo,
     tuning,
     visualId,
   };
@@ -687,7 +714,7 @@ export function useCoverflowMotion<Id extends string>(
  * It is deliberately a *product* handle. Navigation goes through the rail's own command policy and
  * observation goes through read-only telemetry; the controller is not part of it, so a consumer
  * cannot move the surface in a way the model has not agreed to. Composing
- * {@link useCoverflowMotion} directly remains the way to build a renderer that needs more.
+ * `useCoverflowMotion` directly remains the way to build a renderer that needs more.
  */
 export interface CoverflowHandle<Id extends string> {
   readonly canNext: boolean;
@@ -714,7 +741,7 @@ export interface CoverflowHandle<Id extends string> {
   /**
    * One adjacent card forward.
    *
-   * It takes no reason, and that is the point: `requestActiveId` reports why a selection changed,
+   * It takes no reason, and that is the point: `activeIdChange` reports why a selection changed,
    * and an application can only trust that report if a caller cannot author it. Next is next.
    */
   next(): boolean;
@@ -726,7 +753,7 @@ export interface CoverflowHandle<Id extends string> {
    * Navigates to a destination. Returns `false` for an ID the rail does not contain. Reported as
    * `programmatic`.
    */
-  requestId(id: Id): boolean;
-  /** Adopts a destination exactly, with no travel. Silent unless `announce` is true. */
-  synchronizeId(id: Id, announce?: boolean): boolean;
+  navigateTo(id: Id): boolean;
+  /** Adopts a destination exactly, with no travel, semantic echo, or announcement. */
+  synchronizeTo(id: Id): boolean;
 }

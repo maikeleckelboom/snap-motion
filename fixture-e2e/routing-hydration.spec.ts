@@ -30,7 +30,7 @@ test("Nuxt hydrates a query-controlled overlay without warnings", async ({ page 
   expect(response?.status()).toBe(200);
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByText("System detail", { exact: true }).first()).toBeVisible();
-  await page.getByRole("button", { name: "Close dialog" }).click();
+  await page.getByRole("button", { name: "Close gallery" }).click();
   await expect(page).toHaveURL(/\/work\/factif$/);
   await expect(page.getByRole("dialog")).not.toBeVisible();
   expect(hydrationMessages).toEqual([]);

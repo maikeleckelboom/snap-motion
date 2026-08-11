@@ -12,7 +12,7 @@ import {
   createEnglishSnapMotionMessages,
   type SnapMotionMessages,
 } from "../../localization/messages";
-import type { CloseReason } from "../dialog-contracts";
+import type { CloseReason, OpenChangeDetails } from "../dialog-contracts";
 
 const props = withDefaults(
   defineProps<{
@@ -31,7 +31,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (event: "update:open", open: boolean): void;
-  (event: "requestClose", reason: CloseReason): void;
+  (event: "openChange", open: false, details: OpenChangeDetails): void;
   (event: "opened"): void;
   (event: "closed"): void;
 }>();
@@ -68,8 +68,8 @@ function closeNative() {
 }
 
 function requestClose(reason: CloseReason) {
-  emit("requestClose", reason);
   emit("update:open", false);
+  emit("openChange", false, { reason });
 }
 
 function onCancel(event: Event) {
@@ -81,8 +81,8 @@ function onClose() {
   const wasIntentional = closingIntentionally;
   closingIntentionally = false;
   if (!wasIntentional && props.open) {
-    emit("requestClose", "programmatic");
     emit("update:open", false);
+    emit("openChange", false, { reason: "programmatic" });
   }
   restoreFocus({
     fallback: props.focusReturn?.fallback,
@@ -117,7 +117,7 @@ onBeforeUnmount(() => {
   });
 });
 
-defineExpose({ close: closeNative, dialog, requestClose, titleId: resolvedTitleId });
+defineExpose({ dialog, requestClose, titleId: resolvedTitleId });
 </script>
 
 <template>

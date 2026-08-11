@@ -32,7 +32,7 @@ export interface CoverflowSnapshotInput {
  *
  * `visualIndex` is the face in the clearing: it follows the physical mass through a narrow dead
  * band, so a caption and a counter track the gesture instead of lagging a whole spring behind it.
- * `settledIndex` is the durable selection — what a route, an announcement, or opening another
+ * `settledIndex` is mechanical rest — what a settlement announcement or inspection action
  * surface on "the current card" must mean, and it changes only at mechanical rest.
  */
 export interface CoverflowModelState {

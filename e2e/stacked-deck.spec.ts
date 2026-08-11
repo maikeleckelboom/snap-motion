@@ -2162,11 +2162,16 @@ test("inspection, visual semantics, and accessibility expose one authoritative c
     })),
   );
   expect(semanticCards.filter((item) => item.current === "true")).toEqual([
-    { current: "true", hidden: null, id: "team" },
+    { current: "true", hidden: "true", id: "team" },
   ]);
-  expect(semanticCards.filter((item) => item.hidden === "true")).toHaveLength(4);
+  // Pointer ownership keeps every card inert until the gesture releases, even though visual
+  // identity has already migrated to one unambiguous card.
+  expect(semanticCards.filter((item) => item.hidden === "true")).toHaveLength(5);
   await releaseHeldAtRest(page, held, 3);
   await expectCarouselAt(stage, "team");
+  await expect(
+    page.locator(".snap-motion-stacked-deck-card[aria-current='true']"),
+  ).not.toHaveAttribute("aria-hidden", "true");
   await inspect.click();
   await expect(page.getByTestId("snap-motion-media-gallery")).toBeVisible();
   await expect(page.getByTestId("snap-motion-media-gallery-close")).toBeFocused();

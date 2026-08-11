@@ -54,6 +54,13 @@ function sourceSpecifierList(source) {
   return specifiers;
 }
 
+function typeOnlySourceSpecifiers(source) {
+  const specifiers = new Set();
+  const pattern = /\bimport\s+type\b[\s\S]*?\bfrom\s*["']([^"']+)["']/g;
+  for (const match of source.matchAll(pattern)) specifiers.add(match[1]);
+  return specifiers;
+}
+
 async function resolveRelativeImport(importer, specifier) {
   const base = resolve(importer, "..", specifier);
   const extension = extname(specifier);
@@ -109,6 +116,7 @@ sourceFiles.push(
 
 for (const file of sourceFiles) {
   const source = await readFile(file, "utf8");
+  const typeOnlySpecifiers = typeOnlySourceSpecifiers(source);
   const dependencies = [];
   for (const specifier of sourceSpecifierList(source)) {
     if (!specifier.startsWith(".")) {
@@ -119,7 +127,8 @@ for (const file of sourceFiles) {
       }
       if (
         vueArea(file) === "media-gallery" &&
-        ["@snap-motion/core", "motion", "vue-router"].includes(specifier)
+        ["@snap-motion/core", "motion", "vue-router"].includes(specifier) &&
+        !typeOnlySpecifiers.has(specifier)
       ) {
         errors.push(`${repoPath(file)} imports forbidden media-gallery runtime ${specifier}.`);
       }

@@ -73,7 +73,7 @@ export interface StackedDeckSnapshotInput {
  * names a card — caption, counter, pagination, `aria-current`, the re-grab origin, inspection —
  * reads it, so none of them can invent its own. It equals `visualTopIndex` except inside a handoff,
  * where it names the card the eye already reads as current while the outgoing one finishes
- * vacating. `settledIndex` is the slower, durable answer route state and announcements use.
+ * vacating. `settledIndex` is the slower mechanical-rest answer announcements and inspection use.
  */
 export interface StackedDeckModelState {
   /**

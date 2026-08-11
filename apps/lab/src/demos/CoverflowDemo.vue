@@ -5,7 +5,11 @@ import {
   type CoverflowCardState,
   type CoverflowHandle,
 } from "@snap-motion/vue/coverflow";
-import { MediaGalleryDialog, type FocusReturnOptions } from "@snap-motion/vue/media-gallery";
+import {
+  MediaGalleryDialog,
+  type FocusReturnOptions,
+  type MediaGalleryOpenChangeDetails,
+} from "@snap-motion/vue/media-gallery";
 import { computed, ref } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
@@ -29,7 +33,7 @@ const rail = ref<CoverflowHandle<ShowcaseScreenId>>();
 const demoRoot = ref<HTMLElement>();
 const inspectControl = ref<HTMLButtonElement>();
 const galleryOpen = ref(false);
-const galleryInitialIndex = ref(Math.floor(screens.length / 2));
+const galleryActiveId = ref<ShowcaseScreenId>(screens[Math.floor(screens.length / 2)]!.id);
 const activeId = ref<ShowcaseScreenId>(screens[Math.floor(screens.length / 2)]!.id);
 const focusedPaginationIndex = ref<number | null>(null);
 
@@ -97,17 +101,17 @@ function screenTheme(card: CoverflowCardState<ShowcaseScreen, ShowcaseScreenId>)
 
 function openGallery(index: number) {
   const id = screens[index]?.id;
-  if (galleryOpen.value || id === undefined || !rail.value?.synchronizeId(id)) return;
-  galleryInitialIndex.value = index;
+  if (galleryOpen.value || id === undefined || !rail.value?.synchronizeTo(id)) return;
+  galleryActiveId.value = id;
   galleryOpen.value = true;
 }
 
-function onGalleryRequestClose(finalIndex: number) {
-  const id = screens[finalIndex]?.id;
-  if (id !== undefined && finalIndex !== galleryInitialIndex.value) {
-    rail.value?.synchronizeId(id);
+function onGalleryOpenChange(_open: false, details: MediaGalleryOpenChangeDetails) {
+  const id = details.activeId as ShowcaseScreenId | undefined;
+  if (id !== undefined) {
+    activeId.value = id;
+    rail.value?.synchronizeTo(id);
   }
-  galleryOpen.value = false;
 }
 
 function onPaginationFocus(index: number) {
@@ -222,7 +226,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       :reduced-motion-override="reducedMotionOverride"
       :release-policy="releasePolicy"
       :spring="spring"
-      :stage-width="stageWidth"
+      :fallback-stage-width="stageWidth"
       data-testid="coverflow-viewport"
       :data-gallery-open="galleryOpen ? 'true' : 'false'"
       :data-keyboard-target-index="rail?.state.commandIndex"
@@ -349,7 +353,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
           :disabled="galleryOpen"
           type="button"
           @blur="onPaginationBlur(index)"
-          @click="rail?.requestId(dot.id)"
+          @click="rail?.navigateTo(dot.id)"
           @focus="onPaginationFocus(index)"
         >
           <span aria-hidden="true" class="dot-indicator" />
@@ -360,13 +364,13 @@ const diagnostics = computed<LabDiagnostics>(() => {
     <DiagnosticsPanel :diagnostics="diagnostics" />
     <MediaGalleryDialog
       v-model:open="galleryOpen"
+      v-model:active-id="galleryActiveId"
       eyebrow="Screen inspection"
       :focus-return="galleryFocusReturn"
-      :initial-index="galleryOpen ? galleryInitialIndex : settledIndex"
       :items="screens"
       :reduced-motion-override="rail?.diagnostics.reducedMotion"
       title="Screen gallery"
-      @request-close="onGalleryRequestClose"
+      @open-change="onGalleryOpenChange"
     />
   </section>
 </template>
@@ -390,7 +394,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
   --snap-motion-gallery-disabled-surface: #171e29;
   --snap-motion-gallery-disabled-text: #667286;
   --snap-motion-gallery-focus: #73b3ff;
-  --snap-motion-gallery-backdrop: rgb(3 7 18 / 0.92);
+  --snap-motion-gallery-scrim: rgb(3 7 18 / 0.92);
   --snap-motion-gallery-chrome-surface: #151b25;
   --snap-motion-gallery-radius: 1rem;
 }

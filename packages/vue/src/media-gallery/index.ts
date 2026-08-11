@@ -12,13 +12,13 @@ export {
 } from "./media-gallery-math";
 export { fittedMediaTransform, mediaTransformLimits } from "./media-gallery-contracts";
 export type {
+  CloseReason,
   FocusReturnOptions,
   InitialFocus,
-  MediaGalleryCloseReason,
   MediaGalleryDialogProps,
   MediaGalleryItem,
   MediaGalleryMessages,
-  MediaGalleryNavigationReason,
+  MediaGalleryOpenChangeDetails,
   MediaPoint,
   MediaSize,
   MediaTransform,

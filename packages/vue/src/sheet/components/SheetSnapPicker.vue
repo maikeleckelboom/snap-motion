@@ -24,7 +24,7 @@ if (!context) throw new Error("SheetSnapPicker must be used inside Sheet.");
         :name="context.name"
         type="radio"
         :value="point.id"
-        @change="context.requestSnap(point.id, 'picker')"
+        @change="context.navigateTo(point.id, 'picker')"
       />
       <span>{{ point.label }}</span>
     </label>

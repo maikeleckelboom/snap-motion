@@ -47,9 +47,11 @@ export interface CoverflowCardState<TItem, TId extends string> {
   readonly item: TItem;
   readonly id: TId;
   readonly index: number;
-  /** True for the face in the clearing, which is what a caption and a counter should name. */
+  /** True for the application-authoritative semantic selection. */
   readonly active: boolean;
-  /** True for the durable selection, which is what another surface may act on. */
+  /** True for the face currently dominant in the clearing. */
+  readonly visual: boolean;
+  /** True for the item at mechanical rest. */
   readonly settled: boolean;
   /** True when a tap on this card would open it rather than select it. */
   readonly inspectable: boolean;

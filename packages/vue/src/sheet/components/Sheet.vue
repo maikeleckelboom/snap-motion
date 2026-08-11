@@ -1,10 +1,18 @@
 <script setup lang="ts" generic="Id extends string = SheetOpenSnapId">
 import type {
+  ActiveIdChangeDetails,
   ElasticityOptions,
+  NavigationReason,
   ReleaseTargetPolicy,
+  SettlementDetails,
   SpringConfiguration,
 } from "@snap-motion/core";
-import type { CloseReason, FocusReturnOptions, InitialFocus } from "@snap-motion/vue/dialog";
+import type {
+  CloseReason,
+  FocusReturnOptions,
+  InitialFocus,
+  OpenChangeDetails,
+} from "@snap-motion/vue/dialog";
 import type { SnapMotionMessages } from "@snap-motion/vue/localization";
 import {
   computed,
@@ -26,7 +34,7 @@ import {
 } from "../../internal/accessibility/focus";
 import { createEnglishSnapMotionMessages } from "../../localization/messages";
 import { sheetContextKey, type SheetContext } from "../sheet-context";
-import type { SheetNavigationReason, SheetSide } from "../sheet-contracts";
+import type { SheetSide } from "../sheet-contracts";
 import {
   createDefaultSheetSnapPoints,
   defaultSheetOpenSnapId,
@@ -34,6 +42,7 @@ import {
   type SheetSnapPoint,
   type SheetViewportPolicy,
 } from "../sheet-policy";
+import type { SheetDiagnostics } from "../sheetDiagnostics";
 import { useSheetMotion, type SheetViewportDimensions } from "../use-sheet-motion";
 import SheetSnapPicker from "./SheetSnapPicker.vue";
 
@@ -71,12 +80,11 @@ const props = withDefaults(
 const emit = defineEmits<{
   (event: "update:open", open: boolean): void;
   (event: "update:activeId", id: Id): void;
-  (event: "requestClose", reason: CloseReason): void;
-  (event: "requestActiveId", id: Id, reason: SheetNavigationReason): void;
+  (event: "openChange", open: false, details: OpenChangeDetails): void;
+  (event: "activeIdChange", id: Id, details: ActiveIdChangeDetails): void;
   (event: "opened"): void;
   (event: "closed"): void;
-  (event: "settled", id: Id): void;
-  (event: "targetChanged", id: Id, reason: SheetNavigationReason): void;
+  (event: "settled", id: Id, details: SettlementDetails): void;
 }>();
 
 const slots = useSlots();
@@ -113,7 +121,17 @@ function preferredIdForSide() {
     : configuredPoints.value[0]!.id;
 }
 
+function hasConfiguredPoint(id: Id) {
+  return configuredPoints.value.some((point) => point.id === id);
+}
+
+function retainedConfiguredId() {
+  if (props.activeId !== undefined && hasConfiguredPoint(props.activeId)) return props.activeId;
+  return hasConfiguredPoint(intendedId.value) ? intendedId.value : preferredIdForSide();
+}
+
 const intendedId = ref<Id>(preferredIdForSide());
+const resolvedActiveId = computed<Id>(() => intendedId.value);
 let mounted = false;
 let capturedOpener: HTMLElement | undefined;
 let closeReason: CloseReason = "programmatic";
@@ -123,14 +141,16 @@ let focusRestoreFrame: number | undefined;
 let suppressNextFocusRestore = false;
 let presentationChangeClosing = false;
 
-function acceptTarget(id: Id, reason: SheetNavigationReason, userOriginated: boolean) {
+let settlementReason: NavigationReason = "external";
+
+function acceptTarget(id: Id, reason: NavigationReason, componentOriginated: boolean) {
   if (id === intendedId.value) return false;
   intendedId.value = id;
+  settlementReason = reason;
   targetGeneration += 1;
-  emit("targetChanged", id, reason);
-  if (userOriginated) {
-    emit("requestActiveId", id, reason);
+  if (componentOriginated && reason !== "external") {
     emit("update:activeId", id);
+    emit("activeIdChange", id, { reason });
   }
   return true;
 }
@@ -150,8 +170,10 @@ const motion = useSheetMotion<Id>({
         props.snapLabels?.[id] ??
         motion.resolvedSnapPoints.value.find((point) => point.id === id)?.label ??
         id;
-      statusText.value = messages.value.sheetStatus({ id, label });
-      emit("settled", id);
+      if (settlementReason !== "external") {
+        statusText.value = messages.value.sheetStatus({ id, label });
+      }
+      emit("settled", id, { reason: settlementReason });
     });
   },
   onTargetSelected(id) {
@@ -185,6 +207,26 @@ const shouldShowPicker = computed(
     (slots.picker !== undefined ||
       resolvedPoints.value.filter((point) => !point.disabled).length > 1),
 );
+const diagnostics = computed<SheetDiagnostics<Id>>(() => {
+  const snapshot = motion.snapshot.value;
+  return {
+    activeId: intendedId.value,
+    anchors: snapshot.anchors,
+    bounds: snapshot.bounds,
+    geometry: motion.geometry.value,
+    isAnimating: motion.isAnimating.value,
+    phase: snapshot.phase,
+    pointerInteractionActive: motion.isDragging.value,
+    pointerOwned: motion.pointerOwned.value,
+    position: motion.position.value,
+    primarySurfaceExtent: motion.primarySurfaceExtent.value,
+    reducedMotion: motion.reducedMotion.value,
+    sheetState: motion.sheetState.value,
+    side: motion.side.value,
+    targetId: snapshot.target?.id,
+    velocity: motion.velocity.value,
+  };
+});
 
 async function show() {
   const target = dialog.value;
@@ -211,8 +253,8 @@ async function show() {
 function requestClose(reason: CloseReason) {
   if (!dialog.value?.open) return;
   closeReason = reason;
-  emit("requestClose", reason);
   emit("update:open", false);
+  emit("openChange", false, { reason });
 }
 
 function beginClose() {
@@ -234,7 +276,10 @@ function closeForPresentationChange() {
   motion.interrupt();
   motion.sheetState.value = "closed";
   target.close();
-  if (props.open) emit("update:open", false);
+  if (props.open) {
+    emit("update:open", false);
+    emit("openChange", false, { reason: "programmatic" });
+  }
   return focusedInside;
 }
 
@@ -269,14 +314,32 @@ function onClose() {
     return;
   }
   if (props.open) {
-    emit("requestClose", closeReason);
     emit("update:open", false);
+    emit("openChange", false, { reason: closeReason });
   }
 }
 
-function requestSnap(id: Id, reason: SheetNavigationReason) {
-  if (!acceptTarget(id, reason, reason !== "route")) return;
+function navigateWithReason(id: Id, reason: ActiveIdChangeDetails["reason"]) {
+  if (!hasConfiguredPoint(id) || !acceptTarget(id, reason, true)) {
+    return false;
+  }
   motion.snapTo(id);
+  return true;
+}
+
+function navigateTo(id: Id) {
+  return navigateWithReason(id, "programmatic");
+}
+
+function synchronizeTo(id: Id) {
+  if (!hasConfiguredPoint(id)) return false;
+  settlementReason = "external";
+  const changed = acceptTarget(id, "external", false);
+  if (!props.open) return changed || intendedId.value === id;
+  motion.interrupt();
+  motion.remeasure(id);
+  motion.sheetState.value = "open";
+  return true;
 }
 
 watch(
@@ -290,21 +353,33 @@ watch(
 watch(
   () => props.activeId,
   (id) => {
-    if (id !== undefined && props.open && id !== intendedId.value) requestSnap(id, "route");
+    // A v-model confirmation of the semantic destination already accepted by the Sheet is not an
+    // external takeover. Re-synchronizing would cancel the spring and lose its original reason.
+    if (id !== undefined && id !== intendedId.value) synchronizeTo(id);
   },
 );
 
 watch(
   () => props.side,
   async (side) => {
-    const retained = configuredPoints.value.some((point) => point.id === intendedId.value)
-      ? intendedId.value
-      : preferredIdForSide();
-    acceptTarget(retained, "side-change", true);
+    const retained = retainedConfiguredId();
+    if (retained !== intendedId.value) {
+      acceptTarget(
+        retained,
+        props.activeId === undefined ? "reconcile" : "external",
+        props.activeId === undefined,
+      );
+    }
     motion.setSide(side, retained);
     await nextTick();
     const target = motion.remeasure(retained);
-    if (target && target.id !== intendedId.value) acceptTarget(target.id, "side-change", true);
+    if (target && target.id !== intendedId.value) {
+      acceptTarget(
+        target.id,
+        props.activeId === undefined ? "reconcile" : "external",
+        props.activeId === undefined,
+      );
+    }
   },
   { flush: "post" },
 );
@@ -312,12 +387,22 @@ watch(
 watch(
   configuredPoints,
   () => {
-    const retained = configuredPoints.value.some((point) => point.id === intendedId.value)
-      ? intendedId.value
-      : preferredIdForSide();
-    acceptTarget(retained, "side-change", true);
+    const retained = retainedConfiguredId();
+    if (retained !== intendedId.value) {
+      acceptTarget(
+        retained,
+        props.activeId === undefined ? "reconcile" : "external",
+        props.activeId === undefined,
+      );
+    }
     const target = motion.remeasure(retained);
-    if (target && target.id !== intendedId.value) acceptTarget(target.id, "side-change", true);
+    if (target && target.id !== intendedId.value) {
+      acceptTarget(
+        target.id,
+        props.activeId === undefined ? "reconcile" : "external",
+        props.activeId === undefined,
+      );
+    }
   },
   { deep: true, flush: "post" },
 );
@@ -338,11 +423,11 @@ watch(
 );
 
 provide(sheetContextKey, {
-  activeId: computed(() => motion.activeSnapId.value ?? intendedId.value),
+  activeId: resolvedActiveId,
   messages,
   name: pickerName,
   points: resolvedPoints,
-  requestSnap,
+  navigateTo: navigateWithReason,
 } as unknown as SheetContext);
 
 onMounted(() => {
@@ -371,11 +456,15 @@ defineExpose({
   chrome,
   closeForPresentationChange,
   dialog,
+  diagnostics,
   intrinsicBodyContent,
-  motion,
   panel,
+  activeId: resolvedActiveId,
+  sheetState: motion.sheetState,
+  side: motion.side,
   requestClose,
-  requestSnap,
+  navigateTo,
+  synchronizeTo,
   titleId: resolvedTitleId,
   viewport,
 });
@@ -388,7 +477,7 @@ defineExpose({
     class="snap-motion-sheet"
     :data-sheet-axis="motion.axis.value"
     :data-sheet-side="motion.side.value"
-    :data-sheet-snap="motion.activeSnapId.value"
+    :data-sheet-snap="intendedId"
     :data-sheet-state="motion.sheetState.value"
     v-bind="descriptionId ? { 'aria-describedby': descriptionId } : {}"
     @cancel="onCancel"
@@ -406,7 +495,7 @@ defineExpose({
       class="snap-motion-sheet-panel"
       :data-sheet-axis="motion.axis.value"
       :data-sheet-side="motion.side.value"
-      :data-sheet-snap="motion.activeSnapId.value"
+      :data-sheet-snap="intendedId"
       :data-sheet-state="motion.sheetState.value"
       :style="motion.panelStyle.value"
     >

@@ -4,6 +4,7 @@
 
 ```ts
 
+import { ActiveIdChangeDetails } from '@snap-motion/core';
 import type { CarouselMotion } from '@snap-motion/vue/carousel';
 import { ComputedRef } from 'vue';
 import { ElasticityOptions } from '@snap-motion/core';
@@ -12,6 +13,7 @@ import type { NavigationReason } from '@snap-motion/vue/motion';
 import { PaginationIndicatorState } from '@snap-motion/core';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
+import type { SettlementDetails } from '@snap-motion/core';
 import { ShallowRef } from 'vue';
 import { ShallowUnwrapRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
@@ -28,7 +30,6 @@ import { StackedDeckTuning } from '@snap-motion/core';
 import { SurfaceMotionDiagnostics } from '@snap-motion/vue/motion';
 import { VNode } from 'vue';
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_PrettifyLocal" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const StackedDeck: <TItem extends {
@@ -38,12 +39,12 @@ export const StackedDeck: <TItem extends {
         items: readonly TItem[];
         activeId?: TItem["id"];
         label?: string;
-        labelledby?: string;
+        labelledBy?: string;
         itemLabel?: (item: TItem, index: number) => string;
         focusScope?: HTMLElement | undefined;
         disabled?: boolean;
         landmark?: boolean;
-        stageWidth?: number;
+        fallbackStageWidth?: number;
         elasticity?: ElasticityOptions;
         messages?: Partial<SnapMotionMessages>;
         programmaticImpulse?: number;
@@ -51,9 +52,9 @@ export const StackedDeck: <TItem extends {
         releasePolicy?: StackedDeckReleasePolicy;
         spring?: SpringConfiguration;
     } & {
-        "onUpdate:activeId"?: (id: TItem["id"]) => any;
-        onSettled?: (id: TItem["id"]) => any;
-        onRequestActiveId?: (id: TItem["id"], reason: NavigationReason) => any;
+        onActiveIdChange?: (id: TItem["id"] | undefined, details: ActiveIdChangeDetails) => any;
+        onSettled?: (id: TItem["id"], details: SettlementDetails) => any;
+        "onUpdate:activeId"?: (id: TItem["id"] | undefined) => any;
         onActivate?: (item: TItem, index: number) => any;
     }> & (typeof globalThis extends {
         __VLS_PROPS_FALLBACK: infer P;
@@ -62,7 +63,7 @@ export const StackedDeck: <TItem extends {
     canNext: ComputedRef<boolean>;
     canPrevious: ComputedRef<boolean>;
     compositing: ComputedRef<boolean>;
-    currentId: ComputedRef<TItem["id"] | undefined>;
+    visualId: ComputedRef<TItem["id"] | undefined>;
     diagnostics: ComputedRef<SurfaceMotionDiagnostics<TItem["id"]>>;
     frame: ShallowRef<StackedDeckFrame>;
     isInspectEligible: (index: number) => boolean;
@@ -73,12 +74,12 @@ export const StackedDeck: <TItem extends {
     physicalIndex: ComputedRef<number>;
     pitch: ComputedRef<number>;
     previous: () => boolean;
-    requestId: (id: TItem["id"]) => boolean;
+    navigateTo: (id: TItem["id"]) => boolean;
     root: Ref<HTMLElement | undefined, HTMLElement | undefined>;
     settledId: ComputedRef<TItem["id"] | undefined>;
     speedInCards: ComputedRef<number>;
     state: ShallowRef<StackedDeckModelState>;
-    synchronizeId: (id: TItem["id"], announce?: boolean) => boolean;
+    synchronizeTo: (id: TItem["id"]) => boolean;
     tuning: ComputedRef<StackedDeckTuning>;
     tuningProfile: ComputedRef<StackedDeckProfile>;
     }>) => void;
@@ -99,6 +100,7 @@ export const StackedDeck: <TItem extends {
             id: TItem["id"];
             index: number;
             active: boolean;
+            visual: boolean;
             settled: boolean;
             inspectable: boolean;
             role: StackedDeckRole;
@@ -106,9 +108,9 @@ export const StackedDeck: <TItem extends {
         }) => any;
     };
     emit: {
-        (event: "update:activeId", id: TItem["id"]): void;
-        (event: "requestActiveId", id: TItem["id"], reason: NavigationReason): void;
-        (event: "settled", id: TItem["id"]): void;
+        (event: "update:activeId", id: TItem["id"] | undefined): void;
+        (event: "activeIdChange", id: TItem["id"] | undefined, details: ActiveIdChangeDetails): void;
+        (event: "settled", id: TItem["id"], details: SettlementDetails): void;
         (event: "activate", item: TItem, index: number): void;
     };
 }>) => VNode & {
@@ -129,6 +131,7 @@ export interface StackedDeckCardState<TItem, TId extends string> {
     readonly pose: StackedDeckPose;
     readonly role: StackedDeckRole;
     readonly settled: boolean;
+    readonly visual: boolean;
 }
 
 // @public
@@ -138,12 +141,12 @@ export interface StackedDeckHandle<Id extends string> {
     // (undocumented)
     readonly canPrevious: boolean;
     readonly compositing: boolean;
-    readonly currentId: Id | undefined;
     readonly diagnostics: SurfaceMotionDiagnostics<Id>;
     // (undocumented)
     readonly frame: StackedDeckFrame;
     // (undocumented)
     isInspectEligible(index: number): boolean;
+    navigateTo(id: Id): boolean;
     next(): boolean;
     onKeyDown(event: KeyboardEvent): void;
     // (undocumented)
@@ -155,18 +158,18 @@ export interface StackedDeckHandle<Id extends string> {
     // (undocumented)
     readonly pitch: number;
     previous(): boolean;
-    requestId(id: Id): boolean;
     // (undocumented)
     readonly root: HTMLElement | undefined;
     readonly settledId: Id | undefined;
     // (undocumented)
     readonly speedInCards: number;
     readonly state: StackedDeckModelState;
-    synchronizeId(id: Id, announce?: boolean): boolean;
+    synchronizeTo(id: Id): boolean;
     // (undocumented)
     readonly tuning: StackedDeckTuning;
     // (undocumented)
     readonly tuningProfile: StackedDeckProfile;
+    readonly visualId: Id | undefined;
 }
 
 // @public
@@ -221,6 +224,7 @@ export interface UseStackedDeckMotionOptions<Id extends string> {
     // (undocumented)
     readonly initialId?: Id | undefined;
     readonly onActivate?: (id: Id, index: number) => void;
+    readonly onActiveIdChange?: (id: Id, index: number, reason: ActiveIdChangeDetails["reason"]) => void;
     readonly onSettled?: (id: Id, index: number, reason: NavigationReason) => void;
     // (undocumented)
     readonly programmaticImpulse?: MaybeRefOrGetter<number | undefined>;
@@ -246,7 +250,6 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
     // (undocumented)
     readonly canPrevious: ComputedRef<boolean>;
     readonly compositing: ComputedRef<boolean>;
-    readonly currentId: ComputedRef<Id | undefined>;
     readonly diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
     // (undocumented)
     readonly frame: ShallowRef<StackedDeckFrame>;
@@ -254,6 +257,7 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
     isInspectEligible(index: number): boolean;
     readonly model: StackedDeckModel<Id>;
     readonly motion: CarouselMotion<Id>;
+    navigateTo(id: Id): boolean;
     next(): boolean;
     // (undocumented)
     onClick(event: MouseEvent): void;
@@ -276,7 +280,6 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
     previous(): boolean;
     // (undocumented)
     remeasure(): SnapAnchor<Id> | null;
-    requestId(id: Id): boolean;
     readonly settledId: ComputedRef<Id | undefined>;
     // (undocumented)
     readonly speedInCards: ComputedRef<number>;
@@ -285,11 +288,12 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
     // (undocumented)
     readonly state: ShallowRef<StackedDeckModelState>;
     readonly statusIndex: ComputedRef<number | null>;
-    synchronizeId(id: Id, announce?: boolean): boolean;
+    synchronizeTo(id: Id, announce?: boolean): boolean;
     // (undocumented)
     readonly tuning: ComputedRef<StackedDeckTuning>;
     // (undocumented)
     readonly tuningProfile: ComputedRef<StackedDeckProfile>;
+    readonly visualId: ComputedRef<Id | undefined>;
 }
 
 // (No @packageDocumentation comment for this package)

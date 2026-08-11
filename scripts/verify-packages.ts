@@ -454,6 +454,21 @@ try {
   run(process.execPath, ["ssr.mjs"], minimum);
   run(process.execPath, ["media-gallery-import.mjs"], minimum);
 
+  const typescript7 = await createConsumer(
+    "typescript7",
+    "typescript7-package.template.json",
+    coreTarball,
+    vueTarball,
+  );
+  consumers.push(typescript7);
+  assertVueOnlyConsumer(
+    JSON.parse(await readFile(resolve(typescript7, "package.json"), "utf8")) as PackageManifest,
+  );
+  run(pnpmCommand, ["install", "--ignore-scripts"], typescript7);
+  for (const resolution of ["bundler", "node16", "nodenext"]) {
+    run(pnpmCommand, ["exec", "tsc", "-p", `tsconfig.${resolution}.json`], typescript7);
+  }
+
   const current = await createConsumer("current", "package.template.json", coreTarball, vueTarball);
   consumers.push(current);
   assertVueOnlyConsumer(
@@ -476,5 +491,5 @@ try {
 }
 
 process.stdout.write(
-  "Packed package certification passed for the direct core consumer and minimum/current Vue-only consumers: ESM, all Vue surfaces, gallery-only import, generic SFC inference, Vite, Router, Nuxt build/generate, SSR, hydration, live direction, pointer, wheel, keyboard, and compatibility-click smoke.\n",
+  "Packed package certification passed for the direct core consumer, TypeScript 7 Vue declaration consumer, and minimum/current Vue-only consumers: ESM, all Vue surfaces, gallery-only import, generic SFC inference through the TypeScript 6 bridge, Vite, Router, Nuxt build/generate, SSR, hydration, live direction, pointer, wheel, keyboard, and compatibility-click smoke.\n",
 );

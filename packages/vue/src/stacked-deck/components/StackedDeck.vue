@@ -1,6 +1,8 @@
 <script setup lang="ts" generic="TItem extends { id: string }">
 import type {
+  ActiveIdChangeDetails,
   ElasticityOptions,
+  SettlementDetails,
   SpringConfiguration,
   StackedDeckReleasePolicy,
 } from "@snap-motion/core";
@@ -18,10 +20,10 @@ type TId = TItem["id"];
 const props = withDefaults(
   defineProps<{
     items: readonly TItem[];
-    /** Durable selection. Controlled when supplied; it changes only at mechanical rest. */
+    /** Application-authoritative semantic selection. Controlled when supplied. */
     activeId?: TId;
     label?: string;
-    labelledby?: string;
+    labelledBy?: string;
     /** Accessible name of one card. Defaults to its semantic ID. */
     itemLabel?: (item: TItem, index: number) => string;
     /**
@@ -39,7 +41,7 @@ const props = withDefaults(
      */
     landmark?: boolean;
     /** Fallback stage width, used before the deck has been measured. */
-    stageWidth?: number;
+    fallbackStageWidth?: number;
     elasticity?: ElasticityOptions;
     messages?: Partial<SnapMotionMessages>;
     programmaticImpulse?: number;
@@ -51,14 +53,14 @@ const props = withDefaults(
   {
     disabled: false,
     landmark: false,
-    stageWidth: 1_120,
+    fallbackStageWidth: 1_120,
   },
 );
 
 const emit = defineEmits<{
-  (event: "update:activeId", id: TId): void;
-  (event: "requestActiveId", id: TId, reason: NavigationReason): void;
-  (event: "settled", id: TId): void;
+  (event: "update:activeId", id: TId | undefined): void;
+  (event: "activeIdChange", id: TId | undefined, details: ActiveIdChangeDetails): void;
+  (event: "settled", id: TId, details: SettlementDetails): void;
   /** A tap on the current, unambiguous card: the request to open it on another surface. */
   (event: "activate", item: TItem, index: number): void;
 }>();
@@ -70,9 +72,27 @@ const messages = computed(() => createEnglishSnapMotionMessages(props.messages))
 const ids = computed<TId[]>(() => props.items.map((item) => item.id));
 const reducedMotionOverride = computed(() => props.reducedMotionOverride);
 const statusText = ref("");
+const internalActiveId = ref<TId | undefined>(
+  props.activeId ?? props.items[Math.floor(props.items.length / 2)]?.id,
+);
+const semanticActiveId = computed(() => props.activeId ?? internalActiveId.value);
+
+watch(ids, (nextIds, previousIds) => {
+  if (props.activeId !== undefined || nextIds.includes(internalActiveId.value as TId)) return;
+  const previousIndex = Math.max(0, previousIds.indexOf(internalActiveId.value as TId));
+  const nextId = nextIds[Math.min(previousIndex, Math.max(0, nextIds.length - 1))];
+  internalActiveId.value = nextId;
+  emit("update:activeId", nextId);
+  emit("activeIdChange", nextId, { reason: "reconcile" });
+});
 
 function labelFor(item: TItem, index: number): string {
   return props.itemLabel?.(item, index) ?? item.id;
+}
+
+/** Exact application-authoritative adoption; the high-level surface always keeps it silent. */
+function synchronizeTo(id: TId) {
+  return deck.synchronizeTo(id);
 }
 
 function positionLabel(index: number): string {
@@ -91,7 +111,7 @@ const deck = useStackedDeckMotion<TId>({
   initialId: props.items[Math.floor(props.items.length / 2)]?.id,
   reducedMotionOverride,
   root: focusScope,
-  stageWidth: () => props.stageWidth,
+  stageWidth: () => props.fallbackStageWidth,
   track,
   viewport: root,
   elasticity: () => props.elasticity,
@@ -102,13 +122,15 @@ const deck = useStackedDeckMotion<TId>({
     const item = props.items[index];
     if (item) emit("activate", item, index);
   },
-  onSettled(id, index, reason) {
-    statusText.value = positionLabel(index);
-    emit("settled", id);
-    // A settlement the application itself asked for is not a request back to the application.
-    if (reason === "route" || id === props.activeId) return;
-    emit("requestActiveId", id, reason);
+  onActiveIdChange(id, _index, reason) {
+    if (id === semanticActiveId.value) return;
+    internalActiveId.value = id;
     emit("update:activeId", id);
+    emit("activeIdChange", id, { reason });
+  },
+  onSettled(id, index, reason) {
+    if (reason !== "external") statusText.value = positionLabel(index);
+    emit("settled", id, { reason });
   },
 });
 
@@ -121,7 +143,8 @@ const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {
       item,
       id: item.id,
       index,
-      active: index === state.currentIndex,
+      active: item.id === semanticActiveId.value,
+      visual: index === state.currentIndex,
       settled: index === state.settledIndex,
       inspectable: deck.isInspectEligible(index),
       role: pose.role,
@@ -154,7 +177,7 @@ watch(
 );
 
 const stageStyle = computed(() => ({
-  "--snap-motion-deck-stage-width": `${Math.min(props.stageWidth, 1_280)}px`,
+  "--snap-motion-deck-stage-width": `${Math.min(props.fallbackStageWidth, 1_280)}px`,
   "--snap-motion-deck-card-width": `${deck.tuning.value.cardWidth}px`,
   "--snap-motion-deck-card-height": `${deck.tuning.value.cardHeight}px`,
 }));
@@ -184,7 +207,7 @@ defineExpose({
   canNext: deck.canNext,
   canPrevious: deck.canPrevious,
   compositing: deck.compositing,
-  currentId: deck.currentId,
+  visualId: deck.visualId,
   diagnostics: deck.diagnostics,
   frame: deck.frame,
   isInspectEligible: deck.isInspectEligible,
@@ -195,12 +218,12 @@ defineExpose({
   physicalIndex: deck.physicalIndex,
   pitch: deck.pitch,
   previous: deck.previous,
-  requestId: deck.requestId,
+  navigateTo: deck.navigateTo,
   root,
   settledId: deck.settledId,
   speedInCards: deck.speedInCards,
   state: deck.state,
-  synchronizeId: deck.synchronizeId,
+  synchronizeTo,
   tuning: deck.tuning,
   tuningProfile: deck.tuningProfile,
 });
@@ -211,16 +234,17 @@ defineExpose({
     :is="landmark ? 'section' : 'div'"
     ref="root"
     :aria-label="label"
-    :aria-labelledby="labelledby"
+    :aria-labelledby="labelledBy"
     aria-roledescription="carousel"
     class="snap-motion-stacked-deck"
-    :data-active-id="deck.currentId.value"
+    :data-active-id="semanticActiveId"
     :data-authority-stable="deck.state.value.authorityStable ? 'true' : 'false'"
     :data-owned="deck.owned.value ? 'true' : 'false'"
     :data-phase="deck.diagnostics.value.phase"
     :data-profile="deck.tuningProfile.value"
     :data-reduced-motion="deck.diagnostics.value.reducedMotion ? 'true' : 'false'"
     :data-settled-id="deck.settledId.value"
+    :data-visual-id="deck.visualId.value"
     :role="landmark ? 'region' : 'group'"
     :style="[stageStyle, deck.motion.surfaceStyle]"
     tabindex="0"
@@ -262,8 +286,8 @@ defineExpose({
       <div
         v-for="card in cards"
         :key="card.id"
-        :aria-current="card.active ? 'true' : undefined"
-        :aria-hidden="card.active ? undefined : 'true'"
+        :aria-current="card.visual ? 'true' : undefined"
+        :aria-hidden="card.pose.interactive ? undefined : 'true'"
         :aria-label="positionLabel(card.index)"
         aria-roledescription="slide"
         class="snap-motion-stacked-deck-card"
@@ -274,7 +298,7 @@ defineExpose({
         :data-deck-role="card.role"
         :data-deck-visible="card.pose.visible ? 'true' : 'false'"
         :data-item-id="card.id"
-        :inert="!card.active"
+        :inert="!card.pose.interactive"
         role="group"
         :style="cardStyle(card)"
       >
