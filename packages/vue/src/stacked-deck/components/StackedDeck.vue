@@ -106,6 +106,9 @@ watch(
       const releasedId = resolveRollbackId();
       internalActiveId.value = releasedId;
       if (releasedId !== undefined) deck.synchronizeTo(releasedId);
+      // The released authority may seed uncontrolled state, but it belongs to the completed
+      // controlled ownership epoch and must never outrank later uncontrolled navigation.
+      latestValidAuthorityId.value = undefined;
     }
   },
   { flush: "sync" },

@@ -1,6 +1,6 @@
 {
   "name": "@snap-motion/vue",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "private": true,
   "description": "Accessible interruptible Vue carousel, spatial surface, dialog, gallery, and sheet primitives.",
   "keywords": [

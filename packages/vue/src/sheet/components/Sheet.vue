@@ -170,6 +170,14 @@ function resolveRollbackId(): Id | undefined {
     : configuredPoints.value[0]?.id;
 }
 
+function retainConfiguredAuthority(fallback: Id) {
+  const id = props.activeId;
+  if (id === undefined) return;
+  const valid = hasConfiguredPoint(id);
+  mechanicalAnchorId.value = valid ? id : fallback;
+  if (valid) latestValidAuthorityId.value = id;
+}
+
 function acceptTarget(id: Id, reason: NavigationReason, componentOriginated: boolean) {
   if (id === intendedId.value) return false;
   intendedId.value = id;
@@ -296,12 +304,12 @@ async function show(generation: number) {
   body.value?.scrollTo(0, 0);
   motion.remeasure(intendedId.value);
   motion.open(intendedId.value);
-  if (openedGeneration === generation) return;
   focusInitial(props.initialFocus, {
     close: closeButton.value,
     container: panel.value,
     title: title.value,
   });
+  if (openedGeneration === generation) return;
   openedGeneration = generation;
   emit("opened");
 }
@@ -311,7 +319,7 @@ function beginOpenLifecycle() {
   void show(lifecycleGeneration);
 }
 
-function requestClose(reason: CloseReason) {
+function requestClose(reason: CloseReason = "programmatic") {
   if (!props.open || !dialog.value?.open) return;
   closeReason = reason;
   emit("update:open", false);
@@ -453,7 +461,7 @@ watch(
 
 watch(
   () => props.activeId,
-  (id) => {
+  (id, previousId) => {
     // A v-model confirmation of the semantic destination already accepted by the Sheet is not an
     // external takeover. Re-synchronizing would cancel the spring and lose its original reason.
     if (id !== undefined && hasConfiguredPoint(id)) {
@@ -464,6 +472,10 @@ watch(
       const releasedId = resolveRollbackId() ?? intendedId.value;
       internalActiveId.value = releasedId;
       if (releasedId !== intendedId.value) synchronizeExact(releasedId);
+      if (previousId !== undefined) {
+        // The released authority seeds the uncontrolled snap, then its ownership epoch ends.
+        latestValidAuthorityId.value = undefined;
+      }
     }
   },
   { flush: "sync" },
@@ -473,9 +485,7 @@ watch(
   () => props.side,
   async (side) => {
     const retained = retainedConfiguredId();
-    if (props.activeId !== undefined && !hasConfiguredPoint(props.activeId)) {
-      mechanicalAnchorId.value = retained;
-    }
+    retainConfiguredAuthority(retained);
     if (retained !== intendedId.value) {
       acceptTarget(
         retained,
@@ -502,9 +512,7 @@ watch(
   configuredPoints,
   () => {
     const retained = retainedConfiguredId();
-    if (props.activeId !== undefined && !hasConfiguredPoint(props.activeId)) {
-      mechanicalAnchorId.value = retained;
-    }
+    retainConfiguredAuthority(retained);
     if (retained !== intendedId.value) {
       acceptTarget(
         retained,

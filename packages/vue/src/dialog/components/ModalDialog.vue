@@ -83,13 +83,7 @@ async function show(generation: number) {
   captureLifecycleOpener(target, generation);
   if (!target.open) target.showModal();
   await nextTick();
-  if (
-    !mounted ||
-    !props.open ||
-    generation !== lifecycleGeneration ||
-    !target.open ||
-    openedGeneration === generation
-  ) {
+  if (!mounted || !props.open || generation !== lifecycleGeneration || !target.open) {
     return;
   }
   focusInitial(props.initialFocus, {
@@ -97,6 +91,7 @@ async function show(generation: number) {
     container: content.value,
     title: title.value,
   });
+  if (openedGeneration === generation) return;
   openedGeneration = generation;
   emit("opened");
 }
@@ -113,7 +108,7 @@ function closeNative() {
   target.close();
 }
 
-function requestClose(reason: CloseReason) {
+function requestClose(reason: CloseReason = "programmatic") {
   if (!props.open || !dialog.value?.open) return;
   emit("update:open", false);
   emit("openRequest", false, { reason });

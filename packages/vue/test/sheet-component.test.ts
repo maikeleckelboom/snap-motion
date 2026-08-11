@@ -7,7 +7,7 @@ interface SheetInstance {
   closeForPresentationChange: () => boolean;
   activeId: string;
   navigateTo: (id: string) => boolean;
-  requestClose: (reason: "programmatic") => void;
+  requestClose: (reason?: "programmatic") => void;
   synchronizeTo: (id: string) => boolean;
 }
 
@@ -21,9 +21,23 @@ describe("production Sheet component", () => {
     });
     await nextTick();
 
-    (wrapper.vm as unknown as SheetInstance).requestClose("programmatic");
+    (wrapper.vm as unknown as SheetInstance).requestClose();
     expect(wrapper.emitted("update:open")).toBeUndefined();
     expect(wrapper.emitted("openRequest")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("defaults an imperative close request to programmatic provenance", async () => {
+    const wrapper = mount(Sheet, {
+      props: { open: true, reducedMotionOverride: true },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+    });
+    await nextTick();
+    await nextTick();
+
+    (wrapper.vm as unknown as SheetInstance).requestClose();
+    expect(wrapper.emitted("update:open")).toEqual([[false]]);
+    expect(wrapper.emitted("openRequest")).toEqual([[false, { reason: "programmatic" }]]);
     wrapper.unmount();
   });
 
@@ -205,6 +219,45 @@ describe("production Sheet component", () => {
     await nextTick();
     expect(wrapper.get("dialog").attributes("open")).toBeUndefined();
     expect(wrapper.emitted("closed")).toEqual([[]]);
+    wrapper.unmount();
+  });
+
+  it("repairs refused unexpected native closure without duplicating lifecycle events", async () => {
+    const wrapper = mount(Sheet, {
+      props: {
+        initialFocus: () =>
+          document.querySelector<HTMLElement>("[data-sheet-repair-focus]") ?? undefined,
+        open: true,
+        reducedMotionOverride: true,
+      },
+      slots: {
+        title: () => "Sheet title",
+        default: () => h("button", { "data-sheet-repair-focus": "" }, "Repair focus target"),
+      },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+
+    const focusTarget = wrapper.get("[data-sheet-repair-focus]").element;
+    const dialog = wrapper.get("dialog").element as HTMLDialogElement;
+    const snap = wrapper.get("dialog").attributes("data-sheet-snap");
+    expect(document.activeElement).toBe(focusTarget);
+
+    dialog.removeAttribute("open");
+    dialog.dispatchEvent(new Event("close"));
+    await Promise.resolve();
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.emitted("openRequest")).toEqual([[false, { reason: "programmatic" }]]);
+    expect(wrapper.emitted("opened")).toEqual([[]]);
+    expect(wrapper.emitted("closed")).toBeUndefined();
+    expect(wrapper.get("dialog").attributes()).toHaveProperty("open");
+    expect(wrapper.get("dialog").attributes("data-sheet-state")).toBe("open");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe(snap);
+    expect(document.activeElement).toBe(focusTarget);
     wrapper.unmount();
   });
 
@@ -416,6 +469,71 @@ describe("production Sheet component", () => {
     expect(sheet.activeId).toBe("a");
     expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("a");
     expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["b", { reason: "programmatic" }]);
+    wrapper.unmount();
+  });
+
+  it("does not resurrect a snap authority from a completed controlled ownership epoch", async () => {
+    const snapPoints = [
+      { id: "a", label: "A", resolveVisibleExtent: () => 120 },
+      { id: "b", label: "B", resolveVisibleExtent: () => 180 },
+      { id: "c", label: "C", resolveVisibleExtent: () => 240 },
+      { id: "d", label: "D", resolveVisibleExtent: () => 300 },
+    ];
+    const futurePoint = {
+      id: "future",
+      label: "Future",
+      resolveVisibleExtent: () => 360,
+    };
+    const wrapper = mount(Sheet, {
+      props: {
+        activeId: "a",
+        open: true,
+        reducedMotionOverride: true,
+        snapPoints,
+      },
+      slots: { title: () => "Sheet title", default: () => "Body" },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+    const sheet = wrapper.vm as unknown as SheetInstance;
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(sheet.navigateTo("b")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("b");
+
+    await wrapper.setProps({ activeId: "future" });
+    expect(sheet.navigateTo("c")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(sheet.activeId).toBe("future");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("b");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["c", { reason: "programmatic" }]);
+    expect(wrapper.get('[role="status"]').text()).not.toContain("C");
+
+    await wrapper.setProps({ snapPoints: [...snapPoints, futurePoint] });
+    await Promise.resolve();
+    await nextTick();
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("future");
+    expect(wrapper.get('[role="status"]').text()).not.toContain("Future");
+    expect((wrapper.emitted("settled") ?? []).filter(([id]) => id === "future")).toHaveLength(0);
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(sheet.activeId).toBe("future");
+    expect(sheet.navigateTo("d")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(sheet.activeId).toBe("d");
+    expect(wrapper.get("dialog").attributes("data-sheet-snap")).toBe("d");
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
+      ["b", { reason: "programmatic" }],
+      ["c", { reason: "programmatic" }],
+      ["d", { reason: "programmatic" }],
+    ]);
     wrapper.unmount();
   });
 

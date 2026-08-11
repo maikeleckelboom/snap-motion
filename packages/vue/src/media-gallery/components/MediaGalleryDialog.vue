@@ -735,17 +735,27 @@ async function changeIndex(
   return true;
 }
 
-function previous() {
-  if (canGoPrevious.value) void changeIndex(galleryIndex.value - 1, "previous");
+function previous(): boolean {
+  if (!canGoPrevious.value || galleryBusy.value) return false;
+  void changeIndex(galleryIndex.value - 1, "previous");
+  return true;
 }
 
-function next() {
-  if (canGoNext.value) void changeIndex(galleryIndex.value + 1, "next");
+function next(): boolean {
+  if (!canGoNext.value || galleryBusy.value) return false;
+  void changeIndex(galleryIndex.value + 1, "next");
+  return true;
 }
 
 function navigateTo(id: TId): boolean {
   const index = items.value.findIndex((item) => item.id === id);
-  if (index < 0 || galleryBusy.value) return false;
+  if (
+    index < 0 ||
+    galleryBusy.value ||
+    (index === galleryIndex.value && id === intendedActiveId.value)
+  ) {
+    return false;
+  }
   void changeIndex(index, "programmatic");
   return true;
 }
@@ -1327,6 +1337,10 @@ watch(
       internalActiveId.value = releasedId;
       if (previousId !== undefined && releasedId !== intendedActiveId.value && releasedId) {
         synchronizeExact(releasedId, false);
+      }
+      if (previousId !== undefined) {
+        // The released authority seeds the uncontrolled identity, then its ownership epoch ends.
+        latestValidAuthorityId.value = undefined;
       }
       return;
     }

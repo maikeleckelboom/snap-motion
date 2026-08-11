@@ -73,8 +73,8 @@ export const MediaGalleryDialog: <TItem extends MediaGalleryItem>(__VLS_props: N
     activeId: ComputedRef<TItem["id"] | undefined>;
     settledId: ComputedRef<TItem["id"] | undefined>;
     navigateTo: (id: TItem["id"]) => boolean;
-    next: () => void;
-    previous: () => void;
+    next: () => boolean;
+    previous: () => boolean;
     resetToFit: () => void;
     requestClose: (reason?: CloseReason) => void;
     synchronizeTo: (id: TItem["id"]) => boolean;
@@ -126,9 +126,9 @@ export interface MediaGalleryHandle<Id extends string = string> {
     // (undocumented)
     navigateTo(id: Id): boolean;
     // (undocumented)
-    next(): void;
+    next(): boolean;
     // (undocumented)
-    previous(): void;
+    previous(): boolean;
     // (undocumented)
     requestClose(reason?: CloseReason): void;
     // (undocumented)

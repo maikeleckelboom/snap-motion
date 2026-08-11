@@ -37,6 +37,12 @@ host confirms the destination the component just requested. It is distinct from 
 mechanical fallback used while that authority is absent from a reconfigured collection. Targets,
 visual dominance, fallbacks, and stale settlements never overwrite the authority anchor.
 
+Controlled ownership is an epoch, not a lifetime cache. Releasing a controlled prop starts a fresh
+uncontrolled epoch whose committed mechanics become its authority; a valid ID from the previous
+controlled epoch cannot outrank intervening uncontrolled state. A later controlled unknown ID is
+pending within its new epoch. Rejected requests reconcile to that epoch's latest valid anchor, and
+if the pending ID later appears it is adopted silently without replaying a request.
+
 The navigation reasons are `previous`, `next`, `keyboard`, `drag`, `wheel`, `picker`,
 `programmatic`, `reconcile`, and `external`. They live in `@snap-motion/core` because provenance is shared domain
 vocabulary for every future adapter. `external` replaces the router-shaped `route`: routers are one
@@ -63,6 +69,11 @@ close requests no-op after controlled or native closure. The Sheet's
 `closeForPresentationChange()` is a committed host swap: it emits `update:open(false)` but no
 refusable `openRequest`.
 
+If a host refuses an unexpected native close, the same lifecycle generation reopens the dialog and
+reapplies its configured initial-focus policy without emitting a second `opened`. Final focus return
+is generation-scoped and verified across bounded browser cleanup frames so an obsolete lifecycle
+cannot steal focus from a newer overlay.
+
 ## Component contract
 
 | Component            | Visibility      | Semantic state                   | Ownership                                       | Semantic request                     | Rest               | Other public action                         |
@@ -73,6 +84,11 @@ refusable `openRequest`.
 | `Sheet`              | `open`          | optional snap `activeId`         | open controlled; snap controlled when supplied  | same                                 | same               | `navigateTo`, `synchronizeTo`, close change |
 | `ModalDialog`        | `open`          | none                             | controlled                                      | none                                 | `opened`, `closed` | close change                                |
 | `MediaGalleryDialog` | `open`          | optional stable media `activeId` | open controlled; media controlled when supplied | same                                 | same               | same, close change                          |
+
+`requestClose(reason?)` defaults to `programmatic` on Modal, Sheet, and Gallery handles. Gallery
+`navigateTo`, `synchronizeTo`, `previous`, and `next` return whether work was synchronously accepted;
+current, boundary, busy, empty, and unknown destinations are refused. These methods do not add
+aliases or turn imperative handles into state stores.
 
 Optional selection surfaces initialize their internal state from a domain default: the spatial
 surface's centre item, the sheet's valid side default, or the gallery's first item. They do not add

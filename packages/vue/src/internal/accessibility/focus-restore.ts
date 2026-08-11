@@ -19,6 +19,9 @@ export function scheduleVerifiedFocusRestore(options: {
     options.opener?.ownerDocument.defaultView ??
     (typeof window === "undefined" ? undefined : window);
   let frame: number | undefined;
+  // Four retries form a bounded browser-cleanup verification window: enough to observe native
+  // dialog cleanup, retry a temporarily unavailable opener, and confirm one stable frame without
+  // turning focus return into an animation-duration wait.
   let remainingAttempts = 4;
   let observedStableFrame = false;
   let cancelled = false;
@@ -47,7 +50,7 @@ export function scheduleVerifiedFocusRestore(options: {
     restoreFocus({ fallback: options.fallback });
   };
 
-  restoreFocus({ opener: options.opener });
+  if (options.isCurrent()) restoreFocus({ opener: options.opener });
   schedule();
   return {
     cancel() {

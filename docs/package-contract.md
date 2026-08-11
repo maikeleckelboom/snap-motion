@@ -59,9 +59,9 @@ The browser proof changes inherited direction at runtime and checks root/content
 the transform track remains LTR, then exercises keyboard, pointer, wheel, and the real click a drag
 would otherwise produce. The generated chunk graph fails when a capability entrypoint pulls an
 unrelated high-level feature; media-gallery isolation remains a dedicated hard assertion.
-Coverflow and StackedDeck each reserve 47 kB raw / 14 kB gzip for their emitted graph; the bounded
-increase pays for one shared, complete configuration normalizer so removing a reactive override can
-restore every product default instead of retaining stale controller state.
+`config/size-budgets.json` is the sole authority for current raw and gzip limits. Budget changes
+require evidence from the emitted graph and an explanation tied to consumer value; documentation
+does not duplicate volatile numeric thresholds.
 
 Those fixtures also run `vue-tsc` over single-file components that use the generic surface
 components the way an application does: no explicit generic arguments, no casts, readonly `as const`

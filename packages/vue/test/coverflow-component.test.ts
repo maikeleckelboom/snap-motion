@@ -232,6 +232,79 @@ describe("Coverflow", () => {
     wrapper.unmount();
   });
 
+  it("does not resurrect authority from a completed controlled ownership epoch", async () => {
+    const epochItems = [
+      { id: "a", title: "A" },
+      { id: "b", title: "B" },
+      { id: "c", title: "C" },
+      { id: "d", title: "D" },
+    ] as const;
+    const futureItem = { id: "future", title: "Future" } as const;
+    type EpochItem = (typeof epochItems)[number] | typeof futureItem;
+    const EpochCoverflow = Coverflow<EpochItem>;
+    const wrapper = mount(EpochCoverflow, {
+      props: {
+        activeId: "a",
+        items: epochItems,
+        itemLabel: (item: EpochItem) => item.title,
+        reducedMotionOverride: true,
+      },
+      slots: {
+        card: ({ item }: CoverflowCardState<EpochItem, EpochItem["id"]>) => h("div", item.title),
+      },
+    });
+    await nextTick();
+    const rail = wrapper.vm as unknown as {
+      activeId: EpochItem["id"] | undefined;
+      navigateTo: (id: EpochItem["id"]) => boolean;
+      settledId: EpochItem["id"] | undefined;
+      visualId: EpochItem["id"] | undefined;
+    };
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(rail.navigateTo("b")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    expect(rail.settledId).toBe("b");
+
+    await wrapper.setProps({ activeId: "future" } as never);
+    expect(rail.navigateTo("c")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(rail.activeId).toBe("future");
+    expect(rail.visualId).toBe("b");
+    expect(rail.settledId).toBe("b");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["c", { reason: "programmatic" }]);
+    expect(wrapper.get('[data-testid="snap-motion-coverflow-status"]').text()).not.toContain("C");
+
+    await wrapper.setProps({ items: [...epochItems, futureItem] } as never);
+    await Promise.resolve();
+    await nextTick();
+    expect(rail.visualId).toBe("future");
+    expect(rail.settledId).toBe("future");
+    expect(wrapper.get('[data-testid="snap-motion-coverflow-status"]').text()).not.toContain(
+      "Future",
+    );
+    expect((wrapper.emitted("settled") ?? []).filter(([id]) => id === "future")).toHaveLength(1);
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(rail.activeId).toBe("future");
+    expect(rail.navigateTo("d")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(rail.activeId).toBe("d");
+    expect(rail.visualId).toBe("d");
+    expect(rail.settledId).toBe("d");
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
+      ["b", { reason: "programmatic" }],
+      ["c", { reason: "programmatic" }],
+      ["d", { reason: "programmatic" }],
+    ]);
+    wrapper.unmount();
+  });
+
   it("rolls back to a valid rail anchor while controlled authority is unavailable", async () => {
     const wrapper = mountCoverflow({ activeId: "future" });
     await nextTick();

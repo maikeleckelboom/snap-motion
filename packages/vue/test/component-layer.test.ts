@@ -560,11 +560,22 @@ describe("production modal dialog", () => {
     });
     await nextTick();
 
-    (wrapper.vm as unknown as { requestClose: (reason: "programmatic") => void }).requestClose(
-      "programmatic",
-    );
+    (wrapper.vm as unknown as { requestClose: (reason?: "programmatic") => void }).requestClose();
     expect(wrapper.emitted("update:open")).toBeUndefined();
     expect(wrapper.emitted("openRequest")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("defaults an imperative close request to programmatic provenance", async () => {
+    const wrapper = mount(ModalDialog, {
+      props: { open: true },
+      slots: { title: () => "Dialog title", default: () => "Dialog body" },
+    });
+    await nextTick();
+
+    (wrapper.vm as unknown as { requestClose: (reason?: "programmatic") => void }).requestClose();
+    expect(wrapper.emitted("update:open")).toEqual([[false]]);
+    expect(wrapper.emitted("openRequest")).toEqual([[false, { reason: "programmatic" }]]);
     wrapper.unmount();
   });
 
@@ -620,10 +631,21 @@ describe("production modal dialog", () => {
   it("repairs a refused unexpected native close without publishing closed", async () => {
     const wrapper = mount(ModalDialog, {
       attachTo: document.body,
-      props: { open: true },
-      slots: { title: () => "Dialog title", default: () => "Dialog body" },
+      props: {
+        initialFocus: () =>
+          document.querySelector<HTMLElement>("[data-modal-repair-focus]") ?? undefined,
+        open: true,
+      },
+      slots: {
+        title: () => "Dialog title",
+        default: () => h("button", { "data-modal-repair-focus": "" }, "Repair focus target"),
+      },
     });
     await nextTick();
+    await nextTick();
+
+    const focusTarget = wrapper.get("[data-modal-repair-focus]").element;
+    expect(document.activeElement).toBe(focusTarget);
 
     const dialog = wrapper.get("dialog").element as HTMLDialogElement;
     dialog.removeAttribute("open");
@@ -634,7 +656,9 @@ describe("production modal dialog", () => {
 
     expect(wrapper.emitted("openRequest")).toEqual([[false, { reason: "programmatic" }]]);
     expect(wrapper.emitted("closed")).toBeUndefined();
+    expect(wrapper.emitted("opened")).toEqual([[]]);
     expect(wrapper.get("dialog").attributes()).toHaveProperty("open");
+    expect(document.activeElement).toBe(focusTarget);
     wrapper.unmount();
   });
 

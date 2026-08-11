@@ -19,9 +19,15 @@ snap. A component asks the host to change it through `activeIdRequest`; a router
 refuse, or replace that request according to its own guards. `settled` is a later mechanical fact
 for the confirmed ID. Applications update route state from requests, not from settlement.
 
+Use `v-model:active-id` only when every emitted update should be accepted immediately. Vue assigns
+the emitted ID through the model binding before a separate request handler can guard it. A guarded,
+delayed, refusable, or replacement-driven owner must instead bind `:active-id` one way and publish
+its decision later. The same rule applies to overlay `open`: use `v-model:open` for immediate
+acceptance and `:open` plus `openRequest` when the host owns a close policy.
+
 ```vue
 <StackedDeck
-  v-model:active-id="activeId"
+  :active-id="routeActiveId"
   :items="screens"
   label="Project screens"
   @active-id-request="(id) => replaceRouteMedia(id)"
@@ -63,6 +69,22 @@ accepted, delayed, and refused requests, including an accepted B destination fol
 C destination and rollback to B. `apps/nuxt-fixture` certifies the same multi-step authority
 boundary for a query-controlled SSR gallery, initially open valid IDs, hydration, and direct-entry
 fallback. Neither fixture uses `ClientOnly`.
+
+## TypeScript handoff
+
+Before integrating the tarballs into `maikel.site`:
+
+1. record its installed Nuxt, Vue, `vue-tsc`, and TypeScript versions;
+2. upgrade that application to the newest mutually compatible Nuxt/Vue tooling without changing
+   Snap Motion contracts;
+3. run its real application typecheck with the current TypeScript 7 toolchain;
+4. if Vue SFC checking reaches the same removed compiler-API boundary as this repository, use Vue
+   Language Tools' official `@typescript/typescript6` bridge rather than a local loader patch;
+5. keep the rest of the application tooling on the current TypeScript line; and
+6. verify the application build, generated routes, SSR hydration, and the integrated interaction in
+   real browsers.
+
+This is handoff guidance, not authorization to modify `maikel.site` in this repository pass.
 
 The host must not add CSS transitions, native smooth scrolling, native scroll snap, or another
 animation library to the same transform. Private integration does not authorize public activation;

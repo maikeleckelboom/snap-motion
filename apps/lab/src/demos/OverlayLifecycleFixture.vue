@@ -23,15 +23,54 @@ const galleryOpen = ref(false);
 const modalOpener = ref<HTMLButtonElement>();
 const sheetOpener = ref<HTMLButtonElement>();
 const galleryOpener = ref<HTMLButtonElement>();
+const modalFocusTarget = ref<HTMLButtonElement>();
+const sheetFocusTarget = ref<HTMLButtonElement>();
 const modalOpened = ref(0);
 const modalClosed = ref(0);
 const sheetOpened = ref(0);
 const sheetClosed = ref(0);
 const galleryOpened = ref(0);
 const galleryClosed = ref(0);
+const nestedModalOpen = ref(false);
+const nestedGalleryOpen = ref(false);
+const nestedModalOpener = ref<HTMLButtonElement>();
+const nestedGalleryOpener = ref<HTMLButtonElement>();
+
+function modalInitialFocus() {
+  return modalFocusTarget.value;
+}
+
+function sheetInitialFocus() {
+  return sheetFocusTarget.value;
+}
+
+function nestedModalInitialFocus() {
+  return nestedGalleryOpener.value;
+}
 
 function overlayState(id: "gallery" | "modal" | "sheet") {
   return id === "gallery" ? galleryOpen : id === "modal" ? modalOpen : sheetOpen;
+}
+
+const modalRefuseNextClose = ref(false);
+const sheetRefuseNextClose = ref(false);
+const galleryRefuseNextClose = ref(false);
+
+function refusalState(id: "gallery" | "modal" | "sheet") {
+  return id === "gallery"
+    ? galleryRefuseNextClose
+    : id === "modal"
+      ? modalRefuseNextClose
+      : sheetRefuseNextClose;
+}
+
+function updateOpen(id: "gallery" | "modal" | "sheet", open: boolean) {
+  const refusal = refusalState(id);
+  if (!open && refusal.value) {
+    refusal.value = false;
+    return;
+  }
+  overlayState(id).value = open;
 }
 
 async function reopen(id: "gallery" | "modal" | "sheet") {
@@ -51,9 +90,13 @@ async function reopenAndClose(id: "gallery" | "modal" | "sheet") {
 
 useEventListener(window, "snap-motion-overlay-lifecycle", (event) => {
   const detail = (
-    event as CustomEvent<{ action: "race" | "reopen"; id: "gallery" | "modal" | "sheet" }>
+    event as CustomEvent<{
+      action: "race" | "refuse-native-close" | "reopen";
+      id: "gallery" | "modal" | "sheet";
+    }>
   ).detail;
-  if (detail.action === "reopen") void reopen(detail.id);
+  if (detail.action === "refuse-native-close") refusalState(detail.id).value = true;
+  else if (detail.action === "reopen") void reopen(detail.id);
   else void reopenAndClose(detail.id);
 });
 </script>
@@ -127,37 +170,85 @@ useEventListener(window, "snap-motion-overlay-lifecycle", (event) => {
       />
     </article>
 
+    <article>
+      <h3>Nested native dialogs</h3>
+      <button
+        ref="nestedModalOpener"
+        data-testid="nested-modal-open"
+        type="button"
+        @click="nestedModalOpen = true"
+      >
+        Open nested proof
+      </button>
+    </article>
+
     <ModalDialog
       :focus-return="{ opener: modalOpener }"
+      :initial-focus="modalInitialFocus"
       :open="modalOpen"
+      data-testid="modal-lifecycle-dialog"
       @closed="modalClosed += 1"
       @opened="modalOpened += 1"
-      @update:open="modalOpen = $event"
+      @update:open="updateOpen('modal', $event)"
     >
       <template #title>Modal lifecycle proof</template>
-      <button type="button">Modal content action</button>
+      <button ref="modalFocusTarget" data-testid="modal-focus-target" type="button">
+        Modal focus target
+      </button>
     </ModalDialog>
 
     <Sheet
       :focus-return="{ opener: sheetOpener }"
+      :initial-focus="sheetInitialFocus"
       :open="sheetOpen"
       :reduced-motion-override="true"
       @closed="sheetClosed += 1"
       @opened="sheetOpened += 1"
-      @update:open="sheetOpen = $event"
+      @update:open="updateOpen('sheet', $event)"
     >
       <template #title>Sheet lifecycle proof</template>
-      <button type="button">Sheet content action</button>
+      <button ref="sheetFocusTarget" data-testid="sheet-focus-target" type="button">
+        Sheet focus target
+      </button>
     </Sheet>
 
     <MediaGalleryDialog
       :focus-return="{ opener: galleryOpener }"
+      data-testid="gallery-lifecycle-dialog"
+      initial-focus="title"
       :items="galleryItems"
       :open="galleryOpen"
       :reduced-motion-override="true"
       @closed="galleryClosed += 1"
       @opened="galleryOpened += 1"
-      @update:open="galleryOpen = $event"
+      @update:open="updateOpen('gallery', $event)"
+    />
+
+    <ModalDialog
+      :focus-return="{ opener: nestedModalOpener }"
+      :initial-focus="nestedModalInitialFocus"
+      :open="nestedModalOpen"
+      data-testid="nested-modal"
+      @update:open="nestedModalOpen = $event"
+    >
+      <template #title>Nested overlay proof</template>
+      <button
+        ref="nestedGalleryOpener"
+        data-testid="nested-gallery-open"
+        type="button"
+        @click="nestedGalleryOpen = true"
+      >
+        Open gallery above modal
+      </button>
+    </ModalDialog>
+
+    <MediaGalleryDialog
+      :focus-return="{ opener: nestedGalleryOpener }"
+      data-testid="nested-gallery"
+      :items="galleryItems"
+      :open="nestedGalleryOpen"
+      :reduced-motion-override="true"
+      @update:open="nestedGalleryOpen = $event"
     />
   </section>
 </template>

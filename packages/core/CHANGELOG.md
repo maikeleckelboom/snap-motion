@@ -1,5 +1,14 @@
 # @snap-motion/core
 
+## 0.1.0-beta.4
+
+### Minor Changes
+
+- Align core and Vue provenance for the beta.4 private candidate. Vue closes the remaining controlled
+  authority-epoch, native-dialog focus-repair, and imperative Gallery navigation gaps, while docs and
+  consumer proof clarify guarded ownership, nested-overlay support, package exports, and TypeScript
+  handoff.
+
 ## 0.1.0-beta.3
 
 ### Minor Changes

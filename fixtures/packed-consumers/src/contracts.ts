@@ -99,8 +99,13 @@ void mediaNavigationReason;
 type GalleryId = (typeof galleryItems)[number]["id"];
 const galleryHandle = ref<MediaGalleryHandle<GalleryId>>();
 const galleryActiveId: GalleryId | undefined = galleryHandle.value?.activeId;
+const galleryNextAccepted: boolean | undefined = galleryHandle.value?.next();
+const galleryPreviousAccepted: boolean | undefined = galleryHandle.value?.previous();
 void galleryActiveId;
+void galleryNextAccepted;
+void galleryPreviousAccepted;
 galleryHandle.value?.navigateTo("preview");
+galleryHandle.value?.requestClose();
 // @ts-expect-error the gallery handle retains the item collection's semantic ID union.
 galleryHandle.value?.navigateTo("missing");
 

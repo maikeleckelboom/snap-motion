@@ -62,8 +62,8 @@ export interface MediaGalleryHandle<Id extends string = string> {
   readonly dialog: HTMLDialogElement | undefined;
   readonly settledId: Id | undefined;
   navigateTo(id: Id): boolean;
-  next(): void;
-  previous(): void;
+  next(): boolean;
+  previous(): boolean;
   resetToFit(): void;
   requestClose(reason?: CloseReason): void;
   synchronizeTo(id: Id): boolean;

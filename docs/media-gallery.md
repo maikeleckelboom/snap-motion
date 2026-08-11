@@ -12,8 +12,8 @@ import "@snap-motion/vue/style.css";
 
 ```vue
 <MediaGalleryDialog
-  v-model:open="open"
-  v-model:active-id="activeId"
+  :open="routeOpen"
+  :active-id="routeMediaId"
   :items="items"
   :focus-return="{ opener, fallback: viewport }"
   @active-id-request="(id, details) => replaceRouteMedia(id, details.reason)"
@@ -36,8 +36,11 @@ Only the mechanically settled item is exposed to assistive technology.
 
 ## Controlled lifecycle
 
-`open` is controlled through `v-model:open`. `activeId` is optionally controlled through
-`v-model:active-id`; without it, the component starts at the first item and owns semantic state.
+`open` is controlled. `activeId` is optionally controlled; without it, the component starts at the
+first item and owns semantic state. `v-model` is the immediate-acceptance shorthand for either prop.
+Route guards and other owners that may delay, refuse, or replace a request use one-way `:open` and
+`:active-id` bindings, as above. See
+[immediate and guarded ownership](integration.md#semantic-selection).
 Unknown controlled IDs remain the exact semantic state and are adopted mechanically if they later
 appear. Reorder preserves the same ID. Controlled removal does not manufacture a fallback; mechanics
 retain the last valid item. Uncontrolled removal falls back to the same ordinal where possible.
@@ -61,6 +64,9 @@ The exposed handle contains `activeId`, `settledId`, `navigateTo`, `synchronizeT
 `next`, `resetToFit`, `requestClose`, and `dialog`. `navigateTo` performs a new programmatic action;
 `synchronizeTo` exactly adopts state already changed by the same authority. On a controlled gallery
 it refuses an ID other than the current prop, so the handle cannot become a competing state store.
+Navigation methods return `true` only when they synchronously accept work; boundary, busy, empty,
+unknown, and current-destination no-ops return `false`. `requestClose()` defaults to the
+`programmatic` reason; UI paths always supply their exact interaction reason.
 
 Opening, navigation, settlement, image decode, item replacement, closing, and reopening are
 generation-guarded. Work from a stale open cycle cannot publish focus, state, measurements,

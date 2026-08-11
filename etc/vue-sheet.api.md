@@ -114,7 +114,7 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
     activeId: ComputedRef<Id>;
     sheetState: Ref<SheetState, SheetState>;
     side: Ref<SheetEdge, SheetEdge>;
-    requestClose: (reason: CloseReason) => void;
+    requestClose: (reason?: CloseReason) => void;
     navigateTo: (id: Id) => boolean;
     synchronizeTo: (id: Id) => boolean;
     titleId: string;

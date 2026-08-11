@@ -176,6 +176,81 @@ describe("StackedDeck", () => {
     wrapper.unmount();
   });
 
+  it("does not resurrect authority from a completed controlled ownership epoch", async () => {
+    const epochItems = [
+      { id: "a", title: "A" },
+      { id: "b", title: "B" },
+      { id: "c", title: "C" },
+      { id: "d", title: "D" },
+    ] as const;
+    const futureItem = { id: "future", title: "Future" } as const;
+    type EpochItem = (typeof epochItems)[number] | typeof futureItem;
+    const EpochDeck = StackedDeck<EpochItem>;
+    const wrapper = mount(EpochDeck, {
+      props: {
+        activeId: "a",
+        items: epochItems,
+        itemLabel: (item: EpochItem) => item.title,
+        reducedMotionOverride: true,
+      },
+      slots: {
+        card: ({ item }: StackedDeckCardState<EpochItem, EpochItem["id"]>) => h("div", item.title),
+      },
+    });
+    await nextTick();
+    const deck = wrapper.vm as unknown as {
+      activeId: EpochItem["id"] | undefined;
+      navigateTo: (id: EpochItem["id"]) => boolean;
+      settledId: EpochItem["id"] | undefined;
+      visualId: EpochItem["id"] | undefined;
+    };
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(deck.navigateTo("b")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+    expect(deck.settledId).toBe("b");
+
+    await wrapper.setProps({ activeId: "future" } as never);
+    expect(deck.navigateTo("c")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(deck.activeId).toBe("future");
+    expect(deck.visualId).toBe("b");
+    expect(deck.settledId).toBe("b");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["c", { reason: "programmatic" }]);
+    expect(wrapper.get('[data-testid="snap-motion-stacked-deck-status"]').text()).not.toContain(
+      "C",
+    );
+
+    await wrapper.setProps({ items: [...epochItems, futureItem] } as never);
+    await Promise.resolve();
+    await nextTick();
+    expect(deck.visualId).toBe("future");
+    expect(deck.settledId).toBe("future");
+    expect(wrapper.get('[data-testid="snap-motion-stacked-deck-status"]').text()).not.toContain(
+      "Future",
+    );
+    expect((wrapper.emitted("settled") ?? []).filter(([id]) => id === "future")).toHaveLength(1);
+
+    await wrapper.setProps({ activeId: undefined } as never);
+    expect(deck.activeId).toBe("future");
+    expect(deck.navigateTo("d")).toBe(true);
+    await Promise.resolve();
+    await nextTick();
+
+    expect(deck.activeId).toBe("d");
+    expect(deck.visualId).toBe("d");
+    expect(deck.settledId).toBe("d");
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
+      ["b", { reason: "programmatic" }],
+      ["c", { reason: "programmatic" }],
+      ["d", { reason: "programmatic" }],
+    ]);
+    wrapper.unmount();
+  });
+
   it("rolls back to a valid deck anchor while controlled authority is unavailable", async () => {
     const wrapper = mountDeck({ activeId: "future" });
     await nextTick();

@@ -182,11 +182,20 @@ describe("MediaGalleryDialog lifecycle", () => {
     const wrapper = mountGallery({ open: false });
     await flushReactiveTasks();
 
-    (wrapper.vm as unknown as { requestClose: (reason: "programmatic") => void }).requestClose(
-      "programmatic",
-    );
+    (wrapper.vm as unknown as { requestClose: (reason?: "programmatic") => void }).requestClose();
     expect(wrapper.emitted("update:open")).toBeUndefined();
     expect(wrapper.emitted("openRequest")).toBeUndefined();
+  });
+
+  it("defaults an imperative close request to programmatic provenance", async () => {
+    const wrapper = mountGallery();
+    await flushReactiveTasks();
+
+    (wrapper.vm as unknown as { requestClose: (reason?: "programmatic") => void }).requestClose();
+    expect(wrapper.emitted("update:open")).toEqual([[false]]);
+    expect(wrapper.emitted("openRequest")).toEqual([
+      [false, { activeId: "one", reason: "programmatic" }],
+    ]);
   });
 
   it("opens at a clamped initial index, focuses close, and emits opened", async () => {
@@ -278,6 +287,33 @@ describe("MediaGalleryDialog lifecycle", () => {
     await flushReactiveTasks();
     expect(wrapper.get("dialog").attributes("open")).toBeUndefined();
     expect(wrapper.emitted("closed")?.at(-1)).toEqual(["one"]);
+  });
+
+  it("repairs refused unexpected native closure with focus, scroll, and identity intact", async () => {
+    const wrapper = mountGallery({
+      activeId: "two",
+      initialFocus: () =>
+        document.querySelector<HTMLElement>(".snap-motion-media-gallery-header h2") ?? undefined,
+    });
+    await flushReactiveTasks();
+    const dialog = wrapper.get("dialog").element as HTMLDialogElement;
+    const focusTarget = wrapper.get(".snap-motion-media-gallery-header h2").element;
+    expect(document.activeElement).toBe(focusTarget);
+
+    dialog.removeAttribute("open");
+    dialog.dispatchEvent(new Event("close"));
+    await flushReactiveTasks();
+
+    expect(wrapper.emitted("openRequest")).toEqual([
+      [false, { activeId: "two", reason: "programmatic" }],
+    ]);
+    expect(wrapper.emitted("opened")).toEqual([["two"]]);
+    expect(wrapper.emitted("closed")).toBeUndefined();
+    expect(wrapper.get("dialog").attributes()).toHaveProperty("open");
+    expect(wrapper.get("dialog").attributes("data-active-id")).toBe("two");
+    expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("two");
+    expect(document.documentElement.style.overflow).toBe("hidden");
+    expect(document.activeElement).toBe(focusTarget);
   });
 
   it("falls back when the opener is removed before close", async () => {
@@ -561,6 +597,41 @@ describe("MediaGalleryDialog lifecycle", () => {
 });
 
 describe("MediaGalleryDialog navigation", () => {
+  it("reports synchronous acceptance for adjacent and exact navigation commands", async () => {
+    const wrapper = mountGallery();
+    await flushReactiveTasks();
+    const gallery = wrapper.vm as unknown as {
+      navigateTo: (id: string) => boolean;
+      next: () => boolean;
+      previous: () => boolean;
+    };
+
+    expect(gallery.previous()).toBe(false);
+    expect(gallery.navigateTo("one")).toBe(false);
+    expect(gallery.next()).toBe(true);
+    await flushReactiveTasks();
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("1");
+    expect(gallery.previous()).toBe(true);
+    await flushReactiveTasks();
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("0");
+    expect(gallery.navigateTo("missing")).toBe(false);
+  });
+
+  it("refuses adjacent commands while track settlement owns navigation", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountGallery({ reducedMotionOverride: false });
+    await flushReactiveTasks();
+    await frames.flushNext();
+    const gallery = wrapper.vm as unknown as { next: () => boolean; previous: () => boolean };
+
+    expect(gallery.next()).toBe(true);
+    await flushReactiveTasks();
+    await frames.flushNext();
+    expect(wrapper.get("dialog").attributes("data-track-state")).toBe("settling");
+    expect(gallery.next()).toBe(false);
+    expect(gallery.previous()).toBe(false);
+  });
+
   it("adopts a valid external ID while open without echoing a semantic request", async () => {
     const wrapper = mountGallery({ activeId: "one" });
     await flushReactiveTasks();
@@ -733,6 +804,70 @@ describe("MediaGalleryDialog navigation", () => {
     expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("one");
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("0");
     expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["two", { reason: "next" }]);
+  });
+
+  it("does not resurrect media authority from a completed controlled ownership epoch", async () => {
+    const epochItems: readonly MediaGalleryItem[] = [
+      { id: "a", title: "A", alt: "A", previewSrc: "/a.jpg", width: 800, height: 500 },
+      { id: "b", title: "B", alt: "B", previewSrc: "/b.jpg", width: 800, height: 500 },
+      { id: "c", title: "C", alt: "C", previewSrc: "/c.jpg", width: 800, height: 500 },
+      { id: "d", title: "D", alt: "D", previewSrc: "/d.jpg", width: 800, height: 500 },
+    ];
+    const futureItem: MediaGalleryItem = {
+      id: "future",
+      title: "Future",
+      alt: "Future",
+      previewSrc: "/future.jpg",
+      width: 800,
+      height: 500,
+    };
+    const wrapper = mountGallery({ activeId: "a", items: epochItems });
+    await flushReactiveTasks();
+    const gallery = wrapper.vm as unknown as {
+      activeId: string | undefined;
+      navigateTo: (id: string) => boolean;
+      settledId: string | undefined;
+    };
+
+    await wrapper.setProps({ activeId: undefined });
+    expect(gallery.navigateTo("b")).toBe(true);
+    await flushReactiveTasks();
+    expect(gallery.settledId).toBe("b");
+
+    await wrapper.setProps({ activeId: "future" });
+    expect(gallery.navigateTo("c")).toBe(true);
+    await flushReactiveTasks();
+
+    expect(gallery.activeId).toBe("future");
+    expect(gallery.settledId).toBe("b");
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("1");
+    expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["c", { reason: "programmatic" }]);
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-status"]').text()).not.toContain(
+      "C",
+    );
+
+    await wrapper.setProps({ items: [...epochItems, futureItem] });
+    await flushReactiveTasks();
+    expect(gallery.settledId).toBe("future");
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("4");
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-status"]').text()).not.toContain(
+      "Future",
+    );
+    expect((wrapper.emitted("settled") ?? []).filter(([id]) => id === "future")).toHaveLength(0);
+
+    await wrapper.setProps({ activeId: undefined });
+    expect(gallery.activeId).toBe("future");
+    expect(gallery.navigateTo("d")).toBe(true);
+    await flushReactiveTasks();
+
+    expect(gallery.activeId).toBe("d");
+    expect(gallery.settledId).toBe("d");
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("3");
+    expect(wrapper.emitted("activeIdRequest")).toEqual([
+      ["b", { reason: "programmatic" }],
+      ["c", { reason: "programmatic" }],
+      ["d", { reason: "programmatic" }],
+    ]);
   });
 
   it("retains a valid gallery anchor while controlled authority is unavailable", async () => {

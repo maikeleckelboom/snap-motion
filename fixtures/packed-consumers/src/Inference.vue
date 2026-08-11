@@ -13,11 +13,13 @@ import {
   type CoverflowCardPresentation,
   type CoverflowHandle,
 } from "@snap-motion/vue/coverflow";
+import { ModalDialog, type CloseReason } from "@snap-motion/vue/dialog";
 import {
   MediaGalleryDialog,
   type MediaGalleryHandle,
   type MediaGalleryItem,
 } from "@snap-motion/vue/media-gallery";
+import { Sheet } from "@snap-motion/vue/sheet";
 import {
   StackedDeck,
   type StackedDeckHandle,
@@ -103,6 +105,11 @@ const activeMutableMedia = ref<MutableMediaId>("draft");
 const deck = ref<StackedDeckHandle<ScreenId>>();
 const rail = ref<CoverflowHandle<ChapterId>>();
 const gallery = ref<MediaGalleryHandle<GalleryId>>();
+interface OverlayCloseHandle {
+  requestClose(reason?: CloseReason): void;
+}
+const modal = ref<OverlayCloseHandle>();
+const sheet = ref<OverlayCloseHandle>();
 
 /** Accepts the exact domain item, so a widened `TItem` fails to compile here. */
 function screenTitle(screen: Screen): string {
@@ -139,12 +146,19 @@ function driveHandles(): void {
   const phase: string = deck.value?.diagnostics.phase ?? "idle";
   const settled: ChapterId | undefined = rail.value?.settledId;
   gallery.value?.navigateTo("detail");
+  const galleryNextAccepted: boolean | undefined = gallery.value?.next();
+  const galleryPreviousAccepted: boolean | undefined = gallery.value?.previous();
+  gallery.value?.requestClose();
+  modal.value?.requestClose();
+  sheet.value?.requestClose();
   const gallerySemanticId: GalleryId | undefined = gallery.value?.activeId;
   const gallerySettledId: GalleryId | undefined = gallery.value?.settledId;
   void phase;
   void settled;
   void gallerySemanticId;
   void gallerySettledId;
+  void galleryNextAccepted;
+  void galleryPreviousAccepted;
 }
 void driveHandles;
 </script>
@@ -201,6 +215,14 @@ void driveHandles;
       @active-id-request="onGalleryRequested"
       @settled="onGallerySettled"
     />
+
+    <ModalDialog ref="modal" :open="false">
+      <template #title>Modal inference</template>
+    </ModalDialog>
+
+    <Sheet ref="sheet" :open="false">
+      <template #title>Sheet inference</template>
+    </Sheet>
 
     <MediaGalleryDialog
       :open="false"

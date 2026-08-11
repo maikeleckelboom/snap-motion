@@ -19,11 +19,11 @@ import "@snap-motion/vue/style.css";
 ## Basic carousel
 
 Use stable string IDs. A user action emits `update:activeId` and
-`activeIdRequest(id, { reason })` when the command is accepted. With `v-model`, the host confirms by
-publishing that ID back through `activeId`; only a confirmed destination emits
-`settled(id, { reason })` after physical completion. If the host ignores the request, semantic state
-does not change and the mechanics reconcile without a settlement or announcement. External prop
-changes are authoritative and are never echoed through the request events.
+`activeIdRequest(id, { reason })` when the command is accepted. `v-model` immediately accepts the
+update and publishes that ID back through `activeId`; only a confirmed destination emits
+`settled(id, { reason })` after physical completion. If a one-way owner ignores the request,
+semantic state does not change and the mechanics reconcile without a settlement or announcement.
+External prop changes are authoritative and are never echoed through the request events.
 
 ```vue
 <script setup lang="ts">
@@ -55,6 +55,9 @@ const activeId = ref<(typeof ids)[number]>("a");
   </CarouselRoot>
 </template>
 ```
+
+For route guards or any owner that may delay, refuse, or replace a request, use a one-way prop rather
+than `v-model`. See [immediate and guarded ownership](integration.md#semantic-selection).
 
 Use an exposed `navigateTo(id)` for a new programmatic request. Use `synchronizeTo(id)` only to
 adopt state that the same component already exposes as authoritative. On a controlled high-level

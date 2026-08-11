@@ -6,7 +6,7 @@ state, accessibility, and projection.
 
 ```vue
 <Coverflow
-  v-model:active-id="activeId"
+  :active-id="routeActiveId"
   :items="screens"
   label="Project screens"
   @active-id-request="onActiveIdRequest"
@@ -38,6 +38,9 @@ surface commits that state itself. A controlled surface keeps the prop value whi
 travel toward the requested target; the host confirms by publishing the requested ID. Only a
 confirmed destination emits `settled(id, { reason })` at rest. Ignored requests reconcile back
 without settlement or announcement.
+Use `v-model:active-id` only for immediate acceptance. A guarded or delayed owner binds the prop one
+way, as above, and publishes its decision later; see
+[immediate and guarded ownership](integration.md#semantic-selection).
 The slot's `active`, `visual`, and `settled` booleans preserve the same distinction. `aria-current`
 follows visual authority in DOM metadata; cards remain inert and accessibility-hidden while a
 pointer owns the surface, then the one current card is exposed on release. Live announcements remain

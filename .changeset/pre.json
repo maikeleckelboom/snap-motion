@@ -11,6 +11,7 @@
   "changesets": [
     "external-consumer-ready",
     "final-beta-correctness",
+    "final-pre-integration-polish",
     "multi-edge-sheet",
     "one-card-interaction-envelope",
     "public-api-contract-freeze",
