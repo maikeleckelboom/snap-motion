@@ -9,6 +9,7 @@
     "@snap-motion/vue": "0.1.0-beta.0"
   },
   "changesets": [
+    "beta-six-gallery-dogfood",
     "external-consumer-ready",
     "final-beta-correctness",
     "final-dogfood-handoff",
