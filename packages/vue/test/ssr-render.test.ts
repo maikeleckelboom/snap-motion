@@ -62,20 +62,25 @@ function createCertificationApp() {
           { activeId: "comfortable", open: true },
           { title: () => "Sheet title", default: () => h("p", "Sheet content") },
         ),
-        h(MediaGalleryDialog, {
-          open: true,
-          items: [
-            {
-              id: "one",
-              title: "Media title",
-              alt: "Media description",
-              previewSrc: "/preview.jpg",
-              width: 1_600,
-              height: 1_000,
-            },
-          ],
-          activeId: "one",
-        }),
+        h(
+          MediaGalleryDialog,
+          {
+            open: true,
+            items: [
+              {
+                id: "one",
+                title: "Media title",
+                description: "Settled media item description",
+                alt: "Media alternative text",
+                previewSrc: "/preview.jpg",
+                width: 1_600,
+                height: 1_000,
+              },
+            ],
+            activeId: "one",
+          },
+          { actions: () => h("a", { href: "/nl/case?media=one" }, "Switch locale") },
+        ),
         h(
           Coverflow,
           { items: spatialItems, label: "Coverflow rail" },
@@ -102,6 +107,8 @@ describe("production component SSR contract", () => {
     expect(html).toContain("<dialog");
     expect(html).toContain("snap-motion-media-gallery");
     expect(html).toContain("Media title");
+    expect(html).toContain("Settled media item description");
+    expect(html).toContain("Switch locale");
     expect(html).not.toMatch(/<dialog[^>]*\sopen(?:=|\s|>)/);
     expect(html).not.toContain("teleport");
   });

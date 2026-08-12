@@ -80,7 +80,9 @@ export const MediaGalleryDialog: <TItem extends MediaGalleryItem>(__VLS_props: N
     synchronizeTo: (id: TItem["id"]) => boolean;
     }>) => void;
     attrs: any;
-    slots: {};
+    slots: {
+        actions?: () => unknown;
+    };
     emit: {
         (event: "update:open", open: boolean): void;
         (event: "update:activeId", id: TItem["id"] | undefined): void;

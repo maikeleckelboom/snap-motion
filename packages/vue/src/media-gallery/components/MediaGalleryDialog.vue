@@ -107,6 +107,9 @@ const emit = defineEmits<{
   (event: "closed", finalId: TId | undefined): void;
   (event: "settled", id: TId, details: SettlementDetails): void;
 }>();
+const slots = defineSlots<{
+  actions?: () => unknown;
+}>();
 
 const items = computed(() => normalizeMediaGalleryItems(props.items));
 const messages = computed(() => createEnglishMediaGalleryMessages(props.messages));
@@ -1495,35 +1498,53 @@ defineExpose({
       data-testid="snap-motion-media-gallery-shell"
       @transitionend="onShellTransitionEnd"
     >
-      <header class="snap-motion-media-gallery-header">
+      <header class="snap-motion-media-gallery-header" :class="{ 'has-actions': slots.actions }">
         <div>
-          <p v-if="eyebrow">{{ eyebrow }}</p>
+          <p v-if="eyebrow" class="snap-motion-media-gallery-eyebrow">{{ eyebrow }}</p>
           <h2 :id="titleId" ref="titleHeading" tabindex="-1">{{ title }}</h2>
         </div>
         <div class="snap-motion-media-gallery-identity" aria-live="off">
-          <strong data-testid="snap-motion-media-gallery-title">{{ activeItem?.title }}</strong>
-          <span class="tabular" data-testid="snap-motion-media-gallery-position">
-            {{ galleryPosition }}
-          </span>
+          <div class="snap-motion-media-gallery-item-heading">
+            <strong data-testid="snap-motion-media-gallery-title">{{ activeItem?.title }}</strong>
+            <span class="tabular" data-testid="snap-motion-media-gallery-position">
+              {{ galleryPosition }}
+            </span>
+          </div>
+          <p
+            v-if="activeItem?.description"
+            class="snap-motion-media-gallery-description"
+            data-testid="snap-motion-media-gallery-description"
+          >
+            {{ activeItem.description }}
+          </p>
         </div>
-        <button
-          ref="closeButton"
-          :aria-label="messages.closeGallery"
-          class="snap-motion-media-gallery-control snap-motion-media-gallery-close"
-          data-testid="snap-motion-media-gallery-close"
-          type="button"
-          @click="requestClose('close-button')"
-        >
-          <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
-            <path
-              d="M5 5l14 14M19 5 5 19"
-              fill="none"
-              stroke="currentColor"
-              stroke-linecap="square"
-              stroke-width="2"
-            />
-          </svg>
-        </button>
+        <div class="snap-motion-media-gallery-header-actions">
+          <div
+            v-if="slots.actions"
+            class="snap-motion-media-gallery-actions"
+            data-testid="snap-motion-media-gallery-actions"
+          >
+            <slot name="actions" />
+          </div>
+          <button
+            ref="closeButton"
+            :aria-label="messages.closeGallery"
+            class="snap-motion-media-gallery-control snap-motion-media-gallery-close"
+            data-testid="snap-motion-media-gallery-close"
+            type="button"
+            @click="requestClose('close-button')"
+          >
+            <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
+              <path
+                d="M5 5l14 14M19 5 5 19"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="square"
+                stroke-width="2"
+              />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <div class="snap-motion-media-gallery-workspace">

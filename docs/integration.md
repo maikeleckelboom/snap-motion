@@ -70,6 +70,11 @@ C destination and rollback to B. `apps/nuxt-fixture` certifies the same multi-st
 boundary for a query-controlled SSR gallery, initially open valid IDs, hydration, and direct-entry
 fallback. Neither fixture uses `ClientOnly`.
 
+An application control that must remain usable while `MediaGalleryDialog` is open belongs in its
+no-prop `#actions` slot. A locale switch or similarly scoped action outside the native modal is
+correctly inert and is not a viable duplicate control. The application keeps ownership of the
+action and any route update while the Gallery keeps modal focus and DOM order coherent.
+
 ## TypeScript handoff
 
 Before integrating the tarballs into `maikel.site`:

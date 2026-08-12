@@ -58,6 +58,7 @@ const baselineItems: readonly MediaGalleryItem[] = [
   {
     id: "landscape-overview",
     title: "Landscape overview",
+    description: "Landscape overview description for the settled first Gallery item.",
     alt: "Blue landscape test card labelled regular landscape, with a 1600 by 1000 size marker.",
     previewSrc: regular.src,
     fullSrc: `${regular.src}?at-full`,
@@ -67,6 +68,7 @@ const baselineItems: readonly MediaGalleryItem[] = [
   {
     id: "wide-timeline",
     title: "Wide timeline",
+    description: "Wide timeline description for the exact mechanically settled Gallery item.",
     alt: "Wide blue timeline test card with a 12000 by 1600 size marker.",
     previewSrc: wide.src,
     fullSrc: `${wide.src}?at-full`,
@@ -76,6 +78,7 @@ const baselineItems: readonly MediaGalleryItem[] = [
   {
     id: "tall-document",
     title: "Tall document",
+    description: "Tall document description for the settled final Gallery item.",
     alt: "Tall green document test card with a 1600 by 12000 size marker.",
     previewSrc: tall.src,
     fullSrc: `${tall.src}?at-full`,
@@ -506,7 +509,16 @@ async function onClosed(finalId: string | undefined) {
       @settled="onSettled"
       @update:active-id="onActiveIdUpdate"
       @update:open="onOpenUpdate"
-    />
+    >
+      <template #actions>
+        <div class="at-gallery-actions">
+          <a data-testid="at-gallery-action-link" href="#at-gallery-action-target" tabindex="0">
+            Switch locale
+          </a>
+          <button data-testid="at-gallery-action-button" type="button">Application action</button>
+        </div>
+      </template>
+    </MediaGalleryDialog>
   </section>
 </template>
 
@@ -628,6 +640,13 @@ async function onClosed(finalId: string | undefined) {
 .at-certification-actions button:first-child {
   background: var(--ink);
   color: var(--paper);
+}
+
+.at-gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .at-scenario-contract {

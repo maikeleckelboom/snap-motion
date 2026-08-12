@@ -18,7 +18,11 @@ import "@snap-motion/vue/style.css";
   :focus-return="{ opener, fallback: viewport }"
   @active-id-request="(id, details) => replaceRouteMedia(id, details.reason)"
   @open-request="(_open, details) => closeRouteOverlay(details.activeId, details.reason)"
-/>
+>
+  <template #actions>
+    <LocaleSwitch :media-id="routeMediaId" />
+  </template>
+</MediaGalleryDialog>
 ```
 
 ## Item and identity contract
@@ -32,7 +36,19 @@ props, `v-model`, events, lifecycle details, and handle methods. Public state ne
 Intrinsic dimensions reserve layout before loading. Invalid dimensions fall back as one `1 x 1`
 pair. Mixed-aspect media uses a stable containing viewport. A preview stays mounted while a distinct
 full image decodes; a failed full image is removed without hiding the preview and can be retried.
-Only the mechanically settled item is exposed to assistive technology.
+Only the mechanically settled item is exposed to assistive technology. Its optional `description`
+is rendered with that same mechanical item, below the item title and position. A controlled request
+cannot publish destination copy before the host adopts it, and the description is intentionally not
+a live announcement.
+
+## Application actions
+
+The optional no-prop `#actions` slot places application-owned controls inside the native modal.
+Use it for an action such as locale switching that must remain operable while `showModal()` correctly
+makes the page outside the dialog inert. The host owns the action's behavior, accessible name, and
+visual treatment. Snap Motion owns its structural placement, focus containment, focus indication,
+forced-color participation, and DOM order before the Close control. When the slot is absent, no
+empty action container is rendered.
 
 ## Controlled lifecycle
 

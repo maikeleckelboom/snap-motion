@@ -282,6 +282,84 @@ async function readFrame(page: Page) {
   });
 }
 
+async function readNarrowPageGeometry(page: Page) {
+  return page.getByTestId("stacked-deck-overflow-root").evaluate((root) => {
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper must execute in the browser evaluation scope.
+    const rect = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return {
+        bottom: Number(box.bottom.toFixed(3)),
+        height: Number(box.height.toFixed(3)),
+        left: Number(box.left.toFixed(3)),
+        right: Number(box.right.toFixed(3)),
+        top: Number(box.top.toFixed(3)),
+        width: Number(box.width.toFixed(3)),
+      };
+    };
+    const dimensions = (element: HTMLElement) => ({
+      clientHeight: element.clientHeight,
+      clientWidth: element.clientWidth,
+      rect: rect(element),
+      scrollHeight: element.scrollHeight,
+      scrollWidth: element.scrollWidth,
+    });
+    const stage = root.querySelector<HTMLElement>(".snap-motion-stacked-deck-stage")!;
+    const status = root.querySelector<HTMLElement>(
+      "[data-testid='snap-motion-stacked-deck-status']",
+    )!;
+    const cards = [...root.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-card")].map(
+      (card) => {
+        const motion = card.querySelector<HTMLElement>(".snap-motion-stacked-deck-card-motion")!;
+        const child = motion.firstElementChild as HTMLElement;
+        const cardStyle = getComputedStyle(card);
+        const motionStyle = getComputedStyle(motion);
+        return {
+          id: card.dataset.itemId ?? "",
+          interactive: card.dataset.deckInteractive,
+          opacity: cardStyle.opacity,
+          outer: dimensions(card),
+          motion: dimensions(motion),
+          motionTransform: motionStyle.transform,
+          role: card.dataset.deckRole,
+          slottedChild: dimensions(child),
+          visibility: cardStyle.visibility,
+          visible: card.dataset.deckVisible,
+        };
+      },
+    );
+    const pile = [
+      ...root.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-pile-layer"),
+    ].map((layer) => ({
+      dimensions: dimensions(layer),
+      id: layer.dataset.pileItemId ?? "",
+      opacity: getComputedStyle(layer).opacity,
+      slot: layer.dataset.pileSlot ?? "",
+      transform: getComputedStyle(layer).transform,
+    }));
+    return {
+      activeId: root.dataset.activeId,
+      cards,
+      cardWidthProperty: getComputedStyle(stage)
+        .getPropertyValue("--snap-motion-deck-card-width")
+        .trim(),
+      document: {
+        bodyScrollWidth: document.body.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      },
+      phase: root.dataset.phase,
+      pile,
+      root: dimensions(root),
+      settledId: root.dataset.settledId,
+      stage: dimensions(stage),
+      status: {
+        dimensions: dimensions(status),
+        text: status.textContent?.trim() ?? "",
+      },
+    };
+  });
+}
+
 type DeckFrame = Awaited<ReturnType<typeof readFrame>>;
 
 function topPose(frame: DeckFrame) {
@@ -2046,6 +2124,85 @@ test("responsive bleed surface avoids internal clipping and page overflow", asyn
     expect(uniqueInOrder(trace.map((sample) => sample.visualTopIndex))).toEqual([0, 4]);
     await expectNoInternalCardClip(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  }
+});
+
+test("three-card narrow consumers never create document overflow after settlement", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openLabDemo(page, "stacked-deck-overflow", "system");
+  const root = page.getByTestId("stacked-deck-overflow-root");
+  const reports: Array<{
+    direction: "initial" | "next" | "previous";
+    geometry: Awaited<ReturnType<typeof readNarrowPageGeometry>>;
+    variant: "media" | "minimal";
+  }> = [];
+  for (const variant of ["media", "minimal"] as const) {
+    await page.getByTestId(`stacked-deck-overflow-${variant}`).click();
+    await expect(root).toHaveAttribute("data-active-id", "template-editor");
+    await expect(root).toHaveAttribute("data-settled-id", "template-editor");
+    await expect(root).toHaveAttribute("data-phase", "idle");
+    reports.push({ direction: "initial", geometry: await readNarrowPageGeometry(page), variant });
+
+    await root.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(root).toHaveAttribute("data-active-id", "project-detail");
+    await expect(root).toHaveAttribute("data-settled-id", "project-detail");
+    await expect(root).toHaveAttribute("data-phase", "idle");
+    await expect(page.getByTestId("snap-motion-stacked-deck-status")).toHaveText(
+      "Projectdetail met projectinformatie, locatie en dossierstatus, 1 of 3",
+    );
+    reports.push({ direction: "previous", geometry: await readNarrowPageGeometry(page), variant });
+
+    await page.getByTestId("stacked-deck-overflow-reset").click();
+    await expect(root).toHaveAttribute("data-active-id", "template-editor");
+    await expect(root).toHaveAttribute("data-settled-id", "template-editor");
+    await root.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(root).toHaveAttribute("data-active-id", "review-activity");
+    await expect(root).toHaveAttribute("data-settled-id", "review-activity");
+    await expect(root).toHaveAttribute("data-phase", "idle");
+    reports.push({ direction: "next", geometry: await readNarrowPageGeometry(page), variant });
+  }
+
+  await testInfo.attach("stacked-deck-narrow-page-geometry", {
+    body: JSON.stringify(reports, null, 2),
+    contentType: "application/json",
+  });
+  for (const report of reports) {
+    expect(
+      report.geometry.root.clientWidth,
+      `${report.variant} ${report.direction} root width`,
+    ).toBe(280);
+    expect(report.geometry.cardWidthProperty).toBe("192px");
+    expect(
+      report.geometry.document.scrollWidth,
+      `${report.variant} ${report.direction} document width`,
+    ).toBe(report.geometry.document.clientWidth);
+    expect(
+      report.geometry.document.bodyScrollWidth,
+      `${report.variant} ${report.direction} body width`,
+    ).toBe(report.geometry.document.clientWidth);
+    expect(
+      report.geometry.root.scrollWidth,
+      `${report.variant} ${report.direction} public root scroll width`,
+    ).toBe(report.geometry.root.clientWidth);
+    expect(
+      report.geometry.stage.scrollWidth,
+      `${report.variant} ${report.direction} stage scroll width`,
+    ).toBe(report.geometry.stage.clientWidth);
+    for (const card of report.geometry.cards) {
+      expect(card.outer.scrollWidth).toBe(card.outer.clientWidth);
+      expect(card.motion.rect.left).toBeGreaterThanOrEqual(report.geometry.root.rect.left);
+      expect(card.motion.rect.right).toBeLessThanOrEqual(report.geometry.root.rect.right);
+      expect(card.slottedChild.scrollWidth).toBeLessThanOrEqual(card.motion.clientWidth);
+    }
+    for (const layer of report.geometry.pile) {
+      expect(layer.dimensions.rect.left).toBeGreaterThanOrEqual(report.geometry.root.rect.left);
+      expect(layer.dimensions.rect.right).toBeLessThanOrEqual(report.geometry.root.rect.right);
+    }
   }
 });
 

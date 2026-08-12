@@ -11,6 +11,7 @@ import OverlayLifecycleFixture from "@/demos/OverlayLifecycleFixture.vue";
 import PagedGridDemo from "@/demos/PagedGridDemo.vue";
 import RenderWindowFixture from "@/demos/RenderWindowFixture.vue";
 import SheetDemo from "@/demos/SheetDemo.vue";
+import StackedDeckOverflowFixture from "@/demos/stacked-deck-overflow-fixture.vue";
 import StackedDeckDemo from "@/demos/StackedDeckDemo.vue";
 import VariableRailFixture from "@/demos/VariableRailFixture.vue";
 
@@ -135,6 +136,20 @@ export const demos = [
     group: "Certification",
     audience: "fixture",
     component: MediaGalleryAtCertificationDemo,
+    capabilities: {
+      motionPreference: true,
+      physics: false,
+      stageWidth: false,
+    },
+  },
+  {
+    id: "stacked-deck-overflow",
+    label: "Stacked Deck Overflow",
+    description:
+      "Three-item narrow-page regression fixture with minimal and responsive media-like content.",
+    group: "Certification",
+    audience: "fixture",
+    component: StackedDeckOverflowFixture,
     capabilities: {
       motionPreference: true,
       physics: false,

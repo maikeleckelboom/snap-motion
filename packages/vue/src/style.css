@@ -435,6 +435,7 @@
 
 .snap-motion-media-gallery-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   inline-size: min(100%, 96rem);
   block-size: 100%;
@@ -466,6 +467,7 @@
 .snap-motion-media-gallery-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(2.75rem, 1fr);
+  min-inline-size: 0;
   align-items: center;
   gap: 1rem;
   padding: 0.75rem clamp(0.75rem, 2vw, 1.25rem);
@@ -473,14 +475,15 @@
   background: var(--snap-motion-gallery-chrome-surface);
 }
 
-.snap-motion-media-gallery-header p,
+.snap-motion-media-gallery-eyebrow,
 .snap-motion-media-gallery-header h2,
 .snap-motion-media-gallery-identity,
+.snap-motion-media-gallery-description,
 .snap-motion-media-gallery-footer p {
   margin: 0;
 }
 
-.snap-motion-media-gallery-header p {
+.snap-motion-media-gallery-eyebrow {
   color: var(--_gallery-muted);
   font-size: 0.7rem;
   font-weight: 700;
@@ -494,23 +497,61 @@
 }
 
 .snap-motion-media-gallery-identity {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 0.75rem;
+  display: grid;
+  gap: 0.25rem;
   min-inline-size: 0;
   text-align: center;
 }
 
-.snap-motion-media-gallery-identity strong {
+.snap-motion-media-gallery-item-heading {
+  display: flex;
+  min-inline-size: 0;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.snap-motion-media-gallery-item-heading strong {
+  min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.snap-motion-media-gallery-identity span {
+.snap-motion-media-gallery-item-heading span {
   color: var(--_gallery-muted);
   white-space: nowrap;
+}
+
+.snap-motion-media-gallery-description {
+  color: var(--_gallery-muted);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.snap-motion-media-gallery-header-actions,
+.snap-motion-media-gallery-actions {
+  display: flex;
+  min-inline-size: 0;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.snap-motion-media-gallery-header-actions {
+  gap: 0.75rem;
+  justify-self: end;
+}
+
+.snap-motion-media-gallery-actions {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.snap-motion-media-gallery-actions :where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--_gallery-focus);
+  outline-offset: 2px;
 }
 
 .snap-motion-media-gallery-control,
@@ -740,9 +781,20 @@
     text-align: start;
   }
 
-  .snap-motion-media-gallery-close {
+  .snap-motion-media-gallery-item-heading {
+    justify-content: start;
+  }
+
+  .snap-motion-media-gallery-header-actions {
     grid-column: 2;
     grid-row: 1;
+  }
+
+  .snap-motion-media-gallery-header.has-actions .snap-motion-media-gallery-header-actions {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-content: space-between;
+    justify-self: stretch;
   }
 
   .snap-motion-media-gallery-workspace {
@@ -840,7 +892,8 @@
   .snap-motion-media-gallery-viewport,
   .snap-motion-media-gallery-control,
   .snap-motion-media-gallery-zoom-controls button,
-  .snap-motion-media-gallery-status button {
+  .snap-motion-media-gallery-status button,
+  .snap-motion-media-gallery-actions {
     forced-color-adjust: auto;
   }
 

@@ -348,6 +348,37 @@ test("scenario controls preserve focus, never auto-open, and clear only the trac
   await expect(gallery(page)).not.toBeVisible();
 });
 
+test("settled item description and application actions share the native modal", async ({
+  page,
+}) => {
+  await page.getByTestId("at-open-gallery").click();
+
+  const dialog = gallery(page);
+  await expect(dialog).toHaveAttribute("data-active-id", "wide-timeline");
+  await expect(dialog).toHaveAttribute("data-settled-id", "wide-timeline");
+  await expect(page.getByTestId("snap-motion-media-gallery-title")).toHaveText("Wide timeline");
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 3");
+  await expect(page.getByTestId("snap-motion-media-gallery-description")).toHaveText(
+    "Wide timeline description for the exact mechanically settled Gallery item.",
+  );
+  await expect(dialog.getByRole("img", { name: /wide blue timeline/i })).toBeVisible();
+  await expect(page.getByTestId("snap-motion-media-gallery-previous")).toBeEnabled();
+  await expect(page.getByTestId("snap-motion-media-gallery-next")).toBeEnabled();
+
+  const actionLink = page.getByTestId("at-gallery-action-link");
+  const actionButton = page.getByTestId("at-gallery-action-button");
+  await expect(actionLink).toBeVisible();
+  await expect(actionButton).toBeVisible();
+  expect(await actionLink.evaluate((element) => element.closest("dialog") !== null)).toBe(true);
+  expect(await actionButton.evaluate((element) => element.closest("dialog") !== null)).toBe(true);
+
+  await expect(page.getByTestId("snap-motion-media-gallery-close")).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(actionButton).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(actionLink).toBeFocused();
+});
+
 test("baseline event order ends with a bounded focus-restoration trace entry", async ({ page }) => {
   const opener = page.getByTestId("at-open-gallery");
   await opener.click();
@@ -585,6 +616,52 @@ test("long localized content reflows at 320 CSS pixels and 200%-equivalent geome
       name: "Mediagalerij sluiten en terugkeren naar de scenario-opener",
     }),
   ).toBeVisible();
+  const description = page.getByTestId("snap-motion-media-gallery-description");
+  await expect(description).toHaveText(
+    "Deze beschrijving is opzettelijk lang om tekstterugloop, vergroting en kleine schermen zonder afkapping te kunnen controleren.",
+  );
+  const descriptionGeometry = await description.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper must execute in the browser evaluation scope.
+    const dimensions = (candidate: Element | null) => {
+      if (!(candidate instanceof HTMLElement)) return null;
+      const rect = candidate.getBoundingClientRect();
+      return {
+        clientWidth: candidate.clientWidth,
+        left: rect.left,
+        right: rect.right,
+        scrollWidth: candidate.scrollWidth,
+        width: rect.width,
+      };
+    };
+    const header = element.closest("header");
+    return {
+      actions: dimensions(header?.querySelector(".snap-motion-media-gallery-actions") ?? null),
+      close: dimensions(header?.querySelector(".snap-motion-media-gallery-close") ?? null),
+      description: dimensions(element),
+      gridColumns: header ? getComputedStyle(header).gridTemplateColumns : "",
+      header: dimensions(header),
+      height: box.height,
+      identity: dimensions(element.parentElement),
+      lineHeight,
+      right: box.right,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  expect(descriptionGeometry.height).toBeGreaterThan(descriptionGeometry.lineHeight * 1.5);
+  expect(descriptionGeometry.header).not.toBeNull();
+  expect(descriptionGeometry.header!.scrollWidth).toBe(descriptionGeometry.header!.clientWidth);
+  expect(descriptionGeometry.right, JSON.stringify(descriptionGeometry)).toBeLessThanOrEqual(
+    descriptionGeometry.header!.right,
+  );
+  expect(descriptionGeometry.identity!.right).toBeLessThanOrEqual(
+    descriptionGeometry.header!.right,
+  );
+  expect(descriptionGeometry.actions!.right).toBeLessThanOrEqual(descriptionGeometry.header!.right);
+  expect(descriptionGeometry.close!.right).toBeLessThanOrEqual(descriptionGeometry.header!.right);
+  await expect(page.getByTestId("at-gallery-action-link")).toBeVisible();
+  await expect(page.getByTestId("at-gallery-action-button")).toBeVisible();
   expect(
     await page.evaluate(() => ({
       bodyOverflow: document.body.scrollWidth - window.innerWidth,
@@ -643,6 +720,20 @@ test("the complete harness remains usable under forced-colors emulation", async 
   await expect(page.getByTestId("at-scenario-long-localized")).toBeFocused();
   await page.getByTestId("at-open-gallery").click();
   await expect(page.getByTestId("snap-motion-media-gallery-close")).toBeFocused();
+  await expect(page.getByTestId("snap-motion-media-gallery-description")).toBeVisible();
+  const actionLink = page.getByTestId("at-gallery-action-link");
+  await expect(actionLink).toBeVisible();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(actionLink).toBeFocused();
+  expect(
+    await page
+      .getByTestId("snap-motion-media-gallery-actions")
+      .evaluate((element) => getComputedStyle(element).forcedColorAdjust),
+  ).toBe("auto");
+  expect(await actionLink.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe(
+    "none",
+  );
   await expectNoHarnessViolations(page);
 });
 

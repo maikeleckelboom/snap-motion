@@ -130,6 +130,7 @@ Use these contract IDs in every platform result.
 | C12 | Delayed full media exposes pending/loading, then succeeds without a failure state.             |
 | C13 | Retry-changing media fails once, then the provided Retry succeeds in the same run.             |
 | C14 | Long localized content remains readable and operable at 320 CSS pixels and physical 200% zoom. |
+| C15 | Settled item description and application actions are readable, ordered, and modal-contained.   |
 
 Record an issue if the AT speaks a technically present element in an unusable order, repeats status
 excessively, loses context, or traps the operator, even when the DOM contract appears correct.
@@ -162,6 +163,8 @@ must not open the dialog or move focus away from the selected radio.
    browser zoom to 200 percent on desktop. Verify long names, title, description, alternative text,
    status, controls, and focus are not clipped or made unreachable (C14). Do not record automated
    zoom-equivalent coverage as the physical zoom result.
+   Traverse the provided application actions in both directions and verify they remain inside the
+   modal after the settled description (C15).
 10. After closing each scenario, inspect the non-live trace. Verify it ends with `closed`, then
     `focus-restored` identifying `at-open-gallery`. Activate `Clear event trace`; verify it empties
     the trace without changing the selected scenario or opening the dialog (C10).
@@ -185,9 +188,10 @@ must not open the dialog or move focus away from the selected radio.
    `activeIdRequest` then `settled` after `opened` (C04-C06).
 3. Press Left Arrow once and verify `Wide timeline, 2 of 3` once. Repeat with Motion set to
    `Reduced`; no prior-item message may arrive after the new committed item.
-4. Tab forward through the dialog, naming every stop. Confirm background controls are absent,
+4. Tab forward through the dialog, naming every stop. Confirm the settled description and provided
+   application actions occur in a coherent order, background controls are absent,
    disabled boundaries are conveyed, destination-aware labels are intelligible, and traversal
-   remains inside the dialog (C03 and C05).
+   remains inside the dialog (C03, C05, and C15).
 5. Activate `Zoom in`, verify the zoom readout/state is understandable, activate `Fit`, then zoom
    again and activate Next. Verify the item changes and zoom returns to 100% (C07).
 6. With focus on a dialog control, press Home and End. Record boundary behavior, message count, and
@@ -195,7 +199,7 @@ must not open the dialog or move focus away from the selected radio.
 7. Press Escape. Verify the dialog closes, focus returns to the exact opener, and the trace ends
    with `update:open false`, `openRequest` reason `escape`, `closed`, then `focus-restored`
    identifying `at-open-gallery` (C10).
-8. Complete the required scenario sweep above and record C05 and C08-C14 separately.
+8. Complete the required scenario sweep above and record C05 and C08-C15 separately.
 
 ## NVDA and Chrome or Edge on Windows
 
@@ -254,7 +258,7 @@ certify the other.
 6. Close with Escape. Verify focus returns to the opener. Reopen and close with the visible button;
    compare the two close reasons in the trace (C10).
 7. Complete the required scenario sweep. Record rotor order, exact failure/loading speech, Retry
-   operability, image alt text, wrapping, and C05 and C08-C14 results.
+   operability, image alt text, wrapping, and C05 and C08-C15 results.
 8. Set Motion to `Reduced` and rerun one navigation cycle. Record any change in status timing.
 
 ## VoiceOver and Safari on iPhone
@@ -283,7 +287,7 @@ Use a physical iPhone. Do not infer this row from macOS Safari or WebKit automat
    missing or duplicated committed image.
 6. Close with the visible Close control and verify focus returns to the opener (C10). If a hardware
    keyboard is present, separately test Escape and physical Left/Right; label this supplemental.
-7. Complete the required scenario sweep; record C04-C05 and C08-C14. For `long-localized`, record
+7. Complete the required scenario sweep; record C04-C05 and C08-C15. For `long-localized`, record
    actual text size/display zoom and use the narrowest supported physical orientation.
 8. Repeat one baseline navigation with Motion `Reduced`.
 9. Do not disable VoiceOver to force a direct one-finger media swipe. If VoiceOver reserves a
@@ -316,7 +320,7 @@ Use a physical Android device. Do not infer this row from Chromium automation.
 6. Close with the visible Close control and verify focus returns to the opener (C10). With a
    connected keyboard, separately test Escape and physical Left/Right as supplemental evidence.
 7. Complete the required scenario sweep. Record exact pending/failure output, the named fallback
-   preview, Retry operability, localized wrapping, and C04-C05/C08-C14.
+   preview, Retry operability, localized wrapping, and C04-C05/C08-C15.
 8. Repeat one baseline navigation with Motion `Reduced`.
 9. Do not disable TalkBack to force a direct one-finger media swipe. Record TalkBack-reserved
    gestures as AT behavior and use explicit Previous/Next controls for the required navigation path.

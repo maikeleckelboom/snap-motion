@@ -12,7 +12,8 @@ stable IDs, controlled selection, and content, and the surface supplies everythi
 
 The media gallery is a higher-level, interaction-complete composition. Its public item, lifecycle,
 loading, focus, responsive, message, and theme contracts are documented in
-[Media gallery](./media-gallery.md).
+[Media gallery](./media-gallery.md). Optional item descriptions follow the mechanically settled
+item. The no-prop `#actions` slot places application-owned controls inside the native modal.
 
 ## Modal lightbox
 

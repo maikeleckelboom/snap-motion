@@ -1,6 +1,6 @@
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { nextTick } from "vue";
+import { h, nextTick } from "vue";
 
 import MediaGalleryDialog from "../src/media-gallery/components/MediaGalleryDialog.vue";
 import type {
@@ -12,6 +12,7 @@ const items: readonly MediaGalleryItem[] = [
   {
     id: "one",
     title: "One",
+    description: "First item description",
     alt: "First item",
     previewSrc: "/one-preview.jpg",
     fullSrc: "/one-full.jpg",
@@ -21,6 +22,8 @@ const items: readonly MediaGalleryItem[] = [
   {
     id: "two",
     title: "Two",
+    description:
+      "Second item description that remains readable when the gallery header reflows at narrow widths.",
     alt: "Second item",
     previewSrc: "/two-preview.jpg",
     fullSrc: "/two-full.jpg",
@@ -211,6 +214,66 @@ describe("MediaGalleryDialog lifecycle", () => {
     expect(document.documentElement.style.overflow).toBe("hidden");
 
     wrapper.unmount();
+  });
+
+  it("renders only the mechanically settled item's optional description", async () => {
+    const wrapper = mountGallery({ activeId: "two" });
+    await flushReactiveTasks();
+
+    expect(wrapper.get("dialog").attributes("data-active-id")).toBe("two");
+    expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("two");
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-title"]').text()).toBe("Two");
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-position"]').text()).toBe("2 / 3");
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-description"]').text()).toBe(
+      items[1]!.description,
+    );
+    expect(wrapper.find('[data-testid="snap-motion-media-gallery-actions"]').exists()).toBe(false);
+
+    await wrapper.setProps({ activeId: "three" });
+    await flushReactiveTasks();
+    expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("three");
+    expect(wrapper.find('[data-testid="snap-motion-media-gallery-description"]').exists()).toBe(
+      false,
+    );
+  });
+
+  it("does not publish a requested description before controlled mechanics adopt it", async () => {
+    const wrapper = mountGallery({ activeId: "one" });
+    await flushReactiveTasks();
+
+    await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
+    await flushReactiveTasks();
+    expect(wrapper.emitted("activeIdRequest")?.at(-1)).toEqual(["two", { reason: "next" }]);
+    expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("one");
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-description"]').text()).toBe(
+      items[0]!.description,
+    );
+
+    await wrapper.setProps({ activeId: "two" });
+    await flushReactiveTasks();
+    expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("two");
+    expect(wrapper.get('[data-testid="snap-motion-media-gallery-description"]').text()).toBe(
+      items[1]!.description,
+    );
+  });
+
+  it("renders one no-prop application action slot inside the native modal", async () => {
+    const wrapper = mount(MediaGalleryDialog, {
+      attachTo: document.body,
+      props: { items, open: true, reducedMotionOverride: true },
+      slots: {
+        actions: () => [
+          h("a", { href: "#localized-case" }, "Switch locale"),
+          h("button", { type: "button" }, "Save media"),
+        ],
+      },
+    });
+    await flushReactiveTasks();
+
+    const actions = wrapper.get('[data-testid="snap-motion-media-gallery-actions"]');
+    expect(actions.element.closest("dialog")).toBe(wrapper.get("dialog").element);
+    expect(actions.get("a").text()).toBe("Switch locale");
+    expect(actions.get("button").text()).toBe("Save media");
   });
 
   it("uses the system preference for immediate open, navigation, and close completion", async () => {
