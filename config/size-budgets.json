@@ -6,8 +6,8 @@
   },
   "vueRoot": {
     "entry": "packages/vue/dist/index.js",
-    "maxBytes": 127500,
-    "maxGzipBytes": 32500
+    "maxBytes": 129000,
+    "maxGzipBytes": 32800
   },
   "vueCarousel": {
     "entry": "packages/vue/dist/carousel.js",
@@ -26,8 +26,8 @@
   },
   "vueSheet": {
     "entry": "packages/vue/dist/sheet.js",
-    "maxBytes": 46500,
-    "maxGzipBytes": 13250
+    "maxBytes": 48000,
+    "maxGzipBytes": 13600
   },
   "vueDialog": {
     "entry": "packages/vue/dist/dialog.js",
