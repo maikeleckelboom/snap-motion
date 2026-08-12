@@ -80,9 +80,13 @@ reapplies its configured initial-focus policy without emitting a second `opened`
 is generation-scoped and verified across bounded browser cleanup frames so an obsolete lifecycle
 cannot steal focus from a newer overlay.
 
-Focus return is a handoff, not a lease. Bounded verification may repair focus left on the document
-or stranded in a closed native dialog, and may retry an opener that is temporarily unavailable.
-Once another connected element owns focus, verification stops instead of reclaiming the opener.
+Focus return is a handoff, not an ongoing lease. Bounded verification may repair focus left on the
+document or stranded in a closed native dialog, and may retry an opener that is temporarily
+unavailable. If another connected element takes focus during that same cleanup window, it becomes
+the short-lived verification target: a late native-dialog cleanup that returns focus to the stale
+opener is repaired to the new owner. Verification ends after the new owner is stable, or immediately
+if it disconnects. After the handoff stabilizes, later blur or focus changes are outside the
+verification window and never reclaim the opener.
 
 ## Component contract
 

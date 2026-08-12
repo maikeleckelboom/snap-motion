@@ -7,8 +7,10 @@
 - Align core and Vue provenance for the beta.6 private candidate. Core has no runtime or public API
   change in this candidate. Vue renders mechanically settled Media Gallery descriptions, adds one
   optional no-prop `actions` slot inside the native modal, and keeps the expanded header bounded at
-  narrow allocations. Stacked Deck runtime is unchanged and gains exact narrow-consumer regression
-  coverage for both directions.
+  narrow allocations. Its bounded native-dialog focus verifier also preserves an immediate keyboard,
+  pointer, or application focus handoff across late browser cleanup without reclaiming focus after
+  that handoff stabilizes or disconnects. Stacked Deck runtime is unchanged and gains exact
+  narrow-consumer regression coverage for both directions.
 
 ### Patch Changes
 
