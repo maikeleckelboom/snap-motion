@@ -11,8 +11,9 @@
   pointer, or application focus handoff across late browser cleanup without reclaiming focus after
   that handoff stabilizes or disconnects. A configured opener takes priority over focus assigned by
   native cleanup, while an immediate application handoff from that opener is preserved even when it
-  precedes verifier registration. Stacked Deck runtime is unchanged and gains exact
-  narrow-consumer regression coverage for both directions.
+  precedes verifier registration. Stacked Deck now applies layout containment at its public root
+  while preserving visible overflow, and gains exact frame-sampled narrow-consumer regression
+  coverage for both directions.
 
 ## 0.1.0-beta.5
 
