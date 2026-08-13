@@ -1,10 +1,12 @@
 # Releasing
 
 No workflow publishes packages. `pnpm release:check` is the same authoritative gate as
-`pnpm verify`. From a clean worktree, `pnpm release:candidate` runs that gate and writes private
-tarballs, SHA-256 checksums, and a deterministic manifest under `.artifacts`; the manifest records
-the exact source commit, public repository provenance, package versions/exports/dependencies, and
-the tracked blocker details. Candidate generation never publishes.
+`pnpm verify`. From a clean worktree, `pnpm release:candidate` runs that gate, repacks and recertifies
+the exact final consumer archives, then writes SHA-256 checksums and a deterministic manifest under
+`.artifacts`. Candidate generation also rejects an archive whose declared export target is absent.
+The manifest records the exact source commit, public repository provenance, package
+versions/exports/dependencies, and the tracked blocker details. Candidate generation never
+publishes.
 
 Public API changes first run `pnpm api:update` to regenerate the root and capability reports. CI
 uses `pnpm api:check`; package builds create declaration rollups without modifying tracked reports.

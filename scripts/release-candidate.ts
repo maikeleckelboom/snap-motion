@@ -30,6 +30,15 @@ const verification = spawnSync(process.execPath, [pnpmCli, "release:check"], {
 });
 if (verification.status !== 0) process.exit(verification.status ?? 1);
 
+// `release:check` continues into browser and fixture gates after its packed-consumer proof. Repack
+// and recertify last so the bytes hashed below are exactly the bytes a clean consumer exercised.
+const packedVerification = spawnSync(process.execPath, [pnpmCli, "verify:packages"], {
+  cwd: repoRoot,
+  encoding: "utf8",
+  stdio: "inherit",
+});
+if (packedVerification.status !== 0) process.exit(packedVerification.status ?? 1);
+
 await rm(releaseDirectory, { force: true, recursive: true });
 await mkdir(releaseDirectory, { recursive: true });
 const artifacts = (await readdir(packageDirectory))
@@ -58,10 +67,24 @@ interface ReleasePackage {
   readonly version: string;
 }
 
+function exportTargets(value: unknown): readonly string[] {
+  if (typeof value === "string") return value.startsWith("./") ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap(exportTargets);
+  if (value && typeof value === "object") return Object.values(value).flatMap(exportTargets);
+  return [];
+}
+
 const packageManifests = await Promise.all(
   artifacts.map(async (artifact) => {
     const entries = await readPackedArchive(resolve(packageDirectory, artifact));
-    return JSON.parse(packedText(entries, "package/package.json")) as PackageManifest;
+    const manifest = JSON.parse(packedText(entries, "package/package.json")) as PackageManifest;
+    for (const target of exportTargets(manifest.exports)) {
+      const packedTarget = `package/${target.slice(2)}`;
+      if (!entries.has(packedTarget)) {
+        throw new Error(`${artifact} export target does not exist: ${target}`);
+      }
+    }
+    return manifest;
   }),
 );
 const packages: ReleasePackage[] = [];
