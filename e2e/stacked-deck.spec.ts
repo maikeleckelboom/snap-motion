@@ -699,6 +699,89 @@ function pileIdentitySignature(frame: DeckFrame) {
   }));
 }
 
+interface PileNodeIdentityViolation {
+  readonly after: string;
+  readonly before: string;
+  readonly kind: "item-transfer" | "remount";
+  readonly phase: string;
+  readonly progress: number;
+}
+
+async function installPileNodeIdentityTrace(page: Page) {
+  await viewport(page).evaluate((element) => {
+    interface TraceState {
+      readonly activeNodes: Map<string, Element>;
+      readonly identities: WeakMap<Element, string>;
+      readonly observer: MutationObserver;
+      readonly violations: PileNodeIdentityViolation[];
+      inspect: () => void;
+    }
+
+    const target = window as typeof window & { stackedDeckPileNodeIdentityTrace?: TraceState };
+    target.stackedDeckPileNodeIdentityTrace?.observer.disconnect();
+    const activeNodes = new Map<string, Element>();
+    const identities = new WeakMap<Element, string>();
+    const violations: PileNodeIdentityViolation[] = [];
+    const inspect = () => {
+      const currentNodes = new Map<string, Element>();
+      const phase = element.dataset.segmentPhase ?? "";
+      const progress = Number(element.dataset.segmentProgress);
+      for (const layer of element.querySelectorAll<HTMLElement>(
+        ".snap-motion-stacked-deck-pile-layer",
+      )) {
+        const id = layer.dataset.pileItemId ?? "";
+        const previousId = identities.get(layer);
+        if (previousId === undefined) identities.set(layer, id);
+        else if (previousId !== id) {
+          violations.push({
+            after: id,
+            before: previousId,
+            kind: "item-transfer",
+            phase,
+            progress,
+          });
+        }
+
+        const previousNode = activeNodes.get(id);
+        if (previousNode !== undefined && previousNode !== layer) {
+          violations.push({ after: id, before: id, kind: "remount", phase, progress });
+        }
+        currentNodes.set(id, layer);
+      }
+      activeNodes.clear();
+      for (const [id, layer] of currentNodes) activeNodes.set(id, layer);
+    };
+    const observer = new MutationObserver(inspect);
+    observer.observe(element, {
+      attributeFilter: ["data-pile-item-id"],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+    target.stackedDeckPileNodeIdentityTrace = {
+      activeNodes,
+      identities,
+      inspect,
+      observer,
+      violations,
+    };
+    inspect();
+  });
+}
+
+async function readPileNodeIdentityViolations(page: Page) {
+  return viewport(page).evaluate(() => {
+    const target = window as typeof window & {
+      stackedDeckPileNodeIdentityTrace?: {
+        inspect: () => void;
+        readonly violations: PileNodeIdentityViolation[];
+      };
+    };
+    target.stackedDeckPileNodeIdentityTrace?.inspect();
+    return target.stackedDeckPileNodeIdentityTrace?.violations ?? [];
+  });
+}
+
 /** The same accounting across a whole traced interaction rather than one sampled frame. */
 function expectPileAccountsForEveryScreen(trace: readonly TraversalSample[]) {
   for (const sample of trace) {
@@ -1266,6 +1349,53 @@ test("decorative pile identity retraces the ordered screen through reversal", as
 
   await finishPointer(page, held.origin, held.pitch * 0.75, held.elapsedMs + 100, "pointercancel");
   await expectCarouselAt(viewport(page), "settings");
+});
+
+test("visible pile nodes retain material identity through compaction and contrasting reversals", async ({
+  page,
+}) => {
+  const checkpoints = Object.values({
+    gestureStartAndTargetPromotion: 0.02,
+    beforeAuthorityMidpoint: 0.49,
+    afterAuthorityMidpointAndDissolveStart: 0.51,
+    outgoingDissolve: 0.75,
+    beforeOutgoingHidden: 0.91,
+    afterOutgoingHidden: 0.93,
+    nearCompleteHandoff: 0.99,
+    completedExchange: 1,
+  });
+  const reversedCheckpoints = checkpoints.slice(0, -1).toReversed();
+  const exchanges = [
+    { direction: 1, origin: 2 },
+    { direction: -1, origin: 3 },
+    { direction: 1, origin: 3 },
+    { direction: -1, origin: 4 },
+  ] as const;
+
+  for (const { direction, origin } of exchanges) {
+    const held = await beginHeldTraversal(page, origin);
+    await installPileNodeIdentityTrace(page);
+
+    for (const progress of checkpoints) {
+      const frame = await holdPhysicalIndex(page, held, held.startIndex + direction * progress);
+      expectFrameAccountsForEveryScreenByIdentity(frame);
+      expect(frame.pile.every((layer) => TONES[layer.index] === layer.tone)).toBe(true);
+      expect(await readPileNodeIdentityViolations(page)).toEqual([]);
+    }
+
+    for (const progress of reversedCheckpoints) {
+      const frame = await holdPhysicalIndex(page, held, held.startIndex + direction * progress);
+      expectFrameAccountsForEveryScreenByIdentity(frame);
+      expect(frame.pile.every((layer) => TONES[layer.index] === layer.tone)).toBe(true);
+      expect(await readPileNodeIdentityViolations(page)).toEqual([]);
+    }
+
+    const neutral = await holdPhysicalIndex(page, held, held.startIndex);
+    expect(neutral.segmentTargetIndex).toBeNull();
+    expect(await readPileNodeIdentityViolations(page)).toEqual([]);
+    await finishPointer(page, held.origin, 0, held.elapsedMs + 100, "pointercancel");
+    await expectCarouselAt(viewport(page), IDS[held.startIndex]!);
+  }
 });
 
 test("one held gesture cannot discard a second card however far it travels", async ({ page }) => {

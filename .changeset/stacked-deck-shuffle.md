@@ -20,6 +20,7 @@ ordered item. The higher-level `StackedDeck` component exposes only `{ item, id,
 to decorative pile content after verifying the current item and projection still agree.
 
 Frames now render at most one top and one adjacent target. `StackedDeckRole` drops `"backing"`, poses
-drop `stackDepth`, and the `backing*`/`topTravelY` tuning fields become `pile*`/`topDropY`. Physical
-pile nodes remain topology-keyed, while card semantics, interaction, selection, and motion remain
-unchanged.
+drop `stackDepth`, and the `backing*`/`topTravelY` tuning fields become `pile*`/`topDropY`. Decorative
+pile nodes retain item identity while their resolved physical slots change, so arbitrary
+consumer-rendered material moves through compaction instead of changing in place. Card semantics,
+interaction, selection, and motion remain unchanged.

@@ -32,7 +32,7 @@ export interface StackedDeckCardState<TItem, TId extends string> {
 export interface StackedDeckPileLayer<Id extends string = string> {
   readonly id: Id;
   readonly index: number;
-  /** Stable physical key. Deliberately follows side topology rather than item identity. */
+  /** Stable physical-card key. Follows item identity while the resolved slot owns placement. */
   readonly key: string;
   readonly side: -1 | 1;
   readonly slot: number;

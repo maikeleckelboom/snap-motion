@@ -384,23 +384,20 @@ export function useStackedDeckMotion<Id extends string>(
 
   /**
    * Deck thickness. One decorative layer per screen still in the deck, fanned to the side its index
-   * lies on. Layers retain their ordered item association for visual treatment, while keys follow
-   * physical rank within a side. Identity can therefore change in place during an exchange without
-   * replacing the topological node or making gesture direction an identity source.
+   * lies on. The ordered item association owns node lifetime as well as visual treatment, while the
+   * continuously resolved slot owns placement. Compaction therefore moves an existing item's node
+   * instead of repainting a rank node with another item's material.
    */
   const pileLayers = computed<readonly StackedDeckPileLayer<Id>[]>(() => {
-    let before = 0;
-    let after = 0;
     const layers: StackedDeckPileLayer<Id>[] = [];
     for (const pose of resolveStackedDeckPile({ frame: frame.value, tuning: activeTuning.value })) {
       const id = model.idAt(pose.itemIndex);
       if (id === undefined) continue;
       const side = pose.slot < 0 ? -1 : 1;
-      const rank = side < 0 ? (before += 1) : (after += 1);
       layers.push({
         id,
         index: pose.itemIndex,
-        key: `${side}:${rank}`,
+        key: id,
         side,
         slot: Number(pose.slot.toFixed(3)),
         layer: pose.layer,

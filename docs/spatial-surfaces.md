@@ -107,6 +107,11 @@ the domain `item`, stable `id`, collection `index`, semantic/visual/settled/insp
 surface-specific presentation. These projections are read-only render data, not alternate sources
 of truth.
 
+Stacked Deck's optional `#pile-layer` receives only item-associated decorative state:
+`{ item, id, index, side, slot }`. Snap Motion keeps ownership of the inert outer layer and keys its
+lifetime to the item while continuously updating its slot, transform, compositing, opacity, and
+shadow. Consumer material therefore follows a physical card through pile compaction.
+
 `labelledBy` follows the JavaScript/DOM property spelling while rendering `aria-labelledby`.
 `focusScope` identifies a surrounding region that already owns focus; it is not a focus trap.
 `landmark` upgrades the default labelled group to a region only when the surface is a major page

@@ -213,6 +213,12 @@ renderer can associate the same ordered item with the topology that resolved its
 structural provenance does not name a semantic card, expose application metadata from core, or grant
 activation, selection, focus, hit testing, or accessibility ownership.
 
+The Vue projection uses that associated item's stable ID for decorative node lifetime and keeps the
+continuous slot as placement state. When a target leaves the pile, every remaining item's existing
+node therefore moves into its newly resolved slot; a physical rank is never repainted with another
+item's material. The target still changes from decorative to content-bearing representation at the
+same physical pose, without adding a second semantic card.
+
 ### One card per interaction
 
 The deck is a physical card transaction, not a rail. **One interaction may resolve at most one

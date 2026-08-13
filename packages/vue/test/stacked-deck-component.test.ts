@@ -631,15 +631,15 @@ describe("StackedDeck", () => {
     wrapper.unmount();
   });
 
-  it("keeps physical pile nodes keyed by topology while their visual identity changes", async () => {
+  it("keeps each visible pile node bound to its item while its physical slot changes", async () => {
     const wrapper = mountDeck();
     await nextTick();
-    const nearestAfter = wrapper.get('[data-pile-item-id="outcome"]').element;
+    const outcomeLayer = wrapper.get('[data-pile-item-id="outcome"]').element;
 
     await wrapper.setProps({ activeId: "overview" });
     await nextTick();
-    const samePhysicalLayer = wrapper.get('[data-pile-item-id="system"]').element;
-    expect(samePhysicalLayer).toBe(nearestAfter);
+    expect(wrapper.get('[data-pile-item-id="outcome"]').element).toBe(outcomeLayer);
+    expect(wrapper.get('[data-pile-item-id="system"]').element).not.toBe(outcomeLayer);
     wrapper.unmount();
   });
 
