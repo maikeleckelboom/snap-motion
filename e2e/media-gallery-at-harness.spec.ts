@@ -610,14 +610,16 @@ test("responsive retry follows the selected candidate across retry, navigation, 
   await page.getByTestId("snap-motion-media-gallery-previous").click();
   await expect(gallery(page)).toHaveAttribute("data-settled-id", "retry-success-image");
   await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
-  expect(new URL(requests.at(-1)!).searchParams.has("snap-motion-retry")).toBe(false);
+  await expect.poll(() => requests.length).toBe(3);
+  expect(new URL(requests[2]!).searchParams.has("snap-motion-retry")).toBe(false);
 
   await closeGallery(page);
   await selectScenario(page, "baseline");
   await selectScenario(page, "retry-success");
   await page.getByTestId("at-open-gallery").click();
   await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
-  expect(new URL(requests.at(-1)!).searchParams.has("snap-motion-retry")).toBe(false);
+  await expect.poll(() => requests.length).toBe(4);
+  expect(new URL(requests[3]!).searchParams.has("snap-motion-retry")).toBe(false);
   expect(requests.some((source) => source.includes("retry-fallback.svg"))).toBe(false);
 });
 
