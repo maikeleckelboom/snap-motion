@@ -93,8 +93,9 @@ test.describe("zero-configuration surfaces", () => {
     expect(new Set(await cardHints(page)), "idle deck").toEqual(new Set(["auto"]));
 
     let hintedDuringDrag: string[] = [];
-    await dragMouseBy(page, page.locator(DECK), -200, 0, {
+    await dragSyntheticPointerBy(page, page.locator(DECK), -200, 0, {
       beforeRelease: async () => {
+        await expect(page.locator(DECK)).toHaveAttribute("data-phase", "dragging");
         hintedDuringDrag = await cardHints(page);
       },
     });
