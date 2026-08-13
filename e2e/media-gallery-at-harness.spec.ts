@@ -569,6 +569,24 @@ test("responsive retry follows the selected candidate across retry, navigation, 
   page,
 }) => {
   const requests: string[] = [];
+  await page.route("**/__at-media__/retry.svg*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.has("snap-motion-retry")) {
+      await route.fulfill({
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500"></svg>',
+        contentType: "image/svg+xml",
+        headers: { "Cache-Control": "no-store" },
+        status: 200,
+      });
+      return;
+    }
+    await route.fulfill({
+      body: "intentionally invalid image bytes",
+      contentType: "image/png",
+      headers: { "Cache-Control": "no-store" },
+      status: 200,
+    });
+  });
   page.on("request", (request) => {
     if (request.url().includes("/__at-media__/retry")) requests.push(request.url());
   });
@@ -610,16 +628,35 @@ test("responsive retry follows the selected candidate across retry, navigation, 
   await page.getByTestId("snap-motion-media-gallery-previous").click();
   await expect(gallery(page)).toHaveAttribute("data-settled-id", "retry-success-image");
   await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
-  await expect.poll(() => requests.length).toBe(3);
-  expect(new URL(requests[2]!).searchParams.has("snap-motion-retry")).toBe(false);
+  await gallery(page).getByRole("button", { name: "Retry" }).click();
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded");
+  await expect
+    .poll(() => requests.filter((source) => source.includes("snap-motion-retry=")).length)
+    .toBe(2);
+  const navigationRetryUrl = new URL(
+    requests.filter((source) => source.includes("snap-motion-retry=")).at(-1)!,
+  );
+  expect(navigationRetryUrl.pathname).toMatch(/\/__at-media__\/retry\.svg$/);
+  expect(navigationRetryUrl.searchParams.get("snap-motion-retry")).toMatch(/^\d+-\d+-\d+$/);
+  expect(navigationRetryUrl.search).not.toBe(retryUrl.search);
 
   await closeGallery(page);
   await selectScenario(page, "baseline");
   await selectScenario(page, "retry-success");
   await page.getByTestId("at-open-gallery").click();
   await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
-  await expect.poll(() => requests.length).toBe(4);
-  expect(new URL(requests[3]!).searchParams.has("snap-motion-retry")).toBe(false);
+  await gallery(page).getByRole("button", { name: "Retry" }).click();
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded");
+  await expect
+    .poll(() => requests.filter((source) => source.includes("snap-motion-retry=")).length)
+    .toBe(3);
+  const reopenRetryUrl = new URL(
+    requests.filter((source) => source.includes("snap-motion-retry=")).at(-1)!,
+  );
+  expect(reopenRetryUrl.pathname).toMatch(/\/__at-media__\/retry\.svg$/);
+  expect(reopenRetryUrl.searchParams.get("snap-motion-retry")).toMatch(/^\d+-\d+-\d+$/);
+  expect(reopenRetryUrl.search).not.toBe(navigationRetryUrl.search);
+  expect(requests.length).toBeLessThanOrEqual(6);
   expect(requests.some((source) => source.includes("retry-fallback.svg"))).toBe(false);
 });
 
