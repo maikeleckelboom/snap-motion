@@ -296,4 +296,57 @@ test.describe("overlay lifecycle generations", () => {
     await expect(modal).not.toHaveAttribute("open", "");
     await expect(pageOpener).toBeFocused();
   });
+
+  test("Gallery survives ten rapid open-close cycles without retaining focus listeners or scroll lock", async ({
+    page,
+  }) => {
+    await page.goto("./?demo=overlay-lifecycle");
+    await page.evaluate(() => {
+      const tracked = new Set<EventListenerOrEventListenerObject>();
+      const originalAdd = document.addEventListener.bind(document);
+      const originalRemove = document.removeEventListener.bind(document);
+      document.addEventListener = ((type, listener, options) => {
+        if ((type === "focus" || type === "focusin") && listener) tracked.add(listener);
+        originalAdd(type, listener, options);
+      }) as Document["addEventListener"];
+      document.removeEventListener = ((type, listener, options) => {
+        if ((type === "focus" || type === "focusin") && listener) tracked.delete(listener);
+        originalRemove(type, listener, options);
+      }) as Document["removeEventListener"];
+      Object.defineProperty(window, "snapMotionRetainedFocusListeners", {
+        configurable: true,
+        get: () => tracked.size,
+      });
+    });
+
+    const opener = page.getByTestId("gallery-open");
+    const gallery = page.getByTestId("gallery-lifecycle-dialog");
+    const close = gallery.getByRole("button", { name: "Close gallery" });
+
+    for (let cycle = 0; cycle < 10; cycle += 1) {
+      await opener.click();
+      await expect(gallery).toHaveAttribute("open", "");
+      await close.click();
+      await expect(gallery).not.toHaveAttribute("open", "");
+      await expect(opener).toBeFocused();
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.style.overflow))
+        .toBe("");
+    }
+
+    await yieldTwoRenderOpportunities(page);
+    expect(
+      await page.evaluate(
+        () =>
+          (window as typeof window & { snapMotionRetainedFocusListeners?: number })
+            .snapMotionRetainedFocusListeners ?? -1,
+      ),
+    ).toBe(0);
+    expect(
+      await page.evaluate(() => ({
+        overflow: document.documentElement.style.overflow,
+        paddingInlineEnd: document.documentElement.style.paddingInlineEnd,
+      })),
+    ).toEqual({ overflow: "", paddingInlineEnd: "" });
+  });
 });

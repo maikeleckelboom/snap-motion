@@ -2,6 +2,7 @@ import { sortAnchors, type ControllerMeasurement } from "@snap-motion/core";
 import type { UseSnapMotionOptions } from "@snap-motion/vue/motion";
 import { computed, isRef, type Ref } from "vue";
 
+import { isHTMLElement } from "../internal/dom/realm";
 import { isSupportedPrimaryPointerStart } from "../internal/input/pointer-policy";
 import { useRemeasurement } from "../internal/layout/remeasurement";
 import { useSnapMotion } from "../motion/use-snap-motion";
@@ -189,7 +190,7 @@ export function useCarouselMotion<Id extends string>(
     if (
       wheelActive &&
       isSupportedPrimaryPointerStart(event) &&
-      event.currentTarget instanceof HTMLElement
+      isHTMLElement(event.currentTarget)
     ) {
       stopWheelGesture();
       motion.controller.interrupt();

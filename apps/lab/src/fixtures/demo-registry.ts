@@ -9,6 +9,7 @@ import MediaGalleryAtCertificationDemo from "@/demos/MediaGalleryAtCertification
 import MediaLightboxDemo from "@/demos/MediaLightboxDemo.vue";
 import OverlayLifecycleFixture from "@/demos/OverlayLifecycleFixture.vue";
 import PagedGridDemo from "@/demos/PagedGridDemo.vue";
+import RealmOverlayFixture from "@/demos/realm-overlay-fixture.vue";
 import RenderWindowFixture from "@/demos/RenderWindowFixture.vue";
 import SheetDemo from "@/demos/SheetDemo.vue";
 import StackedDeckOverflowFixture from "@/demos/stacked-deck-overflow-fixture.vue";
@@ -176,6 +177,19 @@ export const demos = [
     group: "Certification",
     audience: "fixture",
     component: OverlayLifecycleFixture,
+    capabilities: {
+      motionPreference: false,
+      physics: false,
+      stageWidth: false,
+    },
+  },
+  {
+    id: "realm-overlay",
+    label: "Realm Overlay",
+    description: "Iframe-realm focus return and adopted-document image handling proof.",
+    group: "Certification",
+    audience: "fixture",
+    component: RealmOverlayFixture,
     capabilities: {
       motionPreference: false,
       physics: false,

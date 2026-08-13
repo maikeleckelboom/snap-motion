@@ -6,9 +6,8 @@ const mediaGalleryItems = [
     id: "nuxt",
     title: "Nuxt media gallery fixture",
     alt: "Nuxt fixture preview",
-    previewSrc: "/fixture-preview.jpg",
-    width: 1_600,
-    height: 1_000,
+    preview: { src: "/fixture-preview.jpg", width: 800, height: 500 },
+    full: { src: "/fixture-preview.jpg", width: 1_600, height: 1_000 },
   },
 ];
 </script>

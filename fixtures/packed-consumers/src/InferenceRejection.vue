@@ -34,17 +34,15 @@ const galleryItems = [
     id: "wide",
     title: "Wide",
     alt: "Wide",
-    previewSrc: "/wide.jpg",
-    width: 1_600,
-    height: 900,
+    preview: { src: "/wide-preview.jpg", width: 800, height: 450 },
+    full: { src: "/wide.jpg", width: 1_600, height: 900 },
   },
   {
     id: "detail",
     title: "Detail",
     alt: "Detail",
-    previewSrc: "/detail.jpg",
-    width: 1_200,
-    height: 1_200,
+    preview: { src: "/detail-preview.jpg", width: 600, height: 600 },
+    full: { src: "/detail.jpg", width: 1_200, height: 1_200 },
   },
 ] as const satisfies readonly MediaGalleryItem[];
 const foreignGalleryId = ref<"other-a" | "other-b" | undefined>("other-a");

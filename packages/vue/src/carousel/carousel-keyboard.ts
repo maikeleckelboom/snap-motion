@@ -1,5 +1,6 @@
 import type { SnapKeyboardAction } from "@snap-motion/core";
 
+import { isElement } from "../internal/dom/realm";
 import { resolveDirectionalSnapKeyboardAction } from "../internal/input/keyboard-policy";
 import type { CarouselKeyboardScope } from "./carousel-contracts";
 
@@ -56,7 +57,7 @@ function relevantRegistrations(dialog: HTMLDialogElement): DialogCarouselRegistr
 
 /** Resolves one owner before a scoped Arrow-key handler mutates an event. */
 export function carouselOwnsScopedKeyboardEvent(root: HTMLElement, event: KeyboardEvent): boolean {
-  if (!(event.target instanceof Element) || !root.isConnected) return false;
+  if (!isElement(event.target) || !root.isConnected) return false;
   const nearestCarousel = event.target.closest<HTMLElement>("[data-snap-motion-carousel-root]");
   if (nearestCarousel) return nearestCarousel === root;
 

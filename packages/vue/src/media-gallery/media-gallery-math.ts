@@ -7,6 +7,7 @@ import {
   type GallerySwipeInput,
   type GalleryTap,
   type GalleryTrackSlot,
+  type MediaGalleryImageSource,
   type MediaGalleryItem,
   type MediaPoint,
   type MediaSize,
@@ -32,12 +33,38 @@ function positive(value: number): number {
 }
 
 function normalizeIntrinsicSize(item: MediaGalleryItem): MediaSize {
-  return Number.isFinite(item.width) &&
-    item.width > 0 &&
-    Number.isFinite(item.height) &&
-    item.height > 0
-    ? { height: item.height, width: item.width }
-    : { height: 1, width: 1 };
+  for (const source of [item.full, item.preview]) {
+    if (
+      Number.isFinite(source.width) &&
+      Number(source.width) > 0 &&
+      Number.isFinite(source.height) &&
+      Number(source.height) > 0
+    ) {
+      return { height: Number(source.height), width: Number(source.width) };
+    }
+  }
+  return { height: 1, width: 1 };
+}
+
+function normalizeImageSource(
+  source: MediaGalleryImageSource,
+  label: string,
+): MediaGalleryImageSource {
+  if (!source.src.trim()) throw new RangeError(`${label}.src must be a non-empty string.`);
+  if (source.src !== source.src.trim()) {
+    throw new RangeError(`${label}.src must not contain surrounding whitespace.`);
+  }
+  const hasIntrinsicSize =
+    Number.isFinite(source.width) &&
+    Number(source.width) > 0 &&
+    Number.isFinite(source.height) &&
+    Number(source.height) > 0;
+  return {
+    src: source.src,
+    ...(source.srcset ? { srcset: source.srcset } : {}),
+    ...(source.sizes ? { sizes: source.sizes } : {}),
+    ...(hasIntrinsicSize ? { width: source.width, height: source.height } : {}),
+  };
 }
 
 function normalizedLimits(limits: MediaTransformLimits): MediaTransformLimits {
@@ -330,7 +357,10 @@ export type NormalizedMediaGalleryItem<TItem extends MediaGalleryItem> = Omit<
   keyof MediaGalleryItem
 > &
   Omit<MediaGalleryItem, "id"> &
-  Pick<TItem, "id">;
+  Pick<TItem, "id"> & {
+    readonly intrinsicHeight: number;
+    readonly intrinsicWidth: number;
+  };
 
 export function normalizeMediaGalleryItems<TItem extends MediaGalleryItem>(
   items: readonly TItem[],
@@ -356,18 +386,15 @@ export function normalizeMediaGalleryItems<TItem extends MediaGalleryItem>(
     ids.add(item.id);
   });
 
-  return items.map((item) => {
+  return items.map((item, index) => {
     const intrinsicSize = normalizeIntrinsicSize(item);
-    const { fullSrc: _fullSrc, ...itemWithoutFullSrc } = item;
-    const previewSrc = item.previewSrc;
-    const fullSrc = item.fullSrc && item.fullSrc !== previewSrc ? item.fullSrc : undefined;
     return {
-      ...itemWithoutFullSrc,
+      ...item,
       id: item.id,
-      previewSrc,
-      width: intrinsicSize.width,
-      height: intrinsicSize.height,
-      ...(fullSrc ? { fullSrc } : {}),
+      preview: normalizeImageSource(item.preview, `Media gallery item ${index} preview`),
+      full: normalizeImageSource(item.full, `Media gallery item ${index} full`),
+      intrinsicWidth: intrinsicSize.width,
+      intrinsicHeight: intrinsicSize.height,
     } as NormalizedMediaGalleryItem<TItem>;
   });
 }

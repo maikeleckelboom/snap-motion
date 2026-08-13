@@ -10,6 +10,7 @@ import type { NavigationReason } from "@snap-motion/vue/motion";
 import { useEventListener, useMutationObserver } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, provide, ref, useId, watch, watchEffect } from "vue";
 
+import { isHTMLDialogElement, isHTMLElement } from "../../internal/dom/realm";
 import { createEnglishSnapMotionMessages } from "../../localization/messages";
 import { carouselContextKey, type CarouselContext } from "../carousel-context";
 import type { CarouselKeyboardScope, SnapMotionDirection } from "../carousel-contracts";
@@ -111,11 +112,7 @@ watch([requestedDirection, root], () => void nextTick(refreshContentDirection), 
 function moveFocusOutsideOutgoingSlide(id: Id) {
   const target = viewport.value;
   const activeElement = target?.ownerDocument.activeElement;
-  if (
-    typeof HTMLElement === "undefined" ||
-    !(activeElement instanceof HTMLElement) ||
-    !target?.contains(activeElement)
-  ) {
+  if (!isHTMLElement(activeElement) || !target?.contains(activeElement)) {
     return;
   }
   const activeSlide = activeElement.closest<HTMLElement>("[data-slide-id]");
@@ -309,7 +306,7 @@ useEventListener(keyboardTarget, "keydown", (event) => {
 
 watchEffect((onCleanup) => {
   const target = keyboardTarget.value;
-  if (typeof HTMLDialogElement === "undefined" || !(target instanceof HTMLDialogElement)) return;
+  if (!isHTMLDialogElement(target)) return;
   onCleanup(
     registerDialogCarousel(target, {
       primary: () => props.keyboardPrimary,
@@ -336,8 +333,7 @@ watch(
     const activeElement = viewport.value?.ownerDocument.activeElement;
     const focusNeedsFallback =
       !nextIds.includes(intendedId.value) &&
-      typeof HTMLElement !== "undefined" &&
-      activeElement instanceof HTMLElement &&
+      isHTMLElement(activeElement) &&
       viewport.value?.contains(activeElement);
     if (focusNeedsFallback) viewport.value?.focus({ preventScroll: true });
     motion.interrupt();

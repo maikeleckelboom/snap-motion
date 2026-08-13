@@ -1,16 +1,24 @@
-# Future maikel.site integration
+# maikel.site dogfood integration
 
-The first intended production consumer is `maikel.site`, but application integration is outside
-this repository pass.
+`maikel.site` is the controlled private dogfood consumer. It installs checksummed core and Vue
+tarballs from one local release-candidate manifest and verifies package identity before exposing the
+integration in its `dev` branch. This record does not claim public npm publication, production
+deployment, or completion of the manual accessibility gate.
 
 Snap Motion owns physics, interruption, geometry, target policy, measurement, accessibility,
 structural components, stable-ID reconciliation, and the complete Media Gallery interaction. The
 host owns media content, route/query mapping, history policy, theme, and product composition.
 
-Private dogfooding should install the checksummed core and Vue tarballs from one verified release
-candidate. Import public capability entrypoints such as `@snap-motion/vue/media-gallery`,
+Private dogfooding installs the checksummed core and Vue tarballs from one verified release
+candidate. The application imports public capability entrypoints such as `@snap-motion/vue/media-gallery`,
 `@snap-motion/vue/coverflow`, and `@snap-motion/vue/style.css`; never copy lab code or deep-import
 package source.
+
+For Gallery media, Snap Motion owns bounded track mounting, preview-to-full promotion, decode and
+retry lifecycle, focus containment, and focus return. The host owns the responsive candidate chains,
+alternative text, captions, route identity, history intent, locale changes, and no-JavaScript link.
+The default package policy requests only the current full source. The host must not hide eager full
+loads behind priority hints or duplicate the Gallery loading state.
 
 ## Semantic selection
 
@@ -80,21 +88,14 @@ no-prop `#actions` slot. A locale switch or similarly scoped action outside the 
 correctly inert and is not a viable duplicate control. The application keeps ownership of the
 action and any route update while the Gallery keeps modal focus and DOM order coherent.
 
-## TypeScript handoff
+## TypeScript and provenance handoff
 
-Before integrating the tarballs into `maikel.site`:
-
-1. record its installed Nuxt, Vue, `vue-tsc`, and TypeScript versions;
-2. upgrade that application to the newest mutually compatible Nuxt/Vue tooling without changing
-   Snap Motion contracts;
-3. run its real application typecheck with the current TypeScript 7 toolchain;
-4. if Vue SFC checking reaches the same removed compiler-API boundary as this repository, use Vue
-   Language Tools' official `@typescript/typescript6` bridge rather than a local loader patch;
-5. keep the rest of the application tooling on the current TypeScript line; and
-6. verify the application build, generated routes, SSR hydration, and the integrated interaction in
-   real browsers.
-
-This is handoff guidance, not authorization to modify `maikel.site` in this repository pass.
+The consumer runs its real Nuxt application typecheck, generated media checks, SSR build, route
+tests, browser coverage, and archive-verification tests against the vendored candidate. A candidate
+is acceptable only when both package archives match the manifest version, source commit, size, and
+SHA-256 digest. The consumer rejects path traversal, duplicate entries, links, truncation, trailing
+data, and archive metadata that disagrees with the manifest. A green package build alone is not
+consumer integration proof.
 
 The host must not add CSS transitions, native smooth scrolling, native scroll snap, or another
 animation library to the same transform. Private integration does not authorize public activation;

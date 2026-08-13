@@ -51,7 +51,27 @@ export async function openLabDemo(
   const navigationItem = page.locator(`#nav-${demo}`);
   await navigationItem.click();
   await expect(navigationItem).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(`#panel-${demo}`)).toBeVisible();
+  const panel = page.locator(`#panel-${demo}`);
+  await expect(panel).toBeVisible();
+
+  const publishesMotionState = new Set<DemoId>([
+    "coverflow",
+    "defaults",
+    "gallery-at",
+    "stacked-deck",
+  ]);
+  if (publishesMotionState.has(demo) && reducedMotion !== "system") {
+    const expected = reducedMotion === "reduce" ? "true" : "false";
+    const motionSurfaces = panel.locator("[data-reduced-motion]");
+    await expect
+      .poll(async () => {
+        const states = await motionSurfaces.evaluateAll((elements) =>
+          elements.map((element) => element.getAttribute("data-reduced-motion")),
+        );
+        return states.length > 0 && states.every((state) => state === expected);
+      })
+      .toBe(true);
+  }
 
   const advancedPhysics = page.getByText("Advanced physics", { exact: true });
   if (await advancedPhysics.isVisible()) await advancedPhysics.click();

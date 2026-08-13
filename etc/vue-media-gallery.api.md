@@ -55,6 +55,7 @@ export const MediaGalleryDialog: <TItem extends MediaGalleryItem>(__VLS_props: N
         items: readonly TItem[];
         messages?: Partial<MediaGalleryMessages>;
         open: boolean;
+        preloadPolicy?: MediaGalleryPreloadPolicy;
         reducedMotionOverride?: boolean | undefined;
         title?: string;
     } & {
@@ -99,112 +100,78 @@ export const MediaGalleryDialog: <TItem extends MediaGalleryItem>(__VLS_props: N
 // @public (undocumented)
 export interface MediaGalleryDialogProps<TItem extends MediaGalleryItem = MediaGalleryItem> {
     activeId?: TItem["id"];
-    // (undocumented)
     descriptionId?: string;
-    // (undocumented)
     eyebrow?: string;
-    // (undocumented)
     focusReturn?: FocusReturnOptions;
-    // (undocumented)
     initialFocus?: InitialFocus;
-    // (undocumented)
     items: readonly TItem[];
-    // (undocumented)
     messages?: Partial<MediaGalleryMessages>;
-    // (undocumented)
     open: boolean;
-    // (undocumented)
+    preloadPolicy?: MediaGalleryPreloadPolicy;
     reducedMotionOverride?: boolean | undefined;
-    // (undocumented)
     title?: string;
 }
 
 // @public
 export interface MediaGalleryHandle<Id extends string = string> {
-    // (undocumented)
     readonly activeId: Id | undefined;
-    // (undocumented)
     readonly dialog: HTMLDialogElement | undefined;
-    // (undocumented)
     navigateTo(id: Id): boolean;
-    // (undocumented)
     next(): boolean;
-    // (undocumented)
     previous(): boolean;
-    // (undocumented)
     requestClose(reason?: CloseReason): void;
-    // (undocumented)
     resetToFit(): void;
-    // (undocumented)
     readonly settledId: Id | undefined;
-    // (undocumented)
     synchronizeTo(id: Id): boolean;
 }
 
-// @public (undocumented)
+// @public
+export interface MediaGalleryImageSource {
+    readonly height?: number;
+    readonly sizes?: string;
+    readonly src: string;
+    readonly srcset?: string;
+    readonly width?: number;
+}
+
+// @public
 export interface MediaGalleryItem {
-    // (undocumented)
     readonly alt: string;
-    // (undocumented)
     readonly description?: string;
-    // (undocumented)
-    readonly fullSrc?: string;
-    // (undocumented)
-    readonly height: number;
-    // (undocumented)
+    readonly full: MediaGalleryImageSource;
     readonly id: string;
-    // (undocumented)
-    readonly previewSrc: string;
-    // (undocumented)
+    readonly preview: MediaGalleryImageSource;
     readonly title: string;
-    // (undocumented)
-    readonly width: number;
 }
 
 // @public (undocumented)
 export interface MediaGalleryMessages {
-    // (undocumented)
     closeGallery: string;
-    // (undocumented)
     currentItem(context: {
         title: string;
         index: number;
         count: number;
     }): string;
-    // (undocumented)
     fit: string;
-    // (undocumented)
     fullImageUnavailable: string;
-    // (undocumented)
     gestureInstructions: string;
-    // (undocumented)
     loadingFullImage: string;
-    // (undocumented)
     nextItem(context: {
         title: string | undefined;
     }): string;
-    // (undocumented)
     position(context: {
         index: number;
         count: number;
     }): string;
-    // (undocumented)
     previewFallback: string;
-    // (undocumented)
     previewUnavailable: string;
-    // (undocumented)
     previousItem(context: {
         title: string | undefined;
     }): string;
-    // (undocumented)
     retry: string;
-    // (undocumented)
     zoomControls: string;
-    // (undocumented)
     zoomIn: string;
-    // (undocumented)
     zoomLabel: string;
-    // (undocumented)
     zoomOut: string;
 }
 
@@ -212,6 +179,9 @@ export interface MediaGalleryMessages {
 export interface MediaGalleryOpenRequestDetails<Id extends string = string> extends OpenRequestDetails {
     readonly activeId: Id | undefined;
 }
+
+// @public
+export type MediaGalleryPreloadPolicy = "adjacent-full" | "current-only";
 
 // @public (undocumented)
 export interface MediaPoint {

@@ -6,6 +6,7 @@ import {
 import { useEventListener } from "@vueuse/core";
 import { onScopeDispose, type Ref } from "vue";
 
+import { isElement } from "../dom/realm";
 import { elementOwnsSnapMotionDrag, isSupportedPrimaryPointerStart } from "./pointer-policy";
 
 export interface SurfaceGestureOptions {
@@ -130,10 +131,9 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
   }
 
   function cardAt(event: PointerEvent): HTMLElement | undefined {
-    const direct =
-      event.target instanceof Element
-        ? (event.target.closest<HTMLElement>(options.itemSelector) ?? undefined)
-        : undefined;
+    const direct = isElement(event.target)
+      ? (event.target.closest<HTMLElement>(options.itemSelector) ?? undefined)
+      : undefined;
     if (direct) return direct;
     return itemsAtPoint(options.root.value?.ownerDocument, event.clientX, event.clientY)[0];
   }
@@ -145,10 +145,9 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
   function releasedOnOrigin(tracked: TrackedGesture, event: PointerEvent): boolean {
     const origin = tracked.originElement;
     if (!origin) return false;
-    const releaseCard =
-      event.target instanceof Element
-        ? (event.target.closest<HTMLElement>(options.itemSelector) ?? undefined)
-        : undefined;
+    const releaseCard = isElement(event.target)
+      ? (event.target.closest<HTMLElement>(options.itemSelector) ?? undefined)
+      : undefined;
     if (releaseCard) return releaseCard === origin;
     const hitCards = itemsAtPoint(origin.ownerDocument, event.clientX, event.clientY);
     if (hitCards.some((element) => element === origin)) return true;
@@ -196,7 +195,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     clickSuppression = {
       expiresAt: Date.now() + CLICK_SUPPRESSION_LIFETIME_MS,
       originTarget: tracked.originTarget,
-      releaseTarget: event.target instanceof Element ? event.target : undefined,
+      releaseTarget: isElement(event.target) ? event.target : undefined,
       releaseX: event.clientX,
       releaseY: event.clientY,
     };
@@ -226,7 +225,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
       focusWasOutside: Boolean(root && (!activeElement || !root.contains(activeElement))),
       openEligibleAtStart: originIndex >= 0 && options.isOpenEligible(originIndex),
       originElement,
-      originTarget: event.target instanceof Element ? event.target : undefined,
+      originTarget: isElement(event.target) ? event.target : undefined,
       originIndex: originIndex >= 0 ? originIndex : undefined,
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -316,7 +315,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     // Keyboard activation reports detail zero and no meaningful pointer coordinates.
     if (event.detail <= 0 || event.button !== 0) return;
     if (Math.hypot(event.clientX - armed.releaseX, event.clientY - armed.releaseY) > 4) return;
-    const target = event.target instanceof Element ? event.target : undefined;
+    const target = isElement(event.target) ? event.target : undefined;
     if (!target || (target !== armed.originTarget && target !== armed.releaseTarget)) return;
 
     clearClickSuppression();

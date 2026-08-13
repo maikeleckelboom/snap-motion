@@ -85,9 +85,8 @@ const galleryItems = [
     id: "preview",
     title: "Preview",
     alt: "Preview media",
-    previewSrc: "/preview.jpg",
-    width: 1_600,
-    height: 1_000,
+    preview: { src: "/preview.jpg", width: 800, height: 500 },
+    full: { src: "/full.jpg", width: 1_600, height: 1_000 },
   },
 ] as const satisfies readonly MediaGalleryItem[];
 void h(MediaGalleryDialog, { items: galleryItems, open: false });

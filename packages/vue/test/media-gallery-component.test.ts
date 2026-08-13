@@ -14,10 +14,8 @@ const items: readonly MediaGalleryItem[] = [
     title: "One",
     description: "First item description",
     alt: "First item",
-    previewSrc: "/one-preview.jpg",
-    fullSrc: "/one-full.jpg",
-    width: 1_600,
-    height: 1_000,
+    preview: { src: "/one-preview.jpg", width: 800, height: 500 },
+    full: { src: "/one-full.jpg", width: 1_600, height: 1_000 },
   },
   {
     id: "two",
@@ -25,18 +23,15 @@ const items: readonly MediaGalleryItem[] = [
     description:
       "Second item description that remains readable when the gallery header reflows at narrow widths.",
     alt: "Second item",
-    previewSrc: "/two-preview.jpg",
-    fullSrc: "/two-full.jpg",
-    width: 1_600,
-    height: 1_000,
+    preview: { src: "/two-preview.jpg", width: 800, height: 500 },
+    full: { src: "/two-full.jpg", width: 1_600, height: 1_000 },
   },
   {
     id: "three",
     title: "Three",
     alt: "Third item",
-    previewSrc: "/three-preview.jpg",
-    width: 1_600,
-    height: 1_000,
+    preview: { src: "/three-preview.jpg", width: 800, height: 500 },
+    full: { src: "/three-preview.jpg", width: 800, height: 500 },
   },
 ];
 
@@ -871,18 +866,17 @@ describe("MediaGalleryDialog navigation", () => {
 
   it("does not resurrect media authority from a completed controlled ownership epoch", async () => {
     const epochItems: readonly MediaGalleryItem[] = [
-      { id: "a", title: "A", alt: "A", previewSrc: "/a.jpg", width: 800, height: 500 },
-      { id: "b", title: "B", alt: "B", previewSrc: "/b.jpg", width: 800, height: 500 },
-      { id: "c", title: "C", alt: "C", previewSrc: "/c.jpg", width: 800, height: 500 },
-      { id: "d", title: "D", alt: "D", previewSrc: "/d.jpg", width: 800, height: 500 },
+      { id: "a", title: "A", alt: "A", preview: { src: "/a.jpg" }, full: { src: "/a.jpg" } },
+      { id: "b", title: "B", alt: "B", preview: { src: "/b.jpg" }, full: { src: "/b.jpg" } },
+      { id: "c", title: "C", alt: "C", preview: { src: "/c.jpg" }, full: { src: "/c.jpg" } },
+      { id: "d", title: "D", alt: "D", preview: { src: "/d.jpg" }, full: { src: "/d.jpg" } },
     ];
     const futureItem: MediaGalleryItem = {
       id: "future",
       title: "Future",
       alt: "Future",
-      previewSrc: "/future.jpg",
-      width: 800,
-      height: 500,
+      preview: { src: "/future.jpg", width: 800, height: 500 },
+      full: { src: "/future.jpg", width: 800, height: 500 },
     };
     const wrapper = mountGallery({ activeId: "a", items: epochItems });
     await flushReactiveTasks();
@@ -936,18 +930,17 @@ describe("MediaGalleryDialog navigation", () => {
   it("inherits an accepted in-flight uncontrolled destination into a new unavailable controlled epoch", async () => {
     const frames = useControlledAnimationFrames();
     const epochItems: readonly MediaGalleryItem[] = [
-      { id: "a", title: "A", alt: "A", previewSrc: "/a.jpg", width: 800, height: 500 },
-      { id: "b", title: "B", alt: "B", previewSrc: "/b.jpg", width: 800, height: 500 },
-      { id: "c", title: "C", alt: "C", previewSrc: "/c.jpg", width: 800, height: 500 },
-      { id: "d", title: "D", alt: "D", previewSrc: "/d.jpg", width: 800, height: 500 },
+      { id: "a", title: "A", alt: "A", preview: { src: "/a.jpg" }, full: { src: "/a.jpg" } },
+      { id: "b", title: "B", alt: "B", preview: { src: "/b.jpg" }, full: { src: "/b.jpg" } },
+      { id: "c", title: "C", alt: "C", preview: { src: "/c.jpg" }, full: { src: "/c.jpg" } },
+      { id: "d", title: "D", alt: "D", preview: { src: "/d.jpg" }, full: { src: "/d.jpg" } },
     ];
     const futureItem: MediaGalleryItem = {
       id: "future",
       title: "Future",
       alt: "Future",
-      previewSrc: "/future.jpg",
-      width: 800,
-      height: 500,
+      preview: { src: "/future.jpg", width: 800, height: 500 },
+      full: { src: "/future.jpg", width: 800, height: 500 },
     };
     const wrapper = mountGallery({
       activeId: "a",
@@ -1169,6 +1162,70 @@ describe("MediaGalleryDialog navigation", () => {
 });
 
 describe("MediaGalleryDialog media lifecycle", () => {
+  it("renders no image requests while closed", async () => {
+    const wrapper = mountGallery({ open: false });
+    await nextTick();
+
+    expect(wrapper.findAll("img")).toHaveLength(0);
+    expect(wrapper.get("dialog").attributes("data-preload-policy")).toBe("current-only");
+  });
+
+  it("mounts adjacent previews but only the current full source by default", async () => {
+    const wrapper = mountGallery({
+      items: items.map((item) => ({
+        ...item,
+        preview: {
+          ...item.preview,
+          srcset: `${item.preview.src}?400 400w, ${item.preview.src}?800 800w`,
+          sizes: "50vw",
+        },
+        full: {
+          ...item.full,
+          srcset: `${item.full.src}?1600 1600w, ${item.full.src}?2400 2400w`,
+          sizes: "100vw",
+        },
+      })),
+    });
+    await nextTick();
+
+    expect(wrapper.findAll(".snap-motion-media-gallery-preview")).toHaveLength(2);
+    expect(wrapper.findAll(".snap-motion-media-gallery-full")).toHaveLength(1);
+    const current = wrapper.get('.snap-motion-media-gallery-slot[data-slot-position="0"]');
+    expect(current.get(".snap-motion-media-gallery-preview").attributes()).toMatchObject({
+      sizes: "50vw",
+      src: "/one-preview.jpg",
+      srcset: "/one-preview.jpg?400 400w, /one-preview.jpg?800 800w",
+      width: "800",
+      height: "500",
+    });
+    expect(current.get(".snap-motion-media-gallery-full").attributes()).toMatchObject({
+      sizes: "100vw",
+      src: "/one-full.jpg",
+      srcset: "/one-full.jpg?1600 1600w, /one-full.jpg?2400 2400w",
+      width: "1600",
+      height: "1000",
+    });
+
+    await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
+    await flushReactiveTasks();
+    expect(wrapper.findAll(".snap-motion-media-gallery-full")).toHaveLength(1);
+    expect(
+      wrapper
+        .get('.snap-motion-media-gallery-slot[data-slot-position="0"]')
+        .get(".snap-motion-media-gallery-full")
+        .attributes("src"),
+    ).toBe("/two-full.jpg");
+  });
+
+  it("mounts bounded adjacent full sources only when explicitly requested", async () => {
+    const wrapper = mountGallery({ preloadPolicy: "adjacent-full" });
+    await nextTick();
+
+    expect(wrapper.get("dialog").attributes("data-preload-policy")).toBe("adjacent-full");
+    expect(wrapper.findAll(".snap-motion-media-gallery-preview")).toHaveLength(2);
+    expect(wrapper.findAll(".snap-motion-media-gallery-full")).toHaveLength(2);
+  });
+
   it("keeps previews mounted, reveals only decoded full media, and retries only a failed full layer", async () => {
     const wrapper = mountGallery();
     await nextTick();
@@ -1208,14 +1265,14 @@ describe("MediaGalleryDialog media lifecycle", () => {
     ).toBe("1");
   });
 
-  it("treats missing or identical full sources as complete preview-only media", async () => {
+  it("treats identical full sources as complete preview-only media", async () => {
     const wrapper = mountGallery({
       items: [
         items[2]!,
         {
           ...items[0]!,
           id: "same",
-          fullSrc: items[0]!.previewSrc,
+          full: items[0]!.preview,
         },
       ],
     });
@@ -1279,15 +1336,21 @@ describe("MediaGalleryDialog media lifecycle", () => {
 
   it("normalizes a partially invalid intrinsic pair without changing stage geometry", async () => {
     const wrapper = mountGallery({
-      items: [{ ...items[0]!, height: -1 }],
+      items: [
+        {
+          ...items[0]!,
+          preview: { ...items[0]!.preview, height: -1 },
+          full: { ...items[0]!.full, height: -1 },
+        },
+      ],
     });
     await flushReactiveTasks();
 
     const viewport = wrapper.get('[data-testid="snap-motion-media-gallery-viewport"]');
     const preview = wrapper.get<HTMLImageElement>(".snap-motion-media-gallery-preview");
 
-    expect(preview.attributes("width")).toBe("1");
-    expect(preview.attributes("height")).toBe("1");
+    expect(preview.attributes("width")).toBeUndefined();
+    expect(preview.attributes("height")).toBeUndefined();
     expect(viewport.attributes("style")).toBeUndefined();
   });
 

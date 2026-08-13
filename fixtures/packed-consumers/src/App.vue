@@ -35,10 +35,16 @@ const galleryItems = [
     id: "preview",
     title: "Packed preview",
     alt: "Packed preview",
-    previewSrc:
-      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000'%3E%3Crect width='1600' height='1000' fill='%230b1220'/%3E%3C/svg%3E",
-    width: 1_600,
-    height: 1_000,
+    preview: {
+      src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='500'%3E%3Crect width='800' height='500' fill='%230b1220'/%3E%3C/svg%3E",
+      width: 800,
+      height: 500,
+    },
+    full: {
+      src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000'%3E%3Crect width='1600' height='1000' fill='%230b1220'/%3E%3C/svg%3E",
+      width: 1_600,
+      height: 1_000,
+    },
   },
 ] as const;
 

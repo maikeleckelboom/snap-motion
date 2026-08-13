@@ -11,6 +11,7 @@
     "lint": "oxlint . && pnpm architecture:check",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
+    "text:check": "node scripts/check-text-hygiene.ts",
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
@@ -27,7 +28,7 @@
     "version-packages": "changeset version",
     "release:check": "pnpm verify",
     "release:candidate": "node scripts/release-candidate.ts",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm performance:check && pnpm build && pnpm api:check && pnpm size:check && pnpm verify:packages && pnpm test:e2e && pnpm test:preview && pnpm test:fixtures",
+    "verify": "pnpm text:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm performance:check && pnpm build && pnpm api:check && pnpm size:check && pnpm verify:packages && pnpm test:e2e && pnpm test:preview && pnpm test:fixtures",
     "clean": "node scripts/clean.mjs"
   },
   "devDependencies": {

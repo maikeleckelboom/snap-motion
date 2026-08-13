@@ -258,9 +258,11 @@ const diagnostics = computed<LabDiagnostics>(() => {
             aria-hidden="true"
             class="stacked-screen-image"
             draggable="false"
-            :height="card.item.height"
-            :src="card.item.previewSrc"
-            :width="card.item.width"
+            :height="card.item.preview.height"
+            :src="card.item.preview.src"
+            :srcset="card.item.preview.srcset"
+            :sizes="card.item.preview.sizes"
+            :width="card.item.preview.width"
           />
         </div>
       </template>

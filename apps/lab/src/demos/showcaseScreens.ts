@@ -17,6 +17,26 @@ export interface ShowcaseScreen extends MediaGalleryItem {
   readonly tone: "light" | "mist" | "ink";
 }
 
+function previewSource(url: string): MediaGalleryItem["preview"] {
+  return {
+    src: `${url}?thumbnail`,
+    srcset: `${url}?thumbnail-800 800w, ${url}?thumbnail 1600w`,
+    sizes: "(max-width: 48rem) 100vw, 50vw",
+    width: 1_600,
+    height: 1_000,
+  };
+}
+
+function fullSource(url: string): MediaGalleryItem["full"] {
+  return {
+    src: `${url}?full`,
+    srcset: `${url}?full-1600 1600w, ${url}?full-2400 2400w`,
+    sizes: "100vw",
+    width: 2_400,
+    height: 1_500,
+  };
+}
+
 export const showcaseScreens: readonly ShowcaseScreen[] = [
   {
     id: "templates",
@@ -26,10 +46,8 @@ export const showcaseScreens: readonly ShowcaseScreen[] = [
     tone: "light",
     layout: "gallery",
     alt: "Projects template gallery with a featured project structure and six template cards.",
-    previewSrc: `${templatesGalleryUrl}?thumbnail`,
-    fullSrc: `${templatesGalleryUrl}?full`,
-    width: 1_600,
-    height: 1_000,
+    preview: previewSource(templatesGalleryUrl),
+    full: fullSource(templatesGalleryUrl),
   },
   {
     id: "project",
@@ -39,10 +57,8 @@ export const showcaseScreens: readonly ShowcaseScreen[] = [
     tone: "mist",
     layout: "detail",
     alt: "Project Horizon detail screen with project settings, status rows, and progress.",
-    previewSrc: `${projectGalleryUrl}?thumbnail`,
-    fullSrc: `${projectGalleryUrl}?full`,
-    width: 1_600,
-    height: 1_000,
+    preview: previewSource(projectGalleryUrl),
+    full: fullSource(projectGalleryUrl),
   },
   {
     id: "map",
@@ -52,10 +68,8 @@ export const showcaseScreens: readonly ShowcaseScreen[] = [
     tone: "light",
     layout: "canvas",
     alt: "Location and planning screen with a map, route lines, and a selected location.",
-    previewSrc: `${mapGalleryUrl}?thumbnail`,
-    fullSrc: `${mapGalleryUrl}?full`,
-    width: 1_600,
-    height: 1_000,
+    preview: previewSource(mapGalleryUrl),
+    full: fullSource(mapGalleryUrl),
   },
   {
     id: "team",
@@ -65,10 +79,8 @@ export const showcaseScreens: readonly ShowcaseScreen[] = [
     tone: "mist",
     layout: "roster",
     alt: "Team and roles screen with six member cards arranged in a roster.",
-    previewSrc: `${teamGalleryUrl}?thumbnail`,
-    fullSrc: `${teamGalleryUrl}?full`,
-    width: 1_600,
-    height: 1_000,
+    preview: previewSource(teamGalleryUrl),
+    full: fullSource(teamGalleryUrl),
   },
   {
     id: "settings",
@@ -78,9 +90,7 @@ export const showcaseScreens: readonly ShowcaseScreen[] = [
     tone: "ink",
     layout: "console",
     alt: "Dark workspace settings screen with four administrative setting rows.",
-    previewSrc: `${settingsGalleryUrl}?thumbnail`,
-    fullSrc: `${settingsGalleryUrl}?full`,
-    width: 1_600,
-    height: 1_000,
+    preview: previewSource(settingsGalleryUrl),
+    full: fullSource(settingsGalleryUrl),
   },
 ];

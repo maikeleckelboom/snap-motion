@@ -1,4 +1,4 @@
-﻿<script setup lang="ts" generic="TItem extends MediaGalleryItem">
+<script setup lang="ts" generic="TItem extends MediaGalleryItem">
 import type { ActiveIdRequestDetails, SettlementDetails } from "@snap-motion/core";
 import type { CloseReason, FocusReturnOptions, InitialFocus } from "@snap-motion/vue/dialog";
 import { useEventListener, useResizeObserver, useScrollLock, useTimeoutFn } from "@vueuse/core";
@@ -16,6 +16,7 @@ import {
   type FocusHandoffObservation,
   type FocusRestoreVerification,
 } from "../../internal/accessibility/focus-restore";
+import { isElement, isHTMLElement, isHTMLImageElement } from "../../internal/dom/realm";
 import {
   fittedMediaTransform,
   type GalleryMediaAction,
@@ -23,6 +24,7 @@ import {
   type MediaGalleryItem,
   type MediaGalleryMessages,
   type MediaGalleryOpenRequestDetails,
+  type MediaGalleryPreloadPolicy,
   type MediaPoint,
   type MediaTransform,
   type MediaTransformContext,
@@ -89,12 +91,14 @@ const props = withDefaults(
     items: readonly TItem[];
     messages?: Partial<MediaGalleryMessages>;
     open: boolean;
+    preloadPolicy?: MediaGalleryPreloadPolicy;
     reducedMotionOverride?: boolean | undefined;
     title?: string;
   }>(),
   {
     eyebrow: "Media",
     initialFocus: "close",
+    preloadPolicy: "current-only",
     reducedMotionOverride: undefined,
     title: "Gallery",
   },
@@ -387,7 +391,9 @@ function acceptActiveId(id: TId | undefined, reason: ActiveIdRequestDetails["rea
 function activeContext(): MediaTransformContext {
   const item = activeItem.value;
   return {
-    intrinsicSize: item ? { height: item.height, width: item.width } : { height: 1, width: 1 },
+    intrinsicSize: item
+      ? { height: item.intrinsicHeight, width: item.intrinsicWidth }
+      : { height: 1, width: 1 },
     viewportSize: { height: geometry.height, width: geometry.width },
   };
 }
@@ -470,7 +476,18 @@ function announceCurrent() {
 }
 
 function imageLoadDefault(item: MediaGalleryItem): ImageLoadState {
-  return item.fullSrc ? "pending" : "preview";
+  return hasDistinctFullSource(item) ? "pending" : "preview";
+}
+
+function hasDistinctFullSource(item: MediaGalleryItem): boolean {
+  return item.full.src !== item.preview.src || item.full.srcset !== item.preview.srcset;
+}
+
+function shouldMountFull(item: MediaGalleryItem): boolean {
+  return (
+    hasDistinctFullSource(item) &&
+    (props.preloadPolicy === "adjacent-full" || item.id === activeItem.value?.id)
+  );
 }
 
 function ensureImageState(item: MediaGalleryItem | undefined, reset = false) {
@@ -496,11 +513,14 @@ function imageRetryAttempt(item: MediaGalleryItem): number {
 }
 
 function visibleFullSrc(item: MediaGalleryItem): string {
-  if (!item.fullSrc) return "";
   const attempt = imageRetryAttempt(item);
-  if (attempt === 0) return item.fullSrc;
-  const separator = item.fullSrc.includes("?") ? "&" : "?";
-  return `${item.fullSrc}${separator}retry=${attempt}`;
+  if (attempt === 0) return item.full.src;
+  const separator = item.full.src.includes("?") ? "&" : "?";
+  return `${item.full.src}${separator}retry=${attempt}`;
+}
+
+function visibleFullSrcset(item: MediaGalleryItem): string | undefined {
+  return imageRetryAttempt(item) === 0 ? item.full.srcset : undefined;
 }
 
 function setImageLoadState(item: MediaGalleryItem, state: ImageLoadState) {
@@ -509,9 +529,10 @@ function setImageLoadState(item: MediaGalleryItem, state: ImageLoadState) {
 
 async function onFullImageLoad(event: Event, item: MediaGalleryItem) {
   const image = event.currentTarget;
-  if (!(image instanceof HTMLImageElement)) {
+  if (!isHTMLImageElement(image)) {
     return;
   }
+  if (!shouldMountFull(item)) return;
   const attempt = Number(image.dataset.retryAttempt);
   const openGeneration = Number(image.dataset.openCycle);
   const collectionGeneration = Number(image.dataset.itemCollection);
@@ -525,6 +546,7 @@ async function onFullImageLoad(event: Event, item: MediaGalleryItem) {
     return;
   }
   if (
+    !shouldMountFull(item) ||
     !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt) ||
     !image.complete ||
     image.naturalWidth <= 0 ||
@@ -543,7 +565,8 @@ async function onFullImageLoad(event: Event, item: MediaGalleryItem) {
 function onFullImageError(event: Event, item: MediaGalleryItem) {
   const image = event.currentTarget;
   if (
-    image instanceof HTMLImageElement &&
+    isHTMLImageElement(image) &&
+    shouldMountFull(item) &&
     isMediaOperationCurrent(
       Number(image.dataset.openCycle),
       Number(image.dataset.itemCollection),
@@ -558,7 +581,7 @@ function onFullImageError(event: Event, item: MediaGalleryItem) {
 function onPreviewImageError(event: Event, item: MediaGalleryItem) {
   const image = event.currentTarget;
   if (
-    image instanceof HTMLImageElement &&
+    isHTMLImageElement(image) &&
     isMediaOperationCurrent(
       Number(image.dataset.openCycle),
       Number(image.dataset.itemCollection),
@@ -571,7 +594,7 @@ function onPreviewImageError(event: Event, item: MediaGalleryItem) {
 
 function retryImage() {
   const item = activeItem.value;
-  if (!item) return;
+  if (!item || !shouldMountFull(item)) return;
   imageRetryAttemptByItem.value = {
     ...imageRetryAttemptByItem.value,
     [item.id]: imageRetryAttempt(item) + 1,
@@ -580,7 +603,7 @@ function retryImage() {
 }
 
 function setMediaTransformElement(itemId: string, element: Element | null) {
-  if (element instanceof HTMLElement) mediaTransformElements.set(itemId, element);
+  if (isHTMLElement(element)) mediaTransformElements.set(itemId, element);
   else mediaTransformElements.delete(itemId);
 }
 
@@ -872,7 +895,7 @@ function onImagePointerDown(event: PointerEvent) {
   if (
     dialogState.value !== "open" ||
     galleryBusy.value ||
-    (event.target instanceof Element && event.target.closest("button")) ||
+    (isElement(event.target) && event.target.closest("button")) ||
     (event.pointerType === "mouse" && event.button !== 0)
   ) {
     return;
@@ -1514,6 +1537,7 @@ defineExpose({
     :data-gallery-index="galleryIndex"
     :data-settled-id="settledId"
     :data-image-state="activeImageLoadState"
+    :data-preload-policy="preloadPolicy"
     :data-pan-x="transform.x.toFixed(3)"
     :data-pan-y="transform.y.toFixed(3)"
     :data-reduced-motion="reducedMotion ? 'true' : 'false'"
@@ -1637,17 +1661,23 @@ defineExpose({
                 :style="slot.item.id === activeItem?.id ? transformStyle : undefined"
               >
                 <img
-                  v-if="mounted && open"
+                  v-if="open"
                   class="snap-motion-media-gallery-media snap-motion-media-gallery-preview"
-                  :class="{ concealed: imageLoadState(slot.item) === 'loaded' }"
-                  :src="slot.item.previewSrc"
+                  :class="{
+                    concealed: shouldMountFull(slot.item) && imageLoadState(slot.item) === 'loaded',
+                  }"
+                  :src="slot.item.preview.src"
+                  :srcset="slot.item.preview.srcset"
+                  :sizes="slot.item.preview.sizes"
                   :alt="
-                    slot.item.id === activeItem?.id && imageLoadState(slot.item) !== 'loaded'
+                    slot.item.id === activeItem?.id &&
+                    (!shouldMountFull(slot.item) || imageLoadState(slot.item) !== 'loaded')
                       ? slot.item.alt
                       : ''
                   "
                   :aria-hidden="
-                    slot.item.id !== activeItem?.id || imageLoadState(slot.item) === 'loaded'
+                    slot.item.id !== activeItem?.id ||
+                    (shouldMountFull(slot.item) && imageLoadState(slot.item) === 'loaded')
                       ? 'true'
                       : undefined
                   "
@@ -1655,13 +1685,13 @@ defineExpose({
                   :data-open-cycle="openCycleGeneration"
                   decoding="async"
                   draggable="false"
-                  :height="slot.item.height"
-                  :width="slot.item.width"
+                  :height="slot.item.preview.height"
+                  :width="slot.item.preview.width"
                   @error="onPreviewImageError($event, slot.item)"
                 />
                 <img
                   v-if="
-                    mounted && open && slot.item.fullSrc && imageLoadState(slot.item) !== 'failed'
+                    open && shouldMountFull(slot.item) && imageLoadState(slot.item) !== 'failed'
                   "
                   :key="`${openCycleGeneration}-${itemCollectionGeneration}-${slot.item.id}-${imageRetryAttempt(slot.item)}`"
                   class="snap-motion-media-gallery-media snap-motion-media-gallery-full"
@@ -1670,6 +1700,8 @@ defineExpose({
                   :data-open-cycle="openCycleGeneration"
                   :data-retry-attempt="imageRetryAttempt(slot.item)"
                   :src="visibleFullSrc(slot.item)"
+                  :srcset="visibleFullSrcset(slot.item)"
+                  :sizes="slot.item.full.sizes"
                   :alt="
                     slot.item.id === activeItem?.id && imageLoadState(slot.item) === 'loaded'
                       ? slot.item.alt
@@ -1683,8 +1715,8 @@ defineExpose({
                   decoding="async"
                   draggable="false"
                   :fetchpriority="slot.item.id === activeItem?.id ? 'high' : 'low'"
-                  :height="slot.item.height"
-                  :width="slot.item.width"
+                  :height="slot.item.full.height"
+                  :width="slot.item.full.width"
                   @error="onFullImageError($event, slot.item)"
                   @load="onFullImageLoad($event, slot.item)"
                 />

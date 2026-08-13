@@ -1,4 +1,5 @@
 import type { FocusReturnOptions } from "../../contracts/focus-contracts";
+import { isHTMLDialogElement, isHTMLElement } from "../dom/realm";
 import { captureFocusOpener, restoreFocus } from "./focus";
 
 export interface FocusRestoreVerification {
@@ -16,7 +17,7 @@ function focusTarget(target: HTMLElement | undefined) {
 
 function captureFocusEventOwner(event: FocusEvent) {
   const owner = event.target;
-  return owner instanceof HTMLElement &&
+  return isHTMLElement(owner) &&
     owner.isConnected &&
     !owner.matches("body, html") &&
     !owner.closest("dialog:not([open])")
@@ -205,7 +206,7 @@ export function scheduleVerifiedFocusRestore(options: {
     !options.explicitOpener &&
     initialOwner &&
     initialOwner !== options.opener &&
-    (!(initialOwner instanceof HTMLDialogElement) ||
+    (!isHTMLDialogElement(initialOwner) ||
       !initialOwner.open ||
       !options.opener ||
       !initialOwner.contains(options.opener))

@@ -1,4 +1,5 @@
 import type { FocusReturnOptions, InitialFocus } from "../../contracts/focus-contracts";
+import { isHTMLElement, isHTMLInputElement } from "../dom/realm";
 
 const interactiveSelector = [
   "button",
@@ -52,14 +53,10 @@ export function interactiveElements(container: HTMLElement | undefined) {
     isInteractive,
   );
   return candidates.filter((candidate) => {
-    if (
-      !(candidate instanceof HTMLInputElement) ||
-      candidate.type !== "radio" ||
-      candidate.checked
-    ) {
+    if (!isHTMLInputElement(candidate) || candidate.type !== "radio" || candidate.checked) {
       return true;
     }
-    const name = CSS.escape(candidate.name);
+    const name = candidate.ownerDocument.defaultView?.CSS?.escape(candidate.name) ?? candidate.name;
     return !container.querySelector<HTMLInputElement>(
       `input[type='radio'][name='${name}']:checked`,
     );
@@ -68,11 +65,10 @@ export function interactiveElements(container: HTMLElement | undefined) {
 
 export function captureFocusOpener(documentTarget?: Document) {
   const activeElement = documentTarget?.activeElement;
-  return activeElement &&
-    "focus" in activeElement &&
+  return isHTMLElement(activeElement) &&
     !activeElement.matches("body, html") &&
     !activeElement.closest("dialog:not([open])")
-    ? (activeElement as HTMLElement)
+    ? activeElement
     : undefined;
 }
 
@@ -106,7 +102,7 @@ export function resolveInitialFocus(
     title?: HTMLElement | undefined;
   },
 ) {
-  if (policy instanceof HTMLElement) {
+  if (isHTMLElement(policy)) {
     return policy;
   }
   if (typeof policy === "function") {
@@ -144,7 +140,7 @@ function resolveFocusTarget(target: HTMLElement | (() => HTMLElement | undefined
 }
 
 export function restoreFocus(options: FocusReturnOptions | HTMLElement | undefined) {
-  const normalized = options instanceof HTMLElement ? { opener: options } : (options ?? {});
+  const normalized = isHTMLElement(options) ? { opener: options } : (options ?? {});
   for (const candidate of [normalized.opener, resolveFocusTarget(normalized.fallback)]) {
     if (!candidate?.isConnected) continue;
     candidate.focus({ preventScroll: true });
@@ -165,8 +161,7 @@ export function preserveFocusBeforeSemanticChange(
 ): boolean {
   const activeElement = surface?.ownerDocument.activeElement;
   if (
-    typeof HTMLElement === "undefined" ||
-    !(activeElement instanceof HTMLElement) ||
+    !isHTMLElement(activeElement) ||
     !surface?.contains(activeElement) ||
     activeElement === surface ||
     remainsSemantic(activeElement)

@@ -72,9 +72,20 @@ function createCertificationApp() {
                 title: "Media title",
                 description: "Settled media item description",
                 alt: "Media alternative text",
-                previewSrc: "/preview.jpg",
-                width: 1_600,
-                height: 1_000,
+                preview: {
+                  src: "/preview.jpg",
+                  srcset: "/preview-400.jpg 400w, /preview-800.jpg 800w",
+                  sizes: "50vw",
+                  width: 800,
+                  height: 500,
+                },
+                full: {
+                  src: "/full.jpg",
+                  srcset: "/full-1600.jpg 1600w, /full-2400.jpg 2400w",
+                  sizes: "100vw",
+                  width: 2_400,
+                  height: 1_500,
+                },
               },
             ],
             activeId: "one",
@@ -109,6 +120,12 @@ describe("production component SSR contract", () => {
     expect(html).toContain("Media title");
     expect(html).toContain("Settled media item description");
     expect(html).toContain("Switch locale");
+    expect(html).toContain('src="/preview.jpg"');
+    expect(html).toContain('srcset="/preview-400.jpg 400w, /preview-800.jpg 800w"');
+    expect(html).toContain('sizes="50vw"');
+    expect(html).toContain('src="/full.jpg"');
+    expect(html).toContain('srcset="/full-1600.jpg 1600w, /full-2400.jpg 2400w"');
+    expect(html).toContain('sizes="100vw"');
     expect(html).not.toMatch(/<dialog[^>]*\sopen(?:=|\s|>)/);
     expect(html).not.toContain("teleport");
   });
@@ -133,17 +150,15 @@ describe("production component SSR contract", () => {
             id: "item",
             title: "First",
             alt: "First",
-            previewSrc: "/first.jpg",
-            width: 1_600,
-            height: 1_000,
+            preview: { src: "/first.jpg", width: 800, height: 500 },
+            full: { src: "/first-full.jpg", width: 1_600, height: 1_000 },
           },
           {
             id: "item",
             title: "Second",
             alt: "Second",
-            previewSrc: "/second.jpg",
-            width: 1_600,
-            height: 1_000,
+            preview: { src: "/second.jpg", width: 800, height: 500 },
+            full: { src: "/second-full.jpg", width: 1_600, height: 1_000 },
           },
         ],
       }),

@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { dragMouseBy, openLabDemo } from "./helpers";
+import { dragMouseBy, dragSyntheticPointerBy, openLabDemo } from "./helpers";
 
 const DECK = '[data-testid="defaults-deck"]';
 const RAIL = '[data-testid="defaults-rail"]';
@@ -30,7 +30,7 @@ test.describe("zero-configuration surfaces", () => {
   test("publishes an accessible structure at rest, disabled, and mid-navigation", async ({
     page,
   }) => {
-    await openLabDemo(page, "defaults");
+    await openLabDemo(page, "defaults", "reduce");
     await expectNoAxeViolations(page, "default surfaces at rest");
 
     const structure = await page.locator(DECK).evaluate((deck) => {
@@ -71,15 +71,14 @@ test.describe("zero-configuration surfaces", () => {
   });
 
   test("exchanges exactly one screen however far a gesture travels", async ({ page }) => {
-    await openLabDemo(page, "defaults");
+    await openLabDemo(page, "defaults", "no-preference");
     const deck = page.locator(DECK);
     await expect(deck).toHaveAttribute("data-active-id", "map");
 
     // Far past the adjacent anchor: the surface resists rather than chaining a second exchange.
-    await dragMouseBy(page, deck, -900, 0, {
+    await dragSyntheticPointerBy(page, deck, -900, 0, {
       beforeRelease: async () => {
-        // The browser may deliver capture loss before this hook when a mouse leaves its viewport,
-        // so this cross-browser fixture asserts projection here and semantic acceptance below.
+        await expect(deck).toHaveAttribute("data-phase", "dragging");
         await expect(deck).toHaveAttribute("data-visual-id", "team");
       },
     });
@@ -106,7 +105,7 @@ test.describe("zero-configuration surfaces", () => {
   });
 
   test("keeps a consumer's own controls inside a card usable", async ({ page }) => {
-    await openLabDemo(page, "defaults");
+    await openLabDemo(page, "defaults", "reduce");
     const activations = page.getByTestId("defaults-activations");
     await expect(activations).toHaveText("0");
 
@@ -130,7 +129,7 @@ test.describe("zero-configuration surfaces", () => {
   });
 
   test("reports what actually moved the surface", async ({ page }) => {
-    await openLabDemo(page, "defaults");
+    await openLabDemo(page, "defaults", "reduce");
     const reason = page.getByTestId("defaults-deck-reason");
     await expect(reason).toHaveText("none");
 
@@ -147,7 +146,7 @@ test.describe("zero-configuration surfaces", () => {
   test("lets a route take over selection even while the surface refuses input", async ({
     page,
   }) => {
-    await openLabDemo(page, "defaults");
+    await openLabDemo(page, "defaults", "reduce");
     const deck = page.locator(DECK);
     await page.getByTestId("defaults-cover").check();
     await expect(deck).toHaveAttribute("data-owned", "false");

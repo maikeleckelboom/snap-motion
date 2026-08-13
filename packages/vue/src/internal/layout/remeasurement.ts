@@ -2,6 +2,8 @@
 import { useEventListener, useResizeObserver } from "@vueuse/core";
 import { computed, onMounted, onScopeDispose, type Ref } from "vue";
 
+import { isHTMLElement, isSVGElement } from "../dom/realm";
+
 export interface RemeasurementOptions {
   additionalTargets?: readonly Readonly<Ref<Element | undefined>>[];
   deferResizeObserver?: boolean;
@@ -34,9 +36,7 @@ export function useRemeasurement(options: RemeasurementOptions) {
       .map((target) => target.value)
       .filter(
         (target): target is HTMLElement | SVGElement =>
-          typeof Element !== "undefined" &&
-          Boolean(target) &&
-          (target instanceof HTMLElement || target instanceof SVGElement),
+          isHTMLElement(target) || isSVGElement(target),
       ),
   );
   useResizeObserver(observedTargets, onResizeObserver);

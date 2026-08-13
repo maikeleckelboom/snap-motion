@@ -1,5 +1,7 @@
 import { resolveSnapKeyboardAction, type SnapKeyboardAction } from "@snap-motion/core";
 
+import { isElement } from "../dom/realm";
+
 const KEYBOARD_OWNER_SELECTOR = [
   "input",
   "textarea",
@@ -41,7 +43,7 @@ const ITEM_INTERACTIVE_SELECTOR = ["a[href]", "button", "[role='button']", "[rol
  * is why the semantic key mapping lives in the framework-neutral core instead.
  */
 export function elementOwnsSnapMotionKeyboard(target: EventTarget | null) {
-  if (typeof Element === "undefined" || !(target instanceof Element)) return false;
+  if (!isElement(target)) return false;
   if (target.closest("[data-snap-motion-keyboard-navigation]")) return false;
   if (target.closest(KEYBOARD_OWNER_SELECTOR)) return true;
   const item = target.closest(SURFACE_ITEM_SELECTOR);

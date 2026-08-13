@@ -1,6 +1,7 @@
 import { onScopeDispose, ref } from "vue";
 
 import type { PointerIntent } from "../../contracts/motion-contracts";
+import { isHTMLElement } from "../dom/realm";
 import {
   elementOwnsSnapMotionDrag,
   isSupportedPrimaryPointerStart,
@@ -207,7 +208,7 @@ export function usePointerDrag(options: PointerDragOptions) {
     }
 
     const target = event.currentTarget;
-    if (!(target instanceof HTMLElement) || typeof window === "undefined") {
+    if (!isHTMLElement(target) || typeof window === "undefined") {
       return;
     }
 
