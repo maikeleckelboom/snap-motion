@@ -37,7 +37,7 @@ function certificationMediaMiddleware(
   }
 
   if (url.pathname.endsWith("/__at-media__/retry.svg")) {
-    if (url.searchParams.has("retry")) {
+    if (url.searchParams.has("snap-motion-retry")) {
       sendCertificationImage(response);
       return;
     }
@@ -46,6 +46,11 @@ function certificationMediaMiddleware(
     response.setHeader("Cache-Control", "no-store");
     response.setHeader("Content-Type", "image/png");
     response.end("intentionally invalid image bytes");
+    return;
+  }
+
+  if (url.pathname.endsWith("/__at-media__/retry-fallback.svg")) {
+    sendCertificationImage(response);
     return;
   }
 

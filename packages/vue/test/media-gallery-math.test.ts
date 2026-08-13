@@ -11,6 +11,7 @@ import {
   clampGalleryIndex,
   constrainMediaTransform,
   galleryPreloadIndices,
+  hasDistinctMediaGallerySource,
   isRepeatedGalleryTap,
   resolveGalleryCommitOffset,
   resolveGalleryMediaVisibility,
@@ -527,6 +528,70 @@ describe("gallery item normalization", () => {
     expect(normalized.full).toEqual(normalized.preview);
   });
 
+  describe("responsive source distinctness", () => {
+    const shared = {
+      src: "/image.jpg",
+      srcset: "/image-640.jpg 640w, /image-1280.jpg 1280w",
+      sizes: "100vw",
+    };
+
+    it("collapses equal normalized selection metadata regardless of intrinsic geometry", () => {
+      expect(
+        hasDistinctMediaGallerySource(
+          { ...shared, width: 640, height: 400 },
+          { ...shared, width: 1_280, height: 800 },
+        ),
+      ).toBe(false);
+      expect(
+        hasDistinctMediaGallerySource(
+          { ...shared, srcset: `  ${shared.srcset}  `, sizes: " 100vw " },
+          shared,
+        ),
+      ).toBe(false);
+    });
+
+    it("treats sizes as selection identity when the shared srcset can resolve differently", () => {
+      expect(hasDistinctMediaGallerySource(shared, { ...shared, sizes: "50vw" })).toBe(true);
+      expect(
+        hasDistinctMediaGallerySource(shared, {
+          src: shared.src,
+          srcset: shared.srcset,
+        }),
+      ).toBe(true);
+    });
+
+    it("treats different src and srcset values as network-distinct", () => {
+      expect(hasDistinctMediaGallerySource(shared, { ...shared, src: "/other.jpg" })).toBe(true);
+      expect(
+        hasDistinctMediaGallerySource(shared, {
+          ...shared,
+          srcset: "/image-800.jpg 800w, /image-1600.jpg 1600w",
+        }),
+      ).toBe(true);
+      expect(
+        hasDistinctMediaGallerySource(
+          { src: "/image.jpg" },
+          { src: "/image.jpg", srcset: shared.srcset },
+        ),
+      ).toBe(true);
+    });
+
+    it("ignores sizes without srcset and normalizes empty optional metadata", () => {
+      expect(
+        hasDistinctMediaGallerySource(
+          { src: "/image.jpg", sizes: "100vw" },
+          { src: "/image.jpg", sizes: "50vw" },
+        ),
+      ).toBe(false);
+      expect(
+        hasDistinctMediaGallerySource(
+          { src: "/image.jpg", srcset: " ", sizes: " " },
+          { src: "/image.jpg" },
+        ),
+      ).toBe(false);
+    });
+  });
+
   it("forwards responsive source metadata and prefers full intrinsic dimensions", () => {
     const normalized = normalizeMediaGalleryItems([
       galleryItem({
@@ -565,6 +630,21 @@ describe("gallery item normalization", () => {
       height: 1_500,
       width: 2_400,
     });
+  });
+
+  it("normalizes surrounding and empty optional source metadata", () => {
+    const normalized = normalizeMediaGalleryItems([
+      galleryItem({
+        preview: { src: "/preview.jpg", srcset: "  /preview-800.jpg 800w  ", sizes: " " },
+        full: { src: "/full.jpg", srcset: "", sizes: " 100vw " },
+      }),
+    ])[0]!;
+
+    expect(normalized.preview).toEqual({
+      src: "/preview.jpg",
+      srcset: "/preview-800.jpg 800w",
+    });
+    expect(normalized.full).toEqual({ src: "/full.jpg", sizes: "100vw" });
   });
 
   it.each(["preview", "full"] as const)("rejects an empty %s source", (key) => {

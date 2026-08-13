@@ -53,6 +53,7 @@ const tall = mediaFixtures.find((fixture) => fixture.id === "extremely-tall")!;
 const invalidImageUrl = new URL("__at-media__/invalid.png", document.baseURI).href;
 const delayedImageUrl = new URL("__at-media__/delayed.svg", document.baseURI).href;
 const retryImageUrl = new URL("__at-media__/retry.svg", document.baseURI).href;
+const retryFallbackImageUrl = new URL("__at-media__/retry-fallback.svg", document.baseURI).href;
 
 const baselineItems: readonly MediaGalleryItem[] = [
   {
@@ -203,15 +204,21 @@ const scenarios: readonly CertificationScenario[] = [
     id: "retry-success",
     label: "Retry failure then success",
     purpose:
-      "The first full-image response is intentionally invalid. Retry requests a valid image so the same run deterministically changes from failure to success.",
+      "The browser selects a responsive candidate whose first response is intentionally invalid. Retry targets that exact selection with a fresh request identity, never the larger fallback.",
     initialIndex: 0,
     items: [
       {
         ...baselineItems[0]!,
         id: "retry-success-image",
         title: "Retry succeeds",
-        full: { ...baselineItems[0]!.full, src: retryImageUrl },
+        full: {
+          ...baselineItems[0]!.full,
+          src: retryFallbackImageUrl,
+          srcset: `${retryImageUrl} 800w, ${retryFallbackImageUrl} 2400w`,
+          sizes: "400px",
+        },
       },
+      baselineItems[1]!,
     ],
     expectedCurrentItem: "Retry succeeds (item 1)",
     fullMedia: "Yes",

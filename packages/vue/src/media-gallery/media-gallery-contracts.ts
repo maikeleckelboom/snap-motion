@@ -11,7 +11,11 @@ export interface MediaGalleryImageSource {
   readonly src: string;
   /** Optional responsive candidate list forwarded to the rendered image's `srcset`. */
   readonly srcset?: string;
-  /** Optional responsive selection hint forwarded to the rendered image's `sizes`. */
+  /**
+   * Optional responsive selection hint forwarded to the rendered image's `sizes`.
+   * With a non-empty `srcset`, this participates in resource-selection identity. It does not
+   * make a source network-distinct by itself when no candidate list exists.
+   */
   readonly sizes?: string;
   /** Intrinsic pixel width. Supply it together with `height` to reserve stable geometry. */
   readonly width?: number;

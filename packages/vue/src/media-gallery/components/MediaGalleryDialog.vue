@@ -32,6 +32,7 @@ import {
 import {
   canonicalMediaGalleryTransform,
   clampGalleryIndex,
+  hasDistinctMediaGallerySource,
   isRepeatedGalleryTap,
   normalizeMediaGalleryItems,
   panMediaTransform,
@@ -139,6 +140,9 @@ const galleryIndex = ref(indexForId(intendedActiveId.value));
 const dialogState = ref<DialogState>("closed");
 const imageLoadStateByItem = ref<Record<string, ImageLoadState>>({});
 const imageRetryAttemptByItem = ref<Record<string, number>>({});
+const imageRetryAuthorityByItem = ref<Record<string, number>>({});
+const imageRetryRequestByItem = ref<Record<string, string>>({});
+const selectedFullSourceByItem = ref<Record<string, string>>({});
 const previewFailedByItem = ref<Record<string, boolean>>({});
 const mounted = ref(false);
 const openCycleGeneration = ref(0);
@@ -178,6 +182,8 @@ let pendingTrackReason: ActiveIdRequestDetails["reason"] | undefined;
 let pendingTrackGeneration: number | undefined;
 let navigationGeneration = 0;
 let closeGeneration = 0;
+let activeAuthorityGeneration = 0;
+let retryRequestIdentity = 0;
 let capturedOpener: HTMLElement | undefined;
 let capturedOpenerGeneration = 0;
 let capturedOpenerWasExplicit = false;
@@ -231,6 +237,10 @@ const scalePercentage = computed(() => Math.round(transform.value.scale * 100));
 const activeImageLoadState = computed<ImageLoadState>(() => {
   const item = activeItem.value;
   return item ? (imageLoadStateByItem.value[item.id] ?? imageLoadDefault(item)) : "preview";
+});
+const canRetryActiveImage = computed(() => {
+  const item = activeItem.value;
+  return item !== undefined && selectedFullSourceByItem.value[item.id] !== undefined;
 });
 const transformStyle = computed(() => ({
   "--_gallery-pan-x": `${transform.value.x.toFixed(3)}px`,
@@ -345,6 +355,7 @@ function isMediaOperationCurrent(
   collectionGeneration: number,
   item: MediaGalleryItem,
   attempt?: number,
+  retryAuthority?: number,
 ): boolean {
   return (
     mounted.value &&
@@ -353,7 +364,10 @@ function isMediaOperationCurrent(
     openGeneration === openCycleGeneration.value &&
     collectionGeneration === itemCollectionGeneration.value &&
     items.value.some((candidate) => candidate.id === item.id) &&
-    (attempt === undefined || attempt === imageRetryAttempt(item))
+    (attempt === undefined || attempt === imageRetryAttempt(item)) &&
+    (attempt === undefined ||
+      attempt === 0 ||
+      (retryAuthority === activeAuthorityGeneration && item.id === activeItem.value?.id))
   );
 }
 
@@ -480,7 +494,7 @@ function imageLoadDefault(item: MediaGalleryItem): ImageLoadState {
 }
 
 function hasDistinctFullSource(item: MediaGalleryItem): boolean {
-  return item.full.src !== item.preview.src || item.full.srcset !== item.preview.srcset;
+  return hasDistinctMediaGallerySource(item.full, item.preview);
 }
 
 function shouldMountFull(item: MediaGalleryItem): boolean {
@@ -513,14 +527,60 @@ function imageRetryAttempt(item: MediaGalleryItem): number {
 }
 
 function visibleFullSrc(item: MediaGalleryItem): string {
-  const attempt = imageRetryAttempt(item);
-  if (attempt === 0) return item.full.src;
-  const separator = item.full.src.includes("?") ? "&" : "?";
-  return `${item.full.src}${separator}retry=${attempt}`;
+  return imageRetryRequestByItem.value[item.id] ?? item.full.src;
 }
 
 function visibleFullSrcset(item: MediaGalleryItem): string | undefined {
   return imageRetryAttempt(item) === 0 ? item.full.srcset : undefined;
+}
+
+function selectedFullSource(image: HTMLImageElement): string | undefined {
+  const source = image.currentSrc.trim();
+  return source || undefined;
+}
+
+function captureSelectedFullSource(
+  image: HTMLImageElement,
+  item: MediaGalleryItem,
+  attempt: number,
+) {
+  if (attempt !== 0 || selectedFullSourceByItem.value[item.id]) return;
+  const source = selectedFullSource(image);
+  if (!source) return;
+  selectedFullSourceByItem.value = { ...selectedFullSourceByItem.value, [item.id]: source };
+}
+
+function createRetryRequestSource(source: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(source, dialog.value?.ownerDocument.baseURI);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+
+  retryRequestIdentity += 1;
+  url.searchParams.append(
+    "snap-motion-retry",
+    `${openCycleGeneration.value}-${itemCollectionGeneration.value}-${retryRequestIdentity}`,
+  );
+  return url.href;
+}
+
+function clearItemRetry(itemId: string) {
+  imageRetryAttemptByItem.value = withoutKey(imageRetryAttemptByItem.value, itemId);
+  imageRetryAuthorityByItem.value = withoutKey(imageRetryAuthorityByItem.value, itemId);
+  imageRetryRequestByItem.value = withoutKey(imageRetryRequestByItem.value, itemId);
+  selectedFullSourceByItem.value = withoutKey(selectedFullSourceByItem.value, itemId);
+}
+
+function resetMediaSourceState() {
+  imageLoadStateByItem.value = {};
+  imageRetryAttemptByItem.value = {};
+  imageRetryAuthorityByItem.value = {};
+  imageRetryRequestByItem.value = {};
+  selectedFullSourceByItem.value = {};
+  previewFailedByItem.value = {};
 }
 
 function setImageLoadState(item: MediaGalleryItem, state: ImageLoadState) {
@@ -534,20 +594,28 @@ async function onFullImageLoad(event: Event, item: MediaGalleryItem) {
   }
   if (!shouldMountFull(item)) return;
   const attempt = Number(image.dataset.retryAttempt);
+  const retryAuthority = Number(image.dataset.retryAuthority);
   const openGeneration = Number(image.dataset.openCycle);
   const collectionGeneration = Number(image.dataset.itemCollection);
-  if (!isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt)) return;
+  if (
+    !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority)
+  ) {
+    return;
+  }
+  captureSelectedFullSource(image, item, attempt);
   try {
     await image.decode();
   } catch {
-    if (isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt)) {
+    if (
+      isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority)
+    ) {
       setImageLoadState(item, "failed");
     }
     return;
   }
   if (
     !shouldMountFull(item) ||
-    !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt) ||
+    !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority) ||
     !image.complete ||
     image.naturalWidth <= 0 ||
     image.naturalHeight <= 0
@@ -557,13 +625,18 @@ async function onFullImageLoad(event: Event, item: MediaGalleryItem) {
   setImageLoadState(item, "loaded");
   if (item.id === activeItem.value?.id) {
     await nextTick();
-    if (!isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt)) return;
+    if (
+      !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority)
+    ) {
+      return;
+    }
     measureGeometry();
   }
 }
 
 function onFullImageError(event: Event, item: MediaGalleryItem) {
   const image = event.currentTarget;
+  const attempt = isHTMLImageElement(image) ? Number(image.dataset.retryAttempt) : Number.NaN;
   if (
     isHTMLImageElement(image) &&
     shouldMountFull(item) &&
@@ -571,9 +644,11 @@ function onFullImageError(event: Event, item: MediaGalleryItem) {
       Number(image.dataset.openCycle),
       Number(image.dataset.itemCollection),
       item,
-      Number(image.dataset.retryAttempt),
+      attempt,
+      Number(image.dataset.retryAuthority),
     )
   ) {
+    captureSelectedFullSource(image, item, attempt);
     setImageLoadState(item, "failed");
   }
 }
@@ -595,11 +670,27 @@ function onPreviewImageError(event: Event, item: MediaGalleryItem) {
 function retryImage() {
   const item = activeItem.value;
   if (!item || !shouldMountFull(item)) return;
+  const selectedSource = selectedFullSourceByItem.value[item.id];
+  if (!selectedSource) return;
+  const retrySource = createRetryRequestSource(selectedSource);
+  if (!retrySource) return;
+  const attempt = imageRetryAttempt(item) + 1;
+  imageRetryRequestByItem.value = { ...imageRetryRequestByItem.value, [item.id]: retrySource };
+  imageRetryAuthorityByItem.value = {
+    ...imageRetryAuthorityByItem.value,
+    [item.id]: activeAuthorityGeneration,
+  };
   imageRetryAttemptByItem.value = {
     ...imageRetryAttemptByItem.value,
-    [item.id]: imageRetryAttempt(item) + 1,
+    [item.id]: attempt,
   };
   setImageLoadState(item, "pending");
+}
+
+function withoutKey<TValue>(record: Record<string, TValue>, key: string): Record<string, TValue> {
+  const remaining = { ...record };
+  delete remaining[key];
+  return remaining;
 }
 
 function setMediaTransformElement(itemId: string, element: Element | null) {
@@ -1177,6 +1268,8 @@ async function openDialog(lifecycle: number) {
   focusRestoreVerification?.cancel();
   focusRestoreVerification = undefined;
   const generation = invalidateOpenCycle();
+  activeAuthorityGeneration += 1;
+  resetMediaSourceState();
   invalidateNavigation();
   invalidateClose();
   closingLifecycleGeneration = undefined;
@@ -1419,23 +1512,31 @@ watch(
   { flush: "sync", immediate: true },
 );
 
+watch(
+  () => activeItem.value?.id,
+  (id, previousId) => {
+    if (id === previousId) return;
+    activeAuthorityGeneration += 1;
+    if (!id) return;
+
+    const item = items.value.find((candidate) => candidate.id === id);
+    if (!item || !selectedFullSourceByItem.value[id]) return;
+    clearItemRetry(id);
+    setImageLoadState(item, imageLoadDefault(item));
+  },
+  { flush: "sync" },
+);
+
 watch(items, (nextItems, previousItems) => {
   itemCollectionGeneration.value += 1;
+  activeAuthorityGeneration += 1;
   const collectionGeneration = itemCollectionGeneration.value;
   const openGeneration = openCycleGeneration.value;
   const navigation = invalidateNavigation();
   const previousId = previousItems[galleryIndex.value]?.id;
   const previousSemanticId = semanticActiveId.value;
   const nextIds = new Set(nextItems.map((item) => item.id));
-  imageLoadStateByItem.value = Object.fromEntries(
-    Object.entries(imageLoadStateByItem.value).filter(([id]) => nextIds.has(id)),
-  );
-  imageRetryAttemptByItem.value = Object.fromEntries(
-    Object.entries(imageRetryAttemptByItem.value).filter(([id]) => nextIds.has(id)),
-  );
-  previewFailedByItem.value = Object.fromEntries(
-    Object.entries(previewFailedByItem.value).filter(([id]) => nextIds.has(id)),
-  );
+  resetMediaSourceState();
   for (const id of mediaTransformElements.keys()) {
     if (!nextIds.has(id)) mediaTransformElements.delete(id);
   }
@@ -1666,9 +1767,9 @@ defineExpose({
                   :class="{
                     concealed: shouldMountFull(slot.item) && imageLoadState(slot.item) === 'loaded',
                   }"
-                  :src="slot.item.preview.src"
-                  :srcset="slot.item.preview.srcset"
                   :sizes="slot.item.preview.sizes"
+                  :srcset="slot.item.preview.srcset"
+                  :src="slot.item.preview.src"
                   :alt="
                     slot.item.id === activeItem?.id &&
                     (!shouldMountFull(slot.item) || imageLoadState(slot.item) !== 'loaded')
@@ -1699,9 +1800,10 @@ defineExpose({
                   :data-item-collection="itemCollectionGeneration"
                   :data-open-cycle="openCycleGeneration"
                   :data-retry-attempt="imageRetryAttempt(slot.item)"
-                  :src="visibleFullSrc(slot.item)"
-                  :srcset="visibleFullSrcset(slot.item)"
+                  :data-retry-authority="imageRetryAuthorityByItem[slot.item.id] ?? 0"
                   :sizes="slot.item.full.sizes"
+                  :srcset="visibleFullSrcset(slot.item)"
+                  :src="visibleFullSrc(slot.item)"
                   :alt="
                     slot.item.id === activeItem?.id && imageLoadState(slot.item) === 'loaded'
                       ? slot.item.alt
@@ -1766,7 +1868,9 @@ defineExpose({
             <span data-testid="snap-motion-media-gallery-error">
               {{ messages.fullImageUnavailable }} {{ messages.previewFallback }}
             </span>
-            <button type="button" @click="retryImage">{{ messages.retry }}</button>
+            <button type="button" :disabled="!canRetryActiveImage" @click="retryImage">
+              {{ messages.retry }}
+            </button>
           </template>
         </div>
         <div

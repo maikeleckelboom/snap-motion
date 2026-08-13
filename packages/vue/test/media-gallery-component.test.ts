@@ -1226,8 +1226,16 @@ describe("MediaGalleryDialog media lifecycle", () => {
     expect(wrapper.findAll(".snap-motion-media-gallery-full")).toHaveLength(2);
   });
 
-  it("keeps previews mounted, reveals only decoded full media, and retries only a failed full layer", async () => {
-    const wrapper = mountGallery();
+  it("retries the browser-selected responsive source and restores responsive selection on reopen", async () => {
+    const responsiveItems = items.map((item) => ({
+      ...item,
+      full: {
+        ...item.full,
+        srcset: `${item.full.src}?selected 800w, ${item.full.src}?fallback 1600w`,
+        sizes: "800px",
+      },
+    }));
+    const wrapper = mountGallery({ items: responsiveItems });
     await nextTick();
 
     const currentSlot = wrapper.get('.snap-motion-media-gallery-slot[data-slot-position="0"]');
@@ -1235,6 +1243,10 @@ describe("MediaGalleryDialog media lifecycle", () => {
     expect(preview.attributes("alt")).toBe("First item");
     expect(preview.attributes("aria-hidden")).toBeUndefined();
     const full = currentSlot.get<HTMLImageElement>(".snap-motion-media-gallery-full");
+    Object.defineProperty(full.element, "currentSrc", {
+      configurable: true,
+      value: "https://media.test/one-full-selected.jpg?candidate=800",
+    });
     expect(full.attributes("alt")).toBe("");
     expect(full.attributes("aria-hidden")).toBe("true");
     expect(namedImages(wrapper)).toHaveLength(1);
@@ -1260,9 +1272,107 @@ describe("MediaGalleryDialog media lifecycle", () => {
     await wrapper.get(".snap-motion-media-gallery-status button").trigger("click");
     await nextTick();
     expect(wrapper.get("dialog").attributes("data-image-state")).toBe("pending");
-    expect(
-      currentSlot.get(".snap-motion-media-gallery-full").attributes("data-retry-attempt"),
-    ).toBe("1");
+    const retry = currentSlot.get<HTMLImageElement>(".snap-motion-media-gallery-full");
+    expect(retry.attributes("data-retry-attempt")).toBe("1");
+    expect(retry.attributes("srcset")).toBeUndefined();
+    expect(retry.attributes("sizes")).toBe("800px");
+    const retryUrl = new URL(retry.attributes("src")!);
+    expect(retryUrl.origin + retryUrl.pathname).toBe("https://media.test/one-full-selected.jpg");
+    expect(retryUrl.searchParams.get("candidate")).toBe("800");
+    expect(retryUrl.searchParams.get("snap-motion-retry")).toMatch(/^\d+-\d+-\d+$/);
+    expect(retryUrl.href).not.toBe(full.element.currentSrc);
+    expect(retryUrl.pathname).not.toBe("/one-full.jpg");
+
+    Object.defineProperty(retry.element, "currentSrc", {
+      configurable: true,
+      value: retryUrl.href,
+    });
+    await retry.trigger("load");
+    await nextTick();
+    expect(wrapper.get("dialog").attributes("data-image-state")).toBe("loaded");
+
+    await wrapper.setProps({ open: false });
+    await wrapper.setProps({ open: true });
+    await flushReactiveTasks();
+    const reopened = wrapper.get<HTMLImageElement>(
+      '[data-slot-position="0"] .snap-motion-media-gallery-full',
+    );
+    expect(reopened.attributes("data-retry-attempt")).toBe("0");
+    expect(reopened.attributes("src")).toBe("/one-full.jpg");
+    expect(reopened.attributes("srcset")).toBe(
+      "/one-full.jpg?selected 800w, /one-full.jpg?fallback 1600w",
+    );
+  });
+
+  it("invalidates a pending retry across authority and collection changes", async () => {
+    let releaseDecode: (() => void) | undefined;
+    HTMLImageElement.prototype.decode = vi.fn<() => Promise<void>>(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseDecode = resolve;
+        }),
+    );
+    const responsiveItems = items.slice(0, 2).map((item) => ({
+      ...item,
+      full: {
+        ...item.full,
+        srcset: `${item.full.src}?selected 800w, ${item.full.src}?fallback 1600w`,
+        sizes: "800px",
+      },
+    }));
+    const wrapper = mountGallery({ activeId: "one", items: responsiveItems });
+    await flushReactiveTasks();
+    const initial = wrapper.get<HTMLImageElement>(
+      '[data-slot-position="0"] .snap-motion-media-gallery-full',
+    );
+    Object.defineProperty(initial.element, "currentSrc", {
+      configurable: true,
+      value: "https://media.test/one-selected.jpg",
+    });
+    await initial.trigger("error");
+    await wrapper.get(".snap-motion-media-gallery-status button").trigger("click");
+    const staleRetry = wrapper.get<HTMLImageElement>(
+      '[data-slot-position="0"] .snap-motion-media-gallery-full',
+    );
+    Object.defineProperty(staleRetry.element, "currentSrc", {
+      configurable: true,
+      value: staleRetry.attributes("src"),
+    });
+    void staleRetry.trigger("load");
+    await Promise.resolve();
+
+    await wrapper.setProps({ activeId: "two" });
+    await flushReactiveTasks();
+    if (!releaseDecode) throw new Error("Retry decode hold was not initialized.");
+    releaseDecode();
+    await flushReactiveTasks();
+    expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("two");
+    expect(wrapper.get("dialog").attributes("data-image-state")).toBe("pending");
+
+    await wrapper.setProps({ activeId: "one" });
+    await flushReactiveTasks();
+    const readopted = wrapper.get<HTMLImageElement>(
+      '[data-slot-position="0"] .snap-motion-media-gallery-full',
+    );
+    expect(readopted.attributes("data-retry-attempt")).toBe("0");
+    expect(readopted.attributes("srcset")).toContain("one-full.jpg?selected 800w");
+
+    const replacement = [
+      {
+        ...responsiveItems[0]!,
+        full: {
+          src: "/replacement-full.jpg",
+          srcset: "/replacement-800.jpg 800w, /replacement-1600.jpg 1600w",
+          sizes: "800px",
+        },
+      },
+    ];
+    await wrapper.setProps({ items: replacement });
+    await flushReactiveTasks();
+    const replaced = wrapper.get<HTMLImageElement>(".snap-motion-media-gallery-full");
+    expect(replaced.attributes("data-retry-attempt")).toBe("0");
+    expect(replaced.attributes("src")).toBe("/replacement-full.jpg");
+    expect(replaced.attributes("srcset")).toContain("/replacement-800.jpg 800w");
   });
 
   it("treats identical full sources as complete preview-only media", async () => {

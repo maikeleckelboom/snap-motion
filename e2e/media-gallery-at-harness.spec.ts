@@ -533,9 +533,7 @@ test("named first, final, and single-item boundaries start at their exact states
   await expectNoHarnessViolations(page);
 });
 
-test("preview-only, delayed full, retry success, and terminal failures are deterministic", async ({
-  page,
-}) => {
+test("preview-only, delayed full, and terminal failures are deterministic", async ({ page }) => {
   await openScenario(page, "preview-only");
   await expect(gallery(page)).toHaveAttribute("data-image-state", "preview");
   await expect(page.getByTestId("snap-motion-media-gallery-loading")).toHaveCount(0);
@@ -548,13 +546,6 @@ test("preview-only, delayed full, retry success, and terminal failures are deter
     "Loading full image…",
   );
   await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded", { timeout: 4_000 });
-  await closeGallery(page);
-
-  await openScenario(page, "retry-success");
-  await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
-  await gallery(page).getByRole("button", { name: "Retry" }).click();
-  await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded");
-  await expect(gallery(page).getByRole("button", { name: "Retry" })).toHaveCount(0);
   await closeGallery(page);
 
   await openScenario(page, "full-failure");
@@ -572,6 +563,62 @@ test("preview-only, delayed full, retry success, and terminal failures are deter
   );
   await expect(gallery(page).getByRole("button", { name: "Retry" })).toHaveCount(0);
   await expectNoHarnessViolations(page);
+});
+
+test("responsive retry follows the selected candidate across retry, navigation, and reopen", async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/__at-media__/retry")) requests.push(request.url());
+  });
+
+  await openScenario(page, "retry-success");
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
+  const currentSlot = gallery(page).locator('[data-slot-position="0"]');
+  await expect(currentSlot.locator(".snap-motion-media-gallery-preview")).toBeVisible();
+  await expect(currentSlot.locator(".snap-motion-media-gallery-full")).toHaveCount(0);
+  await expect(
+    gallery(page).locator(
+      '[data-slot-position]:not([data-slot-position="0"]) .snap-motion-media-gallery-full',
+    ),
+  ).toHaveCount(0);
+  expect(requests.map((source) => new URL(source).pathname)).toEqual([
+    expect.stringMatching(/\/__at-media__\/retry\.svg$/),
+  ]);
+  expect(requests.some((source) => source.includes("retry-fallback.svg"))).toBe(false);
+
+  await gallery(page).getByRole("button", { name: "Retry" }).click();
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded");
+  const retriedFull = currentSlot.locator(".snap-motion-media-gallery-full");
+  await expect(retriedFull).not.toHaveAttribute("srcset");
+  const retrySource = await retriedFull.evaluate((element) => element.currentSrc);
+  const retryUrl = new URL(retrySource);
+  expect(retryUrl.pathname).toMatch(/\/__at-media__\/retry\.svg$/);
+  expect(retryUrl.searchParams.get("snap-motion-retry")).toMatch(/^\d+-\d+-\d+$/);
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toBe(retrySource);
+  expect(requests.some((source) => source.includes("retry-fallback.svg"))).toBe(false);
+
+  await page.getByTestId("snap-motion-media-gallery-next").click();
+  await expect(gallery(page)).toHaveAttribute("data-settled-id", "wide-timeline");
+  const navigatedSource = await gallery(page)
+    .locator('[data-slot-position="0"] .snap-motion-media-gallery-full')
+    .evaluate((element) => element.currentSrc);
+  expect(navigatedSource).not.toContain("snap-motion-retry");
+
+  await page.getByTestId("snap-motion-media-gallery-previous").click();
+  await expect(gallery(page)).toHaveAttribute("data-settled-id", "retry-success-image");
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
+  expect(new URL(requests.at(-1)!).searchParams.has("snap-motion-retry")).toBe(false);
+
+  await closeGallery(page);
+  await selectScenario(page, "baseline");
+  await selectScenario(page, "retry-success");
+  await page.getByTestId("at-open-gallery").click();
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
+  expect(new URL(requests.at(-1)!).searchParams.has("snap-motion-retry")).toBe(false);
+  expect(requests.some((source) => source.includes("retry-fallback.svg"))).toBe(false);
 });
 
 test("cancelled swipe emits no semantic change and close cancels pending settlement", async ({

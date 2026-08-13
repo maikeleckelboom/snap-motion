@@ -59,12 +59,40 @@ function normalizeImageSource(
     Number(source.width) > 0 &&
     Number.isFinite(source.height) &&
     Number(source.height) > 0;
+  const srcset = normalizeOptionalSourceMetadata(source.srcset);
+  const sizes = normalizeOptionalSourceMetadata(source.sizes);
   return {
     src: source.src,
-    ...(source.srcset ? { srcset: source.srcset } : {}),
-    ...(source.sizes ? { sizes: source.sizes } : {}),
+    ...(srcset ? { srcset } : {}),
+    ...(sizes ? { sizes } : {}),
     ...(hasIntrinsicSize ? { width: source.width, height: source.height } : {}),
   };
+}
+
+function normalizeOptionalSourceMetadata(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+/**
+ * Returns whether two image sources can select different network resources.
+ * Intrinsic dimensions reserve geometry only. `sizes` affects identity only when a shared
+ * non-empty `srcset` gives the browser responsive candidates to choose between.
+ */
+export function hasDistinctMediaGallerySource(
+  first: MediaGalleryImageSource,
+  second: MediaGalleryImageSource,
+): boolean {
+  if (first.src !== second.src) return true;
+
+  const firstSrcset = normalizeOptionalSourceMetadata(first.srcset);
+  const secondSrcset = normalizeOptionalSourceMetadata(second.srcset);
+  if (firstSrcset !== secondSrcset) return true;
+  if (!firstSrcset) return false;
+
+  return (
+    normalizeOptionalSourceMetadata(first.sizes) !== normalizeOptionalSourceMetadata(second.sizes)
+  );
 }
 
 function normalizedLimits(limits: MediaTransformLimits): MediaTransformLimits {

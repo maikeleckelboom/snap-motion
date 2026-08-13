@@ -965,7 +965,7 @@ test("loading preserves geometry, requests only the current full image, and reve
     releaseRetry = resolve;
   });
   await page.route(mapFullPattern, async (route) => {
-    if (route.request().url().includes("retry=")) {
+    if (route.request().url().includes("snap-motion-retry=")) {
       await retryHold;
       await route.continue();
     } else {
