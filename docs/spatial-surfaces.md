@@ -96,9 +96,11 @@ Both components accept `items`, optional `activeId`, `label` / `labelledBy`, `it
 `fallbackStageWidth` is only the pre-measurement fallback; the component measures the real stage.
 The measured public root may be narrower than the compact mechanics profile. At a 280 CSS-pixel
 allocation, the compact Deck keeps its 192 CSS-pixel card, slotted content, and settled pile inside
-that root in either navigation direction. Consumers should keep their host and slotted card content
-shrinkable with `min-inline-size: 0`. They should not patch the package transform or clip the Deck
-to compensate for unrelated page overflow.
+that root in either navigation direction. The package stylesheet applies layout containment to the
+public Deck root while preserving visible overflow, so transformed exchange cards do not widen the
+document and focus outlines, motion, and pile edges remain unclipped. Consumers should keep their
+host and slotted card content shrinkable with `min-inline-size: 0`. They should not patch the package
+transform, add host containment, or clip the Deck to compensate for page overflow.
 
 Both require `#card`. `StackedDeck` also supports a decorative `#backdrop`. Card slot state exposes
 the domain `item`, stable `id`, collection `index`, semantic/visual/settled/inspection state, and the

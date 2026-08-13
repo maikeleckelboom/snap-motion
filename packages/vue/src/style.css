@@ -974,6 +974,7 @@
   inline-size: min(100%, var(--snap-motion-deck-stage-width));
   min-block-size: calc(var(--snap-motion-deck-card-height) + 5.5rem);
   margin-inline: auto;
+  contain: layout;
   overflow: visible;
   isolation: isolate;
   user-select: none;

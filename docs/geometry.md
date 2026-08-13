@@ -175,6 +175,11 @@ visual top, completes every crossed anchor in order inside that envelope, and ex
 residual adjacent segment. `resolveStackedDeckFrame` projects that segment into `top`, `target`, or
 `hidden` roles. No active segment can have a non-adjacent target.
 
+The public Deck root owns layout containment without paint containment. It keeps `overflow: visible`,
+so transformed cards and pile layers stay visually intact throughout an exchange without
+contributing transient width to the document. This boundary belongs to the package because the
+package owns those transforms; a consumer must not need to clip the surface or contain its host.
+
 ### Deck thickness
 
 `resolveStackedDeckPile` draws one decorative layer for every screen the frame does not already draw,

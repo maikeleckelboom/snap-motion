@@ -52,6 +52,11 @@ Import the structural CSS once:
 import "@snap-motion/vue/style.css";
 ```
 
+That stylesheet gives the public `StackedDeck` root layout containment while keeping overflow
+visible. Transformed exchange cards therefore cannot widen the document during motion, but their
+focus outlines, pile edges, and motion remain unclipped. Do not replace that contract with a host
+clip or an application-side containment patch.
+
 ## Controlled routing
 
 Production components never import Vue Router or Nuxt routing. The application maps a route media
