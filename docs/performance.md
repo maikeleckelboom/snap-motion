@@ -17,7 +17,7 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 | Vue dialog        |  10,387 |      3,547 |      11,000 / 3,700 |
 | Vue media gallery |  49,405 |     13,196 |     60,000 / 16,000 |
 | Vue motion        |   9,524 |      3,218 |      16,000 / 5,500 |
-| Base CSS          |  26,975 |      4,692 |      27,000 / 5,000 |
+| Base CSS          |  26,994 |      4,698 |      27,000 / 5,000 |
 
 `pnpm performance:check` covers 60/120-sample drag streams, repeated interruption, 1/20/100/1,000
 items, bounded render windows, simultaneous instances, resize/mutation storms, wheel coalescing,
