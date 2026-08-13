@@ -240,7 +240,8 @@ test.describe("overlay lifecycle generations", () => {
       await close().click();
       await expect(dialog).not.toHaveAttribute("open", "");
       await page.evaluate(() => Promise.resolve());
-      await opener.focus();
+      await opener.evaluate((element) => HTMLElement.prototype.focus.call(element));
+      await expect(opener).toBeFocused();
       expect(await flushFocusVerificationFrames(page)).toBe(0);
       await expect(followUp).toBeFocused();
       if (browserName === "chromium") {

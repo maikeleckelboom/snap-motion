@@ -82,7 +82,10 @@ cannot steal focus from a newer overlay.
 
 Focus return is a handoff, not an ongoing lease. Bounded verification may repair focus left on the
 document or stranded in a closed native dialog, and may retry an opener that is temporarily
-unavailable. If another connected element takes focus during that same cleanup window, it becomes
+unavailable. A configured `focusReturn.opener` wins over browser focus chosen before verification
+begins; without one, a valid initial application owner is preserved. Package-owned native close also
+observes an immediate application handoff from that configured opener before verification can begin.
+If another connected element takes focus during that same cleanup window, it becomes
 the short-lived verification target: a late native-dialog cleanup that returns focus to the stale
 opener is repaired to the new owner. Verification ends after the new owner is stable, or immediately
 if it disconnects. After the handoff stabilizes, later blur or focus changes are outside the

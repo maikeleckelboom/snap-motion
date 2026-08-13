@@ -11,7 +11,9 @@ import {
   restoreFocus,
 } from "../../internal/accessibility/focus";
 import {
+  observeFocusHandoffFromOpener,
   scheduleVerifiedFocusRestore,
+  type FocusHandoffObservation,
   type FocusRestoreVerification,
 } from "../../internal/accessibility/focus-restore";
 import {
@@ -174,18 +176,36 @@ let navigationGeneration = 0;
 let closeGeneration = 0;
 let capturedOpener: HTMLElement | undefined;
 let capturedOpenerGeneration = 0;
+let capturedOpenerWasExplicit = false;
 let focusRestoreVerification: FocusRestoreVerification | undefined;
 let lifecycleGeneration = 0;
 let openedLifecycleGeneration = 0;
 let finalizedLifecycleGeneration = 0;
 let closingLifecycleGeneration: number | undefined;
-const nativeCloseGenerations: number[] = [];
+const nativeCloseLifecycles: {
+  focusHandoff: FocusHandoffObservation;
+  generation: number;
+}[] = [];
 let geometry = {
   height: 0,
   left: 0,
   top: 0,
   width: 0,
 };
+
+function explicitOpenerForCurrentLifecycle() {
+  if (capturedOpener) return capturedOpenerWasExplicit ? capturedOpener : undefined;
+  return props.focusReturn?.opener;
+}
+
+function cancelPendingCloseHandoffs() {
+  for (const lifecycle of nativeCloseLifecycles) lifecycle.focusHandoff.cancel();
+}
+
+function clearPendingCloseHandoffs() {
+  cancelPendingCloseHandoffs();
+  nativeCloseLifecycles.length = 0;
+}
 
 const activeItem = computed(() => items.value[galleryIndex.value] ?? items.value[0]);
 const semanticActiveId = computed<TId | undefined>(() => props.activeId ?? internalActiveId.value);
@@ -1110,8 +1130,10 @@ function captureLifecycleOpener(target: HTMLDialogElement, generation: number) {
   const explicitOpener = props.focusReturn?.opener;
   if (explicitOpener) {
     capturedOpener = explicitOpener;
+    capturedOpenerWasExplicit = true;
     return;
   }
+  capturedOpenerWasExplicit = false;
   const activeElement = captureFocusOpener(target.ownerDocument);
   if (activeElement && !target.contains(activeElement)) {
     capturedOpener = activeElement;
@@ -1182,6 +1204,7 @@ async function openDialog(lifecycle: number) {
 }
 
 function beginOpenLifecycle() {
+  cancelPendingCloseHandoffs();
   lifecycleGeneration += 1;
   void openDialog(lifecycleGeneration);
 }
@@ -1227,7 +1250,10 @@ function finishClose(generation = closeGeneration) {
   }
   stopCloseFallback();
   closingLifecycleGeneration = undefined;
-  nativeCloseGenerations.push(lifecycle);
+  nativeCloseLifecycles.push({
+    focusHandoff: observeFocusHandoffFromOpener(explicitOpenerForCurrentLifecycle()),
+    generation: lifecycle,
+  });
   dialog.value.close();
 }
 
@@ -1242,7 +1268,9 @@ function onShellTransitionEnd(event: TransitionEvent) {
 }
 
 async function onClose() {
-  const closeLifecycle = nativeCloseGenerations.shift();
+  const nativeCloseLifecycle = nativeCloseLifecycles.shift();
+  const closeLifecycle = nativeCloseLifecycle?.generation;
+  const initialTransferredOwner = nativeCloseLifecycle?.focusHandoff.consume();
   if (dialog.value?.open) return;
   if (closeLifecycle !== undefined && closeLifecycle !== lifecycleGeneration) return;
   if (!mounted.value) return;
@@ -1268,10 +1296,14 @@ async function onClose() {
   resetTransform();
   unlockDocumentScroll();
   const opener = capturedOpener ?? props.focusReturn?.opener;
+  const explicitOpener = capturedOpener ? capturedOpenerWasExplicit : opener !== undefined;
   const focusGeneration = lifecycleGeneration;
   capturedOpener = undefined;
+  capturedOpenerWasExplicit = false;
   focusRestoreVerification = scheduleVerifiedFocusRestore({
+    explicitOpener,
     fallback: props.focusReturn?.fallback,
+    initialTransferredOwner,
     isCurrent: () => mounted.value && !props.open && focusGeneration === lifecycleGeneration,
     opener,
   });
@@ -1441,6 +1473,7 @@ watch(items, (nextItems, previousItems) => {
 onBeforeUnmount(() => {
   mounted.value = false;
   lifecycleGeneration += 1;
+  clearPendingCloseHandoffs();
   invalidateOpenCycle();
   invalidateNavigation();
   invalidateClose();

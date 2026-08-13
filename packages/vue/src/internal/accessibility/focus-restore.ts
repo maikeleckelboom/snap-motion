@@ -5,8 +5,71 @@ export interface FocusRestoreVerification {
   cancel(): void;
 }
 
+export interface FocusHandoffObservation {
+  cancel(): void;
+  consume(): HTMLElement | undefined;
+}
+
 function focusTarget(target: HTMLElement | undefined) {
   restoreFocus({ opener: target });
+}
+
+function captureFocusEventOwner(event: FocusEvent) {
+  const owner = event.target;
+  return owner instanceof HTMLElement &&
+    owner.isConnected &&
+    !owner.matches("body, html") &&
+    !owner.closest("dialog:not([open])")
+    ? owner
+    : undefined;
+}
+
+/**
+ * Observes the synchronous native-close focus chain before the close event finalizer can install
+ * verified restoration. Browser-selected focus before the configured opener is ignored: only a
+ * later focus owner can establish an application handoff.
+ */
+export function observeFocusHandoffFromOpener(
+  opener: HTMLElement | undefined,
+): FocusHandoffObservation {
+  const documentTarget = opener?.ownerDocument;
+  let handoffOwner: HTMLElement | undefined;
+  let observedOpener = false;
+  let stopped = false;
+
+  const onFocus = (event: FocusEvent) => {
+    const owner = captureFocusEventOwner(event);
+    if (!owner) return;
+    if (owner === opener) {
+      observedOpener = true;
+      return;
+    }
+    if (observedOpener) handoffOwner ??= owner;
+  };
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    documentTarget?.removeEventListener("focus", onFocus, true);
+  };
+
+  if (documentTarget && opener?.isConnected) {
+    documentTarget.addEventListener("focus", onFocus, true);
+  } else {
+    stopped = true;
+  }
+
+  return {
+    cancel() {
+      stop();
+      handoffOwner = undefined;
+    },
+    consume() {
+      const owner = handoffOwner;
+      stop();
+      handoffOwner = undefined;
+      return owner;
+    },
+  };
 }
 
 /**
@@ -15,7 +78,9 @@ function focusTarget(target: HTMLElement | undefined) {
  * event handler, so a successful focus handoff is not yet proof that its owner retained focus.
  */
 export function scheduleVerifiedFocusRestore(options: {
+  explicitOpener?: boolean;
   fallback: FocusReturnOptions["fallback"] | undefined;
+  initialTransferredOwner?: HTMLElement | undefined;
   isCurrent: () => boolean;
   opener: HTMLElement | undefined;
 }): FocusRestoreVerification {
@@ -43,12 +108,12 @@ export function scheduleVerifiedFocusRestore(options: {
     frame = undefined;
     documentTarget?.removeEventListener("focusin", onFocusIn, true);
   };
-  const onFocusIn = () => {
+  const onFocusIn = (event: FocusEvent) => {
     if (!options.isCurrent()) {
       stop();
       return;
     }
-    const owner = captureFocusOpener(documentTarget);
+    const owner = captureFocusEventOwner(event);
     if (!owner || owner === restoreTarget) return;
     // Once focus has moved away from the returned opener, native dialog cleanup must not transfer
     // verification ownership back to it. The verifier may repair the new owner, never reclaim it.
@@ -132,7 +197,12 @@ export function scheduleVerifiedFocusRestore(options: {
   }
   documentTarget.addEventListener("focusin", onFocusIn, true);
   const initialOwner = captureFocusOpener(documentTarget);
-  if (
+  if (options.initialTransferredOwner && options.initialTransferredOwner !== options.opener) {
+    restoreTarget = options.initialTransferredOwner;
+    transferred = true;
+    focusTarget(restoreTarget);
+  } else if (
+    !options.explicitOpener &&
     initialOwner &&
     initialOwner !== options.opener &&
     (!(initialOwner instanceof HTMLDialogElement) ||

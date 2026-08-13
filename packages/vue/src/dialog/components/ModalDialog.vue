@@ -9,7 +9,9 @@ import {
   restoreFocus,
 } from "../../internal/accessibility/focus";
 import {
+  observeFocusHandoffFromOpener,
   scheduleVerifiedFocusRestore,
+  type FocusHandoffObservation,
   type FocusRestoreVerification,
 } from "../../internal/accessibility/focus-restore";
 import {
@@ -49,12 +51,30 @@ const resolvedTitleId = props.titleId ?? generatedTitleId;
 const messages = computed(() => createEnglishSnapMotionMessages(props.messages));
 let capturedOpener: HTMLElement | undefined;
 let capturedOpenerGeneration = 0;
+let capturedOpenerWasExplicit = false;
 let mounted = false;
 let lifecycleGeneration = 0;
 let openedGeneration = 0;
 let finalizedGeneration = 0;
-const nativeCloseGenerations: number[] = [];
+const nativeCloseLifecycles: {
+  focusHandoff: FocusHandoffObservation;
+  generation: number;
+}[] = [];
 let focusRestoreVerification: FocusRestoreVerification | undefined;
+
+function explicitOpenerForCurrentLifecycle() {
+  if (capturedOpener) return capturedOpenerWasExplicit ? capturedOpener : undefined;
+  return props.focusReturn?.opener;
+}
+
+function cancelPendingCloseHandoffs() {
+  for (const lifecycle of nativeCloseLifecycles) lifecycle.focusHandoff.cancel();
+}
+
+function clearPendingCloseHandoffs() {
+  cancelPendingCloseHandoffs();
+  nativeCloseLifecycles.length = 0;
+}
 
 function captureLifecycleOpener(target: HTMLDialogElement, generation: number) {
   if (capturedOpenerGeneration === generation) return;
@@ -62,8 +82,10 @@ function captureLifecycleOpener(target: HTMLDialogElement, generation: number) {
   const explicitOpener = props.focusReturn?.opener;
   if (explicitOpener) {
     capturedOpener = explicitOpener;
+    capturedOpenerWasExplicit = true;
     return;
   }
+  capturedOpenerWasExplicit = false;
   const activeElement = captureFocusOpener(target.ownerDocument);
   if (activeElement && !target.contains(activeElement)) {
     capturedOpener = activeElement;
@@ -92,6 +114,7 @@ async function show(generation: number) {
 }
 
 function beginOpenLifecycle() {
+  cancelPendingCloseHandoffs();
   lifecycleGeneration += 1;
   void show(lifecycleGeneration);
 }
@@ -99,7 +122,10 @@ function beginOpenLifecycle() {
 function closeNative() {
   const target = dialog.value;
   if (!target?.open) return;
-  nativeCloseGenerations.push(lifecycleGeneration);
+  nativeCloseLifecycles.push({
+    focusHandoff: observeFocusHandoffFromOpener(explicitOpenerForCurrentLifecycle()),
+    generation: lifecycleGeneration,
+  });
   target.close();
 }
 
@@ -116,12 +142,13 @@ function onCancel(event: Event) {
 
 async function onClose() {
   const target = dialog.value;
-  const closeGeneration = nativeCloseGenerations.shift();
+  const closeLifecycle = nativeCloseLifecycles.shift();
+  const initialTransferredOwner = closeLifecycle?.focusHandoff.consume();
   if (target?.open) return;
   if (!mounted) return;
-  if (closeGeneration !== undefined && closeGeneration !== lifecycleGeneration) return;
+  if (closeLifecycle && closeLifecycle.generation !== lifecycleGeneration) return;
   if (props.open) {
-    if (closeGeneration !== undefined) return;
+    if (closeLifecycle) return;
     emit("update:open", false);
     emit("openRequest", false, { reason: "programmatic" });
     await nextTick();
@@ -132,13 +159,18 @@ async function onClose() {
   }
   if (finalizedGeneration === lifecycleGeneration) return;
   finalizedGeneration = lifecycleGeneration;
+  const opener = capturedOpener ?? props.focusReturn?.opener;
+  const explicitOpener = capturedOpener ? capturedOpenerWasExplicit : opener !== undefined;
   const focusGeneration = lifecycleGeneration;
   focusRestoreVerification = scheduleVerifiedFocusRestore({
+    explicitOpener,
     fallback: props.focusReturn?.fallback,
+    initialTransferredOwner,
     isCurrent: () => mounted && !props.open && focusGeneration === lifecycleGeneration,
-    opener: capturedOpener ?? props.focusReturn?.opener,
+    opener,
   });
   capturedOpener = undefined;
+  capturedOpenerWasExplicit = false;
   emit("closed");
 }
 
@@ -158,6 +190,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   mounted = false;
   lifecycleGeneration += 1;
+  clearPendingCloseHandoffs();
   if (dialog.value?.open) {
     dialog.value.close();
   }

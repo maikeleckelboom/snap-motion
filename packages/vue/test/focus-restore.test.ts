@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { scheduleVerifiedFocusRestore } from "../src/internal/accessibility/focus-restore";
+import {
+  observeFocusHandoffFromOpener,
+  scheduleVerifiedFocusRestore,
+} from "../src/internal/accessibility/focus-restore";
 
 function useControlledAnimationFrames() {
   let nextFrame = 1;
@@ -40,18 +43,18 @@ function useControlledAnimationFrames() {
   };
 }
 
-function useFocusListenerLifecycle() {
+function useFocusListenerLifecycle(type = "focusin") {
   const addEventListener = vi.spyOn(document, "addEventListener");
   const removeEventListener = vi.spyOn(document, "removeEventListener");
 
   return {
     expectNotAdded() {
-      expect(addEventListener.mock.calls.some(([type]) => type === "focusin")).toBe(false);
+      expect(addEventListener.mock.calls.some(([eventType]) => eventType === type)).toBe(false);
     },
     expectRemoved() {
-      const registration = addEventListener.mock.calls.find(([type]) => type === "focusin");
+      const registration = addEventListener.mock.calls.find(([eventType]) => eventType === type);
       if (!registration) throw new Error("Focus verification listener was not registered");
-      expect(removeEventListener).toHaveBeenCalledWith("focusin", registration[1], true);
+      expect(removeEventListener).toHaveBeenCalledWith(type, registration[1], true);
     },
   };
 }
@@ -62,6 +65,43 @@ afterEach(() => {
 });
 
 describe("verified focus restoration", () => {
+  it("observes only an explicit-opener application handoff before native close finalizes", () => {
+    const opener = document.createElement("button");
+    const directCleanupOwner = document.createElement("button");
+    const applicationTarget = document.createElement("button");
+    document.body.append(opener, directCleanupOwner, applicationTarget);
+    const listener = useFocusListenerLifecycle("focus");
+    const observation = observeFocusHandoffFromOpener(opener);
+
+    directCleanupOwner.focus();
+    opener.addEventListener("focus", () => applicationTarget.focus(), { once: true });
+    opener.focus();
+    directCleanupOwner.focus();
+
+    expect(observation.consume()).toBe(applicationTarget);
+    listener.expectRemoved();
+  });
+
+  it("ignores invalid pre-close handoff owners and cancels obsolete observations", () => {
+    const opener = document.createElement("button");
+    const applicationTarget = document.createElement("button");
+    const closedDialog = document.createElement("dialog");
+    const closedDialogTarget = document.createElement("button");
+    closedDialog.append(closedDialogTarget);
+    document.body.append(opener, applicationTarget, closedDialog);
+    const listener = useFocusListenerLifecycle("focus");
+    const observation = observeFocusHandoffFromOpener(opener);
+
+    opener.dispatchEvent(new FocusEvent("focus"));
+    document.body.dispatchEvent(new FocusEvent("focus"));
+    closedDialogTarget.dispatchEvent(new FocusEvent("focus"));
+    applicationTarget.dispatchEvent(new FocusEvent("focus"));
+    observation.cancel();
+
+    expect(observation.consume()).toBeUndefined();
+    listener.expectRemoved();
+  });
+
   it("completes a stable synchronous handoff within its bounded frame window", () => {
     const frames = useControlledAnimationFrames();
     const opener = document.createElement("button");
@@ -131,17 +171,14 @@ describe("verified focus restoration", () => {
     expect(frames.pending()).toBe(0);
   });
 
-  it("preserves an application focus-event handoff across later native cleanup", async () => {
+  it("preserves an application focus-event handoff across later native cleanup", () => {
     const frames = useControlledAnimationFrames();
     const opener = document.createElement("button");
     const applicationTarget = document.createElement("button");
     document.body.append(opener, applicationTarget);
-    opener.addEventListener("focus", () => queueMicrotask(() => applicationTarget.focus()), {
-      once: true,
-    });
+    opener.addEventListener("focus", () => applicationTarget.focus(), { once: true });
 
     scheduleVerifiedFocusRestore({ isCurrent: () => true, opener, fallback: undefined });
-    await Promise.resolve();
     expect(document.activeElement).toBe(applicationTarget);
     opener.focus();
     frames.flushAll();
@@ -164,6 +201,91 @@ describe("verified focus restoration", () => {
     expect(document.activeElement).toBe(applicationTarget);
     expect(frames.pending()).toBe(0);
     listener.expectRemoved();
+  });
+
+  it("returns to an explicit opener despite an initial native cleanup owner", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    const cleanupOwner = document.createElement("section");
+    cleanupOwner.tabIndex = -1;
+    document.body.append(opener, cleanupOwner);
+    cleanupOwner.focus();
+
+    scheduleVerifiedFocusRestore({
+      explicitOpener: true,
+      fallback: undefined,
+      isCurrent: () => true,
+      opener,
+    });
+    frames.flushAll();
+
+    expect(document.activeElement).toBe(opener);
+    expect(frames.pending()).toBe(0);
+  });
+
+  it("repairs a pre-close explicit-opener handoff through later native cleanup", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    const applicationTarget = document.createElement("button");
+    document.body.append(opener, applicationTarget);
+    opener.focus();
+
+    scheduleVerifiedFocusRestore({
+      explicitOpener: true,
+      fallback: undefined,
+      initialTransferredOwner: applicationTarget,
+      isCurrent: () => true,
+      opener,
+    });
+    expect(document.activeElement).toBe(applicationTarget);
+    opener.focus();
+    expect(document.activeElement).toBe(opener);
+    frames.flushAll();
+
+    expect(document.activeElement).toBe(applicationTarget);
+    expect(frames.pending()).toBe(0);
+  });
+
+  it("preserves a synchronous focus-event application handoff from an explicit opener", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    const applicationTarget = document.createElement("button");
+    document.body.append(opener, applicationTarget);
+    opener.addEventListener("focus", () => applicationTarget.focus(), { once: true });
+
+    scheduleVerifiedFocusRestore({
+      explicitOpener: true,
+      fallback: undefined,
+      isCurrent: () => true,
+      opener,
+    });
+    expect(document.activeElement).toBe(applicationTarget);
+    opener.focus();
+    expect(document.activeElement).toBe(opener);
+    frames.flushAll();
+
+    expect(document.activeElement).toBe(applicationTarget);
+    expect(frames.pending()).toBe(0);
+  });
+
+  it("records a focus-event owner after activeElement has already changed", () => {
+    const frames = useControlledAnimationFrames();
+    const opener = document.createElement("button");
+    const applicationTarget = document.createElement("button");
+    document.body.append(opener, applicationTarget);
+
+    scheduleVerifiedFocusRestore({
+      explicitOpener: true,
+      fallback: undefined,
+      isCurrent: () => true,
+      opener,
+    });
+    applicationTarget.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expect(document.activeElement).toBe(opener);
+    frames.flushAll();
+
+    expect(document.activeElement).toBe(applicationTarget);
+    expect(frames.pending()).toBe(0);
   });
 
   it("repairs initial WebKit cleanup focus on an opener's still-open parent dialog", () => {
