@@ -221,6 +221,13 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     const activeElement = root?.ownerDocument.activeElement;
     const originElement = cardAt(event);
     const originIndex = originElement ? options.resolveIndex(originElement) : -1;
+    // WebKit focuses the nearest focusable ancestor of a non-focusable card on a mouse press.
+    // The surface owns this pointer sequence and resolves selection itself, so prevent that native
+    // focus transfer. Descendant controls returned above keep their ordinary click and focus
+    // behavior, while a resolved swipe still focuses the stage explicitly in the surface adapter.
+    if (event.pointerType === "mouse" && originIndex >= 0 && event.cancelable) {
+      event.preventDefault();
+    }
     gesture = {
       focusWasOutside: Boolean(root && (!activeElement || !root.contains(activeElement))),
       openEligibleAtStart: originIndex >= 0 && options.isOpenEligible(originIndex),
