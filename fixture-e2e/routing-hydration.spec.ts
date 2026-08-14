@@ -1,4 +1,15 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+
+async function setRequestPolicy(
+  page: Page,
+  authority: Locator,
+  policy: "accept" | "delay" | "refuse",
+) {
+  await page.evaluate((nextPolicy) => {
+    window.dispatchEvent(new CustomEvent("snap-motion:set-request-policy", { detail: nextPolicy }));
+  }, policy);
+  await expect(authority).toHaveAttribute("data-policy", policy);
+}
 
 test("Vue Router owns push, replacement, Back closure, and direct-entry fallback", async ({
   page,
@@ -48,14 +59,10 @@ test("Vue Router can delay and refuse controlled navigation and close requests",
     "system",
   );
 
-  await page.getByRole("button", { name: "Refuse requests" }).evaluate((element) => {
-    (element as HTMLButtonElement).click();
-  });
+  const authority = page.getByTestId("router-authority");
+  await setRequestPolicy(page, authority, "refuse");
   await page.getByRole("button", { name: "Next item" }).click();
-  await expect(page.getByTestId("router-authority")).toHaveAttribute(
-    "data-request-sequence",
-    "system,outcome",
-  );
+  await expect(authority).toHaveAttribute("data-request-sequence", "system,outcome");
   await expect(page).toHaveURL(/\/work\/factif\/media\/system$/);
   await expect(page.locator(".snap-motion-carousel-viewport")).toHaveAttribute(
     "data-active-id",
@@ -64,38 +71,24 @@ test("Vue Router can delay and refuse controlled navigation and close requests",
   await expect(page.locator(".snap-motion-carousel [role='status']")).toContainText(
     "System detail",
   );
-  await expect(page.getByTestId("router-authority")).toHaveAttribute(
-    "data-settled-sequence",
-    "system",
-  );
+  await expect(authority).toHaveAttribute("data-settled-sequence", "system");
 
-  await page.getByRole("button", { name: "Delay requests" }).evaluate((element) => {
-    (element as HTMLButtonElement).click();
-  });
+  await setRequestPolicy(page, authority, "delay");
   await page.getByRole("button", { name: "Next item" }).click();
-  await expect(page.getByTestId("router-authority")).toHaveAttribute(
-    "data-request-sequence",
-    "system,outcome,outcome",
-  );
+  await expect(authority).toHaveAttribute("data-request-sequence", "system,outcome,outcome");
   await expect(page).toHaveURL(/\/work\/factif\/media\/system$/);
   await expect(page.locator(".snap-motion-carousel-viewport")).toHaveAttribute(
     "data-active-id",
     "system",
   );
-  await expect(page.getByTestId("router-authority")).toHaveAttribute(
-    "data-settled-sequence",
-    "system",
-  );
+  await expect(authority).toHaveAttribute("data-settled-sequence", "system");
   await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
   await expect(page).toHaveURL(/\/work\/factif\/media\/outcome$/);
   await expect(page.locator(".snap-motion-carousel-viewport")).toHaveAttribute(
     "data-active-id",
     "outcome",
   );
-  await expect(page.getByTestId("router-authority")).toHaveAttribute(
-    "data-settled-sequence",
-    "system,outcome",
-  );
+  await expect(authority).toHaveAttribute("data-settled-sequence", "system,outcome");
 
   await page.getByRole("button", { name: "Close dialog" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
@@ -162,14 +155,15 @@ test("Nuxt can delay controlled gallery navigation and close without hydration d
     "system",
   );
 
-  await page.getByRole("button", { name: "Refuse requests" }).evaluate((element) => {
-    (element as HTMLButtonElement).click();
-  });
-  await page.getByRole("button", { name: "Next item" }).click();
-  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute(
-    "data-request-sequence",
-    "system,outcome",
-  );
+  const authority = page.getByTestId("nuxt-authority");
+  const nextItem = page.getByRole("button", { name: "Next item" });
+  await setRequestPolicy(page, authority, "refuse");
+  await nextItem.click();
+  await expect(authority).toHaveAttribute("data-request-sequence", "system,outcome");
+  // `idle` is also the pre-navigation value. Observe the refused transition itself before
+  // treating its rollback as complete, or a fast runner can issue the repeated target request
+  // inside the first request's still-open navigation epoch.
+  await expect(gallery).toHaveAttribute("data-track-state", "settling");
   await expect(page).toHaveURL(/\?media=system$/);
   await expect(
     page.locator('dialog[open][data-testid="snap-motion-media-gallery"]'),
@@ -178,34 +172,21 @@ test("Nuxt can delay controlled gallery navigation and close without hydration d
     "Measured outcome",
   );
   await expect(gallery).toHaveAttribute("data-settled-id", "system");
+  await expect(authority).toHaveAttribute("data-settled-sequence", "system");
   await expect(gallery).toHaveAttribute("data-track-state", "idle");
-  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute(
-    "data-settled-sequence",
-    "system",
-  );
 
-  await page.getByRole("button", { name: "Delay requests" }).evaluate((element) => {
-    (element as HTMLButtonElement).click();
-  });
-  await page.getByRole("button", { name: "Next item" }).click();
-  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute(
-    "data-request-sequence",
-    "system,outcome,outcome",
-  );
+  await setRequestPolicy(page, authority, "delay");
+  await expect(nextItem).toBeEnabled();
+  await nextItem.click();
+  await expect(authority).toHaveAttribute("data-request-sequence", "system,outcome,outcome");
   await expect(page).toHaveURL(/\?media=system$/);
   await expect(gallery).toHaveAttribute("data-active-id", "system");
-  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute(
-    "data-settled-sequence",
-    "system",
-  );
+  await expect(authority).toHaveAttribute("data-settled-sequence", "system");
   await page.evaluate(() => window.dispatchEvent(new Event("snap-motion:resolve-pending")));
   await expect(page).toHaveURL(/\?media=outcome$/);
   await expect(gallery).toHaveAttribute("data-active-id", "outcome");
   await expect(gallery).toHaveAttribute("data-settled-id", "outcome");
-  await expect(page.getByTestId("nuxt-authority")).toHaveAttribute(
-    "data-settled-sequence",
-    "system,outcome",
-  );
+  await expect(authority).toHaveAttribute("data-settled-sequence", "system,outcome");
 
   await page.getByRole("button", { name: "Close gallery" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();

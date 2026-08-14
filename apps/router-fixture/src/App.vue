@@ -37,6 +37,7 @@ const settledSequence = ref<MediaId[]>([]);
 declare global {
   interface WindowEventMap {
     "snap-motion:resolve-pending": Event;
+    "snap-motion:set-request-policy": CustomEvent<RequestPolicy>;
   }
 }
 const basePath = computed(() => `/work/${String(route.params.slug ?? "factif")}`);
@@ -92,6 +93,9 @@ function resolvePendingRequest() {
 }
 
 useEventListener("snap-motion:resolve-pending", resolvePendingRequest);
+useEventListener("snap-motion:set-request-policy", (event) => {
+  requestPolicy.value = event.detail;
+});
 </script>
 
 <template>
