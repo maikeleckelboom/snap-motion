@@ -87,12 +87,15 @@ source. `src`, `srcset`, `sizes`, and valid intrinsic dimensions are forwarded t
 image layers. The current full image is high priority. Adjacent previews do not mount a hidden full
 image merely because `fetchpriority` would be low.
 
-Retry applies only to the failed current full source. The Gallery captures the browser-selected
-`currentSrc`, adds a fresh request identity to that exact resource, and omits `srcset` only from the
-retry element. It neither parses the serialized candidate list nor falls back to a potentially
-larger `full.src`. Open-cycle, collection, active-authority, item, and retry generations prevent a
-late load, decode, error, or rapid-navigation result from changing another item. Navigation back to
-an earlier item and reopening restore its original responsive source contract.
+Built-in retry applies only when the failed current full source resolves to the browser-selected
+HTTP(S) `currentSrc`. The Gallery adds a fresh request identity to that exact resource and omits
+`srcset` only from the retry element. It neither parses the serialized candidate list nor falls back
+to a potentially larger `full.src`. When the selected resource uses another scheme, the preview
+fallback remains visible and no Retry action is offered because the built-in cache-busting mechanism
+cannot construct a new HTTP request. Open-cycle, collection, active-authority, item, and retry
+generations prevent a late load, decode, error, or rapid-navigation result from changing another
+item. Navigation back to an earlier item and reopening restore its original responsive source
+contract.
 
 Preview and full sources are network-distinct when `src` differs, `srcset` differs, or a shared
 non-empty `srcset` has different `sizes`. Intrinsic `width` and `height` reserve geometry and do not

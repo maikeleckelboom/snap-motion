@@ -240,7 +240,9 @@ const activeImageLoadState = computed<ImageLoadState>(() => {
 });
 const canRetryActiveImage = computed(() => {
   const item = activeItem.value;
-  return item !== undefined && selectedFullSourceByItem.value[item.id] !== undefined;
+  if (!item) return false;
+  const selectedSource = selectedFullSourceByItem.value[item.id];
+  return selectedSource !== undefined && resolveRetryRequestUrl(selectedSource) !== undefined;
 });
 const transformStyle = computed(() => ({
   "--_gallery-pan-x": `${transform.value.x.toFixed(3)}px`,
@@ -550,7 +552,7 @@ function captureSelectedFullSource(
   selectedFullSourceByItem.value = { ...selectedFullSourceByItem.value, [item.id]: source };
 }
 
-function createRetryRequestSource(source: string): string | undefined {
+function resolveRetryRequestUrl(source: string): URL | undefined {
   let url: URL;
   try {
     url = new URL(source, dialog.value?.ownerDocument.baseURI);
@@ -558,6 +560,13 @@ function createRetryRequestSource(source: string): string | undefined {
     return undefined;
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+
+  return url;
+}
+
+function createRetryRequestSource(source: string): string | undefined {
+  const url = resolveRetryRequestUrl(source);
+  if (!url) return undefined;
 
   retryRequestIdentity += 1;
   url.searchParams.append(
@@ -1868,7 +1877,7 @@ defineExpose({
             <span data-testid="snap-motion-media-gallery-error">
               {{ messages.fullImageUnavailable }} {{ messages.previewFallback }}
             </span>
-            <button type="button" :disabled="!canRetryActiveImage" @click="retryImage">
+            <button v-if="canRetryActiveImage" type="button" @click="retryImage">
               {{ messages.retry }}
             </button>
           </template>

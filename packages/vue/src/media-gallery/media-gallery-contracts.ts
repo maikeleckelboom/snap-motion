@@ -5,7 +5,11 @@ import type {
   OpenRequestDetails,
 } from "@snap-motion/vue/dialog";
 
-/** One responsive image candidate owned by the Gallery consumer. */
+/**
+ * One responsive image candidate owned by the Gallery consumer.
+ * Failed browser-selected HTTP(S) full resources support automatic cache-busting retry. Other
+ * schemes retain the preview fallback without exposing the built-in Retry action.
+ */
 export interface MediaGalleryImageSource {
   /** Required fallback URL used for `src` and canonical download/error identity. */
   readonly src: string;
@@ -64,7 +68,7 @@ export interface MediaGalleryMessages {
   zoomOut: string;
   /** Accessible name for resetting the media to its fitted transform. */
   fit: string;
-  /** Visible action label for retrying the failed current full source. */
+  /** Visible action label for retrying a failed current HTTP(S) full source. */
   retry: string;
   /** Status text while the current full source loads and decodes. */
   loadingFullImage: string;

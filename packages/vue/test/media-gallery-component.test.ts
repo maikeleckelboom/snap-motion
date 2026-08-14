@@ -1245,7 +1245,7 @@ describe("MediaGalleryDialog media lifecycle", () => {
     const full = currentSlot.get<HTMLImageElement>(".snap-motion-media-gallery-full");
     Object.defineProperty(full.element, "currentSrc", {
       configurable: true,
-      value: "https://media.test/one-full-selected.jpg?candidate=800",
+      value: "https://media.test/one-full-selected.jpg?candidate=800#detail",
     });
     expect(full.attributes("alt")).toBe("");
     expect(full.attributes("aria-hidden")).toBe("true");
@@ -1280,6 +1280,7 @@ describe("MediaGalleryDialog media lifecycle", () => {
     expect(retryUrl.origin + retryUrl.pathname).toBe("https://media.test/one-full-selected.jpg");
     expect(retryUrl.searchParams.get("candidate")).toBe("800");
     expect(retryUrl.searchParams.get("snap-motion-retry")).toMatch(/^\d+-\d+-\d+$/);
+    expect(retryUrl.hash).toBe("#detail");
     expect(retryUrl.href).not.toBe(full.element.currentSrc);
     expect(retryUrl.pathname).not.toBe("/one-full.jpg");
 
@@ -1287,7 +1288,24 @@ describe("MediaGalleryDialog media lifecycle", () => {
       configurable: true,
       value: retryUrl.href,
     });
-    await retry.trigger("load");
+    await retry.trigger("error");
+    await wrapper.get(".snap-motion-media-gallery-status button").trigger("click");
+    await nextTick();
+    const secondRetry = currentSlot.get<HTMLImageElement>(".snap-motion-media-gallery-full");
+    const secondRetryUrl = new URL(secondRetry.attributes("src")!);
+    expect(secondRetry.attributes("data-retry-attempt")).toBe("2");
+    expect(secondRetry.attributes("srcset")).toBeUndefined();
+    expect(secondRetryUrl.searchParams.get("candidate")).toBe("800");
+    expect(secondRetryUrl.searchParams.get("snap-motion-retry")).not.toBe(
+      retryUrl.searchParams.get("snap-motion-retry"),
+    );
+    expect(secondRetryUrl.hash).toBe("#detail");
+
+    Object.defineProperty(secondRetry.element, "currentSrc", {
+      configurable: true,
+      value: secondRetryUrl.href,
+    });
+    await secondRetry.trigger("load");
     await nextTick();
     expect(wrapper.get("dialog").attributes("data-image-state")).toBe("loaded");
 
@@ -1303,6 +1321,36 @@ describe("MediaGalleryDialog media lifecycle", () => {
       "/one-full.jpg?selected 800w, /one-full.jpg?fallback 1600w",
     );
   });
+
+  it.each([
+    "blob:https://media.test/selected-resource",
+    "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'/%3E",
+  ])(
+    "keeps the preview fallback without Retry for unsupported selected source %s",
+    async (source) => {
+      const wrapper = mountGallery();
+      await nextTick();
+
+      const currentSlot = wrapper.get('.snap-motion-media-gallery-slot[data-slot-position="0"]');
+      const full = currentSlot.get<HTMLImageElement>(".snap-motion-media-gallery-full");
+      Object.defineProperty(full.element, "currentSrc", {
+        configurable: true,
+        value: source,
+      });
+      await full.trigger("error");
+      await nextTick();
+
+      expect(wrapper.get("dialog").attributes("data-image-state")).toBe("failed");
+      expect(currentSlot.find(".snap-motion-media-gallery-preview").exists()).toBe(true);
+      expect(currentSlot.get(".snap-motion-media-gallery-preview").attributes("alt")).toBe(
+        "First item",
+      );
+      expect(wrapper.get('[data-testid="snap-motion-media-gallery-error"]').text()).toBe(
+        "Full image unavailable. Showing the preview.",
+      );
+      expect(wrapper.find(".snap-motion-media-gallery-status button").exists()).toBe(false);
+    },
+  );
 
   it("invalidates a pending retry across authority and collection changes", async () => {
     let releaseDecode: (() => void) | undefined;
