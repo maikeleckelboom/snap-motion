@@ -12,9 +12,9 @@ Public API changes first run `pnpm api:update` to regenerate the root and capabi
 uses `pnpm api:check`; package builds create declaration rollups without modifying tracked reports.
 
 Every changed package byte receives a new immutable version through Changesets prerelease mode.
-The private `0.1.0-beta.0` through `0.1.0-beta.9` candidates are immutable provenance and are never
-overwritten or republished. The package manifests and generated release manifest are the authority
-for the candidate currently under review; every later candidate must advance the prerelease version.
+Every previously generated prerelease candidate is immutable provenance and may never be overwritten
+or republished. The package manifests and generated release manifest are the authority for the
+candidate currently under review; every later candidate must advance the prerelease version.
 Core and Vue move together so Vue's packed dependency range resolves the candidate's exact compatible
 core line.
 
