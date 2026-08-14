@@ -74,7 +74,20 @@ test.describe("lab audience navigation", () => {
     await page.getByRole("button", { name: "Inspect motion" }).click();
     await expectLabLocation(page, { demo: "media", view: "workbench" });
     await expect(page.getByTestId("media-fixture-mode")).toBeVisible();
-    await page.getByTestId("open-lightbox").press("Enter");
+    const opener = page.getByTestId("open-lightbox");
+    const lightbox = page.getByTestId("media-lightbox");
+    await expect(opener).toBeVisible();
+    await expect(lightbox).toHaveAttribute("data-open-state", "closed");
+
+    await opener.click();
+    await expect(lightbox).toHaveAttribute("data-open-state", "open");
+    await expect(page.getByTestId("media-test-rail")).toBeVisible();
+    await page.getByTestId("close-lightbox").click();
+    await expect(lightbox).toHaveAttribute("data-open-state", "closed");
+
+    await opener.focus();
+    await expect(opener).toBeFocused();
+    await opener.press("Enter");
     await expect(page.getByTestId("media-lightbox")).toHaveAttribute("data-open-state", "open");
     await expect(page.getByTestId("media-test-rail")).toBeVisible();
   });
