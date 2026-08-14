@@ -10,6 +10,7 @@
   },
   "changesets": [
     "beta-eight-responsive-retry",
+    "beta-nine-closure",
     "beta-seven-integration-hardening",
     "beta-six-gallery-dogfood",
     "external-consumer-ready",
