@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -14,7 +15,10 @@ const artifactsDirectory = resolve(repoRoot, ".artifacts/packages");
 const fixtureDirectory = resolve(repoRoot, "fixtures/packed-consumers");
 const coreFixtureDirectory = resolve(repoRoot, "fixtures/packed-core-consumer");
 const pnpmCommand = "pnpm";
-const pnpmCli = resolve(dirname(process.execPath), "node_modules/corepack/dist/pnpm.js");
+const pnpmCli = [
+  resolve(dirname(process.execPath), "node_modules/corepack/dist/pnpm.js"),
+  resolve(dirname(process.execPath), "../node_modules/pnpm/bin/pnpm.mjs"),
+].find((candidate) => existsSync(candidate));
 const workspaceManifest = await readFile(resolve(repoRoot, "pnpm-workspace.yaml"), "utf8");
 
 function workspaceVersion(pattern: RegExp, label: string): string {
@@ -40,9 +44,12 @@ interface PackageManifest {
 }
 
 function run(command: string, args: readonly string[], cwd = repoRoot) {
-  const usesWindowsCorepack = process.platform === "win32" && command === pnpmCommand;
-  const resolvedCommand = usesWindowsCorepack ? process.execPath : command;
-  const resolvedArguments = usesWindowsCorepack ? [pnpmCli, ...args] : args;
+  const usesWindowsPnpmCli = process.platform === "win32" && command === pnpmCommand;
+  if (usesWindowsPnpmCli && pnpmCli === undefined) {
+    throw new Error("Could not resolve the pnpm CLI beside the active Node.js runtime.");
+  }
+  const resolvedCommand = usesWindowsPnpmCli ? process.execPath : command;
+  const resolvedArguments = usesWindowsPnpmCli ? [pnpmCli, ...args] : args;
   const result = spawnSync(resolvedCommand, resolvedArguments, {
     cwd,
     encoding: "utf8",
