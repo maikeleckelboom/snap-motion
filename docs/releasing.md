@@ -14,6 +14,10 @@ The release-candidate lifecycle has separate producer and consumer phases:
    authorities, and requires the package set, manifest data, archive bytes, and SHA-256 hashes to
    match before reconstructing `.artifacts/packages` and `.artifacts/release`.
 
+The shared assembler normalizes pnpm's platform-dependent gzip OS header byte before hashing. The
+tar payload remains pnpm-produced and unchanged, while Windows preparation and Linux verification
+resolve to the same recorded archive bytes.
+
 The verifier never creates or rewrites a registry record. It is also the recovery path when producer
 record creation succeeded but artifact finalization was interrupted: rerun verification for that
 recorded version. GitHub Actions accepts an explicit version and performs this recorded-candidate

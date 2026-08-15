@@ -21,6 +21,7 @@
     "release-candidate-verifier.ts",
     "release-candidate-workflow.test.ts",
     "release-candidate.ts",
+    "release-package-assembly.test.ts",
     "release-package-assembly.ts",
     "verify-release-candidate.ts",
     "verify-packages.ts"

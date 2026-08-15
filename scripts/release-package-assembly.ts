@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir, mkdir, rm } from "node:fs/promises";
+import { readFile, readdir, mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { packedText, readPackedArchive } from "./packedArchive.ts";
@@ -28,6 +28,22 @@ interface PackageManifest {
   readonly version: string;
 }
 
+// pnpm's tar payload is deterministic, but its gzip wrapper records the host OS.
+// 0x0a is the byte used by the adopted Windows-produced beta.9 archives, so it is
+// the compatibility boundary for both existing records and future candidates.
+const canonicalGzipOperatingSystem = 0x0a;
+
+export async function normalizePnpmPackArchive(archivePath: string): Promise<void> {
+  const archive = await readFile(archivePath);
+  if (archive.length < 10 || archive[0] !== 0x1f || archive[1] !== 0x8b || archive[2] !== 0x08) {
+    throw new Error(`${archivePath} is not a supported gzip package archive.`);
+  }
+  if (archive[9] === canonicalGzipOperatingSystem) return;
+
+  archive[9] = canonicalGzipOperatingSystem;
+  await writeFile(archivePath, archive);
+}
+
 function exportTargets(value: unknown): readonly string[] {
   if (typeof value === "string") return value.startsWith("./") ? [value] : [];
   if (Array.isArray(value)) return value.flatMap(exportTargets);
@@ -50,6 +66,10 @@ export async function packReleasePackages(
   runPnpmSync(pnpm, ["pack", "--out", resolve(artifactsDirectory, "snap-motion-vue-%v.tgz")], {
     cwd: resolve(repositoryRoot, "packages/vue"),
   });
+  const archives = (await readdir(artifactsDirectory)).filter((file) => file.endsWith(".tgz"));
+  await Promise.all(
+    archives.map((archive) => normalizePnpmPackArchive(resolve(artifactsDirectory, archive))),
+  );
 }
 
 export async function inspectReleasePackages(
