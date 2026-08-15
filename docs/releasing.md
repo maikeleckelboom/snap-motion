@@ -1,12 +1,24 @@
 # Releasing
 
-No workflow publishes packages. `pnpm release:check` is the same authoritative gate as
-`pnpm verify`. From a clean worktree, `pnpm release:candidate` runs that gate, repacks and recertifies
-the exact final consumer archives, then writes SHA-256 checksums and a deterministic manifest under
-`.artifacts`. Candidate generation also rejects an archive whose declared export target is absent.
-The manifest records the exact source commit, public repository provenance, package
-versions/exports/dependencies, and the tracked blocker details. Candidate generation never
-publishes.
+No workflow publishes packages. `pnpm release:check` is the same authoritative gate as `pnpm verify`.
+The release-candidate lifecycle has separate producer and consumer phases:
+
+1. From a clean worktree whose aligned package version is unrecorded,
+   `pnpm release:candidate:prepare` runs the full gate, certifies the exact packed-consumer archives,
+   exclusively creates `config/release-candidates/<version>.json`, and writes ignored package and
+   release output under `.artifacts`.
+2. Review and commit only the new producer record. That later provenance commit does not become the
+   package source authority; the record keeps the source commit that produced the archives.
+3. `pnpm release:candidate:verify -- <version>` reads an existing record, checks out its recorded
+   `source.commit` in an isolated detached worktree, uses the repository pnpm and package-assembly
+   authorities, and requires the package set, manifest data, archive bytes, and SHA-256 hashes to
+   match before reconstructing `.artifacts/packages` and `.artifacts/release`.
+
+The verifier never creates or rewrites a registry record. It is also the recovery path when producer
+record creation succeeded but artifact finalization was interrupted: rerun verification for that
+recorded version. GitHub Actions accepts an explicit version and performs this recorded-candidate
+verification only; it has read-only repository permission and never certifies, commits, or pushes a
+new candidate.
 
 Before verification or artifact mutation, candidate preflight compares the current aligned package
 version with the producer-owned manifests under `config/release-candidates`. A recorded version is
@@ -14,11 +26,12 @@ immutable and cannot be generated again, even when a package Changeset was forgo
 Changesets additionally make an unversioned next-candidate intent explicit in the refusal. After the
 Changesets versioning step advances Core and Vue together, the new unrecorded version becomes eligible.
 
-A successful candidate run writes the exact generated release-manifest data to `.artifacts` and to a
-new, exclusively created, repository-formatted `config/release-candidates/<version>.json` producer
-record before replacing older ignored release output. Review and commit that generated record to certify
-durable candidate history. Historical records are immutable machine data, not a prose release ledger.
-Inspect an existing record rather than regenerating its version.
+A successful producer run reserves the immutable record before replacing older ignored release
+output. A producer rerun for that version therefore fails without replacing the record or artifacts;
+it never becomes recertification. `pnpm release:candidates:check` mechanically scans Git history and
+the working tree. Once a record enters history, modification, deletion, rename, replacement, or
+recreation fails ordinary verification and CI. The registry can evolve only by adding a new version
+record.
 
 Public API changes first run `pnpm api:update` to regenerate the root and capability reports. CI
 uses `pnpm api:check`; package builds create declaration rollups without modifying tracked reports.

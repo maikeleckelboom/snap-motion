@@ -7,13 +7,22 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "check-release-candidate-history.ts",
     "pack-packages.ts",
     "packedArchive.ts",
     "pnpm-cli.test.ts",
     "pnpm-cli.ts",
+    "release-candidate-history.test.ts",
+    "release-candidate-history.ts",
     "release-candidate-lifecycle.test.ts",
     "release-candidate-lifecycle.ts",
+    "release-candidate-record.ts",
+    "release-candidate-verifier.test.ts",
+    "release-candidate-verifier.ts",
+    "release-candidate-workflow.test.ts",
     "release-candidate.ts",
+    "release-package-assembly.ts",
+    "verify-release-candidate.ts",
     "verify-packages.ts"
   ]
 }

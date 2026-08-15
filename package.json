@@ -27,9 +27,12 @@
     "performance:check": "vitest run packages/core/test/performance-budget.test.ts packages/core/test/surface-model-performance.test.ts packages/vue/test/performance-budget.test.ts",
     "changeset": "changeset",
     "version-packages": "changeset version",
+    "release:candidates:check": "node scripts/check-release-candidate-history.ts",
     "release:check": "pnpm verify",
     "release:candidate": "node scripts/release-candidate.ts",
-    "verify": "pnpm text:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm performance:check && pnpm build && pnpm api:check && pnpm size:check && pnpm verify:packages && pnpm test:e2e && pnpm test:preview && pnpm test:fixtures",
+    "release:candidate:prepare": "node scripts/release-candidate.ts",
+    "release:candidate:verify": "node scripts/verify-release-candidate.ts",
+    "verify": "pnpm release:candidates:check && pnpm text:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm performance:check && pnpm build && pnpm api:check && pnpm size:check && pnpm verify:packages && pnpm test:e2e && pnpm test:preview && pnpm test:fixtures",
     "clean": "node scripts/clean.mjs"
   },
   "devDependencies": {

@@ -1,21 +1,24 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
-import { packedText, readPackedArchive } from "./packedArchive.ts";
 import { resolveRepositoryPnpm, runPnpmSync } from "./pnpm-cli.ts";
 import {
-  alignedCandidateVersion,
   assertCandidateEligible,
+  finalizeNewCandidate,
   pendingChangesets,
-  type CandidateHistoryEntry,
   type CandidatePackageVersion,
 } from "./release-candidate-lifecycle.ts";
+import {
+  candidateHistory,
+  serializeCandidateRecord,
+  type CandidateRecord,
+} from "./release-candidate-record.ts";
+import { inspectReleasePackages } from "./release-package-assembly.ts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
-const packageDirectory = resolve(repoRoot, ".artifacts/packages");
-const releaseDirectory = resolve(repoRoot, ".artifacts/release");
+const artifactsRoot = resolve(repoRoot, ".artifacts");
+const packageDirectory = resolve(artifactsRoot, "packages");
 const candidateHistoryDirectory = resolve(repoRoot, "config/release-candidates");
 const changesetDirectory = resolve(repoRoot, ".changeset");
 
@@ -23,6 +26,14 @@ function capture(command: string, args: readonly string[]): string {
   const result = spawnSync(command, args, { cwd: repoRoot, encoding: "utf8" });
   if (result.status !== 0) throw result.error ?? new Error(result.stderr || `${command} failed.`);
   return result.stdout.trim();
+}
+
+function assertCleanWorktree(): void {
+  if (capture("git", ["status", "--porcelain=v1", "--untracked-files=normal"]) !== "") {
+    throw new Error(
+      "Release candidates require a clean worktree so their source provenance is exact.",
+    );
+  }
 }
 
 interface WorkspacePackageManifest {
@@ -41,30 +52,6 @@ async function currentPackageVersions(): Promise<readonly CandidatePackageVersio
         await readFile(resolve(repoRoot, `packages/${packageName}/package.json`), "utf8"),
       ) as WorkspacePackageManifest;
       return { name: manifest.name, version: manifest.version };
-    }),
-  );
-}
-
-async function candidateHistory(): Promise<readonly CandidateHistoryEntry[]> {
-  const files = (await readdir(candidateHistoryDirectory))
-    .filter((file) => file.endsWith(".json"))
-    .toSorted();
-  return Promise.all(
-    files.map(async (file) => {
-      const manifest = JSON.parse(
-        await readFile(resolve(candidateHistoryDirectory, file), "utf8"),
-      ) as { readonly packages?: readonly CandidatePackageVersion[] };
-      if (!manifest.packages) {
-        throw new Error(`Archived candidate manifest has no packages: ${file}`);
-      }
-      const version = alignedCandidateVersion(manifest.packages);
-      if (file !== `${version}.json`) {
-        throw new Error(`Archived candidate manifest ${file} must be named ${version}.json.`);
-      }
-      return {
-        file: `config/release-candidates/${file}`,
-        packages: manifest.packages,
-      };
     }),
   );
 }
@@ -90,132 +77,65 @@ async function currentPendingChangesets() {
 const candidatePackages = await currentPackageVersions();
 const candidateVersion = assertCandidateEligible(
   candidatePackages,
-  await candidateHistory(),
+  await candidateHistory(candidateHistoryDirectory),
   await currentPendingChangesets(),
 );
 
-const worktreeStatus = capture("git", ["status", "--porcelain=v1", "--untracked-files=normal"]);
-if (worktreeStatus !== "") {
-  throw new Error(
-    "Release candidates require a clean worktree so their source provenance is exact.",
-  );
-}
-
+// Eligibility must be proven before the full verification path repacks and replaces ignored output.
+assertCleanWorktree();
 const pnpm = resolveRepositoryPnpm(repoRoot);
 runPnpmSync(pnpm, ["release:check"], { cwd: repoRoot });
 
 // `release:check` continues into browser and fixture gates after its packed-consumer proof. Repack
-// and recertify last so the bytes hashed below are exactly the bytes a clean consumer exercised.
+// and recertify last so the bytes recorded below are exactly the bytes a clean consumer exercised.
 runPnpmSync(pnpm, ["verify:packages"], { cwd: repoRoot });
+assertCleanWorktree();
 
-const artifacts = (await readdir(packageDirectory))
-  .filter((file) => file.endsWith(".tgz"))
-  .toSorted();
-interface PackageManifest {
-  readonly dependencies?: Readonly<Record<string, string>>;
-  readonly exports: Readonly<Record<string, unknown>>;
-  readonly name: string;
-  readonly peerDependencies?: Readonly<Record<string, string>>;
-  readonly private: boolean;
-  readonly sideEffects: boolean | readonly string[];
-  readonly version: string;
-}
-
-interface ReleasePackage {
-  readonly bytes: number;
-  readonly dependencies: Readonly<Record<string, string>>;
-  readonly exports: readonly string[];
-  readonly file: string;
-  readonly name: string;
-  readonly peerDependencies: Readonly<Record<string, string>>;
-  readonly private: boolean;
-  readonly sha256: string;
-  readonly sideEffects: boolean | readonly string[];
-  readonly version: string;
-}
-
-function exportTargets(value: unknown): readonly string[] {
-  if (typeof value === "string") return value.startsWith("./") ? [value] : [];
-  if (Array.isArray(value)) return value.flatMap(exportTargets);
-  if (value && typeof value === "object") return Object.values(value).flatMap(exportTargets);
-  return [];
-}
-
-const packageManifests = await Promise.all(
-  artifacts.map(async (artifact) => {
-    const entries = await readPackedArchive(resolve(packageDirectory, artifact));
-    const manifest = JSON.parse(packedText(entries, "package/package.json")) as PackageManifest;
-    for (const target of exportTargets(manifest.exports)) {
-      const packedTarget = `package/${target.slice(2)}`;
-      if (!entries.has(packedTarget)) {
-        throw new Error(`${artifact} export target does not exist: ${target}`);
-      }
-    }
-    return manifest;
-  }),
-);
-const packages: ReleasePackage[] = [];
-for (const artifact of artifacts) {
-  const data = await readFile(resolve(packageDirectory, artifact));
-  const manifest = packageManifests.find((candidate) =>
-    artifact.startsWith(`${candidate.name.replace("@", "").replace("/", "-")}-`),
-  );
-  if (!manifest) throw new Error(`No packed package manifest matches ${artifact}.`);
-  packages.push({
-    name: manifest.name,
-    version: manifest.version,
-    file: artifact,
-    bytes: data.byteLength,
-    sha256: createHash("sha256").update(data).digest("hex"),
-    private: manifest.private,
-    sideEffects: manifest.sideEffects,
-    exports: Object.keys(manifest.exports).toSorted(),
-    dependencies: manifest.dependencies ?? {},
-    peerDependencies: manifest.peerDependencies ?? {},
-  });
-}
-
-const blockers = JSON.parse(
-  await readFile(resolve(repoRoot, "config/release-blockers.json"), "utf8"),
-) as readonly Record<string, unknown>[];
+const packages = await inspectReleasePackages(packageDirectory);
 const commit = capture("git", ["rev-parse", "HEAD"]);
-const createdAt = capture("git", ["show", "-s", "--format=%cI", "HEAD"]);
-const manifestSource = `${JSON.stringify(
-  {
-    schemaVersion: 1,
-    createdAt,
-    source: {
-      repository: "https://github.com/maikeleckelboom/snap-motion",
-      visibility: "public",
-      branch: capture("git", ["branch", "--show-current"]),
-      commit,
-    },
-    verification: { command: "pnpm release:check", passed: true },
-    packages,
-    private: true,
-    published: false,
-    intendedDistTag: "beta",
-    blockers,
+const record: CandidateRecord = {
+  schemaVersion: 1,
+  createdAt: capture("git", ["show", "-s", "--format=%cI", commit]),
+  source: {
+    repository: "https://github.com/maikeleckelboom/snap-motion",
+    visibility: "public",
+    branch: capture("git", ["branch", "--show-current"]),
+    commit,
   },
-  null,
-  2,
-)}\n`;
+  verification: { command: "pnpm release:check", passed: true },
+  packages,
+  private: true,
+  published: false,
+  intendedDistTag: "beta",
+  blockers: JSON.parse(
+    await readFile(resolve(repoRoot, "config/release-blockers.json"), "utf8"),
+  ) as readonly Record<string, unknown>[],
+};
 const candidateRecord = resolve(candidateHistoryDirectory, `${candidateVersion}.json`);
-
-// Reserve the immutable producer record before replacing any prior ignored release output. The
-// preflight above makes ordinary collisions fail before verification or package regeneration; the
-// exclusive write also closes a concurrent or interrupted finalization race.
-await writeFile(candidateRecord, manifestSource, { encoding: "utf8", flag: "wx" });
-runPnpmSync(pnpm, ["exec", "oxfmt", "--write", candidateRecord], { cwd: repoRoot });
-
-await rm(releaseDirectory, { force: true, recursive: true });
-await mkdir(releaseDirectory, { recursive: true });
-
-await writeFile(
-  resolve(releaseDirectory, "SHA256SUMS"),
-  `${packages.map((item) => `${item.sha256}  ${item.file}`).join("\n")}\n`,
+const formattedRecord = spawnSync(
+  pnpm.command,
+  [...pnpm.argsPrefix, "exec", "oxfmt", "--stdin-filepath", candidateRecord],
+  {
+    cwd: repoRoot,
+    encoding: "utf8",
+    input: serializeCandidateRecord(record),
+  },
 );
-await writeFile(resolve(releaseDirectory, "release-manifest.json"), manifestSource);
+if (formattedRecord.status !== 0) {
+  throw (
+    formattedRecord.error ??
+    new Error(formattedRecord.stderr || "Could not format the candidate record before reservation.")
+  );
+}
+const recordSource = formattedRecord.stdout;
+
+await finalizeNewCandidate({
+  artifactsRoot,
+  candidateRecord,
+  packageSourceDirectory: packageDirectory,
+  packages,
+  recordSource,
+});
 process.stdout.write(
-  `Release candidate artifacts created in ${basename(releaseDirectory)}; commit the generated producer record ${candidateVersion}.json to certify its immutable history.\n`,
+  `Prepared and certified new release candidate ${candidateVersion} from source commit ${commit}. Review and commit config/release-candidates/${candidateVersion}.json; ignored artifacts are in .artifacts/packages and .artifacts/release.\n`,
 );

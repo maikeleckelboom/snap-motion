@@ -2,20 +2,27 @@ name: Release candidate
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Committed release-candidate version to verify and reassemble
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-candidate-${{ github.ref }}
+  group: release-candidate-${{ github.ref }}-${{ inputs.version }}
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Verify and assemble
+  verify-recorded-candidate:
+    name: Verify recorded candidate ${{ inputs.version }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           run_install: false
@@ -24,9 +31,11 @@ jobs:
           cache: pnpm
           node-version-file: .node-version
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium firefox webkit
-      - run: pnpm release:candidate
-      - name: Upload private release-candidate artifacts
+      - name: Verify and reassemble immutable recorded candidate
+        run: pnpm release:candidate:verify
+        env:
+          SNAP_MOTION_CANDIDATE_VERSION: ${{ inputs.version }}
+      - name: Upload verified private release-candidate artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: snap-motion-release-candidate
@@ -34,7 +43,6 @@ jobs:
             .artifacts/packages/*.tgz
             .artifacts/release/SHA256SUMS
             .artifacts/release/release-manifest.json
-            config/release-candidates/*.json
-            etc/*.api.md
+            config/release-candidates/${{ inputs.version }}.json
           if-no-files-found: error
           retention-days: 14
