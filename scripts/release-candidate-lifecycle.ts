@@ -40,6 +40,15 @@ export function alignedCandidateVersion(packages: readonly CandidatePackageVersi
   return packages[0]!.version;
 }
 
+export function assertAttachedSourceBranch(branch: string): string {
+  if (branch.length === 0) {
+    throw new Error(
+      "Release-candidate preparation requires an attached source branch so provenance is explicit.",
+    );
+  }
+  return branch;
+}
+
 export function pendingChangesets(
   sources: Readonly<Record<string, string>>,
   consumedNames: readonly string[],

@@ -1,4 +1,8 @@
 import { spawnSync } from "node:child_process";
+import { readdir } from "node:fs/promises";
+import { resolve } from "node:path";
+
+import { readCandidateRecord } from "./release-candidate-record.ts";
 
 function git(repositoryRoot: string, args: readonly string[]): string {
   const result = spawnSync("git", args, { cwd: repositoryRoot, encoding: "utf8" });
@@ -62,5 +66,54 @@ export function assertReleaseCandidateHistory(repositoryRoot: string): void {
     throw new Error(
       `Immutable release-candidate history is append-only. Existing records may never be modified, deleted, renamed, copied as replacements, or recreated. Only a new config/release-candidates/<version>.json addition is permitted.\n${violations.join("\n")}`,
     );
+  }
+}
+
+function assertSourceCommitTopology(
+  repositoryRoot: string,
+  recordPath: string,
+  sourceCommit: string,
+): void {
+  const commit = spawnSync("git", ["cat-file", "-e", `${sourceCommit}^{commit}`], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  });
+  if (commit.status !== 0) {
+    throw new Error(
+      `Candidate record ${recordPath} source.commit ${sourceCommit} does not resolve to a Git commit in this repository.`,
+      { cause: commit.error },
+    );
+  }
+
+  const ancestry = spawnSync("git", ["merge-base", "--is-ancestor", sourceCommit, "HEAD"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  });
+  if (ancestry.status === 0) return;
+  if (ancestry.status === 1) {
+    throw new Error(
+      `Candidate record ${recordPath} source.commit ${sourceCommit} is not an ancestor of the current HEAD.`,
+    );
+  }
+  throw (
+    ancestry.error ??
+    new Error(
+      ancestry.stderr ||
+        `Could not verify candidate record ${recordPath} source.commit ancestry against HEAD.`,
+    )
+  );
+}
+
+export async function assertReleaseCandidateRegistry(repositoryRoot: string): Promise<void> {
+  assertReleaseCandidateHistory(repositoryRoot);
+
+  const candidateDirectory = resolve(repositoryRoot, "config/release-candidates");
+  const files = (await readdir(candidateDirectory))
+    .filter((file) => file.endsWith(".json"))
+    .toSorted();
+  for (const file of files) {
+    const recordPath = resolve(candidateDirectory, file);
+    const { record } = await readCandidateRecord(recordPath);
+    assertSourceCommitTopology(repositoryRoot, recordPath, record.source.commit);
   }
 }

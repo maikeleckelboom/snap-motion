@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -5,6 +6,7 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  assertAttachedSourceBranch,
   assertCandidateEligible,
   finalizeNewCandidate,
   pendingChangesets,
@@ -28,6 +30,10 @@ const fixturePackage: ReleasePackageAuthority = {
   peerDependencies: {},
 };
 
+function git(repository: string, ...args: readonly string[]): string {
+  return execFileSync("git", args, { cwd: repository, encoding: "utf8" }).trim();
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true })),
@@ -44,6 +50,27 @@ const history: readonly CandidateHistoryEntry[] = [
 const unrecordedVersion = "0.1.0-beta.next";
 
 describe("release candidate lifecycle", () => {
+  it("requires an attached source branch before candidate preparation", async () => {
+    const repository = await mkdtemp(join(tmpdir(), "snap-motion-branch-authority-"));
+    temporaryDirectories.push(repository);
+    git(repository, "init");
+    git(repository, "config", "user.name", "Snap Motion tests");
+    git(repository, "config", "user.email", "snap-motion-tests@example.invalid");
+    await writeFile(resolve(repository, "README.md"), "fixture\n");
+    git(repository, "add", "README.md");
+    git(repository, "commit", "-m", "attached source");
+
+    const attachedBranch = git(repository, "branch", "--show-current");
+    expect(assertAttachedSourceBranch(attachedBranch)).toBe(attachedBranch);
+
+    git(repository, "checkout", "--detach", "HEAD");
+    const detachedBranch = git(repository, "branch", "--show-current");
+    expect(detachedBranch).toBe("");
+    expect(() => assertAttachedSourceBranch(detachedBranch)).toThrow(
+      /requires an attached source branch so provenance is explicit/,
+    );
+  });
+
   it("reports pending package intent when an archived version would be reused", () => {
     expect(() =>
       assertCandidateEligible(beta9, history, [

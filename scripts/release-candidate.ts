@@ -4,6 +4,7 @@ import { basename, resolve } from "node:path";
 
 import { resolveRepositoryPnpm, runPnpmSync } from "./pnpm-cli.ts";
 import {
+  assertAttachedSourceBranch,
   assertCandidateEligible,
   finalizeNewCandidate,
   pendingChangesets,
@@ -74,6 +75,8 @@ async function currentPendingChangesets() {
   return pendingChangesets(sources, preState.changesets);
 }
 
+// Detached source checkouts fail before eligibility, verification, or the exclusive record reservation.
+const sourceBranch = assertAttachedSourceBranch(capture("git", ["branch", "--show-current"]));
 const candidatePackages = await currentPackageVersions();
 const candidateVersion = assertCandidateEligible(
   candidatePackages,
@@ -99,7 +102,7 @@ const record: CandidateRecord = {
   source: {
     repository: "https://github.com/maikeleckelboom/snap-motion",
     visibility: "public",
-    branch: capture("git", ["branch", "--show-current"]),
+    branch: sourceBranch,
     commit,
   },
   verification: { command: "pnpm release:check", passed: true },
