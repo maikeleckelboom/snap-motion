@@ -34,6 +34,7 @@ jobs:
             .artifacts/packages/*.tgz
             .artifacts/release/SHA256SUMS
             .artifacts/release/release-manifest.json
+            config/release-candidates/*.json
             etc/*.api.md
           if-no-files-found: error
           retention-days: 14

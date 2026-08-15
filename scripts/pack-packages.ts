@@ -1,25 +1,24 @@
-import { spawnSync } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { resolveRepositoryPnpm, runPnpmSync } from "./pnpm-cli.ts";
+
 const repoRoot = resolve(import.meta.dirname, "..");
 const artifactsDirectory = resolve(repoRoot, ".artifacts", "packages");
+const pnpm = resolveRepositoryPnpm(repoRoot);
 
-function run(command, args, cwd = repoRoot) {
-  const result = spawnSync(command, args, { cwd, encoding: "utf8", shell: true, stdio: "inherit" });
-  if (result.status !== 0) process.exit(result.status ?? 1);
+function runPnpm(args: readonly string[], cwd = repoRoot) {
+  runPnpmSync(pnpm, args, { cwd });
 }
 
 await rm(artifactsDirectory, { force: true, recursive: true });
 await mkdir(artifactsDirectory, { recursive: true });
-run("pnpm", ["build:packages"]);
-run(
-  "pnpm",
+runPnpm(["build:packages"]);
+runPnpm(
   ["pack", "--out", "../../.artifacts/packages/snap-motion-core-%v.tgz"],
   resolve(repoRoot, "packages/core"),
 );
-run(
-  "pnpm",
+runPnpm(
   ["pack", "--out", "../../.artifacts/packages/snap-motion-vue-%v.tgz"],
   resolve(repoRoot, "packages/vue"),
 );

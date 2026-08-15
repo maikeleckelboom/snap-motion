@@ -1,24 +1,20 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync } from "node:fs";
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 import { chromium } from "@playwright/test";
 
 import { packedText, readPackedArchive, type PackedArchive } from "./packedArchive.ts";
+import { resolveRepositoryPnpm, runPnpmSync } from "./pnpm-cli.ts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const artifactsDirectory = resolve(repoRoot, ".artifacts/packages");
 const fixtureDirectory = resolve(repoRoot, "fixtures/packed-consumers");
 const coreFixtureDirectory = resolve(repoRoot, "fixtures/packed-core-consumer");
-const pnpmCommand = "pnpm";
-const pnpmCli = [
-  resolve(dirname(process.execPath), "node_modules/corepack/dist/pnpm.js"),
-  resolve(dirname(process.execPath), "../node_modules/pnpm/bin/pnpm.mjs"),
-].find((candidate) => existsSync(candidate));
+const pnpm = resolveRepositoryPnpm(repoRoot);
 const workspaceManifest = await readFile(resolve(repoRoot, "pnpm-workspace.yaml"), "utf8");
 
 function workspaceVersion(pattern: RegExp, label: string): string {
@@ -43,14 +39,8 @@ interface PackageManifest {
   readonly version?: string;
 }
 
-function run(command: string, args: readonly string[], cwd = repoRoot) {
-  const usesWindowsPnpmCli = process.platform === "win32" && command === pnpmCommand;
-  if (usesWindowsPnpmCli && pnpmCli === undefined) {
-    throw new Error("Could not resolve the pnpm CLI beside the active Node.js runtime.");
-  }
-  const resolvedCommand = usesWindowsPnpmCli ? process.execPath : command;
-  const resolvedArguments = usesWindowsPnpmCli ? [pnpmCli, ...args] : args;
-  const result = spawnSync(resolvedCommand, resolvedArguments, {
+function runCommand(command: string, args: readonly string[], cwd = repoRoot) {
+  const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
     stdio: "inherit",
@@ -58,6 +48,10 @@ function run(command: string, args: readonly string[], cwd = repoRoot) {
   if (result.status !== 0) {
     throw result.error ?? new Error(`${command} ${args.join(" ")} failed.`);
   }
+}
+
+function runPnpm(args: readonly string[], cwd = repoRoot) {
+  runPnpmSync(pnpm, args, { cwd });
 }
 
 function exportTargets(value: unknown): string[] {
@@ -166,19 +160,22 @@ async function browserSmoke(cwd: string) {
       const viewport = page.locator(".snap-motion-carousel-viewport");
       const track = page.locator(".snap-motion-carousel-track");
       const slide = page.locator(".snap-motion-carousel-slide").first();
-      const directions = async () =>
-        page.evaluate(
-          ([root, physicalTrack, content]) => [
-            getComputedStyle(root).direction,
-            getComputedStyle(physicalTrack).direction,
-            getComputedStyle(content).direction,
+      const directions = async () => {
+        const root = await carousel.elementHandle();
+        const physicalTrack = await track.elementHandle();
+        const content = await slide.elementHandle();
+        if (!root || !physicalTrack || !content) {
+          throw new Error("Packed carousel direction targets are not rendered.");
+        }
+        return page.evaluate(
+          ({ root: rootElement, physicalTrack: trackElement, content: contentElement }) => [
+            getComputedStyle(rootElement).direction,
+            getComputedStyle(trackElement).direction,
+            getComputedStyle(contentElement).direction,
           ],
-          [
-            await carousel.elementHandle(),
-            await track.elementHandle(),
-            await slide.elementHandle(),
-          ],
+          { root, physicalTrack, content },
         );
+      };
       if (JSON.stringify(await directions()) !== JSON.stringify(["ltr", "ltr", "ltr"])) {
         throw new Error("Packed carousel started with an incoherent LTR direction contract.");
       }
@@ -341,7 +338,7 @@ async function nuxtHydrationSmoke(cwd: string) {
  */
 function certifyTemplateInference(cwd: string) {
   process.stdout.write(`\nCertifying packed SFC generic inference with vue-tsc: ${cwd}\n`);
-  run(pnpmCommand, ["exec", "vue-tsc", "--noEmit", "-p", "tsconfig.vue.json"], cwd);
+  runPnpm(["exec", "vue-tsc", "--noEmit", "-p", "tsconfig.vue.json"], cwd);
   process.stdout.write("Packed SFC template inference certified.\n");
 }
 
@@ -397,7 +394,7 @@ async function createCoreConsumer(coreTarball: string) {
   return directory;
 }
 
-run(pnpmCommand, ["pack:packages"]);
+runPnpm(["pack:packages"]);
 const artifacts = (await readdir(artifactsDirectory)).filter((file) => file.endsWith(".tgz"));
 const coreArtifact = artifacts.find((file) => file.startsWith("snap-motion-core-"));
 const vueArtifact = artifacts.find((file) => file.startsWith("snap-motion-vue-"));
@@ -417,7 +414,7 @@ for (const tarball of [coreTarball, vueTarball]) {
   const manifest = JSON.parse(manifestSource) as PackageManifest;
   if (manifest.name) packedManifests.set(manifest.name, manifest);
   inspectPackedFiles(tarball, manifest, entries);
-  run(pnpmCommand, ["exec", "publint", "run", tarball, "--strict"]);
+  runPnpm(["exec", "publint", "run", tarball, "--strict"]);
   const attwArguments = ["exec", "attw", tarball, "--profile", "esm-only", "--format", "table"];
   if (tarball === vueTarball) {
     attwArguments.push(
@@ -431,7 +428,7 @@ for (const tarball of [coreTarball, vueTarball]) {
       "no-resolution",
     );
   }
-  run(pnpmCommand, attwArguments);
+  runPnpm(attwArguments);
 }
 
 const packedCoreManifest = packedManifests.get("@snap-motion/core");
@@ -458,9 +455,9 @@ const consumers = [];
 try {
   const core = await createCoreConsumer(coreTarball);
   consumers.push(core);
-  run(pnpmCommand, ["install", "--ignore-scripts"], core);
-  run(pnpmCommand, ["exec", "tsc", "-p", "tsconfig.json"], core);
-  run(process.execPath, ["runtime.mjs"], core);
+  runPnpm(["install", "--ignore-scripts"], core);
+  runPnpm(["exec", "tsc", "-p", "tsconfig.json"], core);
+  runCommand(process.execPath, ["runtime.mjs"], core);
 
   const minimum = await createConsumer(
     "minimum",
@@ -473,14 +470,14 @@ try {
     await readFile(resolve(minimum, "package.json"), "utf8"),
   ) as PackageManifest;
   assertVueOnlyConsumer(minimumManifest);
-  run(pnpmCommand, ["install", "--ignore-scripts"], minimum);
+  runPnpm(["install", "--ignore-scripts"], minimum);
   for (const resolution of ["bundler", "node16", "nodenext"]) {
-    run(pnpmCommand, ["exec", "tsc", "-p", `tsconfig.${resolution}.json`], minimum);
+    runPnpm(["exec", "tsc", "-p", `tsconfig.${resolution}.json`], minimum);
   }
   certifyTemplateInference(minimum);
-  run(pnpmCommand, ["exec", "vite", "build"], minimum);
-  run(process.execPath, ["ssr.mjs"], minimum);
-  run(process.execPath, ["media-gallery-import.mjs"], minimum);
+  runPnpm(["exec", "vite", "build"], minimum);
+  runCommand(process.execPath, ["ssr.mjs"], minimum);
+  runCommand(process.execPath, ["media-gallery-import.mjs"], minimum);
 
   const typescript7 = await createConsumer(
     "typescript7",
@@ -492,9 +489,9 @@ try {
   assertVueOnlyConsumer(
     JSON.parse(await readFile(resolve(typescript7, "package.json"), "utf8")) as PackageManifest,
   );
-  run(pnpmCommand, ["install", "--ignore-scripts"], typescript7);
+  runPnpm(["install", "--ignore-scripts"], typescript7);
   for (const resolution of ["bundler", "node16", "nodenext"]) {
-    run(pnpmCommand, ["exec", "tsc", "-p", `tsconfig.${resolution}.json`], typescript7);
+    runPnpm(["exec", "tsc", "-p", `tsconfig.${resolution}.json`], typescript7);
   }
 
   const current = await createConsumer("current", "package.template.json", coreTarball, vueTarball);
@@ -502,18 +499,18 @@ try {
   assertVueOnlyConsumer(
     JSON.parse(await readFile(resolve(current, "package.json"), "utf8")) as PackageManifest,
   );
-  run(pnpmCommand, ["install", "--ignore-scripts"], current);
+  runPnpm(["install", "--ignore-scripts"], current);
   for (const resolution of ["bundler", "node16", "nodenext"]) {
-    run(pnpmCommand, ["exec", "tsc", "-p", `tsconfig.${resolution}.json`], current);
+    runPnpm(["exec", "tsc", "-p", `tsconfig.${resolution}.json`], current);
   }
   certifyTemplateInference(current);
-  run(pnpmCommand, ["exec", "vite", "build"], current);
-  run(process.execPath, ["ssr.mjs"], current);
-  run(process.execPath, ["media-gallery-import.mjs"], current);
-  run(pnpmCommand, ["exec", "nuxt", "build", "nuxt"], current);
+  runPnpm(["exec", "vite", "build"], current);
+  runCommand(process.execPath, ["ssr.mjs"], current);
+  runCommand(process.execPath, ["media-gallery-import.mjs"], current);
+  runPnpm(["exec", "nuxt", "build", "nuxt"], current);
   await browserSmoke(current);
   await nuxtHydrationSmoke(current);
-  run(pnpmCommand, ["exec", "nuxt", "generate", "nuxt"], current);
+  runPnpm(["exec", "nuxt", "generate", "nuxt"], current);
 } finally {
   await Promise.all(consumers.map(removeConsumer));
 }

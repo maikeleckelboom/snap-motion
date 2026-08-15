@@ -1,0 +1,19 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "target": "ES2023",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "pack-packages.ts",
+    "packedArchive.ts",
+    "pnpm-cli.test.ts",
+    "pnpm-cli.ts",
+    "release-candidate-lifecycle.test.ts",
+    "release-candidate-lifecycle.ts",
+    "release-candidate.ts",
+    "verify-packages.ts"
+  ]
+}

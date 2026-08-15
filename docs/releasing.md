@@ -8,6 +8,18 @@ The manifest records the exact source commit, public repository provenance, pack
 versions/exports/dependencies, and the tracked blocker details. Candidate generation never
 publishes.
 
+Before verification or artifact mutation, candidate preflight compares the current aligned package
+version with the producer-owned manifests under `config/release-candidates`. A recorded version is
+immutable and cannot be generated again, even when a package Changeset was forgotten. Pending
+Changesets additionally make an unversioned next-candidate intent explicit in the refusal. After the
+Changesets versioning step advances Core and Vue together, the new unrecorded version becomes eligible.
+
+A successful candidate run writes the exact generated release-manifest data to `.artifacts` and to a
+new, exclusively created, repository-formatted `config/release-candidates/<version>.json` producer
+record before replacing older ignored release output. Review and commit that generated record to certify
+durable candidate history. Historical records are immutable machine data, not a prose release ledger.
+Inspect an existing record rather than regenerating its version.
+
 Public API changes first run `pnpm api:update` to regenerate the root and capability reports. CI
 uses `pnpm api:check`; package builds create declaration rollups without modifying tracked reports.
 
