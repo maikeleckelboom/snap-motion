@@ -1,6 +1,3 @@
-import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
-
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
@@ -409,7 +406,6 @@ test("baseline event order ends with a bounded focus-restoration trace entry", a
 });
 
 test("mixed-aspect navigation preserves usable geometry through both transition directions", async ({
-  browserName,
   page,
 }) => {
   await page.setViewportSize({ width: 2_560, height: 1_312 });
@@ -439,13 +435,6 @@ test("mixed-aspect navigation preserves usable geometry through both transition 
 
   await holdButtonTransitionAtMidpoint(page, "next");
   const wideToTall = await captureGalleryGeometry(page, ["wide-timeline", "tall-document"]);
-  if (browserName === "chromium") {
-    const artifactDirectory = resolve(".artifacts/media-gallery-at-certification");
-    await mkdir(artifactDirectory, { recursive: true });
-    await page.screenshot({
-      path: resolve(artifactDirectory, "07-wide-to-tall-button-mid-transition.png"),
-    });
-  }
   expectRectStable(wideToTall.viewport, wideSettled.viewport);
   expectRectStable(wideToTall.header, wideSettled.header);
   expectRectStable(wideToTall.footer, wideSettled.footer);
@@ -834,55 +823,4 @@ test("a sub-threshold completed swipe does not add a semantic change", async ({ 
   );
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 3");
   expect((await traceEvents(page)).split(",")).not.toContain("activeIdRequest");
-});
-
-test("captures the canonical visual evidence set", async ({ browserName, page }) => {
-  test.skip(browserName !== "chromium", "One canonical Chromium evidence set is sufficient.");
-  const artifactDirectory = resolve(".artifacts/media-gallery-at-certification");
-  await mkdir(artifactDirectory, { recursive: true });
-
-  await page.setViewportSize({ width: 1_440, height: 1_000 });
-  await page.screenshot({
-    fullPage: true,
-    path: resolve(artifactDirectory, "01-harness-setup.png"),
-  });
-
-  await page.getByTestId("at-open-gallery").click();
-  await expect(gallery(page)).toBeVisible();
-  await page.screenshot({
-    path: resolve(artifactDirectory, "02-standard-open.png"),
-  });
-  await closeGallery(page);
-
-  await openScenario(page, "single-item");
-  await page.screenshot({
-    path: resolve(artifactDirectory, "03-one-item-state.png"),
-  });
-  await closeGallery(page);
-
-  await openScenario(page, "full-failure");
-  await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
-  await page.screenshot({
-    path: resolve(artifactDirectory, "04-failure-state.png"),
-  });
-  await closeGallery(page);
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  await selectScenario(page, "long-localized");
-  await page.screenshot({
-    fullPage: true,
-    path: resolve(artifactDirectory, "05-mobile-harness.png"),
-  });
-
-  await page.setViewportSize({ width: 1_440, height: 1_000 });
-  await selectScenario(page, "baseline");
-  await page.getByTestId("at-open-gallery").click();
-  await page.keyboard.press("ArrowRight");
-  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("3 / 3");
-  await page.keyboard.press("Escape");
-  await expect.poll(() => traceEvents(page)).toContain("focus-restored");
-  await trace(page).evaluate((element) => element.scrollIntoView({ block: "center" }));
-  await trace(page).screenshot({
-    path: resolve(artifactDirectory, "06-event-trace-after-close.png"),
-  });
 });

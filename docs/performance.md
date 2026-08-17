@@ -19,9 +19,10 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 | Vue motion        |  10,771 |      3,551 |      16,000 / 5,500 |
 | Base CSS          |  26,991 |      4,689 |      27,000 / 5,000 |
 
-`pnpm performance:check` covers 60/120-sample drag streams, repeated interruption, 1/20/100/1,000
-items, bounded render windows, simultaneous instances, resize/mutation storms, wheel coalescing,
-reactive publication counts, playback disposal, and listener cleanup.
+The performance-budget files run once through `pnpm test:unit`. They cover 60/120-sample drag
+streams, repeated interruption, 1/20/100/1,000 items, bounded render windows, simultaneous
+instances, resize/mutation storms, wheel coalescing, reactive publication counts, playback disposal,
+and listener cleanup.
 
 Package byte budgets do not stand in for media-transfer budgets. `MediaGalleryDialog` defaults to
 `current-only`: while closed it renders no images, while open it mounts current and adjacent preview

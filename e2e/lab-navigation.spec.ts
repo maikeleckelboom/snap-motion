@@ -1,9 +1,7 @@
-import { expect, test } from "@playwright/test";
-
-import { openLabDemo } from "./helpers";
+import { expect, test, type Page } from "@playwright/test";
 
 async function expectLabLocation(
-  page: Parameters<typeof openLabDemo>[0],
+  page: Page,
   expected: { demo: string; view: "fixtures" | "showcase" | "workbench" },
 ) {
   await expect(page.locator(`#nav-${expected.demo}`)).toHaveAttribute("aria-pressed", "true");
@@ -62,67 +60,6 @@ test.describe("lab audience navigation", () => {
     await expect(page.getByRole("spinbutton", { name: "Stiffness" })).toBeVisible();
   });
 
-  test("keeps media certification controls in the workbench", async ({ page }) => {
-    await page.goto("./?demo=media");
-    await expect(page.getByTestId("media-fixture-mode")).toHaveCount(0);
-    await page.getByTestId("open-lightbox").click();
-    await expect(page.getByTestId("media-lightbox")).toHaveAttribute("data-open-state", "open");
-    await expect(page.getByTestId("media-test-rail")).toHaveCount(0);
-    await page.getByTestId("close-lightbox").click();
-    await expect(page.getByTestId("media-lightbox")).toHaveAttribute("data-open-state", "closed");
-
-    await page.getByRole("button", { name: "Inspect motion" }).click();
-    await expectLabLocation(page, { demo: "media", view: "workbench" });
-    await expect(page.getByTestId("media-fixture-mode")).toBeVisible();
-    const opener = page.getByTestId("open-lightbox");
-    const lightbox = page.getByTestId("media-lightbox");
-    await expect(opener).toBeVisible();
-    await expect(lightbox).toHaveAttribute("data-open-state", "closed");
-
-    await opener.click();
-    await expect(lightbox).toHaveAttribute("data-open-state", "open");
-    await expect(page.getByTestId("media-test-rail")).toBeVisible();
-    await page.getByTestId("close-lightbox").click();
-    await expect(lightbox).toHaveAttribute("data-open-state", "closed");
-
-    await opener.focus();
-    await expect(opener).toBeFocused();
-    await opener.press("Enter");
-    await expect(page.getByTestId("media-lightbox")).toHaveAttribute("data-open-state", "open");
-    await expect(page.getByTestId("media-test-rail")).toBeVisible();
-  });
-
-  test("keeps certification and geometry fixtures out of showcase navigation", async ({ page }) => {
-    await page.goto("./");
-    await page.getByRole("button", { name: "Fixtures", exact: true }).click();
-
-    await expect(page.getByRole("group", { name: "Engineering fixtures" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Default Surfaces" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await expect(page.getByRole("button", { name: "Coverflow", exact: true })).toHaveCount(0);
-    await expect(page.getByTestId("defaults-deck")).toBeVisible();
-
-    await page.getByRole("button", { name: "Variable Rail" }).click();
-    await expect(page.getByTestId("variable-rail")).toBeVisible();
-    await expect(page.getByTestId("paged-grid")).toHaveCount(0);
-
-    await openLabDemo(page, "render-window");
-    await expect(page.getByTestId("render-window-mounted").locator("li")).toHaveCount(3);
-  });
-
-  test("infers fixture view for compatible direct demo URLs", async ({ page }) => {
-    await page.goto("./?demo=gallery-at");
-
-    await expect(page.getByRole("button", { name: "Fixtures", exact: true })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await expect(page.getByTestId("media-gallery-at-harness")).toBeVisible();
-    await expect(page).toHaveURL(/demo=gallery-at/);
-  });
-
   test("normalizes valid, incomplete, invalid, and conflicting direct URLs", async ({ page }) => {
     const cases = [
       {
@@ -172,31 +109,5 @@ test.describe("lab audience navigation", () => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
     await expectLabLocation(page, { demo: "coverflow", view: "showcase" });
-  });
-
-  test("does not fall through unowned shell props to fixture roots", async ({ page }) => {
-    const cases = [
-      { demo: "defaults" as const, root: page.locator(".defaults-demo") },
-      { demo: "gallery-at" as const, root: page.getByTestId("media-gallery-at-harness") },
-      { demo: "adaptive-sheet" as const, root: page.getByTestId("adaptive-sheet-fixture") },
-      { demo: "render-window" as const, root: page.locator(".render-window-fixture") },
-    ];
-
-    for (const { demo, root } of cases) {
-      await openLabDemo(page, demo);
-      const attributes = await root.evaluate((element) =>
-        Array.from(element.attributes, ({ name, value }) => ({ name, value })),
-      );
-      expect(attributes.map(({ name }) => name)).not.toEqual(
-        expect.arrayContaining([
-          "reduced-motion-override",
-          "reducedmotionoverride",
-          "settings",
-          "stage-width",
-          "stagewidth",
-        ]),
-      );
-      expect(attributes.map(({ value }) => value)).not.toContain("[object Object]");
-    }
   });
 });

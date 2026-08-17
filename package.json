@@ -12,7 +12,6 @@
     "lint": "oxlint . && pnpm architecture:check",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "text:check": "node scripts/check-text-hygiene.ts",
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
@@ -27,7 +26,6 @@
     "pack:packages": "node scripts/pack-packages.ts",
     "verify:packages": "node scripts/verify-packages.ts",
     "size:check": "node scripts/check-size.mjs",
-    "performance:check": "vitest run packages/core/test/performance-budget.test.ts packages/core/test/surface-model-performance.test.ts packages/vue/test/performance-budget.test.ts",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release:candidates:check": "node scripts/check-release-candidate-history.ts",
@@ -35,7 +33,7 @@
     "release:candidate": "node scripts/release-candidate.ts",
     "release:candidate:prepare": "node scripts/release-candidate.ts",
     "release:candidate:verify": "node scripts/verify-release-candidate.ts",
-    "verify": "pnpm release:candidates:check && pnpm text:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm performance:check && pnpm build && pnpm api:check && pnpm size:check && pnpm verify:packages && pnpm test:e2e && pnpm test:preview && pnpm test:fixtures",
+    "verify": "pnpm release:candidates:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm build && pnpm api:check && pnpm size:check && pnpm verify:packages && pnpm test:e2e && pnpm test:preview && pnpm test:fixtures",
     "clean": "node scripts/clean.mjs"
   },
   "devDependencies": {

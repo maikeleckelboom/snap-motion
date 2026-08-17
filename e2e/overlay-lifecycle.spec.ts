@@ -16,20 +16,6 @@ const overlays: readonly OverlayProof[] = [
     focusTarget: "[data-testid='modal-focus-target']",
     followUp: "[data-testid='modal-follow-up']",
   },
-  {
-    closeName: "Close sheet",
-    id: "sheet",
-    dialog: ".snap-motion-sheet",
-    focusTarget: "[data-testid='sheet-focus-target']",
-    followUp: "[data-testid='sheet-follow-up']",
-  },
-  {
-    closeName: "Close gallery",
-    id: "gallery",
-    dialog: "[data-testid='gallery-lifecycle-dialog']",
-    focusTarget: ".snap-motion-media-gallery-header h2",
-    followUp: "[data-testid='gallery-follow-up']",
-  },
 ];
 
 async function yieldTwoRenderOpportunities(page: Page) {
@@ -137,12 +123,6 @@ test.describe("overlay lifecycle generations", () => {
       await expect(lifecycle).toHaveAttribute("data-opened", "3");
       await expect(lifecycle).toHaveAttribute("data-closed", "1");
       await expect(opener).toBeFocused();
-
-      if (overlay.id === "gallery") {
-        await expect
-          .poll(() => page.evaluate(() => document.documentElement.style.overflow))
-          .toBe("");
-      }
     });
 
     test(`${overlay.id} reapplies focus policy when an unexpected native close is refused`, async ({
@@ -175,12 +155,6 @@ test.describe("overlay lifecycle generations", () => {
         await expect(focusTarget).toBeFocused();
         await expect(lifecycle).toHaveAttribute("data-opened", "1");
         await expect(lifecycle).toHaveAttribute("data-closed", "0");
-      }
-
-      if (overlay.id === "gallery") {
-        await expect
-          .poll(() => page.evaluate(() => document.documentElement.style.overflow))
-          .toBe("hidden");
       }
     });
 

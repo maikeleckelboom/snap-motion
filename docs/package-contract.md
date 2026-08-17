@@ -49,16 +49,15 @@ relative declaration edges and source-only aliases, and runs strict Publint plus
 supported ESM resolutions. The legacy Node10 self-subpath probe is explicitly excluded while clean
 Bundler, Node16, and NodeNext consumers remain hard failures. The verifier also asserts the packed
 Vue-to-core dependency is the caret range derived from the packed core version. One clean fixture
-depends directly on core. The ordinary minimum/current Vue fixtures depend directly
-on **only** `@snap-motion/vue`; a workspace override points its transitive core dependency at the
-packed core artifact as test infrastructure. Installs disable lifecycle scripts. Clean fixtures
-compile bundler, Node16, and NodeNext modes and exercise ESM, every Vue surface, Vite, Vue Router,
-SSR, Nuxt build/generate/hydration without `ClientOnly`, CSS, and browser behavior.
-
-The browser proof changes inherited direction at runtime and checks root/content direction while
-the transform track remains LTR, then exercises keyboard, pointer, wheel, and the real click a drag
-would otherwise produce. The generated chunk graph fails when a capability entrypoint pulls an
-unrelated high-level feature; media-gallery isolation remains a dedicated hard assertion.
+depends directly on core. The ordinary minimum/current Vue fixtures depend directly on **only**
+`@snap-motion/vue`; a workspace override points its transitive core dependency at the packed core
+artifact as test infrastructure. Installs disable lifecycle scripts. One TypeScript 7 consumer
+compiles Bundler, Node16, and NodeNext modes. The minimum-Vue consumer owns SFC inference, Vite,
+Router, SSR, CSS, and a minimal browser execution smoke. The current-Vue consumer owns Nuxt build,
+SSR, and hydration without `ClientOnly`. Product interaction behavior remains owned by the
+source/component and browser suites rather than being repeated through packed bytes. The generated
+chunk graph fails when a capability entrypoint pulls an unrelated high-level feature;
+media-gallery isolation remains a dedicated hard assertion.
 `config/size-budgets.json` is the sole authority for current raw and gzip limits. Budget changes
 require evidence from the emitted graph and an explanation tied to consumer value; documentation
 does not duplicate volatile numeric thresholds.

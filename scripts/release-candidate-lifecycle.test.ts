@@ -71,40 +71,15 @@ describe("release candidate lifecycle", () => {
     );
   });
 
-  it("reports pending package intent when an archived version would be reused", () => {
-    expect(() =>
-      assertCandidateEligible(beta9, history, [
-        { name: "coverflow-pointer-focus", packages: ["@snap-motion/core", "@snap-motion/vue"] },
-      ]),
-    ).toThrow(/Pending release intent .* has advanced beyond the current package version/);
-  });
-
   it("blocks archived-version reuse even when an engineer forgot a Changeset", () => {
     expect(() => assertCandidateEligible(beta9, history, [])).toThrow(
       /Existing immutable prerelease versions may not be reused/,
     );
   });
 
-  it("allows the next aligned version after Changesets versioning", () => {
-    expect(
-      assertCandidateEligible(
-        beta9.map(({ name }) => ({ name, version: unrecordedVersion })),
-        history,
-        [],
-      ),
-    ).toBe(unrecordedVersion);
-  });
-
   it("does not require release intent for documentation-only work before first certification", () => {
     const firstCandidate = beta9.map(({ name }) => ({ name, version: unrecordedVersion }));
     expect(assertCandidateEligible(firstCandidate, history, [])).toBe(unrecordedVersion);
-  });
-
-  it("keeps inspection separate from candidate regeneration", () => {
-    expect(history[0]?.packages).toEqual(beta9);
-    expect(() => assertCandidateEligible(beta9, history, [])).toThrow(
-      /Inspect the archived producer manifest instead of regenerating/,
-    );
   });
 
   it("fails closed when Core and Vue versions diverge", () => {

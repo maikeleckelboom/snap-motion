@@ -156,108 +156,15 @@ async function browserSmoke(cwd: string) {
       });
       await page.goto(url);
       await page.locator("[data-packed-ready]").waitFor();
-      const carousel = page.locator(".snap-motion-carousel");
-      const viewport = page.locator(".snap-motion-carousel-viewport");
-      const track = page.locator(".snap-motion-carousel-track");
-      const slide = page.locator(".snap-motion-carousel-slide").first();
-      const directions = async () => {
-        const root = await carousel.elementHandle();
-        const physicalTrack = await track.elementHandle();
-        const content = await slide.elementHandle();
-        if (!root || !physicalTrack || !content) {
-          throw new Error("Packed carousel direction targets are not rendered.");
-        }
-        return page.evaluate(
-          ({ root: rootElement, physicalTrack: trackElement, content: contentElement }) => [
-            getComputedStyle(rootElement).direction,
-            getComputedStyle(trackElement).direction,
-            getComputedStyle(contentElement).direction,
-          ],
-          { root, physicalTrack, content },
-        );
-      };
-      if (JSON.stringify(await directions()) !== JSON.stringify(["ltr", "ltr", "ltr"])) {
-        throw new Error("Packed carousel started with an incoherent LTR direction contract.");
+      for (const selector of [
+        ".snap-motion-carousel",
+        ".snap-motion-coverflow",
+        ".snap-motion-stacked-deck",
+      ]) {
+        await page.locator(selector).waitFor();
       }
-
-      await page.getByRole("button", { name: "Select overview surfaces" }).click();
-      await page.locator('[data-packed-ready][data-deck-id="overview"]').waitFor();
-      await page.locator('[data-packed-ready][data-coverflow-id="overview"]').waitFor();
-      const deck = page.locator(".snap-motion-stacked-deck");
-      const coverflow = page.locator(".snap-motion-coverflow");
-      await deck.press("ArrowRight");
-      await page.locator('[data-packed-ready][data-deck-id="system"]').waitFor();
-      await coverflow.press("ArrowRight");
-      await page.locator('[data-packed-ready][data-coverflow-id="system"]').waitFor();
-
       await page.getByRole("button", { name: "Next item" }).click();
       await page.locator('[data-packed-ready][data-active-id="two"]').waitFor();
-      await page.getByRole("button", { name: "Previous item" }).click();
-      await page.locator('[data-packed-ready][data-active-id="one"]').waitFor();
-      await viewport.press("ArrowRight");
-      await page.locator('[data-packed-ready][data-active-id="two"]').waitFor();
-      await page.getByRole("button", { name: "Toggle direction" }).click();
-      await page.locator("[data-packed-ready][data-direction='rtl']").waitFor();
-      const rtlDirections = await directions();
-      if (JSON.stringify(rtlDirections) !== JSON.stringify(["rtl", "ltr", "rtl"])) {
-        throw new Error(
-          `Packed carousel did not update content direction while keeping its rail LTR: ${JSON.stringify(rtlDirections)}.`,
-        );
-      }
-      await viewport.press("ArrowRight");
-      await page.locator('[data-packed-ready][data-active-id="one"]').waitFor();
-
-      const viewportBox = await viewport.boundingBox();
-      if (!viewportBox) throw new Error("Packed carousel viewport is not rendered.");
-      const pointerY = viewportBox.y + viewportBox.height * 0.5;
-      await page.mouse.move(viewportBox.x + viewportBox.width * 0.15, pointerY);
-      await page.mouse.down();
-      await page.mouse.move(viewportBox.x + viewportBox.width * 0.9, pointerY, {
-        steps: 8,
-      });
-      const pointerTransform = await track.evaluate(
-        (element) => getComputedStyle(element).transform,
-      );
-      const pointerPhase = await viewport.getAttribute("data-phase");
-      await page.mouse.up();
-      await page.waitForTimeout(100);
-      const pointerTarget = await page
-        .locator("[data-packed-ready]")
-        .getAttribute("data-active-id");
-      if (pointerTarget !== "two") {
-        throw new Error(
-          `Packed RTL pointer drag resolved to ${pointerTarget ?? "no semantic target"} instead of two (phase ${pointerPhase ?? "unknown"}, transform ${pointerTransform}).`,
-        );
-      }
-      await viewport.hover();
-      await page.mouse.wheel(200, 0);
-      await page.locator('[data-packed-ready][data-active-id="one"]').waitFor();
-
-      const deckCard = page.locator(
-        ".snap-motion-stacked-deck-card[aria-current='true'] .packed-screen",
-      );
-      const deckBox = await deckCard.boundingBox();
-      if (!deckBox) throw new Error("Packed stacked deck card is not rendered.");
-      await page.mouse.move(deckBox.x + deckBox.width * 0.7, deckBox.y + deckBox.height * 0.5);
-      await page.mouse.down();
-      await page.mouse.move(deckBox.x + deckBox.width * 0.25, deckBox.y + deckBox.height * 0.5, {
-        steps: 8,
-      });
-      await page.mouse.up();
-      await page.locator("[data-packed-ready][data-card-clicks='0']").waitFor();
-      await page.getByRole("button", { name: "Card action" }).first().click();
-      await page.locator("[data-packed-ready][data-control-clicks='1']").waitFor();
-
-      await page.getByRole("button", { name: "Open sheet" }).click();
-      await page.locator(".snap-motion-sheet").waitFor({ state: "visible" });
-      await page.getByRole("button", { name: "Close sheet" }).click();
-      await page.locator(".snap-motion-sheet").waitFor({ state: "hidden" });
-
-      await page.getByRole("button", { name: "Open gallery" }).click();
-      await page.locator(".snap-motion-media-gallery").waitFor({ state: "visible" });
-      await page.getByRole("button", { name: "Close gallery" }).click();
-      await page.locator(".snap-motion-media-gallery").waitFor({ state: "hidden" });
-      await page.waitForTimeout(100);
       if (runtimeFailures.length > 0) {
         throw new Error(`Packed Vue runtime failed:\n${runtimeFailures.join("\n")}`);
       }
@@ -471,13 +378,10 @@ try {
   ) as PackageManifest;
   assertVueOnlyConsumer(minimumManifest);
   runPnpm(["install", "--ignore-scripts"], minimum);
-  for (const resolution of ["bundler", "node16", "nodenext"]) {
-    runPnpm(["exec", "tsc", "-p", `tsconfig.${resolution}.json`], minimum);
-  }
   certifyTemplateInference(minimum);
   runPnpm(["exec", "vite", "build"], minimum);
   runCommand(process.execPath, ["ssr.mjs"], minimum);
-  runCommand(process.execPath, ["media-gallery-import.mjs"], minimum);
+  await browserSmoke(minimum);
 
   const typescript7 = await createConsumer(
     "typescript7",
@@ -500,21 +404,12 @@ try {
     JSON.parse(await readFile(resolve(current, "package.json"), "utf8")) as PackageManifest,
   );
   runPnpm(["install", "--ignore-scripts"], current);
-  for (const resolution of ["bundler", "node16", "nodenext"]) {
-    runPnpm(["exec", "tsc", "-p", `tsconfig.${resolution}.json`], current);
-  }
-  certifyTemplateInference(current);
-  runPnpm(["exec", "vite", "build"], current);
-  runCommand(process.execPath, ["ssr.mjs"], current);
-  runCommand(process.execPath, ["media-gallery-import.mjs"], current);
   runPnpm(["exec", "nuxt", "build", "nuxt"], current);
-  await browserSmoke(current);
   await nuxtHydrationSmoke(current);
-  runPnpm(["exec", "nuxt", "generate", "nuxt"], current);
 } finally {
   await Promise.all(consumers.map(removeConsumer));
 }
 
 process.stdout.write(
-  "Packed package certification passed for the direct core consumer, TypeScript 7 Vue declaration consumer, and minimum/current Vue-only consumers: ESM, all Vue surfaces, gallery-only import, generic SFC inference through the TypeScript 6 bridge, Vite, Router, Nuxt build/generate, SSR, hydration, live direction, pointer, wheel, keyboard, and compatibility-click smoke.\n",
+  "Packed package certification passed for the direct Core consumer, TypeScript 7 declaration consumer, minimum-Vue SFC/Vite/SSR runtime, and current-Vue Nuxt build and hydration consumer.\n",
 );

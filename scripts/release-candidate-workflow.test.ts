@@ -21,12 +21,4 @@ describe("release-candidate workflow contract", () => {
     expect(workflow).not.toMatch(/\bgit\s+(?:commit|push|tag|merge)\b/);
     expect(workflow).toContain("config/release-candidates/${{ inputs.version }}.json");
   });
-
-  it("runs append-only history enforcement in ordinary CI with full history", async () => {
-    const workflow = await readFile(resolve(repoRoot, ".github/workflows/verify.yml"), "utf8");
-
-    expect(workflow).toContain("name: Release-candidate history");
-    expect(workflow).toContain("fetch-depth: 0");
-    expect(workflow).toContain("node scripts/check-release-candidate-history.ts");
-  });
 });

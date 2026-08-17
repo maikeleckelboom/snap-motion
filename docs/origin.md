@@ -24,6 +24,3 @@ It discards obsolete implementation details: mixed gesture and motion stacks, ra
 semantic state, `scrollWidth` as geometry authority, index identity, IntersectionObserver-based
 restoration, Tab interception, global touch suppression, wheel amplification, final-event-pair
 velocity, fixed-duration sheet easing, phantom panel-height input, and debug or dead source.
-
-Exact frozen sources, branches, revisions, paths, and retrieval date are recorded in
-[`legacy/README.md`](../legacy/README.md).

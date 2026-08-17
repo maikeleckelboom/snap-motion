@@ -28,7 +28,7 @@ function matrixEntries(block: string) {
 }
 
 describe("Verify browser CI topology", () => {
-  it("replaces the monolithic browser job with eight explicit one-worker shards", async () => {
+  it("maps every browser project to two explicit one-worker shards", async () => {
     const workflow = await readFile(
       resolve(repositoryRoot, ".github/workflows/verify.yml"),
       "utf8",
@@ -36,7 +36,6 @@ describe("Verify browser CI topology", () => {
     const shard = jobBlock(workflow, "browser-shard");
     const entries = matrixEntries(shard);
 
-    expect(workflow).not.toContain("name: Browser regression");
     expect(entries).toEqual([
       { project: "chromium", browser: "chromium", shard: 1, total: 2, display: "Chromium 1/2" },
       { project: "chromium", browser: "chromium", shard: 2, total: 2, display: "Chromium 2/2" },
@@ -67,7 +66,6 @@ describe("Verify browser CI topology", () => {
     expect(shard).toContain("--shard=${{ matrix.shard }}/${{ matrix.total }}");
     expect(shard).toContain("--workers=1");
     expect(shard).not.toContain("pnpm build");
-    expect(shard).not.toContain("pnpm test:e2e");
   });
 
   it("uses a fail-closed scope job without suppressing the workflow", async () => {

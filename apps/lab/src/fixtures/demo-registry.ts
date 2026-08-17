@@ -2,7 +2,6 @@ import { STACKED_DECK_ANCHOR_SKIP } from "@snap-motion/core";
 import type { Component } from "vue";
 
 import AdaptiveSupportingPaneDemo from "@/demos/AdaptiveSupportingPaneDemo.vue";
-import AuthorityEpochFixture from "@/demos/AuthorityEpochFixture.vue";
 import CoverflowDemo from "@/demos/CoverflowDemo.vue";
 import DefaultSurfacesDemo from "@/demos/DefaultSurfacesDemo.vue";
 import MediaGalleryAtCertificationDemo from "@/demos/MediaGalleryAtCertificationDemo.vue";
@@ -190,19 +189,6 @@ export const demos = [
     group: "Certification",
     audience: "fixture",
     component: RealmOverlayFixture,
-    capabilities: {
-      motionPreference: false,
-      physics: false,
-      stageWidth: false,
-    },
-  },
-  {
-    id: "authority-epoch",
-    label: "Authority Epoch",
-    description: "In-flight uncontrolled ownership handoff into unavailable controlled state.",
-    group: "Certification",
-    audience: "fixture",
-    component: AuthorityEpochFixture,
     capabilities: {
       motionPreference: false,
       physics: false,

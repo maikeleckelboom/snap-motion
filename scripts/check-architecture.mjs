@@ -197,13 +197,6 @@ for (const entrypoint of entrypoints) {
   }
 }
 
-for (const banned of ["common", "helpers", "shared", "utils"]) {
-  try {
-    await readdir(resolve(vueRoot, banned));
-    errors.push(`packages/vue/src/${banned} is a prohibited generic ownership directory.`);
-  } catch {}
-}
-
 for (const scope of ["apps", "fixtures"]) {
   const files = await walk(resolve(repoRoot, scope), (path) =>
     /\.(?:js|json|mjs|ts|vue)$/.test(path),

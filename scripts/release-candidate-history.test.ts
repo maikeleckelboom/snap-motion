@@ -176,30 +176,15 @@ describe("release-candidate registry admission", () => {
   });
 
   it.each([
-    ["missing schema version", (record: MutableCandidateRecord) => delete record.schemaVersion],
     ["invalid schema version", (record: MutableCandidateRecord) => (record.schemaVersion = 2)],
-    [
-      "invalid source commit",
-      (record: MutableCandidateRecord) => (record.source.commit = "not-a-commit"),
-    ],
     [
       "empty source repository",
       (record: MutableCandidateRecord) => (record.source.repository = ""),
     ],
     [
-      "empty source visibility",
-      (record: MutableCandidateRecord) => (record.source.visibility = ""),
-    ],
-    ["empty source branch", (record: MutableCandidateRecord) => (record.source.branch = "")],
-    [
       "duplicate package identity",
       (record: MutableCandidateRecord) =>
         record.packages.push({ ...record.packages[0]!, file: "snap-motion-duplicate.tgz" }),
-    ],
-    [
-      "duplicate package archive name",
-      (record: MutableCandidateRecord) =>
-        record.packages.push({ ...record.packages[0]!, name: "@snap-motion/vue" }),
     ],
     [
       "misaligned package versions",

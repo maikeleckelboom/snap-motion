@@ -65,19 +65,6 @@ own status output. Read it after a run and compare it with the operator's timest
 
 Event order is evidence about Vue events, not evidence that equivalent speech was heard.
 
-### Automated visual evidence
-
-The Chromium harness test regenerates this focused local directory:
-
-```text
-.artifacts/media-gallery-at-certification/
-```
-
-It captures `01-harness-setup.png`, `02-standard-open.png`, `03-one-item-state.png`,
-`04-failure-state.png`, `05-mobile-harness.png`, and `06-event-trace-after-close.png`. These
-captures prove the configured harness states were visually inspected; they do not contain or imply
-NVDA, VoiceOver, TalkBack, spoken-output, rotor, or reading-control evidence.
-
 ## Result vocabulary
 
 Every step and matrix row uses one of these values:

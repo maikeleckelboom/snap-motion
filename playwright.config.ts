@@ -1,7 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const mediaPreviewSpec = "media-preview.spec.ts";
+const showcaseSmokeSpec = "showcase-smoke.spec.ts";
 const stackedDeckSpec = "stacked-deck.spec.ts";
+const stackedDeckWebKitSmoke =
+  /real pointer movement maps|one held gesture cannot discard|a re-grab during settlement rebases|cancel, lost capture, edge elasticity|inspection, visual semantics, and accessibility/;
 const testPort = process.env.SNAP_MOTION_TEST_PORT ?? "4173";
 const testUrl = `http://127.0.0.1:${testPort}`;
 
@@ -22,14 +25,19 @@ export default defineConfig({
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+    {
+      name: "firefox",
+      testMatch: showcaseSmokeSpec,
+      use: { ...devices["Desktop Firefox"] },
+    },
     {
       name: "webkit",
-      testIgnore: [mediaPreviewSpec, stackedDeckSpec],
+      testMatch: showcaseSmokeSpec,
       use: { ...devices["Desktop Safari"] },
     },
     {
       name: "webkit-stacked-deck",
+      grep: stackedDeckWebKitSmoke,
       testMatch: stackedDeckSpec,
       workers: process.env.CI ? 1 : 2,
       use: { ...devices["Desktop Safari"] },

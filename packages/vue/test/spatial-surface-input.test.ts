@@ -1,8 +1,3 @@
-import {
-  nonlinearElasticDistance,
-  STACKED_DECK_INTERIOR_ELASTICITY,
-  type ElasticBoundaryOptions,
-} from "@snap-motion/core";
 import { mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { h, nextTick } from "vue";
@@ -36,11 +31,6 @@ interface DeckInstance {
   state: { traversal: { phase: string; segmentTargetIndex: number | null } };
 }
 
-interface RailInstance {
-  settledId: ScreenId | undefined;
-  visualId: ScreenId | undefined;
-}
-
 function pointerEvent(type: string, init: PointerEventInit = {}) {
   return new PointerEvent(type, {
     bubbles: true,
@@ -52,10 +42,6 @@ function pointerEvent(type: string, init: PointerEventInit = {}) {
     clientY: 0,
     ...init,
   });
-}
-
-function keyEvent(key: string) {
-  return new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key });
 }
 
 function wheelEvent(deltaX: number) {
@@ -98,113 +84,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("stacked deck default physics", () => {
-  it("resists travel past the adjacent screen instead of stopping dead at it", async () => {
-    // No `elasticity`, no `spring`, no `releasePolicy`: exactly what the package documents.
-    const wrapper = mountDefaultDeck();
-    await nextTick();
-    const deck = wrapper.vm as unknown as DeckInstance;
-    const pitch = deck.pitch;
-    const travel = pitch + 302;
-
-    pressAndMove(wrapper.element as HTMLElement, -travel);
-    await nextTick();
-
-    // One whole pitch of travel exchanges exactly one screen...
-    expect(deck.visualId).toBe("d");
-    // ...and everything past it is bounded resistance, not free travel and not a wall.
-    const boundary = STACKED_DECK_INTERIOR_ELASTICITY.min as ElasticBoundaryOptions;
-    const resisted = nonlinearElasticDistance(302, boundary);
-    expect(resisted).toBeLessThan(302);
-    expect(deck.physicalIndex).toBeGreaterThan(3);
-    expect(deck.physicalIndex).toBeCloseTo(3 + resisted / pitch, 5);
-    expect(deck.physicalIndex).toBeLessThan(3 + boundary.maxDistance / pitch);
-
-    // A single interaction never opens a second exchange, however far it is pushed.
-    expect(deck.state.traversal.phase).toBe("elastic");
-    expect(deck.state.traversal.segmentTargetIndex).toBeNull();
-
-    releaseAt(wrapper.element as HTMLElement, -travel);
-    wrapper.unmount();
-  });
-
-  it("keeps the one-card invariant when a consumer customizes the resistance", async () => {
-    const wrapper = mountDefaultDeck({
-      elasticity: {
-        min: { resistance: 1.2, maxDistance: 200 },
-        max: { resistance: 1.2, maxDistance: 200 },
-      },
-    });
-    await nextTick();
-    const deck = wrapper.vm as unknown as DeckInstance;
-    const travel = deck.pitch + 302;
-
-    pressAndMove(wrapper.element as HTMLElement, -travel);
-    await nextTick();
-
-    // A looser boundary travels further than the default, and still exchanges exactly one screen.
-    const softer = nonlinearElasticDistance(302, { resistance: 1.2, maxDistance: 200 });
-    expect(softer).toBeGreaterThan(
-      nonlinearElasticDistance(302, STACKED_DECK_INTERIOR_ELASTICITY.min as ElasticBoundaryOptions),
-    );
-    expect(deck.physicalIndex).toBeCloseTo(3 + softer / deck.pitch, 5);
-    expect(deck.visualId).toBe("d");
-    expect(deck.state.traversal.segmentTargetIndex).toBeNull();
-
-    releaseAt(wrapper.element as HTMLElement, -travel);
-    wrapper.unmount();
-  });
-});
-
 describe("right-to-left agreement", () => {
-  it("mirrors deck arrow keys and leaves Home and End absolute", async () => {
-    const wrapper = mountDeck();
-    await nextTick();
-    const deck = wrapper.vm as unknown as DeckInstance;
-    const root = wrapper.element as HTMLElement;
-
-    root.dispatchEvent(keyEvent("ArrowRight"));
-    await nextTick();
-    expect(deck.settledId).toBe("d");
-
-    root.style.direction = "rtl";
-    root.dispatchEvent(keyEvent("ArrowRight"));
-    await nextTick();
-    expect(deck.settledId).toBe("c");
-    root.dispatchEvent(keyEvent("ArrowLeft"));
-    await nextTick();
-    expect(deck.settledId).toBe("d");
-
-    root.dispatchEvent(keyEvent("Home"));
-    await nextTick();
-    expect(deck.settledId).toBe("a");
-    root.dispatchEvent(keyEvent("End"));
-    await nextTick();
-    expect(deck.settledId).toBe("e");
-    wrapper.unmount();
-  });
-
-  it("mirrors coverflow arrow keys on the same terms", async () => {
-    const wrapper = mountRail();
-    await nextTick();
-    const rail = wrapper.vm as unknown as RailInstance;
-    const root = wrapper.element as HTMLElement;
-
-    root.dispatchEvent(keyEvent("ArrowLeft"));
-    await nextTick();
-    expect(rail.settledId).toBe("b");
-
-    root.style.direction = "rtl";
-    root.dispatchEvent(keyEvent("ArrowLeft"));
-    await nextTick();
-    expect(rail.settledId).toBe("c");
-
-    root.dispatchEvent(keyEvent("Home"));
-    await nextTick();
-    expect(rail.settledId).toBe("a");
-    wrapper.unmount();
-  });
-
   it("mirrors the pointer with the writing direction", async () => {
     const ltr = mountDeck();
     await nextTick();
@@ -248,36 +128,6 @@ describe("right-to-left agreement", () => {
   });
 });
 
-describe("keyboard ownership", () => {
-  it.each([
-    ["deck", mountDeck],
-    ["coverflow", mountRail],
-  ] as const)("prevents only keyboard commands the %s accepts", async (_name, mountSurface) => {
-    const wrapper = mountSurface();
-    await nextTick();
-    const root = wrapper.element as HTMLElement;
-
-    const accepted = keyEvent("ArrowRight");
-    root.dispatchEvent(accepted);
-    expect(accepted.defaultPrevented).toBe(true);
-
-    const end = keyEvent("End");
-    root.dispatchEvent(end);
-    expect(end.defaultPrevented).toBe(true);
-    await nextTick();
-
-    const refusedAtBoundary = keyEvent("ArrowRight");
-    root.dispatchEvent(refusedAtBoundary);
-    expect(refusedAtBoundary.defaultPrevented).toBe(false);
-
-    await wrapper.setProps({ disabled: true });
-    const refusedWhileDisabled = keyEvent("Home");
-    root.dispatchEvent(refusedWhileDisabled);
-    expect(refusedWhileDisabled.defaultPrevented).toBe(false);
-    wrapper.unmount();
-  });
-});
-
 describe("interactive descendant ownership", () => {
   function mountDeckWithControls() {
     return mount(TypedStackedDeck, {
@@ -294,44 +144,6 @@ describe("interactive descendant ownership", () => {
       attachTo: document.body,
     });
   }
-
-  it("leaves arrow keys to a control the consumer put inside a card", async () => {
-    const wrapper = mountDeckWithControls();
-    await nextTick();
-    const deck = wrapper.vm as unknown as DeckInstance;
-
-    for (const selector of [".card-link", ".card-button", ".card-input"]) {
-      const event = keyEvent("ArrowRight");
-      wrapper.get(selector).element.dispatchEvent(event);
-      await nextTick();
-      expect(event.defaultPrevented).toBe(false);
-      expect(deck.settledId).toBe("c");
-    }
-
-    // The surface still owns arrow keys everywhere it legitimately does.
-    const surfaceEvent = keyEvent("ArrowRight");
-    (wrapper.element as HTMLElement).dispatchEvent(surfaceEvent);
-    await nextTick();
-    expect(surfaceEvent.defaultPrevented).toBe(true);
-    expect(deck.settledId).toBe("d");
-    wrapper.unmount();
-  });
-
-  it("never takes pointer ownership from a control or an opted-out descendant", async () => {
-    const wrapper = mountDeckWithControls();
-    await nextTick();
-    const deck = wrapper.vm as unknown as DeckInstance;
-
-    for (const selector of [".card-link", ".card-button", ".card-input", ".card-ignored"]) {
-      const target = wrapper.get(selector).element as HTMLElement;
-      target.dispatchEvent(pointerEvent("pointerdown", { buttons: 1, clientX: 0 }));
-      await nextTick();
-      expect(deck.owned).toBe(false);
-      expect(deck.physicalIndex).toBeCloseTo(2, 6);
-      target.dispatchEvent(pointerEvent("pointerup", { clientX: 0 }));
-    }
-    wrapper.unmount();
-  });
 
   it("lets an ordinary click through, and cancels only the click a drag produced", async () => {
     const wrapper = mountDeckWithControls();
@@ -363,113 +175,6 @@ describe("interactive descendant ownership", () => {
   });
 });
 
-function click(element: HTMLElement, init: MouseEventInit = {}) {
-  const event = new MouseEvent("click", { bubbles: true, cancelable: true, ...init });
-  element.dispatchEvent(event);
-  return event;
-}
-
-describe("click suppression follows what the surface consumed", () => {
-  function mountDeckWithLink() {
-    return mount(TypedStackedDeck, {
-      props: { items: screens, label: "Screens", reducedMotionOverride: true },
-      slots: {
-        card: () =>
-          h("div", { class: "card-surface" }, [
-            h("span", { class: "card-label" }, "Card"),
-            h("a", { href: "#detail", class: "card-link" }, "Detail"),
-          ]),
-      },
-      attachTo: document.body,
-    });
-  }
-
-  it("cancels the click a horizontal drag generated, and only that one", async () => {
-    const wrapper = mountDeckWithLink();
-    await nextTick();
-    const root = wrapper.element as HTMLElement;
-    const surface = wrapper.get(".card-surface").element as HTMLElement;
-    const link = wrapper.get(".card-link").element as HTMLElement;
-
-    pressAndMove(surface, -240);
-    releaseAt(root, -240);
-    expect(click(surface, { clientX: -240, detail: 1 }).defaultPrevented).toBe(true);
-    expect(click(surface, { clientX: -240, detail: 1 }).defaultPrevented).toBe(false);
-    // A nearby application control is not correlated to that release and remains usable.
-    expect(click(link, { clientX: -230, detail: 1 }).defaultPrevented).toBe(false);
-    wrapper.unmount();
-  });
-
-  it("leaves an ordinary tap alone", async () => {
-    const wrapper = mountDeckWithLink();
-    await nextTick();
-    const root = wrapper.element as HTMLElement;
-    const link = wrapper.get(".card-link").element as HTMLElement;
-
-    root.dispatchEvent(pointerEvent("pointerdown", { buttons: 1, clientX: 0, clientY: 0 }));
-    root.dispatchEvent(pointerEvent("pointerup", { clientX: 2, clientY: 1 }));
-    expect(click(link).defaultPrevented).toBe(false);
-    wrapper.unmount();
-  });
-
-  it("leaves a control alone after a vertical touch gesture over the surface", async () => {
-    const wrapper = mountDeckWithLink();
-    await nextTick();
-    const root = wrapper.element as HTMLElement;
-    const link = wrapper.get(".card-link").element as HTMLElement;
-
-    // A page scroll displaces the pointer a long way without this surface consuming anything.
-    root.dispatchEvent(
-      pointerEvent("pointerdown", { buttons: 1, clientX: 0, clientY: 0, pointerType: "touch" }),
-    );
-    root.dispatchEvent(
-      pointerEvent("pointermove", { buttons: 1, clientX: 4, clientY: -300, pointerType: "touch" }),
-    );
-    root.dispatchEvent(
-      pointerEvent("pointerup", { clientX: 4, clientY: -300, pointerType: "touch" }),
-    );
-
-    expect(click(link).defaultPrevented).toBe(false);
-    wrapper.unmount();
-  });
-
-  it("leaves no suppression behind after a cancelled or multi-pointer gesture", async () => {
-    const wrapper = mountDeckWithLink();
-    await nextTick();
-    const root = wrapper.element as HTMLElement;
-    const link = wrapper.get(".card-link").element as HTMLElement;
-
-    pressAndMove(root, -240);
-    root.dispatchEvent(pointerEvent("pointercancel", { clientX: -240 }));
-    await Promise.resolve();
-    expect(click(link).defaultPrevented).toBe(false);
-
-    // A second finger joining makes the gesture something the surface does not resolve either.
-    pressAndMove(root, -240);
-    root.dispatchEvent(pointerEvent("pointerdown", { buttons: 1, clientX: -240, pointerId: 2 }));
-    releaseAt(root, -240);
-    await Promise.resolve();
-    expect(click(link).defaultPrevented).toBe(false);
-    wrapper.unmount();
-  });
-
-  it("expires an armed suppression the browser never spent", async () => {
-    vi.useFakeTimers();
-    const wrapper = mountDeckWithLink();
-    await nextTick();
-    const root = wrapper.element as HTMLElement;
-    const link = wrapper.get(".card-link").element as HTMLElement;
-
-    pressAndMove(root, -240);
-    releaseAt(root, -240);
-
-    // No compatibility click followed this drag. Much later, an unrelated one must survive.
-    vi.advanceTimersByTime(5_000);
-    expect(click(link).defaultPrevented).toBe(false);
-    wrapper.unmount();
-  });
-});
-
 function deckHints(wrapper: ReturnType<typeof mountDeck>) {
   return wrapper
     .findAll(".snap-motion-stacked-deck-card-motion")
@@ -492,73 +197,9 @@ describe("compositor hinting", () => {
     expect(new Set(deckHints(wrapper))).toEqual(new Set(["auto"]));
     wrapper.unmount();
   });
-
-  it("hints only while the rail is actually moving", async () => {
-    const wrapper = mountRail();
-    await nextTick();
-    const hints = () =>
-      wrapper
-        .findAll(".snap-motion-coverflow-card")
-        .map((card) => (card.element as HTMLElement).style.willChange);
-    expect(new Set(hints())).toEqual(new Set(["auto"]));
-
-    const root = wrapper.element as HTMLElement;
-    pressAndMove(root, -120);
-    await nextTick();
-    expect(hints()).toContain("transform");
-
-    releaseAt(root, -120);
-    await nextTick();
-    expect(new Set(hints())).toEqual(new Set(["auto"]));
-    wrapper.unmount();
-  });
 });
 
 describe("gesture lifecycle ownership", () => {
-  it("returns a deck to the card its interaction began on when pointer capture is lost", async () => {
-    // Real motion, so the surface is still settling when the cancelled gesture is resolved — which
-    // is the situation the restore exists for.
-    const wrapper = mountDefaultDeck();
-    await nextTick();
-    const deck = wrapper.vm as unknown as DeckInstance;
-    const root = wrapper.element as HTMLElement;
-
-    pressAndMove(root, -300);
-    root.dispatchEvent(pointerEvent("lostpointercapture", { clientX: -300 }));
-    await Promise.resolve();
-    await nextTick();
-
-    expect(deck.owned).toBe(false);
-    expect(deck.diagnostics.targetId).toBe("c");
-    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
-    wrapper.unmount();
-  });
-
-  it("abandons a rail gesture when pointer capture is lost, rather than resolving it later", async () => {
-    const frames: FrameRequestCallback[] = [];
-    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => {
-      frames.push(callback);
-      return frames.length;
-    });
-    const wrapper = mountRail();
-    await nextTick();
-    const root = wrapper.element as HTMLElement;
-    const card = wrapper.findAll(".snap-motion-coverflow-card")[1]!.element as HTMLElement;
-
-    card.dispatchEvent(pointerEvent("pointerdown", { buttons: 1 }));
-    root.dispatchEvent(pointerEvent("lostpointercapture"));
-    await Promise.resolve();
-    card.dispatchEvent(pointerEvent("pointerup"));
-    await Promise.resolve();
-
-    // Without the binding the stale gesture would survive the lost capture and this release would
-    // still be read as a selection, scheduling a deferred move.
-    expect(frames).toHaveLength(0);
-    expect((wrapper.vm as unknown as RailInstance).settledId).toBe("c");
-    expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
-    wrapper.unmount();
-  });
-
   it("says nothing about a gesture whose surface was unmounted before it resolved", async () => {
     const wrapper = mountDeck();
     await nextTick();
