@@ -8,7 +8,7 @@ export interface BrowserChangeClassification {
 
 export type GitCommand = (arguments_: readonly string[]) => string;
 
-const releaseCandidateIntegrityPaths = new Set([
+const browserIrrelevantPaths = new Set([
   ".github/workflows/release-candidate.yml",
   "config/release-blockers.json",
   "docs/releasing.md",
@@ -23,7 +23,7 @@ const releaseCandidateIntegrityPaths = new Set([
   "scripts/release-candidate-workflow.test.ts",
   "scripts/release-candidate.ts",
   "scripts/release-package-assembly.test.ts",
-  "scripts/release-package-assembly.ts",
+  "scripts/verify-packages.ts",
   "scripts/verify-release-candidate.ts",
 ]);
 
@@ -36,7 +36,7 @@ function isBrowserIrrelevantPath(path: string): boolean {
   if (/\.md$/i.test(path)) return true;
   if (path.startsWith(".changeset/")) return true;
   if (path.startsWith("config/release-candidates/") && path.endsWith(".json")) return true;
-  return releaseCandidateIntegrityPaths.has(path);
+  return browserIrrelevantPaths.has(path);
 }
 
 export function classifyChangedPaths(paths: readonly string[]): BrowserChangeClassification {

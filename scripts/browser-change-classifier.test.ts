@@ -98,6 +98,10 @@ describe("browser changed-path classification", () => {
     ).toBe(false);
   });
 
+  it("skips browser certification for browser-free package verification changes", () => {
+    expect(classifyChangedPaths(["scripts/verify-packages.ts"]).browserRequired).toBe(false);
+  });
+
   it.each([
     ["Core source", "packages/core/src/index.ts"],
     ["Vue source", "packages/vue/src/index.ts"],
@@ -107,6 +111,8 @@ describe("browser changed-path classification", () => {
     ["lockfile", "pnpm-lock.yaml"],
     ["root manifest", "package.json"],
     ["Verify workflow", ".github/workflows/verify.yml"],
+    ["shared package assembly", "scripts/release-package-assembly.ts"],
+    ["browser package verification", "scripts/verifyPackagesBrowser.ts"],
     ["unknown path", "future/new-authority.toml"],
   ])("requires browser certification for %s changes", (_label, path) => {
     expect(classifyChangedPaths([path]).browserRequired).toBe(true);
