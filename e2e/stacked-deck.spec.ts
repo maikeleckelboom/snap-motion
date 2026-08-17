@@ -364,6 +364,13 @@ async function readNarrowPageGeometry(page: Page) {
   });
 }
 
+async function readMeasuredNarrowPageGeometry(page: Page) {
+  await expect
+    .poll(async () => (await readNarrowPageGeometry(page)).cardWidthProperty)
+    .toBe("192px");
+  return readNarrowPageGeometry(page);
+}
+
 interface NarrowPageFrame {
   readonly activeId: string;
   readonly bodyScrollWidth: number;
@@ -2362,7 +2369,7 @@ test("three-card narrow consumers contain document width through every exchange 
     reports.push({
       direction: "initial",
       frames: [],
-      geometry: await readNarrowPageGeometry(page),
+      geometry: await readMeasuredNarrowPageGeometry(page),
       variant,
     });
 
@@ -2378,7 +2385,7 @@ test("three-card narrow consumers contain document width through every exchange 
     reports.push({
       direction: "previous",
       frames: await readNarrowPageTrace(page),
-      geometry: await readNarrowPageGeometry(page),
+      geometry: await readMeasuredNarrowPageGeometry(page),
       variant,
     });
 
@@ -2394,7 +2401,7 @@ test("three-card narrow consumers contain document width through every exchange 
     reports.push({
       direction: "next",
       frames: await readNarrowPageTrace(page),
-      geometry: await readNarrowPageGeometry(page),
+      geometry: await readMeasuredNarrowPageGeometry(page),
       variant,
     });
   }

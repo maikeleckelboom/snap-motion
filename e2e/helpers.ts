@@ -78,8 +78,8 @@ export async function openLabDemo(
 }
 
 export async function expectCarouselAt(carousel: Locator, id: string) {
-  await expect(carousel).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
   await expect(carousel).toHaveAttribute("data-active-id", id);
+  await expect(carousel).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
 }
 
 export async function expectSheetOpenAt(dialog: Locator, id: string) {
