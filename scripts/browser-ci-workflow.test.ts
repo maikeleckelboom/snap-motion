@@ -56,13 +56,22 @@ describe("Verify browser CI contracts", () => {
     const workflow = await workflowSource();
     const chromium = jobBlock(workflow, "chromium");
     const crossBrowser = jobBlock(workflow, "cross-browser");
+    const workspace = await readFile(resolve(repositoryRoot, "pnpm-workspace.yaml"), "utf8");
+    const playwrightVersion = workspace.match(
+      /^\s*"?@playwright\/test"?:\s*(\d+\.\d+\.\d+)\s*$/m,
+    )?.[1];
 
+    expect(playwrightVersion).toBeDefined();
     expect(chromium).toContain("shard: [1, 2]");
     expect(chromium).toContain("playwright install --with-deps chromium");
     expect(chromium).toContain("--project=chromium");
     expect(chromium).toContain("--shard=${{ matrix.shard }}/2");
     expect(chromium).toContain("--workers=1");
-    expect(crossBrowser).toContain("playwright install --with-deps firefox webkit");
+    expect(crossBrowser).toContain(
+      `image: mcr.microsoft.com/playwright:v${playwrightVersion}-noble`,
+    );
+    expect(crossBrowser).toContain("options: --user 1001");
+    expect(crossBrowser).not.toMatch(/playwright\s+install(?:-deps)?\b/);
     for (const project of ["firefox", "webkit", "webkit-stacked-deck"]) {
       expect(crossBrowser).toContain(`--project=${project}`);
     }
