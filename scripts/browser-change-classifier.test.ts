@@ -1,9 +1,15 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
   classifyChangedPaths,
   classifyGitRange,
   classifyGitHubEvent,
+  repositoryGitCommand,
   type GitCommand,
 } from "./browser-change-classifier.ts";
 
@@ -16,6 +22,82 @@ function gitForDiff(paths: readonly string[], mergeBase = sha("c")): GitCommand 
     if (arguments_[0] === "diff") return `${paths.join("\n")}${paths.length > 0 ? "\n" : ""}`;
     throw new Error(`Unexpected Git command: ${arguments_.join(" ")}`);
   };
+}
+
+interface GitFixture {
+  readonly base: string;
+  readonly head: string;
+  readonly repositoryRoot: string;
+}
+
+function git(repositoryRoot: string, ...arguments_: readonly string[]): string {
+  return execFileSync("git", arguments_, {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+function writeFixtureFile(repositoryRoot: string, path: string, contents: string): void {
+  const absolutePath = join(repositoryRoot, path);
+  mkdirSync(dirname(absolutePath), { recursive: true });
+  writeFileSync(absolutePath, contents);
+}
+
+function createGitFixture(options: {
+  readonly beforePath: string;
+  readonly afterPath?: string;
+  readonly afterContents?: string;
+}): GitFixture {
+  const repositoryRoot = mkdtempSync(join(tmpdir(), "snap-motion-browser-classifier-"));
+  git(repositoryRoot, "init", "--quiet");
+  git(repositoryRoot, "config", "user.email", "classifier@example.test");
+  git(repositoryRoot, "config", "user.name", "Browser Classifier Test");
+  writeFixtureFile(repositoryRoot, options.beforePath, "fixture authority\n");
+  git(repositoryRoot, "add", ".");
+  git(repositoryRoot, "commit", "--quiet", "--message", "fixture before");
+  const base = git(repositoryRoot, "rev-parse", "HEAD").trim();
+
+  if (options.afterPath === undefined) {
+    writeFixtureFile(
+      repositoryRoot,
+      options.beforePath,
+      options.afterContents ?? "fixture authority changed\n",
+    );
+  } else {
+    const afterAbsolutePath = join(repositoryRoot, options.afterPath);
+    mkdirSync(dirname(afterAbsolutePath), { recursive: true });
+    renameSync(join(repositoryRoot, options.beforePath), afterAbsolutePath);
+  }
+
+  git(repositoryRoot, "add", "--all");
+  git(repositoryRoot, "commit", "--quiet", "--message", "fixture after");
+  const head = git(repositoryRoot, "rev-parse", "HEAD").trim();
+  return { base, head, repositoryRoot };
+}
+
+function classifyGitFixture(options: Parameters<typeof createGitFixture>[0]) {
+  const fixture = createGitFixture(options);
+  try {
+    return {
+      classification: classifyGitRange(
+        fixture.base,
+        fixture.head,
+        repositoryGitCommand(fixture.repositoryRoot),
+      ),
+      renameCollapsedPaths: git(
+        fixture.repositoryRoot,
+        "diff",
+        "--name-only",
+        fixture.base,
+        fixture.head,
+      )
+        .trim()
+        .split(/\r?\n/),
+    };
+  } finally {
+    rmSync(fixture.repositoryRoot, { recursive: true, force: true });
+  }
 }
 
 describe("browser changed-path classification", () => {
@@ -111,7 +193,9 @@ describe("GitHub event change authority", () => {
     });
     expect(result.browserRequired).toBe(true);
     expect(commands).toContain(`merge-base ${sha("a")} ${sha("b")}`);
-    expect(commands).toContain(`diff --name-only --diff-filter=ACDMRTUXB ${sha("c")} ${sha("b")}`);
+    expect(commands).toContain(
+      `diff --no-renames --name-only --diff-filter=ACDMRTUXB ${sha("c")} ${sha("b")}`,
+    );
   });
 
   it("requires browser certification for workflow dispatch without reading Git", () => {
@@ -151,5 +235,46 @@ describe("GitHub event change authority", () => {
     });
     expect(result.browserRequired).toBe(true);
     expect(result.reason).toMatch(/merge base or diff could not be inspected/);
+  });
+});
+
+describe("real Git rename classification", () => {
+  it.each([
+    ["Vue source to Markdown", "packages/vue/src/example.ts", "docs/example.md"],
+    ["E2E test to Markdown", "e2e/example.spec.ts", "docs/example.md"],
+    ["release documentation to Vue source", "docs/releasing.md", "packages/vue/src/example.ts"],
+    ["Core source to release documentation", "packages/core/src/example.ts", "docs/releasing.md"],
+  ])("requires browsers for %s", (_label, beforePath, afterPath) => {
+    const { classification, renameCollapsedPaths } = classifyGitFixture({
+      beforePath,
+      afterPath,
+    });
+    expect(renameCollapsedPaths).toEqual([afterPath]);
+    expect(classification.browserRequired).toBe(true);
+    expect(classification.changedPaths).toHaveLength(2);
+    expect(classification.changedPaths).toEqual(expect.arrayContaining([beforePath, afterPath]));
+  });
+
+  it("keeps an irrelevant Markdown rename browser-irrelevant", () => {
+    const { classification, renameCollapsedPaths } = classifyGitFixture({
+      beforePath: "docs/old.md",
+      afterPath: "docs/new.md",
+    });
+    expect(renameCollapsedPaths).toEqual(["docs/new.md"]);
+    expect(classification.browserRequired).toBe(false);
+    expect(classification.changedPaths).toHaveLength(2);
+    expect(classification.changedPaths).toEqual(
+      expect.arrayContaining(["docs/old.md", "docs/new.md"]),
+    );
+  });
+
+  it.each([
+    ["ordinary irrelevant modification", "docs/example.md", false],
+    ["ordinary runtime modification", "packages/vue/src/example.ts", true],
+  ])("classifies an %s without a rename", (_label, path, browserRequired) => {
+    const { classification, renameCollapsedPaths } = classifyGitFixture({ beforePath: path });
+    expect(renameCollapsedPaths).toEqual([path]);
+    expect(classification.browserRequired).toBe(browserRequired);
+    expect(classification.changedPaths).toEqual([path]);
   });
 });

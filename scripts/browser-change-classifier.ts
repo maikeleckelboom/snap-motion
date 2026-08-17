@@ -89,7 +89,14 @@ function isAllZeroSha(value: string): boolean {
 function changedPathsFromGit(git: GitCommand, base: string, head: string): readonly string[] {
   git(["cat-file", "-e", `${base}^{commit}`]);
   git(["cat-file", "-e", `${head}^{commit}`]);
-  const output = git(["diff", "--name-only", "--diff-filter=ACDMRTUXB", base, head]);
+  const output = git([
+    "diff",
+    "--no-renames",
+    "--name-only",
+    "--diff-filter=ACDMRTUXB",
+    base,
+    head,
+  ]);
   return output
     .split(/\r?\n/)
     .map((path) => path.trim())
