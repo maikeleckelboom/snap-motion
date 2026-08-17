@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 
 import {
   dragMouseBy,
@@ -48,6 +48,73 @@ interface CapturedFixedStageGeometry {
     width: number;
   };
   viewportClientWidth: number;
+}
+
+interface CapturedExtremeMediaGeometry {
+  activeLeft: number;
+  activeRight: number;
+  imageContained: boolean;
+  morphingContained: boolean;
+  slideWidths: number[];
+  trackWidth: number;
+  viewportLeft: number;
+  viewportRight: number;
+  viewportWidth: number;
+}
+
+async function readExtremeMediaGeometry(
+  carousel: Locator,
+  fixture: "wide" | "tall" | "transformed",
+): Promise<CapturedExtremeMediaGeometry> {
+  return carousel.evaluate((viewport, fixtureMode) => {
+    const track = viewport.querySelector<HTMLElement>(".media-track");
+    const activeSlide = viewport.querySelector<HTMLElement>(`[data-fixture="${fixtureMode}"]`);
+    const frame = activeSlide?.querySelector<HTMLElement>(".media-frame");
+    const image = activeSlide?.querySelector<HTMLImageElement>("img");
+    const morphing = activeSlide?.querySelector<HTMLElement>(".media-transition-surface");
+    const slides = Array.from(viewport.querySelectorAll<HTMLElement>(".media-slide"));
+    if (!track || !activeSlide || !frame) {
+      throw new Error("Media stage geometry is incomplete.");
+    }
+
+    const viewportRect = viewport.getBoundingClientRect();
+    const activeRect = activeSlide.getBoundingClientRect();
+    const frameRect = frame.getBoundingClientRect();
+    const imageRect = image?.getBoundingClientRect();
+    const morphingRect = morphing?.getBoundingClientRect();
+
+    return {
+      activeLeft: activeRect.left,
+      activeRight: activeRect.right,
+      imageContained:
+        !imageRect ||
+        (imageRect.width <= frameRect.width + 1 && imageRect.height <= frameRect.height + 1),
+      morphingContained:
+        !morphingRect ||
+        (morphingRect.width <= frameRect.width + 1 && morphingRect.height <= frameRect.height + 1),
+      slideWidths: slides.map((slide) => slide.offsetWidth),
+      trackWidth: track.scrollWidth,
+      viewportLeft: viewportRect.left + viewport.clientLeft,
+      viewportRight: viewportRect.left + viewport.clientLeft + viewport.clientWidth,
+      viewportWidth: viewport.clientWidth,
+    };
+  }, fixture);
+}
+
+async function readAlignedExtremeMediaGeometry(
+  carousel: Locator,
+  fixture: "wide" | "tall" | "transformed",
+): Promise<CapturedExtremeMediaGeometry> {
+  await expect
+    .poll(async () => {
+      const geometry = await readExtremeMediaGeometry(carousel, fixture);
+      return Math.max(
+        Math.abs(geometry.activeLeft - geometry.viewportLeft),
+        Math.abs(geometry.activeRight - geometry.viewportRight),
+      );
+    })
+    .toBeLessThanOrEqual(1.5);
+  return readExtremeMediaGeometry(carousel, fixture);
 }
 
 function expectFixedStageContract(geometry: CapturedFixedStageGeometry) {
@@ -379,40 +446,7 @@ test.describe("media lightbox", () => {
             : "transformed";
       await expectCarouselAt(carousel, expectedId);
 
-      const geometry = await carousel.evaluate((viewport, fixtureMode) => {
-        const track = viewport.querySelector<HTMLElement>(".media-track");
-        const activeSlide = viewport.querySelector<HTMLElement>(`[data-fixture="${fixtureMode}"]`);
-        const frame = activeSlide?.querySelector<HTMLElement>(".media-frame");
-        const image = activeSlide?.querySelector<HTMLImageElement>("img");
-        const morphing = activeSlide?.querySelector<HTMLElement>(".media-transition-surface");
-        const slides = Array.from(viewport.querySelectorAll<HTMLElement>(".media-slide"));
-        if (!track || !activeSlide || !frame) {
-          throw new Error("Media stage geometry is incomplete.");
-        }
-
-        const viewportRect = viewport.getBoundingClientRect();
-        const activeRect = activeSlide.getBoundingClientRect();
-        const frameRect = frame.getBoundingClientRect();
-        const imageRect = image?.getBoundingClientRect();
-        const morphingRect = morphing?.getBoundingClientRect();
-
-        return {
-          activeLeft: activeRect.left,
-          activeRight: activeRect.right,
-          imageContained:
-            !imageRect ||
-            (imageRect.width <= frameRect.width + 1 && imageRect.height <= frameRect.height + 1),
-          morphingContained:
-            !morphingRect ||
-            (morphingRect.width <= frameRect.width + 1 &&
-              morphingRect.height <= frameRect.height + 1),
-          slideWidths: slides.map((slide) => slide.offsetWidth),
-          trackWidth: track.scrollWidth,
-          viewportLeft: viewportRect.left + viewport.clientLeft,
-          viewportRight: viewportRect.left + viewport.clientLeft + viewport.clientWidth,
-          viewportWidth: viewport.clientWidth,
-        };
-      }, fixture);
+      const geometry = await readAlignedExtremeMediaGeometry(carousel, fixture);
 
       expect(Math.abs(geometry.activeLeft - geometry.viewportLeft)).toBeLessThanOrEqual(1.5);
       expect(Math.abs(geometry.activeRight - geometry.viewportRight)).toBeLessThanOrEqual(1.5);
