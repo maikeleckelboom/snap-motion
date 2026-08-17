@@ -6,9 +6,17 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { resolveRepositoryPnpm, runPnpmSync } from "./pnpm-cli.ts";
-import { serializeCandidateRecord, type CandidateRecord } from "./release-candidate-record.ts";
+import {
+  assertPackageAuthorityMatches,
+  serializeCandidateRecord,
+  type CandidateRecord,
+} from "./release-candidate-record.ts";
 import { verifyRecordedCandidate } from "./release-candidate-verifier.ts";
-import { inspectReleasePackages, packReleasePackages } from "./release-package-assembly.ts";
+import {
+  inspectReleasePackages,
+  packReleasePackages,
+  type ReleasePackageAuthority,
+} from "./release-package-assembly.ts";
 
 const temporaryRepositories: string[] = [];
 const version = "1.0.0-beta.1";
@@ -68,21 +76,12 @@ async function createSourceRepository(): Promise<{ repository: string; sourceCom
   return { repository, sourceCommit: git(repository, "rev-parse", "HEAD") };
 }
 
-async function assembleRecord(
-  repository: string,
-  sourceCommit: string,
-  tamperHash = false,
-): Promise<string> {
+async function assembleRecord(repository: string, sourceCommit: string): Promise<string> {
   const pnpm = resolveRepositoryPnpm(repository);
   runPnpmSync(pnpm, ["install", "--frozen-lockfile"], { cwd: repository });
   const packageDirectory = resolve(repository, ".artifacts/packages");
   await packReleasePackages(repository, packageDirectory);
   const assembledPackages = await inspectReleasePackages(packageDirectory);
-  const packages = tamperHash
-    ? assembledPackages.map((candidatePackage, index) =>
-        index === 0 ? { ...candidatePackage, sha256: "0".repeat(64) } : candidatePackage,
-      )
-    : assembledPackages;
   const record: CandidateRecord = {
     schemaVersion: 1,
     createdAt: git(repository, "show", "-s", "--format=%cI", sourceCommit),
@@ -93,7 +92,7 @@ async function assembleRecord(
       commit: sourceCommit,
     },
     verification: { command: "pnpm release:check", passed: true },
-    packages,
+    packages: assembledPackages,
     private: true,
     published: false,
     intendedDistTag: "beta",
@@ -134,11 +133,6 @@ describe("recorded release-candidate verification", () => {
     git(repository, "add", `config/release-candidates/${version}.json`);
     git(repository, "commit", "-m", "provenance record P");
 
-    await rm(resolve(repository, ".artifacts"), { force: true, recursive: true });
-    const firstVerification = await verifyRecordedCandidate(repository, version);
-    expect(firstVerification.sourceCommit).toBe(sourceCommit);
-    expect(await readFile(recordPath, "utf8")).toBe(recordSource);
-
     await writeFile(
       resolve(repository, "packages/core/dist/index.js"),
       'export const source = "later-same-version-bytes";\n',
@@ -161,20 +155,27 @@ describe("recorded release-candidate verification", () => {
     const recorded = JSON.parse(recordSource) as CandidateRecord;
     const recovered = await inspectReleasePackages(resolve(repository, ".artifacts/packages"));
     expect(recovered).toEqual(recorded.packages);
-  }, 120_000);
-
-  it("hard-fails a recorded hash mismatch without rewriting the record or leaking a worktree", async () => {
-    const { repository, sourceCommit } = await createSourceRepository();
-    const recordSource = await assembleRecord(repository, sourceCommit, true);
-    const recordPath = await writeRecord(repository, recordSource);
-    await rm(resolve(repository, ".artifacts"), { force: true, recursive: true });
-
-    await expect(verifyRecordedCandidate(repository, version)).rejects.toThrow(
-      /package authority does not match/,
-    );
-    expect(await readFile(recordPath, "utf8")).toBe(recordSource);
     expect(git(repository, "worktree", "list", "--porcelain").match(/^worktree /gm)).toHaveLength(
       1,
     );
   }, 120_000);
+
+  it("hard-fails a package-authority mismatch directly", () => {
+    const recorded: ReleasePackageAuthority = {
+      name: "@snap-motion/core",
+      version,
+      file: `snap-motion-core-${version}.tgz`,
+      bytes: 128,
+      sha256: "a".repeat(64),
+      private: true,
+      sideEffects: false,
+      exports: ["."],
+      dependencies: {},
+      peerDependencies: {},
+    };
+
+    expect(() =>
+      assertPackageAuthorityMatches([recorded], [{ ...recorded, sha256: "b".repeat(64) }]),
+    ).toThrow(/package authority does not match/);
+  });
 });

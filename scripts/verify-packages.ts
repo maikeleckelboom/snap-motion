@@ -1,11 +1,7 @@
-import { spawn, spawnSync } from "node:child_process";
-import { once } from "node:events";
+import { spawnSync } from "node:child_process";
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-
-import { chromium } from "@playwright/test";
 
 import { packedText, readPackedArchive, type PackedArchive } from "./packedArchive.ts";
 import { resolveRepositoryPnpm, runPnpmSync } from "./pnpm-cli.ts";
@@ -104,137 +100,6 @@ function inspectPackedFiles(tarball: string, manifest: PackageManifest, entries:
   }
 }
 
-async function availablePort(): Promise<number> {
-  return new Promise<number>((resolvePort, reject) => {
-    const server = createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (!address || typeof address === "string") return reject(new Error("No TCP port."));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
-async function waitForUrl(url: string) {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return;
-    } catch {}
-    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
-  }
-  throw new Error(`Timed out waiting for ${url}`);
-}
-
-async function browserSmoke(cwd: string) {
-  const port = await availablePort();
-  const server = spawn(
-    process.execPath,
-    [
-      resolve(cwd, "node_modules/vite/bin/vite.js"),
-      "preview",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(port),
-      "--strictPort",
-    ],
-    { cwd, stdio: "pipe" },
-  );
-  const url = `http://127.0.0.1:${port}`;
-  try {
-    await waitForUrl(url);
-    const browser = await chromium.launch({ headless: true });
-    try {
-      const page = await browser.newPage();
-      const runtimeFailures: string[] = [];
-      page.on("pageerror", (error) => runtimeFailures.push(error.message));
-      page.on("console", (message) => {
-        if (message.type() === "error") runtimeFailures.push(message.text());
-      });
-      await page.goto(url);
-      await page.locator("[data-packed-ready]").waitFor();
-      for (const selector of [
-        ".snap-motion-carousel",
-        ".snap-motion-coverflow",
-        ".snap-motion-stacked-deck",
-      ]) {
-        await page.locator(selector).waitFor();
-      }
-      await page.getByRole("button", { name: "Next item" }).click();
-      await page.locator('[data-packed-ready][data-active-id="two"]').waitFor();
-      if (runtimeFailures.length > 0) {
-        throw new Error(`Packed Vue runtime failed:\n${runtimeFailures.join("\n")}`);
-      }
-    } finally {
-      await browser.close();
-    }
-  } finally {
-    await stopServer(server);
-  }
-}
-
-async function stopServer(server: ReturnType<typeof spawn>) {
-  if (server.exitCode !== null) return;
-  server.kill();
-  await Promise.race([
-    once(server, "exit"),
-    new Promise((resolveWait) => setTimeout(resolveWait, 5_000)),
-  ]);
-}
-
-async function nuxtHydrationSmoke(cwd: string) {
-  const port = await availablePort();
-  const server = spawn(process.execPath, [resolve(cwd, "nuxt/.output/server/index.mjs")], {
-    cwd,
-    env: {
-      ...process.env,
-      NITRO_HOST: "127.0.0.1",
-      NITRO_PORT: String(port),
-    },
-    stdio: "pipe",
-  });
-  const url = `http://127.0.0.1:${port}`;
-  try {
-    await waitForUrl(url);
-    const serverHtml = await fetch(url).then((response) => response.text());
-    for (const marker of [
-      "data-snap-motion-carousel-root",
-      "snap-motion-stacked-deck",
-      "snap-motion-coverflow",
-      "snap-motion-sheet",
-      "snap-motion-media-gallery",
-    ]) {
-      if (!serverHtml.includes(marker)) {
-        throw new Error(`Packed Nuxt SSR omitted ${marker}.`);
-      }
-    }
-    const browser = await chromium.launch({ headless: true });
-    try {
-      const page = await browser.newPage();
-      const runtimeFailures: string[] = [];
-      page.on("pageerror", (error) => runtimeFailures.push(error.message));
-      page.on("console", (message) => {
-        if (message.type() === "error" || /hydration|mismatch/i.test(message.text())) {
-          runtimeFailures.push(message.text());
-        }
-      });
-      await page.goto(url);
-      await page.locator("[data-packed-nuxt-ready]").waitFor();
-      await page.waitForTimeout(100);
-      if (runtimeFailures.length > 0) {
-        throw new Error(`Packed Nuxt hydration failed:\n${runtimeFailures.join("\n")}`);
-      }
-    } finally {
-      await browser.close();
-    }
-  } finally {
-    await stopServer(server);
-  }
-}
-
 /**
  * Type-checks the consumer's single-file components against the packed declarations.
  *
@@ -301,7 +166,6 @@ async function createCoreConsumer(coreTarball: string) {
   return directory;
 }
 
-runPnpm(["pack:packages"]);
 const artifacts = (await readdir(artifactsDirectory)).filter((file) => file.endsWith(".tgz"));
 const coreArtifact = artifacts.find((file) => file.startsWith("snap-motion-core-"));
 const vueArtifact = artifacts.find((file) => file.startsWith("snap-motion-vue-"));
@@ -381,7 +245,6 @@ try {
   certifyTemplateInference(minimum);
   runPnpm(["exec", "vite", "build"], minimum);
   runCommand(process.execPath, ["ssr.mjs"], minimum);
-  await browserSmoke(minimum);
 
   const typescript7 = await createConsumer(
     "typescript7",
@@ -397,19 +260,10 @@ try {
   for (const resolution of ["bundler", "node16", "nodenext"]) {
     runPnpm(["exec", "tsc", "-p", `tsconfig.${resolution}.json`], typescript7);
   }
-
-  const current = await createConsumer("current", "package.template.json", coreTarball, vueTarball);
-  consumers.push(current);
-  assertVueOnlyConsumer(
-    JSON.parse(await readFile(resolve(current, "package.json"), "utf8")) as PackageManifest,
-  );
-  runPnpm(["install", "--ignore-scripts"], current);
-  runPnpm(["exec", "nuxt", "build", "nuxt"], current);
-  await nuxtHydrationSmoke(current);
 } finally {
   await Promise.all(consumers.map(removeConsumer));
 }
 
 process.stdout.write(
-  "Packed package certification passed for the direct Core consumer, TypeScript 7 declaration consumer, minimum-Vue SFC/Vite/SSR runtime, and current-Vue Nuxt build and hydration consumer.\n",
+  "Browser-free packed package certification passed for the direct Core consumer, TypeScript 7 declaration consumer, and minimum-Vue SFC/Vite/SSR runtime.\n",
 );

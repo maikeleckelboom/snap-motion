@@ -57,9 +57,18 @@ export async function packReleasePackages(
 ): Promise<void> {
   const pnpm = resolveRepositoryPnpm(repositoryRoot);
 
+  runPnpmSync(pnpm, ["build:packages"], { cwd: repositoryRoot });
+  await packPreparedReleasePackages(repositoryRoot, artifactsDirectory);
+}
+
+export async function packPreparedReleasePackages(
+  repositoryRoot: string,
+  artifactsDirectory = resolve(repositoryRoot, ".artifacts/packages"),
+): Promise<void> {
+  const pnpm = resolveRepositoryPnpm(repositoryRoot);
+
   await rm(artifactsDirectory, { force: true, recursive: true });
   await mkdir(artifactsDirectory, { recursive: true });
-  runPnpmSync(pnpm, ["build:packages"], { cwd: repositoryRoot });
   runPnpmSync(pnpm, ["pack", "--out", resolve(artifactsDirectory, "snap-motion-core-%v.tgz")], {
     cwd: resolve(repositoryRoot, "packages/core"),
   });

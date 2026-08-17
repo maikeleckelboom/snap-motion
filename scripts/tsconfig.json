@@ -10,7 +10,6 @@
     "browser-change-classifier.test.ts",
     "browser-change-classifier.ts",
     "browser-ci-workflow.test.ts",
-    "check-browser-shards.ts",
     "check-release-candidate-history.ts",
     "classify-browser-change.ts",
     "pack-packages.ts",
@@ -29,6 +28,7 @@
     "release-package-assembly.test.ts",
     "release-package-assembly.ts",
     "verify-release-candidate.ts",
-    "verify-packages.ts"
+    "verify-packages.ts",
+    "verifyPackagesBrowser.ts"
   ]
 }

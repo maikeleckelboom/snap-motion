@@ -88,12 +88,10 @@ const candidateVersion = assertCandidateEligible(
 assertCleanWorktree();
 const pnpm = resolveRepositoryPnpm(repoRoot);
 runPnpmSync(pnpm, ["release:check"], { cwd: repoRoot });
-
-// `release:check` continues into browser and fixture gates after its packed-consumer proof. Repack
-// and recertify last so the bytes recorded below are exactly the bytes a clean consumer exercised.
-runPnpmSync(pnpm, ["verify:packages"], { cwd: repoRoot });
 assertCleanWorktree();
 
+// `release:check` builds package authority once, packs it once, then certifies those exact archives
+// through the static and Chromium consumers. Later browser and fixture gates do not mutate them.
 const packages = await inspectReleasePackages(packageDirectory);
 const commit = capture("git", ["rev-parse", "HEAD"]);
 const record: CandidateRecord = {

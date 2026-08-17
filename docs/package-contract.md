@@ -43,21 +43,24 @@ an intermediate declaration graph under `temp/declarations`; API Extractor then 
 entrypoint into one self-contained declaration file in `dist`. Intermediate modules, declaration
 maps, Vue SFC compatibility aliases, and relative declaration edges do not ship.
 
-`pnpm verify:packages` builds actual tarballs, parses them without a system `tar` dependency,
-inspects their contents, rejects workspace protocols, checks every export-map target, rejects
-relative declaration edges and source-only aliases, and runs strict Publint plus ATTW across the
-supported ESM resolutions. The legacy Node10 self-subpath probe is explicitly excluded while clean
-Bundler, Node16, and NodeNext consumers remain hard failures. The verifier also asserts the packed
-Vue-to-core dependency is the caret range derived from the packed core version. One clean fixture
-depends directly on core. The ordinary minimum/current Vue fixtures depend directly on **only**
-`@snap-motion/vue`; a workspace override points its transitive core dependency at the packed core
-artifact as test infrastructure. Installs disable lifecycle scripts. One TypeScript 7 consumer
-compiles Bundler, Node16, and NodeNext modes. The minimum-Vue consumer owns SFC inference, Vite,
-Router, SSR, CSS, and a minimal browser execution smoke. The current-Vue consumer owns Nuxt build,
-SSR, and hydration without `ClientOnly`. Product interaction behavior remains owned by the
-source/component and browser suites rather than being repeated through packed bytes. The generated
-chunk graph fails when a capability entrypoint pulls an unrelated high-level feature;
-media-gallery isolation remains a dedicated hard assertion.
+`pnpm verify:packages` builds actual tarballs and certifies them without installing or launching a
+browser. It parses archives without a system `tar` dependency, inspects their contents, rejects
+workspace protocols, checks every export-map target, rejects relative declaration edges and
+source-only aliases, and runs strict Publint plus ATTW across the supported ESM resolutions. The
+legacy Node10 self-subpath probe is explicitly excluded while clean Bundler, Node16, and NodeNext
+consumers remain hard failures. The verifier also asserts the packed Vue-to-core dependency is the
+caret range derived from the packed core version. One clean fixture depends directly on core. The
+ordinary Vue fixtures depend directly on **only** `@snap-motion/vue`; a workspace override points
+the transitive core dependency at the packed core artifact as test infrastructure. Installs disable
+lifecycle scripts. One TypeScript 7 consumer compiles Bundler, Node16, and NodeNext modes. The
+minimum-Vue consumer owns SFC inference, Vite, Router, SSR, and CSS.
+
+`pnpm verify:packages:browser` is the separate browser-specific packed boundary. Its current-Vue
+consumer builds through Nuxt, proves SSR, starts the production server, and certifies Chromium
+hydration without `ClientOnly`. The weaker minimum-consumer Chromium smoke is intentionally absent;
+product interaction behavior remains owned by the source/component and browser suites rather than
+being repeated through packed bytes. The generated chunk graph fails when a capability entrypoint
+pulls an unrelated high-level feature; media-gallery isolation remains a dedicated hard assertion.
 `config/size-budgets.json` is the sole authority for current raw and gzip limits. Budget changes
 require evidence from the emitted graph and an explanation tied to consumer value; documentation
 does not duplicate volatile numeric thresholds.
