@@ -68,8 +68,17 @@ describe("StackedDeck", () => {
     expect(cards[0]!.attributes("aria-hidden")).toBe("true");
     // Only the current card is drawn at rest; the rest of the deck is depth, not content.
     expect(cards[1]!.attributes("data-deck-visible")).toBe("true");
+    expect(cards[1]!.attributes("data-deck-content-exposure")).toBe("1");
     expect(cards[0]!.attributes("data-deck-visible")).toBe("false");
     expect(cards[1]!.attributes("data-deck-role")).toBe("top");
+    const apertures = wrapper.findAll(".snap-motion-stacked-deck-card-aperture");
+    expect(apertures).toHaveLength(screens.length);
+    expect(apertures[1]!.attributes("style")).toContain("clip-path: none");
+    expect(
+      apertures.every((aperture) =>
+        aperture.find(".snap-motion-stacked-deck-card-motion").exists(),
+      ),
+    ).toBe(true);
     wrapper.unmount();
   });
 

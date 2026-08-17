@@ -79,6 +79,7 @@ const paginationStyle = computed(() => {
 
 function screenPoseAttributes(card: StackedDeckCardState<ShowcaseScreen, ShowcaseScreenId>) {
   return {
+    "data-content-exposure": card.pose.contentExposure,
     "data-opacity": card.pose.opacity,
     "data-rotate": card.pose.rotate,
     "data-scale": card.pose.scale,

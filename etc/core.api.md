@@ -686,6 +686,8 @@ export interface MutableStackedDeckFrame extends MutableStackedDeckTraversal {
 // @public
 export interface MutableStackedDeckPose {
     // (undocumented)
+    contentExposure: number;
+    // (undocumented)
     interactive: boolean;
     // (undocumented)
     layer: number;
@@ -1291,6 +1293,7 @@ export interface StackedDeckPilePose {
 
 // @public (undocumented)
 export interface StackedDeckPose {
+    readonly contentExposure: number;
     // (undocumented)
     readonly interactive: boolean;
     // (undocumented)

@@ -69,7 +69,7 @@ describe("stacked deck authority stability", () => {
     expect(contested.poses[2]!.visible).toBe(true);
     expect(isStackedDeckAuthorityStable(contested)).toBe(false);
 
-    // Fully dissolved: one card, already parked. Residual travel toward the anchor is irrelevant.
+    // Fully occluded: one card, already parked. Residual travel toward the anchor is irrelevant.
     const uncontested = at(2.95);
     expect(uncontested.authoritativeIndex).toBe(3);
     expect(uncontested.poses[2]!.visible).toBe(false);

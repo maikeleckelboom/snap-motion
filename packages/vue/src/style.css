@@ -988,13 +988,17 @@
   transform-style: flat;
 }
 
-.snap-motion-stacked-deck-card {
+.snap-motion-stacked-deck-card,
+.snap-motion-stacked-deck-card-aperture {
   position: absolute;
   inset: 0;
+}
+
+.snap-motion-stacked-deck-card {
   margin: 0;
   border: 0;
   padding: 0;
-  background: transparent;
+  background: none;
   pointer-events: none;
 }
 
@@ -1009,10 +1013,6 @@
   block-size: var(--snap-motion-deck-card-height);
   transform-origin: center center;
   backface-visibility: hidden;
-}
-
-.snap-motion-stacked-deck-card-motion {
-  transform-style: flat;
 }
 
 /* Decorative depth only. Visual item association never grants content or semantics. */
