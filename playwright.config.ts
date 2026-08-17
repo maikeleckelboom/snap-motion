@@ -11,12 +11,13 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: Boolean(process.env.CI),
   workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? "line" : "list",
+  reporter: process.env.CI ? [["line"], ["blob"]] : "list",
   use: {
     baseURL: testUrl,
     screenshot: "only-on-failure",
-    trace: "retain-on-failure",
+    trace: "on-first-retry",
     video: "off",
   },
   projects: [

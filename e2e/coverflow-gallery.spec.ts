@@ -980,9 +980,20 @@ test("loading preserves geometry, requests only the current full image, and reve
   expect(fullRequests).toEqual(new Set());
   await page.getByTestId("coverflow-inspect").click();
   await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
-  await page.getByTestId("snap-motion-media-gallery-shell").evaluate(async (element) => {
-    await Promise.all(element.getAnimations().map((animation) => animation.finished));
-  });
+  await expect(gallery(page)).toHaveAttribute("data-dialog-state", "open");
+  const shell = page.getByTestId("snap-motion-media-gallery-shell");
+  await expect
+    .poll(() =>
+      shell.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const matrix =
+          style.transform === "none"
+            ? new DOMMatrixReadOnly()
+            : new DOMMatrixReadOnly(style.transform);
+        return Math.max(Math.abs(1 - Number(style.opacity)), Math.abs(1 - matrix.a));
+      }),
+    )
+    .toBeLessThan(0.0001);
 
   const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
   const before = await viewport.boundingBox();

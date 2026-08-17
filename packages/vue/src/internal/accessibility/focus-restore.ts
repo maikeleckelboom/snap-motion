@@ -100,16 +100,24 @@ export function scheduleVerifiedFocusRestore(options: {
   // code keeps moving focus throughout the cleanup window.
   let remainingFrames = 6;
   let observedStableFrame = false;
+  let pointerTakeover = false;
   let stopped = false;
 
-  const stop = () => {
+  function stop() {
     if (stopped) return;
     stopped = true;
     if (frame !== undefined) view?.cancelAnimationFrame(frame);
     frame = undefined;
     documentTarget?.removeEventListener("focusin", onFocusIn, true);
-  };
-  const onFocusIn = (event: FocusEvent) => {
+    documentTarget?.removeEventListener("pointerdown", onPointerDown, true);
+  }
+  function onPointerDown() {
+    // A pointer press after focus has been returned starts a new interaction. It may intentionally
+    // leave focus on body (for example, a non-focusable spatial surface), so the verifier must not
+    // later reclaim the opener or move focus to its fallback.
+    pointerTakeover = true;
+  }
+  function onFocusIn(event: FocusEvent) {
     if (!options.isCurrent()) {
       stop();
       return;
@@ -122,7 +130,7 @@ export function scheduleVerifiedFocusRestore(options: {
     restoreTarget = owner;
     transferred ||= owner !== options.opener;
     observedStableFrame = false;
-  };
+  }
 
   const schedule = () => {
     if (!view || stopped) return;
@@ -182,6 +190,10 @@ export function scheduleVerifiedFocusRestore(options: {
       schedule();
       return;
     }
+    if (pointerTakeover) {
+      stop();
+      return;
+    }
     observedStableFrame = false;
     if (target?.isConnected && remainingAttempts > 0) {
       remainingAttempts--;
@@ -197,6 +209,7 @@ export function scheduleVerifiedFocusRestore(options: {
     return { cancel: stop };
   }
   documentTarget.addEventListener("focusin", onFocusIn, true);
+  documentTarget.addEventListener("pointerdown", onPointerDown, true);
   const initialOwner = captureFocusOpener(documentTarget);
   if (options.initialTransferredOwner && options.initialTransferredOwner !== options.opener) {
     restoreTarget = options.initialTransferredOwner;

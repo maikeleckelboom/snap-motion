@@ -171,6 +171,28 @@ describe("verified focus restoration", () => {
     expect(frames.pending()).toBe(0);
   });
 
+  it("ends verification when a pointer handoff intentionally leaves document focus", () => {
+    const frames = useControlledAnimationFrames();
+    const listener = useFocusListenerLifecycle("pointerdown");
+    const opener = document.createElement("button");
+    const surface = document.createElement("section");
+    const fallback = document.createElement("button");
+    const fallbackFocus = vi.spyOn(fallback, "focus");
+    document.body.append(opener, surface, fallback);
+
+    scheduleVerifiedFocusRestore({ isCurrent: () => true, opener, fallback });
+    expect(document.activeElement).toBe(opener);
+
+    surface.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    opener.blur();
+    frames.flushAll();
+
+    expect(document.activeElement).toBe(document.body);
+    expect(fallbackFocus).not.toHaveBeenCalled();
+    expect(frames.pending()).toBe(0);
+    listener.expectRemoved();
+  });
+
   it("preserves an application focus-event handoff across later native cleanup", () => {
     const frames = useControlledAnimationFrames();
     const opener = document.createElement("button");

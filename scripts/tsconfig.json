@@ -7,7 +7,12 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "browser-change-classifier.test.ts",
+    "browser-change-classifier.ts",
+    "browser-ci-workflow.test.ts",
+    "check-browser-shards.ts",
     "check-release-candidate-history.ts",
+    "classify-browser-change.ts",
     "pack-packages.ts",
     "packedArchive.ts",
     "pnpm-cli.test.ts",
