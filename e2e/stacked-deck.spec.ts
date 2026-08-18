@@ -1211,6 +1211,30 @@ test("successive rendered frames preserve one opaque physical card per item", as
   }
 });
 
+test("ten consecutive exchanges restore the exact opaque physical inventory", async ({ page }) => {
+  const stage = viewport(page);
+  await pagination(page).nth(2).click();
+  await expectCarouselAt(stage, "map");
+
+  for (let exchange = 0; exchange < 10; exchange += 1) {
+    const movingForward = exchange % 2 === 0;
+    const settledIndex = movingForward ? 3 : 2;
+    await page.getByTestId(movingForward ? "stacked-deck-next" : "stacked-deck-previous").click();
+    await expectCarouselAt(stage, IDS[settledIndex]!);
+
+    const frame = await readFrame(page);
+    expect(frame).toMatchObject({
+      authoritativeIndex: settledIndex,
+      controllerPhase: "idle",
+      physicalIndex: settledIndex,
+      segmentTargetIndex: null,
+      settledIndex,
+      visualTopIndex: settledIndex,
+    });
+    expectFrameAccountsForEveryScreenByIdentity(frame);
+  }
+});
+
 test("deck thickness shows where you are, from index order alone", async ({ page }) => {
   const stage = viewport(page);
   const cardWidth = Number(await stage.getAttribute("data-card-width"));
