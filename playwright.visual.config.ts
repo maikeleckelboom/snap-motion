@@ -1,8 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { readVisualScenarioFromEnvironment } from "./scripts/stackedDeckVisualScenario.ts";
+
 const visualPort = process.env.SNAP_MOTION_VISUAL_PORT ?? "4174";
 const visualUrl = `http://127.0.0.1:${visualPort}`;
-const visualViewport = { height: 1_000, width: 1_440 };
+const scenario = readVisualScenarioFromEnvironment();
+const visualViewport = scenario.config.viewport;
 
 export default defineConfig({
   testDir: "./e2e/visual",
@@ -14,8 +17,12 @@ export default defineConfig({
   outputDir: ".artifacts/stacked-deck-visual-review/.playwright",
   use: {
     baseURL: visualUrl,
-    contextOptions: { reducedMotion: "no-preference" },
+    colorScheme: "light",
+    deviceScaleFactor: 1,
+    locale: "en-US",
+    reducedMotion: "no-preference",
     screenshot: "off",
+    timezoneId: "UTC",
     trace: "off",
     video: "off",
     viewport: visualViewport,
@@ -25,6 +32,11 @@ export default defineConfig({
       name: "chromium",
       use: {
         ...devices["Desktop Chrome"],
+        colorScheme: "light",
+        deviceScaleFactor: 1,
+        locale: "en-US",
+        reducedMotion: "no-preference",
+        timezoneId: "UTC",
         viewport: visualViewport,
       },
     },

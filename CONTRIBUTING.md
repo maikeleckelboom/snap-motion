@@ -36,13 +36,40 @@ extractor, compiler, TSDoc, and API-report diagnostic keeps its normal reporting
 
 ## Stacked Deck visual review
 
-Run `pnpm visual:stacked-deck` to write revision-scoped recordings, timelines, and crossover
-checkpoints under `.artifacts/stacked-deck-visual-review/<short-git-sha>/`. The mouse recording
-covers direct manipulation, crossover, and reversal; the keyboard recording isolates autonomous
-spring and settlement motion.
+Use one of these workflows:
 
-This is a deterministic human visual-review capture, not a visual regression golden test and not a
-CI gate. The normal Playwright suite remains the correctness authority.
+```bash
+# Frozen full review: mouse chapters, keyboard springs, traces, and checkpoints
+pnpm visual:stacked-deck
+
+# Short team -> settings held-gesture curve review
+pnpm visual:stacked-deck -- --scenario curve
+
+# Compare two existing capture roots
+pnpm visual:stacked-deck:compare <artifact-a> <artifact-b>
+```
+
+The no-argument full review is the only canonical run. Scenario selection or supported overrides
+(`--pair`, `--viewport`, `--slow-duration`, `--slow-cadence`, `--slow-max-progress`,
+`--normal-duration`, `--normal-cadence`, and `--repetitions`) are exploratory and serialize their
+resolved configuration into `manifest.json`. Run `pnpm visual:stacked-deck -- --help` for syntax.
+
+Artifacts live under
+`.artifacts/stacked-deck-visual-review/<revision>/<scenario-id>-v<scenario-version>/`. A clean
+revision uses its short SHA. A dirty revision adds a fingerprint of staged and unstaged binary Git
+patches plus every non-ignored untracked path and its bytes; ignored `.artifacts/` output is not
+hashed. Custom parameter sets add a resolved-configuration fingerprint, so they cannot overwrite
+the canonical capture.
+
+The WebM recordings are for human perception. Checkpoint PNGs replay exact named physical states,
+dense mouse stimulus traces record requested versus actual progress, and rAF traces record what the
+browser presented independently of input cadence. Raw traces are authoritative; derived metrics and
+comparison reports are concise navigation aids. The comparison command checks experiment
+compatibility before comparing direct manipulation by physical progress and keyboard springs by
+relative time.
+
+This remains a deterministic human-review instrument, not a screenshot baseline, pixel-diff
+framework, perceptual score, CI visual gate, or replacement for product E2E correctness tests.
 
 Changes to a publishable package need a Changeset unless they are documentation-only. Public API
 changes must include the reviewed API report diff. Browser-visible changes require Chromium,
