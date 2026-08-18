@@ -688,6 +688,31 @@ describe("stacked deck persistent physical cards", () => {
     const firstStep = Math.abs(resolveFrame(segment(2, 1, 0.001)).poses[2]!.translateX) / 0.001;
     expect(firstStep).toBeGreaterThan(WIDE_TUNING.motionPitch * 0.9);
     expect(firstStep).toBeLessThan(WIDE_TUNING.motionPitch * 1.2);
+    const derivativeStep = 0.00001;
+    const initialDerivative =
+      Math.abs(resolveFrame(segment(2, 1, derivativeStep)).poses[2]!.translateX) / derivativeStep;
+    expect(initialDerivative).toBeCloseTo(WIDE_TUNING.motionPitch, 3);
+  });
+
+  it("keeps the outgoing path differentiable at its corner boundaries", () => {
+    const outgoingX = (direction: -1 | 1, progress: number) =>
+      resolveFrame(segment(2, direction, progress)).poses[2]!.translateX;
+    const slopeJump = (direction: -1 | 1, boundary: number, step: number) => {
+      const boundaryX = outgoingX(direction, boundary);
+      const before = (boundaryX - outgoingX(direction, boundary - step)) / step;
+      const after = (outgoingX(direction, boundary + step) - boundaryX) / step;
+      return Math.abs(after - before);
+    };
+
+    for (const direction of [-1, 1] as const) {
+      for (const boundary of [0.2, 0.5]) {
+        const coarseJump = slopeJump(direction, boundary, 0.001);
+        const fineJump = slopeJump(direction, boundary, 0.0001);
+        // A real derivative discontinuity would survive smaller sampling. The smooth path's secant
+        // mismatch instead converges toward zero with the sampling interval.
+        expect(fineJump).toBeLessThan(coarseJump * 0.2);
+      }
+    }
   });
 
   it("keeps one pose per item while the exchanging pair stays opaque", () => {

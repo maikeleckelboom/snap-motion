@@ -236,12 +236,14 @@ const PROFILE_VALUES: Record<StackedDeckProfile, ProfileValues> = {
 /**
  * Lateral shuffle path of the card leaving the top. The direct envelope follows the pointer through
  * the opening fifth of the gesture, then returns with zero endpoint velocity so it joins the pile
- * without a path kink. A deliberately concentrated middle term clears the target only around the
- * instant depth order changes; it does not make the opening drag feel geared up.
+ * without a path kink. The corner envelope leaves that direct opening untouched, rises with flat
+ * boundary slopes into exact crossover clearance, then gives the longer return route the remaining
+ * half of the gesture so it joins the pile deliberately rather than rushing through one shoulder.
  */
 function exchangeDetour(progress: number, directRatio: number): number {
   const directEnvelope = progress * (1 - progress ** 4) ** 2;
-  const middleWeight = (4 * progress * (1 - progress)) ** 12;
+  const middleWeight =
+    progress <= 0.5 ? smoothstep((progress - 0.2) / 0.3) : smoothstep((1 - progress) / 0.5);
   const midpointDirect = directRatio * 0.5 * (1 - 0.5 ** 4) ** 2;
   return directRatio * directEnvelope + (0.9 - midpointDirect) * middleWeight;
 }
