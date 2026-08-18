@@ -17,7 +17,7 @@ import {
 const WIDE_TUNING = resolveStackedDeckTuning({ stageWidth: 1_120, stageHeight: 620 });
 const SEGMENT_SAMPLES = [0.1, 0.25, 0.5, 0.7, 0.85, 0.95] as const;
 /** Local progress at which the outgoing content is gone and pile materialisation may begin. */
-const PILE_MATERIALIZE_START = 0.92;
+const PILE_MATERIALIZE_START = 0.5;
 
 function traversal(overrides: Partial<StackedDeckTraversal> = {}): StackedDeckTraversal {
   return {
@@ -98,10 +98,10 @@ function span(pose: StackedDeckPose, tuning: StackedDeckTuning) {
 }
 
 /**
- * Perceptual dominance of one local segment after opaque aperture occlusion.
+ * Perceptual dominance of one local segment.
  *
- * `targetVisibility` is the share of the target not covered by the retained outgoing content.
- * `outgoingDominance` is the outgoing card's exposed area and scale relative to a resting card.
+ * `targetVisibility` is the share of the target not covered by what is left of the outgoing face.
+ * `outgoingDominance` is the outgoing card's strength and scale relative to a resting card.
  */
 function dominance(frame: ReturnType<typeof resolveFrame>, tuning: StackedDeckTuning) {
   const outgoing = frame.poses.find((pose) => pose.role === "top")!;
@@ -115,8 +115,8 @@ function dominance(frame: ReturnType<typeof resolveFrame>, tuning: StackedDeckTu
   const exposed = 1 - overlap / targetSpan.width;
   return {
     exposed,
-    targetVisibility: 1 - (1 - exposed) * outgoing.contentExposure,
-    outgoingDominance: outgoing.contentExposure * outgoing.scale * outgoing.scale,
+    targetVisibility: 1 - (1 - exposed) * outgoing.opacity,
+    outgoingDominance: outgoing.opacity * outgoing.scale * outgoing.scale,
   };
 }
 
@@ -160,7 +160,6 @@ function frameIsFinite(frame: ReturnType<typeof resolveFrame>) {
       pose.scale,
       pose.rotate,
       pose.opacity,
-      pose.contentExposure,
       pose.layer,
       pose.shadowStrength,
     ].every(Number.isFinite),
@@ -214,8 +213,8 @@ describe("stacked deck tuning", () => {
     const frame = resolveFrame(segment(2, 1, 0.6), 5, reduced);
     expect(frame.poses[2]!.translateX).toBeCloseTo(-reduced.motionPitch * 0.6);
     expect(frame.poses.every((pose) => pose.rotate === 0)).toBe(true);
-    expect(frame.poses[2]).toMatchObject({ opacity: 1, visible: true });
-    expect(frame.poses[2]!.contentExposure).toBeLessThan(1);
+    expect(frame.poses[2]).toMatchObject({ visible: true });
+    expect(frame.poses[2]!.opacity).toBeLessThan(1);
     expect(frame.poses[3]!.scale).toBeLessThan(1);
   });
 });
@@ -277,9 +276,9 @@ describe("stacked deck thickness", () => {
       for (const progress of SEGMENT_SAMPLES) {
         const active = segment(2, direction, progress);
         const centre = 2 + direction * progress;
-        const expectedItems = [0, 1, 2, 3, 4]
-          .filter((index) => index !== active.segmentTargetIndex)
-          .filter((index) => index !== 2 || progress > PILE_MATERIALIZE_START);
+        const expectedItems = [0, 1, 2, 3, 4].filter(
+          (index) => index !== 2 || progress > PILE_MATERIALIZE_START,
+        );
         const pile = resolvePile(active);
         expect(pile.map((layer) => layer.itemIndex)).toEqual(expectedItems);
         expect(pile.map((layer) => layer.slot)).toEqual(
@@ -356,30 +355,41 @@ describe("stacked deck thickness", () => {
       }
       expect(target.layer).toBeGreaterThan(nearest.layer);
 
-      // The card being replaced does not materialise into the far pile while any of its opaque
-      // content remains. Its decorative layer then converges during the content-free tail.
+      // The card being replaced arrives in the far pile on exactly the envelope its face leaves
+      // on, so one whole card is accounted for at every instant and neither half is switched on.
       for (const progress of SEGMENT_SAMPLES) {
         const frame = resolveFrame(segment(2, direction, progress));
         const activePile = resolvePile(segment(2, direction, progress));
-        expect(activePile.every((layer) => layer.itemIndex !== 2 + direction)).toBe(true);
+        // The rising target never stops being a card in the deck. Its material stays at full
+        // strength for the whole segment, which is what its own face dissolves in over.
+        const rising = activePile.find((layer) => layer.itemIndex === 2 + direction);
+        expect(rising?.opacity).toBe(1);
+        expect(Math.sign(rising!.slot)).toBe(direction);
         const vacating = activePile.find(
           (layer) => Math.abs(layer.slot + direction * progress) < 1e-9,
         );
-        const contentExposure = frame.poses[2]!.contentExposure;
         expect(vacating?.itemIndex).toBe(progress > PILE_MATERIALIZE_START ? 2 : undefined);
-        expect(contentExposure > 0 && vacating !== undefined).toBe(false);
         const vacatingOpacity = vacating?.opacity ?? 0;
         expect(vacatingOpacity > 0).toBe(vacating !== undefined);
-        expect(vacatingOpacity).toBeLessThanOrEqual(1);
+        expect(vacatingOpacity + frame.poses[2]!.opacity).toBeCloseTo(1, 10);
         expect(vacating === undefined ? -direction : Math.sign(vacating.slot)).toBe(-direction);
       }
-      // A completed exchange leaves exactly the resting geometry of the card it landed on.
-      const landed = resolvePile(segment(2, direction, 0.999999)).map((layer) => ({
-        itemIndex: layer.itemIndex,
-        slot: Number(layer.slot.toFixed(3)),
-      }));
+      // A completed exchange leaves exactly the resting geometry of the card it landed on, plus
+      // that card's own deck material at rest geometry underneath it. Its face covers that layer
+      // exactly by then, so the crossing that drops the layer cannot take anything visible with it.
+      const arriving = 2 + direction;
+      const landedLayers = resolvePile(segment(2, direction, 0.999999));
+      const covered = landedLayers.find((layer) => layer.itemIndex === arriving)!;
+      expect(covered.opacity).toBe(1);
+      expect(covered.translateX).toBeCloseTo(0, 3);
+      expect(covered.translateY).toBeCloseTo(0, 3);
+      expect(covered.scale).toBeCloseTo(1, 4);
+      expect(covered.rotate).toBeCloseTo(0, 3);
+      const landed = landedLayers
+        .filter((layer) => layer.itemIndex !== arriving)
+        .map((layer) => ({ itemIndex: layer.itemIndex, slot: Number(layer.slot.toFixed(3)) }));
       const resting = resolvePile(
-        traversal({ settledIndex: 2 + direction, visualTopIndex: 2 + direction }),
+        traversal({ settledIndex: arriving, visualTopIndex: arriving }),
       ).map((layer) => ({ itemIndex: layer.itemIndex, slot: layer.slot }));
       expect(landed).toEqual(resting);
     }
@@ -402,10 +412,12 @@ describe("stacked deck thickness", () => {
     );
     expect(retraced).toEqual(outbound.map((_sample, index) => outbound.at(-1 - index)));
 
+    // Mid-exchange the deck still accounts for every screen: the one rising out of it, the one
+    // arriving back into it, and the ones that were never involved.
     const opposite = resolvePile(segment(2, -1, 0.55));
-    expect(opposite.map((layer) => layer.itemIndex)).toEqual([0, 3, 4]);
-    expect(opposite.every((layer) => layer.itemIndex !== 1)).toBe(true);
-    expect(opposite.every((layer) => layer.itemIndex !== 2)).toBe(true);
+    expect(opposite.map((layer) => layer.itemIndex)).toEqual([0, 1, 2, 3, 4]);
+    expect(opposite.find((layer) => layer.itemIndex === 1)!.opacity).toBe(1);
+    expect(opposite.find((layer) => layer.itemIndex === 2)!.slot).toBeGreaterThan(0);
   });
 
   it("moves every layer continuously across a segment and its reversal", () => {
@@ -696,7 +708,6 @@ describe("stacked deck opaque content occlusion", () => {
       scale: 1,
       rotate: 0,
       opacity: 1,
-      contentExposure: 1,
       layer: 500,
       role: "top",
       interactive: true,
@@ -715,7 +726,6 @@ describe("stacked deck opaque content occlusion", () => {
       expect(forward.poses[2]!.translateY).toBeCloseTo(backward.poses[2]!.translateY);
       expect(forward.poses[2]!.rotate).toBeCloseTo(-backward.poses[2]!.rotate);
       expect(forward.poses[2]!.opacity).toBeCloseTo(backward.poses[2]!.opacity);
-      expect(forward.poses[2]!.contentExposure).toBeCloseTo(backward.poses[2]!.contentExposure);
     }
   });
 
@@ -733,7 +743,7 @@ describe("stacked deck opaque content occlusion", () => {
     }
   });
 
-  it("subordinates and occludes the outgoing card monotonically across the whole segment", () => {
+  it("subordinates and fades the outgoing card monotonically across the whole segment", () => {
     const outgoing = [0.0001, ...SEGMENT_SAMPLES, 1].map(
       (progress) => resolveFrame(segment(2, 1, progress)).poses[2]!,
     );
@@ -744,7 +754,7 @@ describe("stacked deck opaque content occlusion", () => {
         translateY: pose.translateY - before.translateY,
         scale: pose.scale - before.scale,
         rotate: pose.rotate - before.rotate,
-        contentExposure: pose.contentExposure - before.contentExposure,
+        opacity: pose.opacity - before.opacity,
         shadowStrength: pose.shadowStrength - before.shadowStrength,
       };
     });
@@ -752,7 +762,7 @@ describe("stacked deck opaque content occlusion", () => {
     expect(steps.every((step) => step.translateY > 0)).toBe(true);
     expect(steps.every((step) => step.scale < 0)).toBe(true);
     expect(steps.every((step) => step.rotate < 0)).toBe(true);
-    expect(steps.every((step) => step.contentExposure <= 0)).toBe(true);
+    expect(steps.every((step) => step.opacity <= 0)).toBe(true);
     expect(steps.every((step) => step.shadowStrength < 0)).toBe(true);
   });
 
@@ -836,30 +846,37 @@ describe("stacked deck opaque content occlusion", () => {
     }
   });
 
-  it("keeps every visible content face opaque and finishes occlusion before ownership changes", () => {
+  it("develops one face over the first half and retires the other over the second", () => {
     // The default release policy caps travel near a fifth of a pitch per rendered frame, so the
-    // last sample before an anchor crossing always lands inside the tail of the aperture closure.
+    // last sample before an anchor crossing always lands inside the tail of the fade.
     for (const progress of [0.92, 0.95, 0.99, 1]) {
       const outgoing = resolveFrame(segment(2, 1, progress)).poses[2]!;
       expect(outgoing.opacity).toBe(0);
-      expect(outgoing.contentExposure).toBe(0);
       expect(outgoing.visible).toBe(false);
     }
     for (const direction of [-1, 1] as const) {
-      for (let step = 1; step < 184; step += 1) {
+      // First half: the outgoing card owns the surface outright while the target's face develops
+      // over its own deck material, which stays at full strength the whole time it is developing.
+      for (let step = 1; step <= 100; step += 1) {
+        const progress = step / 200;
+        const frame = resolveFrame(segment(2, direction, progress));
+        const pile = resolvePile(segment(2, direction, progress));
+        expect(frame.poses[2]!.opacity).toBe(1);
+        expect(frame.poses[2 + direction]!.opacity).toBeLessThanOrEqual(1);
+        expect(pile.find((layer) => layer.itemIndex === 2 + direction)!.opacity).toBe(1);
+      }
+      // Second half: the target's face is complete and only the outgoing face thins.
+      for (let step = 101; step < 184; step += 1) {
         const frame = resolveFrame(segment(2, direction, step / 200));
-        expect(frame.poses.filter((pose) => pose.visible).every((pose) => pose.opacity === 1)).toBe(
-          true,
-        );
+        expect(frame.poses[2 + direction]!.opacity).toBe(1);
+        expect(frame.poses[2]!.opacity).toBeLessThan(1);
+        expect(frame.poses[2]!.opacity).toBeGreaterThan(0);
       }
     }
     const late = resolveFrame(segment(2, 1, 0.8)).poses[2]!;
-    expect(late).toMatchObject({ opacity: 1, visible: true });
-    expect(late.contentExposure).toBeLessThan(0.25);
-    expect(resolveFrame(segment(2, 1, 0.4)).poses[2]).toMatchObject({
-      contentExposure: 1,
-      opacity: 1,
-    });
+    expect(late.visible).toBe(true);
+    expect(late.opacity).toBeLessThan(0.25);
+    expect(resolveFrame(segment(2, 1, 0.4)).poses[2]).toMatchObject({ opacity: 1 });
   });
 });
 
@@ -898,7 +915,7 @@ describe("stacked deck handoff continuity", () => {
         const wasTarget = previous.poses[promoted]!;
         crossings.push({
           label: `${vacated}->${promoted}`,
-          vacatedExposure: previous.poses[vacated]!.contentExposure,
+          vacatedExposure: previous.poses[vacated]!.opacity,
           vacatedScale: previous.poses[vacated]!.scale,
           vacatedStillVisible: poses[vacated]!.visible,
           promotedWasTargetRole: wasTarget.role,
@@ -928,7 +945,7 @@ describe("stacked deck handoff continuity", () => {
     ]);
   });
 
-  it("keeps the fastest permitted traversal inside the occluded tail", () => {
+  it("keeps the fastest permitted traversal inside the faded tail", () => {
     // The capped release velocity crosses at most about a fifth of a pitch per rendered frame.
     const samples = Array.from({ length: 21 }, (_unused, step) => Number((step * 0.2).toFixed(2)));
     const result = traceCrossings(samples);
@@ -946,14 +963,7 @@ describe("stacked deck handoff continuity", () => {
     for (let index = 0; index < forward.length; index += 1) {
       const outbound = forward[index]!.poses;
       const inbound = reversed[forward.length - 1 - index]!.poses;
-      for (const key of [
-        "translateX",
-        "translateY",
-        "scale",
-        "rotate",
-        "opacity",
-        "contentExposure",
-      ] as const) {
+      for (const key of ["translateX", "translateY", "scale", "rotate", "opacity"] as const) {
         expect(inbound[2]![key]).toBe(outbound[2]![key]);
         expect(inbound[3]![key]).toBe(outbound[3]![key]);
       }
@@ -1006,8 +1016,9 @@ describe("stacked deck handoff continuity", () => {
       TypeError,
     );
     // A single-item deck has nothing behind its one card, and an empty one has nothing at all.
+    // A two-item deck mid-exchange still has the card it is moving toward, as deck material.
     expect(resolvePile(createStackedDeckTraversal(0, 1), 1)).toEqual([]);
-    expect(resolvePile(segment(0, 1, 0.5), 2)).toEqual([]);
+    expect(resolvePile(segment(0, 1, 0.5), 2).map((layer) => layer.itemIndex)).toEqual([1]);
     expect(() => resolvePile(traversal(), 5, { ...WIDE_TUNING, pileScaleStep: -1 })).toThrow(
       RangeError,
     );

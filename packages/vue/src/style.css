@@ -988,13 +988,9 @@
   transform-style: flat;
 }
 
-.snap-motion-stacked-deck-card,
-.snap-motion-stacked-deck-card-aperture {
+.snap-motion-stacked-deck-card {
   position: absolute;
   inset: 0;
-}
-
-.snap-motion-stacked-deck-card {
   margin: 0;
   border: 0;
   padding: 0;

@@ -9,10 +9,11 @@ and reversal without controller resets, and keeps direct one-to-one pointer tran
 changed is the dominance model: one motion pitch now spans most of a card width, the outgoing card's
 scale, rotation, drop, and shadow subordinate monotonically instead of returning toward neutral
 through a midpoint arc, and the adjacent target rises from the first pile slot to exact top rest
-geometry. The final presentation keeps every visible content face
-fully opaque and removes the outgoing screenshot through a direction-aware aperture; its decorative
-pile material appears only after that content is fully occluded. Visual authority therefore migrates
-before an anchor crossing transfers ownership, and a crossing only confirms it.
+geometry. The final presentation removes the outgoing screenshot by
+fading the whole face out rather than cutting it, and brings its decorative pile material in on
+exactly the complementary envelope, so the card is always fully accounted for and neither
+representation is ever switched on. Visual authority therefore migrates before an anchor crossing
+transfers ownership, and a crossing only confirms it.
 
 Depth moves out of the item poses into `resolveStackedDeckPile`, which returns deterministic
 decorative layers with ordered source provenance through `itemIndex`. Gesture direction, segment

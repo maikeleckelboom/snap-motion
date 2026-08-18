@@ -266,34 +266,6 @@ function cardStyle(card: StackedDeckCardState<TItem, TId>) {
   };
 }
 
-function halfStageInset(offset: number): string {
-  const operation = offset < 0 ? "-" : "+";
-  return `calc(50% ${operation} ${Math.abs(offset).toFixed(3)}px)`;
-}
-
-/**
- * Clips in the stationary stage coordinate space while the child keeps its rigid transform. The
- * visible strip retreats toward the direction the outgoing card is already travelling, so reversal
- * retraces the same aperture instead of selecting another presentation branch.
- */
-function cardApertureStyle(card: StackedDeckCardState<TItem, TId>) {
-  const pose = card.pose;
-  const frame = deck.frame.value;
-  if (pose.role !== "top" || frame.phase !== "traversing" || pose.contentExposure >= 1) {
-    return { clipPath: "none" };
-  }
-
-  const scaledWidth = deck.tuning.value.cardWidth * pose.scale;
-  const exposedWidth = scaledWidth * pose.contentExposure;
-  if (frame.direction > 0) {
-    const boundaryFromCentre = pose.translateX - scaledWidth / 2 + exposedWidth;
-    return { clipPath: `inset(0 ${halfStageInset(-boundaryFromCentre)} 0 0)` };
-  }
-
-  const boundaryFromCentre = pose.translateX + scaledWidth / 2 - exposedWidth;
-  return { clipPath: `inset(0 0 0 ${halfStageInset(boundaryFromCentre)})` };
-}
-
 function cardMotionStyle(card: StackedDeckCardState<TItem, TId>) {
   const pose = card.pose;
   return {
@@ -399,7 +371,6 @@ defineExpose({
         data-snap-motion-item
         data-snap-motion-stacked-deck-card
         :data-deck-interactive="card.pose.interactive ? 'true' : 'false'"
-        :data-deck-content-exposure="card.pose.contentExposure"
         :data-deck-layer="card.pose.layer"
         :data-deck-role="card.role"
         :data-deck-visible="card.pose.visible ? 'true' : 'false'"
@@ -408,10 +379,8 @@ defineExpose({
         role="group"
         :style="cardStyle(card)"
       >
-        <div class="snap-motion-stacked-deck-card-aperture" :style="cardApertureStyle(card)">
-          <div class="snap-motion-stacked-deck-card-motion" :style="cardMotionStyle(card)">
-            <slot name="card" v-bind="card" />
-          </div>
+        <div class="snap-motion-stacked-deck-card-motion" :style="cardMotionStyle(card)">
+          <slot name="card" v-bind="card" />
         </div>
       </div>
     </div>

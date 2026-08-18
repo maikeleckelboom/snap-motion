@@ -11,7 +11,7 @@ export type StackedDeckTraversalPhase = "idle" | "neutral" | "traversing" | "ela
  *
  * `visualTopIndex` names the card that still owns the surface, and `authoritativeIndex` names the
  * card the eye already reads as current. They differ only inside the handoff, because the exchange
- * finishes occluding the outgoing face before the controller reaches the anchor.
+ * finishes fading the outgoing face out before the controller reaches the anchor.
  */
 export interface StackedDeckTraversal {
   readonly settledIndex: number;
@@ -113,8 +113,6 @@ export interface StackedDeckPose {
   readonly scale: number;
   readonly rotate: number;
   readonly opacity: number;
-  /** Opaque content fraction retained by the direction-aware exchange aperture. */
-  readonly contentExposure: number;
   readonly layer: number;
   readonly role: StackedDeckRole;
   readonly shadowStrength: number;
@@ -129,7 +127,6 @@ export interface MutableStackedDeckPose {
   scale: number;
   rotate: number;
   opacity: number;
-  contentExposure: number;
   layer: number;
   role: StackedDeckRole;
   shadowStrength: number;
@@ -175,22 +172,23 @@ const TOP_LAYER = 500;
 const TARGET_LAYER = 400;
 const PILE_LAYER_STEP = 10;
 /**
- * Local progress that keeps the complete outgoing face exposed. The pitch clears most of the
- * target before the stage-space aperture starts occluding the face.
+ * Local progress that keeps the outgoing face at full strength. The pitch clears most of the target
+ * before it starts fading, so it is already a card on its way out by the time it thins at all.
  */
-const OUTGOING_CONTENT_HOLD = 0.5;
+const OUTGOING_FADE_HOLD = 0.5;
 /**
- * Local progress at which the outgoing content is fully occluded. Completing before the anchor
- * leaves a short, content-free tail in which its decorative pile material can converge to rest.
+ * Local progress at which the outgoing face has faded out completely. Completing before the anchor
+ * keeps a skipped-frame crossing continuous: the fastest permitted travel still samples inside the
+ * tail, so the exchange can never end on a face that is still partly drawn.
  */
-const OUTGOING_CONTENT_END = 0.92;
+const OUTGOING_FADE_END = 0.92;
 /**
  * Local progress at which the incoming card is nearer the top slot than the card vacating it, and
- * so becomes the one a user would name and act on. `OUTGOING_CONTENT_HOLD` is the same instant read
- * from the other side: the compositor holds the outgoing face at full strength exactly while it
- * still occupies the slot, and begins removing it once it does not.
+ * so becomes the one a user would name and act on. `OUTGOING_FADE_HOLD` is the same instant read
+ * from the other side: the outgoing face holds full strength exactly while it still occupies the
+ * slot, and begins leaving once it does not.
  */
-const AUTHORITY_MIDPOINT = OUTGOING_CONTENT_HOLD;
+const AUTHORITY_MIDPOINT = OUTGOING_FADE_HOLD;
 /**
  * Dead band around that midpoint. Identity then changes once per crossing rather than once per
  * jitter, so a hand shaking on the boundary cannot rename the deck.
@@ -245,17 +243,23 @@ function subordination(progress: number): number {
   return progress * progress;
 }
 
-/** Opaque outgoing content retained by the aperture, reaching exactly zero before the handoff. */
-function outgoingContentExposure(progress: number): number {
-  return (
-    1 -
-    smoothstep((progress - OUTGOING_CONTENT_HOLD) / (OUTGOING_CONTENT_END - OUTGOING_CONTENT_HOLD))
-  );
+/**
+ * Face strength of the rising target, complete exactly where the outgoing face starts to leave.
+ *
+ * A card waiting in the deck is drawn from decorative material and a card on the surface is drawn
+ * from its own face, and those are different pictures. Whichever way that changeover is timed, it
+ * cannot be an event: `segmentTargetIndex` is a `Math.sign` of a quantity that crosses zero at rest,
+ * so a hand resting on the boundary would otherwise repaint two backing cards on every crossing.
+ * Developing the face across the first half of the segment ties the change to the gesture instead,
+ * and reaching full strength at the midpoint hands the surface over exactly once.
+ */
+function targetFaceOpacity(progress: number): number {
+  return smoothstep(progress / OUTGOING_FADE_HOLD);
 }
 
-/** Decorative material appears only after the corresponding content face is fully occluded. */
-function outgoingPileOpacity(progress: number): number {
-  return smoothstep((progress - OUTGOING_CONTENT_END) / (1 - OUTGOING_CONTENT_END));
+/** Outgoing face strength: held, then faded to exactly zero before the handoff so nothing pops. */
+function outgoingOpacity(progress: number): number {
+  return 1 - smoothstep((progress - OUTGOING_FADE_HOLD) / (OUTGOING_FADE_END - OUTGOING_FADE_HOLD));
 }
 
 /**
@@ -339,11 +343,13 @@ export function resolveStackedDeckTuning(
  * one slot rather than snapping.
  *
  * The pile completes a frame rather than standing alone, which is what makes an exchange one event
- * instead of two. The rising target is drawn by the frame, so it is skipped here; the card it
- * replaces materialises into its nearest slot on the far side only after its content is fully
- * occluded. The final content-free tail brings that decorative layer to full opacity before the
- * anchor, so the exact crossing preserves its geometry and material without double-painting the
- * logical item. The frame has already validated its inputs, so nothing is validated twice either.
+ * instead of two. Every screen still in the deck keeps a layer here for the whole exchange — the
+ * rising target included, because a card cannot stop being made of deck material at the instant a
+ * segment happens to exist. It keeps that material at full strength while its own face dissolves in
+ * above it, and the card it replaces arrives in its nearest slot on the far side on exactly the
+ * envelope that face leaves on. One card is therefore always fully accounted for, and no layer in
+ * the visible deck is ever exchanged for a different picture in a single frame.
+ * The frame has already validated its inputs, so nothing is validated twice either.
  *
  * Each layer retains the ordered item index this loop already resolves. That association is visual
  * provenance only: core still carries no application item, material metadata, or semantic state.
@@ -355,10 +361,13 @@ export function resolveStackedDeckPile(
   const centre = frame.visualTopIndex + frame.signedLocalDistance;
   const poses: StackedDeckPilePose[] = [];
   for (let index = 0; index < frame.poses.length; index += 1) {
-    if (index === frame.segmentTargetIndex) continue;
+    // The target keeps its decorative material at full strength underneath its own rising face,
+    // rather than surrendering it the instant a segment exists. Its face dissolves over material
+    // that is still fully opaque, so the deck never shows through the changeover and the layer is
+    // only ever dropped once the face above it covers it exactly.
     const opacity =
       index === frame.visualTopIndex && frame.phase === "traversing"
-        ? outgoingPileOpacity(frame.localProgress)
+        ? 1 - outgoingOpacity(frame.localProgress)
         : index === frame.visualTopIndex
           ? 0
           : 1;
@@ -518,7 +527,7 @@ export function resolveStackedDeckTraversal(
 /**
  * True when the deck renders exactly one content card, so its identity cannot be contested.
  *
- * A handoff draws two opaque faces until the outgoing one is fully occluded, and by that point the
+ * A handoff draws two faces until the outgoing one has faded out entirely, and by that point the
  * promotion curve has already parked the incoming card within a fraction of a pixel of rest. That
  * is why remaining spring travel is not disqualifying — exact synchronization from here cannot move
  * anything the eye can follow. Elastic overdrag is excluded because its single card is deliberately
@@ -526,7 +535,7 @@ export function resolveStackedDeckTraversal(
  */
 export function isStackedDeckAuthorityStable(traversal: StackedDeckTraversal): boolean {
   if (traversal.phase !== "traversing") return traversal.phase !== "elastic";
-  return outgoingContentExposure(traversal.localProgress) <= 0;
+  return outgoingOpacity(traversal.localProgress) <= 0;
 }
 
 function validateTuning(tuning: StackedDeckTuning): void {
@@ -607,7 +616,6 @@ function resetPose(pose: MutableStackedDeckPose): MutableStackedDeckPose {
   pose.scale = 1;
   pose.rotate = 0;
   pose.opacity = 0;
-  pose.contentExposure = 0;
   pose.layer = 0;
   pose.role = "hidden";
   pose.shadowStrength = 0;
@@ -632,7 +640,6 @@ export function createStackedDeckFrame(itemCount: number): MutableStackedDeckFra
  */
 function setTopPose(pose: MutableStackedDeckPose, interactive: boolean): void {
   pose.opacity = 1;
-  pose.contentExposure = 1;
   pose.layer = TOP_LAYER;
   pose.role = "top";
   pose.shadowStrength = 1;
@@ -642,9 +649,11 @@ function setTopPose(pose: MutableStackedDeckPose, interactive: boolean): void {
 
 /**
  * Migrates visual authority across one local segment. The outgoing card keeps exact 1:1 translation
- * while a stage-space aperture monotonically occludes its fully opaque content; the target rises
- * from the deterministic first pile slot to exact top rest geometry. Both boundaries are met before
- * ownership changes, so a crossing only confirms the hierarchy the eye already reads.
+ * while every other property decreases monotonically to a fully subordinate handoff pose; the target
+ * rises from the deterministic first pile slot to exact top rest geometry. Nothing is ever cut: the
+ * face leaves by thinning out as a whole, on the same envelope its own pile material arrives on.
+ * Both boundaries are met before ownership changes, so a crossing only confirms the hierarchy the
+ * eye already reads.
  */
 function setExchangePair(
   outgoing: MutableStackedDeckPose,
@@ -657,18 +666,17 @@ function setExchangePair(
   const promotion = smoothstep(progress);
   const remaining = 1 - promotion;
   const direction = traversal.direction as -1 | 1;
-  const contentExposure = outgoingContentExposure(progress);
+  const opacity = outgoingOpacity(progress);
 
   outgoing.translateX = -traversal.signedLocalDistance * tuning.motionPitch;
   outgoing.translateY = tuning.topDropY * recession;
   outgoing.scale = 1 - tuning.topScaleReduction * recession;
   outgoing.rotate = -direction * tuning.topRotate * recession;
-  outgoing.opacity = contentExposure > 0 ? 1 : 0;
-  outgoing.contentExposure = contentExposure;
+  outgoing.opacity = opacity;
   outgoing.layer = TOP_LAYER;
   outgoing.role = "top";
   outgoing.shadowStrength = mix(1, 0.2, recession);
-  outgoing.visible = contentExposure > 0;
+  outgoing.visible = opacity > 0;
   outgoing.interactive = false;
 
   // The target rises from its own nearest slot, which is the side its index actually lies on: the
@@ -677,8 +685,7 @@ function setExchangePair(
   target.translateY = tuning.pileOffsetY * remaining;
   target.scale = 1 - tuning.pileScaleStep * remaining;
   target.rotate = direction * tuning.pileRotate * remaining;
-  target.opacity = 1;
-  target.contentExposure = 1;
+  target.opacity = targetFaceOpacity(progress);
   target.layer = TARGET_LAYER;
   target.role = "target";
   target.shadowStrength = mix(pileShadow(1), 1, promotion);

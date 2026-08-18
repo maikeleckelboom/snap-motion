@@ -198,9 +198,9 @@ reversal retraces the same slots rather than mirroring the deck, and travelling 
 position lays out an exact mirror of the other.
 
 An exchange is one physical event. The adjacent target rises to centre out of the nearest slot on
-its own side. The outgoing screenshot stays opaque while a direction-aware aperture occludes it;
-only after its content is fully concealed does its decorative material appear in the nearest slot on
-the far side. A `Next` therefore moves one card from the right stack to the left, and `Previous`
+its own side. The outgoing screenshot fades out as a whole — it is never cut — and its decorative
+material arrives in the nearest slot on the far side on exactly that envelope, so one card is always
+fully accounted for between your hand and the deck. A `Next` therefore moves one card from the right stack to the left, and `Previous`
 mirrors it because the ordering genuinely is reversed. Because `centre` is continuous, the whole
 deck slides across by one slot rather than snapping, and a reversal part-way through an exchange
 retraces it.
@@ -283,8 +283,8 @@ A spring can still have residual motion long after the card the user is looking 
 `authoritativeIndex` is the deck's single answer to "which card is current" during that window, and
 it is what the caption, counter, pagination state, `aria-current`, the re-grab origin, the relative
 navigation origin, and inspection all read. It moves to the incoming card once the segment passes
-its midpoint — the point at which that card is nearer the top slot and the compositor begins
-occluding the outgoing face — and is latched across a small dead band, so a crossing renames the
+its midpoint — the point at which that card is nearer the top slot and the outgoing face begins
+leaving — and is latched across a small dead band, so a crossing renames the
 deck exactly once and jitter on the boundary cannot rename it at all.
 
 Only two things still wait for mechanical rest, because only they are about durability rather than

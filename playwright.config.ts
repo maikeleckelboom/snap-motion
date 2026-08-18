@@ -4,7 +4,7 @@ const mediaPreviewSpec = "media-preview.spec.ts";
 const showcaseSmokeSpec = "showcase-smoke.spec.ts";
 const stackedDeckSpec = "stacked-deck.spec.ts";
 const stackedDeckWebKitSmoke =
-  /real pointer movement maps|one held gesture cannot discard|a re-grab during settlement rebases|cancel, lost capture, edge elasticity|inspection, visual semantics, and accessibility|successive rendered frames exchange opaque content through the aperture/;
+  /real pointer movement maps|one held gesture cannot discard|a re-grab during settlement rebases|cancel, lost capture, edge elasticity|inspection, visual semantics, and accessibility|successive rendered frames exchange material without cutting or switching it|a backing card never switches what it is made of/;
 const testPort = process.env.SNAP_MOTION_TEST_PORT ?? "4173";
 const testUrl = `http://127.0.0.1:${testPort}`;
 
