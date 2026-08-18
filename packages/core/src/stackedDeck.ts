@@ -237,13 +237,22 @@ const PROFILE_VALUES: Record<StackedDeckProfile, ProfileValues> = {
  * Lateral shuffle path of the card leaving the top. The direct envelope follows the pointer through
  * the opening fifth of the gesture, then returns with zero endpoint velocity so it joins the pile
  * without a path kink. The corner envelope leaves that direct opening untouched, rises with flat
- * boundary slopes into exact crossover clearance, then gives the longer return route the remaining
- * half of the gesture so it joins the pile deliberately rather than rushing through one shoulder.
+ * boundary slopes into exact crossover clearance, then gives the longer return route a broad rate
+ * envelope so it remains visibly in motion behind the incoming card before settling into the pile.
  */
+function exchangeReturnWeight(progress: number): number {
+  const phase = (progress - 0.5) / 0.5;
+  const centred = phase * 2 - 1;
+  // The normalized rate is `5 / 4 * (1 - centred ** 4)`: zero at both joins, broad through the
+  // traversal, and unit-area so the exact endpoint is unchanged. Its 1.25 peak replaces the
+  // smoothstep rate's narrower 1.5 shoulder without introducing a new timing or state dependency.
+  return 1 - (5 / 4) * (phase - (centred ** 5 + 1) / 10);
+}
+
 function exchangeDetour(progress: number, directRatio: number): number {
   const directEnvelope = progress * (1 - progress ** 4) ** 2;
   const middleWeight =
-    progress <= 0.5 ? smoothstep((progress - 0.2) / 0.3) : smoothstep((1 - progress) / 0.5);
+    progress <= 0.5 ? smoothstep((progress - 0.2) / 0.3) : exchangeReturnWeight(progress);
   const midpointDirect = directRatio * 0.5 * (1 - 0.5 ** 4) ** 2;
   return directRatio * directEnvelope + (0.9 - midpointDirect) * middleWeight;
 }
