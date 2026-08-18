@@ -64,9 +64,9 @@ export interface ResolvedStackedDeckVisualScenario extends StackedDeckVisualScen
 
 export interface StimulusSchedulePoint {
   readonly atMs: number;
-  readonly checkpointProgress?: number;
-  readonly sampleKind: "checkpoint" | "stimulus";
 }
+
+export const STIMULUS_PROGRESS_EPSILON = 1e-9;
 
 const canonicalViewport = { height: 1_000, width: 1_440 } as const;
 const canonicalPair = { startId: "team", targetId: "settings" } as const;
@@ -78,7 +78,7 @@ const screenshotCheckpoints = [0.49, 0.5, 0.51] as const;
 const scenarios = {
   [STACKED_DECK_REVIEW_SCENARIO_ID]: {
     id: STACKED_DECK_REVIEW_SCENARIO_ID,
-    version: 1,
+    version: 2,
     config: {
       cardPair: canonicalPair,
       kind: "full-review",
@@ -108,7 +108,7 @@ const scenarios = {
   },
   [STACKED_DECK_CURVE_SCENARIO_ID]: {
     id: STACKED_DECK_CURVE_SCENARIO_ID,
-    version: 1,
+    version: 2,
     config: {
       cardPair: canonicalPair,
       kind: "curve",
@@ -305,31 +305,49 @@ export function resolveStackedDeckVisualScenario(
 export function createStimulusSchedule(
   durationMs: number,
   cadenceMs: number,
-  checkpoints: readonly number[],
+): readonly StimulusSchedulePoint[] {
+  const points: StimulusSchedulePoint[] = [];
+  for (let atMs = 0; atMs <= durationMs; atMs += cadenceMs) {
+    points.push({ atMs });
+  }
+  if (points.at(-1)?.atMs !== durationMs) {
+    points.push({ atMs: durationMs });
+  }
+  return points;
+}
+
+export function nextStimulusScheduleIndex(
+  schedule: readonly StimulusSchedulePoint[],
+  currentIndex: number,
+  elapsedMs: number,
+): number {
+  const finalIndex = schedule.length - 1;
+  if (currentIndex >= finalIndex) return finalIndex;
+  let latestDueIndex = -1;
+  for (let index = currentIndex + 1; index <= finalIndex; index += 1) {
+    if (schedule[index]!.atMs > elapsedMs) break;
+    latestDueIndex = index;
+  }
+  return latestDueIndex < 0 ? currentIndex + 1 : latestDueIndex;
+}
+
+export function idealProgressAtElapsedTime(
   fromProgress: number,
   toProgress: number,
-): readonly StimulusSchedulePoint[] {
-  const points = new Map<string, StimulusSchedulePoint>();
-  const add = (point: StimulusSchedulePoint) => {
-    const key = point.atMs.toFixed(6);
-    const existing = points.get(key);
-    if (existing?.sampleKind === "checkpoint" && point.sampleKind === "stimulus") return;
-    points.set(key, point);
-  };
-  for (let atMs = 0; atMs <= durationMs; atMs += cadenceMs) {
-    add({ atMs, sampleKind: "stimulus" });
-  }
-  add({ atMs: durationMs, sampleKind: "stimulus" });
-  for (const checkpointProgress of checkpoints) {
-    const fraction = Math.abs((checkpointProgress - fromProgress) / (toProgress - fromProgress));
-    if (!Number.isFinite(fraction) || fraction < 0 || fraction > 1) continue;
-    add({
-      atMs: durationMs * fraction,
-      checkpointProgress,
-      sampleKind: "checkpoint",
-    });
-  }
-  return [...points.values()].toSorted((left, right) => left.atMs - right.atMs);
+  elapsedMs: number,
+  durationMs: number,
+): number {
+  const fraction = Math.max(0, Math.min(1, elapsedMs / durationMs));
+  return fromProgress + (toProgress - fromProgress) * fraction;
+}
+
+export function progressIsMonotonic(
+  previous: number,
+  current: number,
+  direction: "forward" | "reverse",
+  epsilon = STIMULUS_PROGRESS_EPSILON,
+): boolean {
+  return direction === "forward" ? current + epsilon >= previous : current - epsilon <= previous;
 }
 
 export function readVisualScenarioFromEnvironment(

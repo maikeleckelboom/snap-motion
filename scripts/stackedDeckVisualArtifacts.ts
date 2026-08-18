@@ -2,6 +2,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
 import {
+  progressIsMonotonic,
+  STIMULUS_PROGRESS_EPSILON,
   STACKED_DECK_VISUAL_SCHEMA_VERSION,
   stableJson,
   type StackedDeckVisualScenarioConfig,
@@ -41,12 +43,43 @@ export interface MotionStateObservation {
 }
 
 export interface StimulusTraceSample extends MotionStateObservation {
+  readonly actualExecutionTimeMs?: number;
   readonly checkpointProgress?: number;
   readonly direction: Exclude<ReviewDirection, "none">;
+  readonly latenessMs?: number;
   readonly relativeTimeMs: number;
   readonly requestedProgress: number;
   readonly sampleKind: "checkpoint" | "stimulus";
   readonly scheduledTimeMs: number;
+}
+
+export interface LiveCheckpointCrossingSample {
+  readonly actualExecutionTimeMs: number;
+  readonly actualPhysicalProgress: number;
+  readonly relativeTimeMs: number;
+  readonly requestedProgress: number;
+  readonly scheduledTimeMs: number;
+}
+
+export interface LiveCheckpointCrossing {
+  readonly atOrAfter: LiveCheckpointCrossingSample;
+  readonly before: LiveCheckpointCrossingSample | null;
+  readonly checkpointProgress: number;
+  readonly direction: Exclude<ReviewDirection, "none">;
+  readonly interpolatedRelativeTimeMs: number;
+}
+
+export interface ExactCheckpointSample extends MotionStateObservation {
+  readonly direction: Exclude<ReviewDirection, "none">;
+  readonly requestedProgress: number;
+}
+
+export interface CheckpointTrace {
+  readonly captureMode: "post-recording deterministic held-gesture replay";
+  readonly samples: readonly ExactCheckpointSample[];
+  readonly scenarioId: string;
+  readonly scenarioVersion: number;
+  readonly schemaVersion: number;
 }
 
 export interface RenderedFrameSample extends MotionStateObservation {
@@ -88,15 +121,39 @@ export interface CaptureRecordingSummary {
   readonly timelineSampleCount: number;
 }
 
+export interface ScheduleLatenessTelemetry {
+  readonly maxMs: number | null;
+  readonly meanMs: number | null;
+  readonly p95Ms: number | null;
+  readonly sampleCount: number;
+}
+
+export interface ProgressDomainRateLandmark extends MetricLandmark {
+  readonly progressWindow: readonly [number, number];
+}
+
+export interface ProgressDomainMotionMetrics {
+  readonly gridStep: number;
+  readonly method: string;
+  readonly outgoingRotatePerProgress: ProgressDomainRateLandmark | null;
+  readonly outgoingScalePerProgress: ProgressDomainRateLandmark | null;
+  readonly outgoingTranslateXPerProgress: ProgressDomainRateLandmark | null;
+  readonly outgoingTranslateYPerProgress: ProgressDomainRateLandmark | null;
+}
+
 export interface DirectManipulationDirectionMetrics {
   readonly authorityCrossoverProgress: number | null;
   readonly depthCrossoverProgress: number | null;
   readonly maximumCheckpointError: number;
   readonly maximumProgressError: number;
+  readonly actualProgressMonotonicityViolations: number;
   readonly minimumScale: MetricLandmark | null;
   readonly peakAbsoluteOutgoingTranslateX: MetricLandmark | null;
   readonly peakAbsoluteOutgoingTranslateXVelocityPerSecond: TimeMetricLandmark | null;
   readonly peakAbsoluteRotation: MetricLandmark | null;
+  readonly progressDomainMotion: ProgressDomainMotionMetrics;
+  readonly requestedProgressMonotonicityViolations: number;
+  readonly scheduleLateness: ScheduleLatenessTelemetry;
   readonly shadowMinimum: MetricLandmark | null;
   readonly shadowRecovery: {
     readonly endProgress: number;
@@ -140,6 +197,16 @@ export interface StackedDeckVisualManifest {
   readonly artifactFiles: readonly string[];
   readonly canonical: boolean;
   readonly capture: {
+    readonly exactCheckpointReplay: {
+      readonly purpose: string;
+      readonly sampleCount: number;
+      readonly traceFilename: "checkpoint-trace.json";
+    };
+    readonly liveStimulus: {
+      readonly checkpointBehavior: "observational-crossings-only";
+      readonly checkpointCrossingCount: number;
+      readonly progressSource: "monotonic-elapsed-time";
+    };
     readonly recordings: readonly CaptureRecordingSummary[];
     readonly video: {
       readonly codec: "vp8";
@@ -178,7 +245,9 @@ export interface MouseTimeline {
   readonly checkpointCapture: {
     readonly mode: string;
     readonly progress: readonly number[];
+    readonly traceFilename?: string;
   };
+  readonly liveCheckpointCrossings?: readonly LiveCheckpointCrossing[];
   readonly phases: readonly ReviewPhase[];
   readonly recordingDurationMs: number;
   readonly scenarioId: string;
@@ -205,6 +274,7 @@ export interface RenderTrace {
 }
 
 export interface ArtifactCapture {
+  readonly checkpointTrace: CheckpointTrace | null;
   readonly directory: string;
   readonly keyboardRenderTrace: RenderTrace | null;
   readonly keyboardTimeline: KeyboardTimeline | null;
@@ -289,8 +359,181 @@ export function frameIntervalTelemetry(
   };
 }
 
+function emptyProgressDomainMotionMetrics(): ProgressDomainMotionMetrics {
+  return {
+    gridStep: 0.01,
+    method:
+      "centered finite difference over a linearly interpolated physical-progress grid; one-sided at boundaries",
+    outgoingRotatePerProgress: null,
+    outgoingScalePerProgress: null,
+    outgoingTranslateXPerProgress: null,
+    outgoingTranslateYPerProgress: null,
+  };
+}
+
+function scheduleLatenessTelemetry(
+  samples: readonly StimulusTraceSample[],
+): ScheduleLatenessTelemetry {
+  const values = samples
+    .map((sample) => sample.latenessMs)
+    .filter((value): value is number => value !== undefined && Number.isFinite(value));
+  return {
+    maxMs: values.length === 0 ? null : Math.max(...values),
+    meanMs:
+      values.length === 0
+        ? null
+        : values.reduce((total, value) => total + value, 0) / values.length,
+    p95Ms: percentile(values, 0.95),
+    sampleCount: values.length,
+  };
+}
+
+export function countProgressMonotonicityViolations(
+  samples: readonly StimulusTraceSample[],
+  direction: Exclude<ReviewDirection, "none">,
+  read: (sample: StimulusTraceSample) => number,
+  epsilon = STIMULUS_PROGRESS_EPSILON,
+): number {
+  const directionalSamples = samples.filter((sample) => sample.direction === direction);
+  return directionalSamples.slice(1).filter((sample, index) => {
+    const previous = directionalSamples[index]!;
+    return !progressIsMonotonic(read(previous), read(sample), direction, epsilon);
+  }).length;
+}
+
+function crossingSample(sample: StimulusTraceSample): LiveCheckpointCrossingSample {
+  if (sample.actualExecutionTimeMs === undefined) {
+    throw new Error("Live checkpoint crossings require actual execution timestamps.");
+  }
+  return {
+    actualExecutionTimeMs: sample.actualExecutionTimeMs,
+    actualPhysicalProgress: sample.actualPhysicalProgress,
+    relativeTimeMs: sample.relativeTimeMs,
+    requestedProgress: sample.requestedProgress,
+    scheduledTimeMs: sample.scheduledTimeMs,
+  };
+}
+
+export function deriveLiveCheckpointCrossings(
+  samples: readonly StimulusTraceSample[],
+  checkpoints: readonly number[],
+  epsilon = STIMULUS_PROGRESS_EPSILON,
+): readonly LiveCheckpointCrossing[] {
+  const crossings: LiveCheckpointCrossing[] = [];
+  for (const direction of ["forward", "reverse"] as const) {
+    const directionalSamples = samples.filter((sample) => sample.direction === direction);
+    const orderedCheckpoints = direction === "forward" ? checkpoints : checkpoints.toReversed();
+    for (const checkpointProgress of orderedCheckpoints) {
+      const crossingIndex = directionalSamples.findIndex((sample) =>
+        direction === "forward"
+          ? sample.actualPhysicalProgress + epsilon >= checkpointProgress
+          : sample.actualPhysicalProgress - epsilon <= checkpointProgress,
+      );
+      if (crossingIndex < 0) continue;
+      const current = directionalSamples[crossingIndex]!;
+      const previous = crossingIndex === 0 ? null : directionalSamples[crossingIndex - 1]!;
+      const progressSpan = previous
+        ? current.actualPhysicalProgress - previous.actualPhysicalProgress
+        : 0;
+      const interpolationFraction =
+        previous && Math.abs(progressSpan) > epsilon
+          ? Math.max(
+              0,
+              Math.min(1, (checkpointProgress - previous.actualPhysicalProgress) / progressSpan),
+            )
+          : 1;
+      crossings.push({
+        atOrAfter: crossingSample(current),
+        before: previous ? crossingSample(previous) : null,
+        checkpointProgress,
+        direction,
+        interpolatedRelativeTimeMs: previous
+          ? previous.relativeTimeMs +
+            (current.relativeTimeMs - previous.relativeTimeMs) * interpolationFraction
+          : current.relativeTimeMs,
+      });
+    }
+  }
+  return crossings;
+}
+
+function progressDomainRateLandmark(
+  samples: readonly StimulusTraceSample[],
+  direction: Exclude<ReviewDirection, "none">,
+  read: (sample: StimulusTraceSample) => number | null,
+  gridStep: number,
+): ProgressDomainRateLandmark | null {
+  const series = interpolationSeries(samples, direction, read);
+  if (series.length < 2) return null;
+  const minimum = series[0]!.progress;
+  const maximum = series.at(-1)!.progress;
+  const range = maximum - minimum;
+  if (range <= STIMULUS_PROGRESS_EPSILON) return null;
+  const gridLength = Math.max(2, Math.ceil(range / gridStep) + 1);
+  const grid = Array.from({ length: gridLength }, (_, index) => ({
+    progress: minimum + (range * index) / (gridLength - 1),
+    value: 0,
+  })).map((point) => ({ ...point, value: interpolate(series, point.progress)! }));
+  let selected: ProgressDomainRateLandmark | null = null;
+  for (let index = 0; index < grid.length; index += 1) {
+    const previous = grid[Math.max(0, index - 1)]!;
+    const current = grid[index]!;
+    const next = grid[Math.min(grid.length - 1, index + 1)]!;
+    const progressWindow = next.progress - previous.progress;
+    if (progressWindow <= STIMULUS_PROGRESS_EPSILON) continue;
+    const rate = (next.value - previous.value) / progressWindow;
+    if (
+      selected === null ||
+      Math.abs(rate) > Math.abs(selected.value) + STIMULUS_PROGRESS_EPSILON
+    ) {
+      selected = {
+        progress: current.progress,
+        progressWindow: [previous.progress, next.progress],
+        value: rate,
+      };
+    }
+  }
+  return selected;
+}
+
+export function deriveProgressDomainMotionMetrics(
+  samples: readonly StimulusTraceSample[],
+  direction: Exclude<ReviewDirection, "none">,
+): ProgressDomainMotionMetrics {
+  const gridStep = 0.01;
+  const empty = emptyProgressDomainMotionMetrics();
+  return {
+    ...empty,
+    outgoingRotatePerProgress: progressDomainRateLandmark(
+      samples,
+      direction,
+      (sample) => sample.outgoing?.rotate ?? null,
+      gridStep,
+    ),
+    outgoingScalePerProgress: progressDomainRateLandmark(
+      samples,
+      direction,
+      (sample) => sample.outgoing?.scale ?? null,
+      gridStep,
+    ),
+    outgoingTranslateXPerProgress: progressDomainRateLandmark(
+      samples,
+      direction,
+      (sample) => sample.outgoing?.translateX ?? null,
+      gridStep,
+    ),
+    outgoingTranslateYPerProgress: progressDomainRateLandmark(
+      samples,
+      direction,
+      (sample) => sample.outgoing?.translateY ?? null,
+      gridStep,
+    ),
+  };
+}
+
 function emptyDirectionMetrics(): DirectManipulationDirectionMetrics {
   return {
+    actualProgressMonotonicityViolations: 0,
     authorityCrossoverProgress: null,
     depthCrossoverProgress: null,
     maximumCheckpointError: 0,
@@ -299,6 +542,9 @@ function emptyDirectionMetrics(): DirectManipulationDirectionMetrics {
     peakAbsoluteOutgoingTranslateX: null,
     peakAbsoluteOutgoingTranslateXVelocityPerSecond: null,
     peakAbsoluteRotation: null,
+    progressDomainMotion: emptyProgressDomainMotionMetrics(),
+    requestedProgressMonotonicityViolations: 0,
+    scheduleLateness: scheduleLatenessTelemetry([]),
     shadowMinimum: null,
     shadowRecovery: null,
     stimulusSampleCount: 0,
@@ -351,6 +597,7 @@ function velocityLandmark(samples: readonly RenderedFrameSample[]): TimeMetricLa
 function directionMetrics(
   stimulusSamples: readonly StimulusTraceSample[],
   renderedSamples: readonly RenderedFrameSample[],
+  checkpointSamples: readonly ExactCheckpointSample[],
   direction: Exclude<ReviewDirection, "none">,
   targetIndex: number,
 ): DirectManipulationDirectionMetrics {
@@ -362,13 +609,11 @@ function directionMetrics(
   const maximumProgressError = Math.max(
     ...samples.map((sample) => Math.abs(sample.actualPhysicalProgress - sample.requestedProgress)),
   );
-  const checkpoints = samples.filter((sample) => sample.sampleKind === "checkpoint");
+  const checkpoints = checkpointSamples.filter((sample) => sample.direction === direction);
   const maximumCheckpointError = checkpoints.length
     ? Math.max(
         ...checkpoints.map((sample) =>
-          Math.abs(
-            sample.actualPhysicalProgress - (sample.checkpointProgress ?? sample.requestedProgress),
-          ),
+          Math.abs(sample.actualPhysicalProgress - sample.requestedProgress),
         ),
       )
     : 0;
@@ -398,6 +643,11 @@ function directionMetrics(
   const renderedDirection = renderedSamples.filter((sample) => sample.capturePhase === phaseName);
 
   return {
+    actualProgressMonotonicityViolations: countProgressMonotonicityViolations(
+      samples,
+      direction,
+      (sample) => sample.actualPhysicalProgress,
+    ),
     authorityCrossoverProgress:
       progressSorted.find((sample) => sample.authoritativeIndex === targetIndex)
         ?.actualPhysicalProgress ?? null,
@@ -429,6 +679,13 @@ function directionMetrics(
       Math.abs,
       true,
     ),
+    progressDomainMotion: deriveProgressDomainMotionMetrics(samples, direction),
+    requestedProgressMonotonicityViolations: countProgressMonotonicityViolations(
+      samples,
+      direction,
+      (sample) => sample.requestedProgress,
+    ),
+    scheduleLateness: scheduleLatenessTelemetry(samples),
     shadowMinimum: landmark(
       samples,
       (sample) => sample.outgoing?.shadowStrength ?? null,
@@ -441,6 +698,7 @@ function directionMetrics(
 }
 
 export function deriveStackedDeckMetrics(options: {
+  readonly checkpointSamples?: readonly ExactCheckpointSample[];
   readonly keyboardPhases?: readonly ReviewPhase[];
   readonly mouseRenderedSamples: readonly RenderedFrameSample[];
   readonly stimulusSamples: readonly StimulusTraceSample[];
@@ -454,12 +712,14 @@ export function deriveStackedDeckMetrics(options: {
       forward: directionMetrics(
         options.stimulusSamples,
         options.mouseRenderedSamples,
+        options.checkpointSamples ?? [],
         "forward",
         options.targetIndex,
       ),
       reverse: directionMetrics(
         options.stimulusSamples,
         options.mouseRenderedSamples,
+        options.checkpointSamples ?? [],
         "reverse",
         options.targetIndex,
       ),
@@ -484,6 +744,10 @@ function formatNumber(value: number | null, digits = 3): string {
 
 function metricSummary(label: string, metric: MetricLandmark | null, unit: string): string {
   return `- ${label}: ${metric ? `${formatNumber(metric.value)}${unit} at progress ${formatNumber(metric.progress)}` : "n/a"}`;
+}
+
+function latenessSummary(label: string, telemetry: ScheduleLatenessTelemetry): string {
+  return `- ${label}: mean ${formatNumber(telemetry.meanMs, 2)} ms; p95 ${formatNumber(telemetry.p95Ms, 2)} ms; max ${formatNumber(telemetry.maxMs, 2)} ms (${telemetry.sampleCount} samples)`;
 }
 
 export function renderCaptureReview(manifest: StackedDeckVisualManifest): string {
@@ -517,7 +781,27 @@ export function renderCaptureReview(manifest: StackedDeckVisualManifest): string
 
 ${recordings}
 
-## Direct-manipulation metrics
+## Live stimulus integrity
+
+- Progress source: deterministic continuous function of actual monotonic elapsed time.
+- Named checkpoints: observation only; ${manifest.capture.liveStimulus.checkpointCrossingCount} crossings recorded. They never command the held gesture.
+- Forward/retrace maximum requested-vs-actual physical progress error: ${formatNumber(forward.maximumProgressError, 9)} / ${formatNumber(reverse.maximumProgressError, 9)}
+- Forward/retrace requested-progress monotonicity violations: ${forward.requestedProgressMonotonicityViolations} / ${reverse.requestedProgressMonotonicityViolations}
+- Forward/retrace actual-progress monotonicity violations: ${forward.actualProgressMonotonicityViolations} / ${reverse.actualProgressMonotonicityViolations}
+${latenessSummary("Forward schedule lateness", forward.scheduleLateness)}
+${latenessSummary("Retrace schedule lateness", reverse.scheduleLateness)}
+
+## Progress-domain curve metrics
+
+${metricSummary("Forward peak |d(outgoing translateX) / d(physical progress)|", forward.progressDomainMotion.outgoingTranslateXPerProgress, " px/progress")}
+${metricSummary("Forward peak |d(outgoing rotation) / d(physical progress)|", forward.progressDomainMotion.outgoingRotatePerProgress, " deg/progress")}
+${metricSummary("Forward peak |d(outgoing scale) / d(physical progress)|", forward.progressDomainMotion.outgoingScalePerProgress, " /progress")}
+${metricSummary("Forward peak |d(outgoing translateY) / d(physical progress)|", forward.progressDomainMotion.outgoingTranslateYPerProgress, " px/progress")}
+- Method: ${forward.progressDomainMotion.method}; maximum grid step ${forward.progressDomainMotion.gridStep}.
+
+These are deterministic progress-domain slope estimates, not real-world velocity. Raw traces remain authoritative.
+
+## Other direct-manipulation landmarks
 
 ${metricSummary("Forward peak absolute outgoing translateX", forward.peakAbsoluteOutgoingTranslateX, " px")}
 ${metricSummary("Forward peak absolute rotation", forward.peakAbsoluteRotation, " deg")}
@@ -525,10 +809,15 @@ ${metricSummary("Forward minimum scale", forward.minimumScale, "")}
 ${metricSummary("Forward shadow minimum", forward.shadowMinimum, "")}
 - Forward depth crossover: ${formatNumber(forward.depthCrossoverProgress)}
 - Forward authority crossover: ${formatNumber(forward.authorityCrossoverProgress)}
-- Forward/retrace maximum progress error: ${formatNumber(forward.maximumProgressError, 6)} / ${formatNumber(reverse.maximumProgressError, 6)}
-- Forward/retrace maximum checkpoint error: ${formatNumber(forward.maximumCheckpointError, 6)} / ${formatNumber(reverse.maximumCheckpointError, 6)}
+${forward.peakAbsoluteOutgoingTranslateXVelocityPerSecond ? `- Secondary wall-clock telemetry: peak outgoing translateX ${formatNumber(forward.peakAbsoluteOutgoingTranslateXVelocityPerSecond.value)} px/s at ${formatNumber(forward.peakAbsoluteOutgoingTranslateXVelocityPerSecond.relativeTimeMs, 1)} ms. Its magnitude depends on the arbitrary review duration.` : "- Secondary wall-clock telemetry: n/a."}
 
-Raw traces are authoritative. The WebM files are human perception aids; exact checkpoint PNGs and dense progress/render traces serve different review purposes.
+## Exact checkpoint replay
+
+- Capture: post-recording deterministic held-gesture replay, outside the WebM live stimulus.
+- Machine-readable states: ${manifest.capture.exactCheckpointReplay.traceFilename} (${manifest.capture.exactCheckpointReplay.sampleCount} samples).
+- Forward/retrace maximum exact-checkpoint progress error: ${formatNumber(forward.maximumCheckpointError, 9)} / ${formatNumber(reverse.maximumCheckpointError, 9)}
+
+The WebM files are human perception aids. Live stimulus traces, live checkpoint-crossing markers, exact replay states, checkpoint PNGs, and rAF render traces are deliberately separate evidence surfaces.
 
 ## Artifacts
 
@@ -584,6 +873,9 @@ export async function readArtifactCapture(directory: string): Promise<ArtifactCa
     join(resolvedDirectory, "mouse-render-trace.json"),
   );
   return {
+    checkpointTrace: await readOptionalJson<CheckpointTrace>(
+      join(resolvedDirectory, "checkpoint-trace.json"),
+    ),
     directory: resolvedDirectory,
     keyboardRenderTrace: await readOptionalJson<RenderTrace>(
       join(resolvedDirectory, "keyboard-render-trace.json"),
@@ -812,19 +1104,15 @@ export function compareArtifactCaptures(
   for (const input of ["mouse", "keyboard"] as const) {
     const recordingA = a.manifest.capture.recordings.find((recording) => recording.input === input);
     const recordingB = b.manifest.capture.recordings.find((recording) => recording.input === input);
-    const cadenceA = recordingA?.screencastTelemetry.meanFrameIntervalMs;
-    const cadenceB = recordingB?.screencastTelemetry.meanFrameIntervalMs;
-    if (
-      cadenceA !== undefined &&
-      cadenceA !== null &&
-      cadenceB !== undefined &&
-      cadenceB !== null &&
-      Math.abs(cadenceA - cadenceB) > 5
-    ) {
+    const renderedP95A = recordingA?.renderedFrameTelemetry.p95FrameIntervalMs;
+    const renderedP95B = recordingB?.renderedFrameTelemetry.p95FrameIntervalMs;
+    const unhealthyA = renderedP95A !== undefined && renderedP95A !== null && renderedP95A > 50;
+    const unhealthyB = renderedP95B !== undefined && renderedP95B !== null && renderedP95B > 50;
+    if (unhealthyA !== unhealthyB) {
       differences.push({
-        a: cadenceA,
-        b: cadenceB,
-        field: `capture.${input}.meanFrameIntervalMs`,
+        a: renderedP95A,
+        b: renderedP95B,
+        field: `capture.${input}.renderedFrameP95Health`,
         severity: "warning",
       });
     }

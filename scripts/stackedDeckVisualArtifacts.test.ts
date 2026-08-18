@@ -8,15 +8,22 @@ import { describe, expect, test } from "vitest";
 import {
   compareArtifactCaptures,
   compareProgressAlignedGeometry,
+  deriveLiveCheckpointCrossings,
+  deriveProgressDomainMotionMetrics,
   deriveStackedDeckMetrics,
   type ArtifactCapture,
+  type CaptureRecordingSummary,
   type CardPoseObservation,
+  type ExactCheckpointSample,
   type StackedDeckVisualManifest,
   type StimulusTraceSample,
 } from "./stackedDeckVisualArtifacts.ts";
 import { inspectGitRevision } from "./stackedDeckVisualRevision.ts";
 import {
   createStimulusSchedule,
+  idealProgressAtElapsedTime,
+  nextStimulusScheduleIndex,
+  progressIsMonotonic,
   resolveStackedDeckVisualScenario,
   STACKED_DECK_REVIEW_SCENARIO_ID,
   STACKED_DECK_VISUAL_SCHEMA_VERSION,
@@ -42,12 +49,14 @@ function pose(id: string, index: number, progress: number): CardPoseObservation 
 
 function sample(progress: number, relativeTimeMs: number): StimulusTraceSample {
   return {
+    actualExecutionTimeMs: relativeTimeMs,
     actualLocalProgress: progress,
     actualPhysicalIndex: 3 + progress,
     actualPhysicalProgress: progress,
     authoritativeIndex: progress >= 0.5 ? 4 : 3,
     controllerPhase: "dragging",
     direction: "forward",
+    latenessMs: 0,
     outgoing: pose("team", 3, progress),
     relativeTimeMs,
     requestedProgress: progress,
@@ -57,6 +66,32 @@ function sample(progress: number, relativeTimeMs: number): StimulusTraceSample {
     segmentTargetIndex: 4,
     target: pose("settings", 4, progress),
     visualTopIndex: progress >= 0.5 ? 4 : 3,
+  };
+}
+
+function recording(
+  screencastMeanFrameIntervalMs = 16,
+  renderedP95FrameIntervalMs = 16,
+): CaptureRecordingSummary {
+  return {
+    durationMs: 1_000,
+    filename: "mouse-review.webm",
+    input: "mouse",
+    renderedFrameTelemetry: {
+      durationMs: 1_000,
+      frameCount: 60,
+      maxFrameIntervalMs: renderedP95FrameIntervalMs,
+      meanFrameIntervalMs: 16,
+      p95FrameIntervalMs: renderedP95FrameIntervalMs,
+    },
+    screencastTelemetry: {
+      durationMs: 1_000,
+      frameCount: 30,
+      maxFrameIntervalMs: screencastMeanFrameIntervalMs,
+      meanFrameIntervalMs: screencastMeanFrameIntervalMs,
+      p95FrameIntervalMs: screencastMeanFrameIntervalMs,
+    },
+    timelineSampleCount: 60,
   };
 }
 
@@ -82,6 +117,16 @@ function artifact(
     artifactFiles: [],
     canonical: true,
     capture: {
+      exactCheckpointReplay: {
+        purpose: "test",
+        sampleCount: 0,
+        traceFilename: "checkpoint-trace.json",
+      },
+      liveStimulus: {
+        checkpointBehavior: "observational-crossings-only",
+        checkpointCrossingCount: 0,
+        progressSource: "monotonic-elapsed-time",
+      },
       recordings: [],
       video: {
         codec: "vp8",
@@ -117,6 +162,7 @@ function artifact(
     ...overrides,
   };
   return {
+    checkpointTrace: null,
     directory: "C:/artifact",
     keyboardRenderTrace: null,
     keyboardTimeline: null,
@@ -149,8 +195,8 @@ describe("Stacked Deck visual scenario resolution", () => {
     expect(first).toEqual(second);
     expect(first.canonical).toBe(true);
     expect(first.id).toBe(STACKED_DECK_REVIEW_SCENARIO_ID);
-    expect(first.version).toBe(1);
-    expect(first.artifactDirectoryName).toBe("stacked-deck-review-v1");
+    expect(first.version).toBe(2);
+    expect(first.artifactDirectoryName).toBe("stacked-deck-review-v2");
   });
 
   test("marks scenario selections and supported overrides as non-canonical", () => {
@@ -158,24 +204,104 @@ describe("Stacked Deck visual scenario resolution", () => {
     const custom = resolveStackedDeckVisualScenario(["--slow-duration", "3000"]);
 
     expect(curve.canonical).toBe(false);
-    expect(curve.artifactDirectoryName).toBe("stacked-deck-curve-v1");
+    expect(curve.version).toBe(2);
+    expect(curve.artifactDirectoryName).toBe("stacked-deck-curve-v2");
     expect(custom.canonical).toBe(false);
-    expect(custom.artifactDirectoryName).toMatch(/^stacked-deck-review-v1-custom-[a-f0-9]{12}$/);
+    expect(custom.artifactDirectoryName).toMatch(/^stacked-deck-review-v2-custom-[a-f0-9]{12}$/);
   });
 
-  test("merges exact named checkpoints into the high-rate schedule", () => {
-    const schedule = createStimulusSchedule(2_500, 16, [0.47, 0.5], 0, 0.7);
+  test("creates a cadence-only schedule with no named-checkpoint commands", () => {
+    const schedule = createStimulusSchedule(50, 16);
 
-    expect(schedule).toContainEqual({
-      atMs: (2_500 * 0.47) / 0.7,
-      checkpointProgress: 0.47,
-      sampleKind: "checkpoint",
+    expect(schedule).toEqual([{ atMs: 0 }, { atMs: 16 }, { atMs: 32 }, { atMs: 48 }, { atMs: 50 }]);
+  });
+
+  test("skips missed cadence points instead of replaying catch-up positions", () => {
+    const schedule = createStimulusSchedule(64, 16);
+
+    expect(nextStimulusScheduleIndex(schedule, 0, 33)).toBe(2);
+    expect(schedule[2]).toEqual({ atMs: 32 });
+    expect(nextStimulusScheduleIndex(schedule, 2, 80)).toBe(4);
+    expect(schedule[4]).toEqual({ atMs: 64 });
+  });
+
+  test("keeps outbound requested progress monotonic under scheduler lateness", () => {
+    const executionTimes = [0, 17, 48, 49, 81, 100];
+    const requested = executionTimes.map((elapsedMs) =>
+      idealProgressAtElapsedTime(0, 0.7, elapsedMs, 100),
+    );
+
+    expect(
+      requested
+        .slice(1)
+        .every((value, index) => progressIsMonotonic(requested[index]!, value, "forward")),
+    ).toBe(true);
+  });
+
+  test("keeps retrace requested progress monotonic under scheduler lateness", () => {
+    const executionTimes = [0, 17, 48, 49, 81, 100];
+    const requested = executionTimes.map((elapsedMs) =>
+      idealProgressAtElapsedTime(0.7, 0, elapsedMs, 100),
+    );
+
+    expect(
+      requested
+        .slice(1)
+        .every((value, index) => progressIsMonotonic(requested[index]!, value, "reverse")),
+    ).toBe(true);
+  });
+
+  test("derives late-sample progress from actual elapsed time rather than schedule time", () => {
+    const scheduledTimeMs = 32;
+    const actualExecutionTimeMs = 80;
+
+    expect(idealProgressAtElapsedTime(0, 0.7, actualExecutionTimeMs, 100)).toBeCloseTo(0.56, 12);
+    expect(idealProgressAtElapsedTime(0, 0.7, scheduledTimeMs, 100)).toBeCloseTo(0.224, 12);
+  });
+});
+
+describe("Stacked Deck live stimulus evidence", () => {
+  test("observes named crossings without altering live samples", () => {
+    const samples = [sample(0, 0), sample(0.3, 16), sample(0.6, 32), sample(0.7, 48)];
+    const requestedBefore = samples.map((entry) => entry.requestedProgress);
+    const crossings = deriveLiveCheckpointCrossings(samples, [0, 0.25, 0.5, 0.7]);
+
+    expect(samples.map((entry) => entry.requestedProgress)).toEqual(requestedBefore);
+    expect(crossings.map((crossing) => crossing.checkpointProgress)).toEqual([0, 0.25, 0.5, 0.7]);
+    expect(crossings[1]?.before?.actualPhysicalProgress).toBe(0);
+    expect(crossings[1]?.atOrAfter.actualPhysicalProgress).toBe(0.3);
+  });
+
+  test("keeps exact checkpoint replay error separate and effectively zero", () => {
+    const checkpointSamples: ExactCheckpointSample[] = [0, 0.25, 0.5, 0.7].flatMap((progress) => {
+      const observation = sample(progress, progress * 100);
+      return [
+        { ...observation, direction: "forward" as const, requestedProgress: progress },
+        { ...observation, direction: "reverse" as const, requestedProgress: progress },
+      ];
     });
-    expect(schedule).toContainEqual({
-      atMs: (2_500 * 0.5) / 0.7,
-      checkpointProgress: 0.5,
-      sampleKind: "checkpoint",
+    const metrics = deriveStackedDeckMetrics({
+      checkpointSamples,
+      mouseRenderedSamples: [],
+      stimulusSamples: [sample(0, 0), sample(0.7, 100)],
+      targetIndex: 4,
     });
+
+    expect(metrics.directManipulation.forward.maximumCheckpointError).toBe(0);
+    expect(metrics.directManipulation.reverse.maximumCheckpointError).toBe(0);
+  });
+
+  test("derives a deterministic progress-domain slope from a known linear trace", () => {
+    const metrics = deriveProgressDomainMotionMetrics(
+      [sample(0, 0), sample(0.25, 10), sample(0.5, 20), sample(0.75, 30), sample(1, 40)],
+      "forward",
+    );
+
+    expect(metrics.outgoingTranslateXPerProgress?.value).toBeCloseTo(100, 10);
+    expect(metrics.outgoingRotatePerProgress?.value).toBeCloseTo(4, 10);
+    expect(metrics.outgoingScalePerProgress?.value).toBeCloseTo(-0.1, 10);
+    expect(metrics.outgoingTranslateYPerProgress?.value).toBeCloseTo(10, 10);
+    expect(metrics.outgoingTranslateXPerProgress?.progress).toBe(0);
   });
 });
 
@@ -221,8 +347,8 @@ describe("Stacked Deck revision identity", () => {
 });
 
 describe("Stacked Deck artifact comparison", () => {
-  test("rejects incompatible scenario versions", () => {
-    const comparison = compareArtifactCaptures(artifact(), artifact({ scenarioVersion: 2 }));
+  test("classifies v1 and v2 scenarios as not directly comparable", () => {
+    const comparison = compareArtifactCaptures(artifact({ scenarioVersion: 1 }), artifact());
 
     expect(comparison.compatibility).toBe("not-directly-comparable");
     expect(comparison.differences).toContainEqual(
@@ -240,6 +366,43 @@ describe("Stacked Deck artifact comparison", () => {
     expect(comparison.compatibility).toBe("comparable-with-warnings");
     expect(comparison.differences).toContainEqual(
       expect.objectContaining({ field: "environment.browserVersion", severity: "warning" }),
+    );
+  });
+
+  test("ignores screencast changed-frame cadence differences", () => {
+    const first = artifact();
+    const second = artifact();
+    const a = artifact({
+      capture: { ...first.manifest.capture, recordings: [recording(16)] },
+    });
+    const b = artifact({
+      capture: { ...second.manifest.capture, recordings: [recording(80)] },
+    });
+
+    const comparison = compareArtifactCaptures(a, b);
+
+    expect(comparison.compatibility).toBe("comparable");
+    expect(comparison.differences).toEqual([]);
+  });
+
+  test("warns when rendered rAF telemetry crosses the presentation-health threshold", () => {
+    const first = artifact();
+    const second = artifact();
+    const a = artifact({
+      capture: { ...first.manifest.capture, recordings: [recording(16, 16)] },
+    });
+    const b = artifact({
+      capture: { ...second.manifest.capture, recordings: [recording(16, 64)] },
+    });
+
+    const comparison = compareArtifactCaptures(a, b);
+
+    expect(comparison.compatibility).toBe("comparable-with-warnings");
+    expect(comparison.differences).toContainEqual(
+      expect.objectContaining({
+        field: "capture.mouse.renderedFrameP95Health",
+        severity: "warning",
+      }),
     );
   });
 

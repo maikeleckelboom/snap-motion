@@ -11,12 +11,15 @@ import {
   STACKED_DECK_ANCHOR_SKIP,
 } from "../../packages/core/src/index";
 import {
+  deriveLiveCheckpointCrossings,
   deriveStackedDeckMetrics,
   frameIntervalTelemetry,
   renderCaptureReview,
   writeJsonFile,
   type CaptureRecordingSummary,
   type CardPoseObservation,
+  type CheckpointTrace,
+  type ExactCheckpointSample,
   type KeyboardTimeline,
   type MotionStateObservation,
   type MouseTimeline,
@@ -31,6 +34,9 @@ import {
 import { inspectGitRevision } from "../../scripts/stackedDeckVisualRevision.ts";
 import {
   createStimulusSchedule,
+  idealProgressAtElapsedTime,
+  nextStimulusScheduleIndex,
+  progressIsMonotonic,
   readVisualScenarioFromEnvironment,
   STACKED_DECK_VISUAL_SCHEMA_VERSION,
 } from "../../scripts/stackedDeckVisualScenario.ts";
@@ -114,6 +120,7 @@ let mouseRecording: CaptureRecordingSummary | null = null;
 let keyboardTimeline: KeyboardTimeline | null = null;
 let keyboardRenderTrace: RenderTrace | null = null;
 let keyboardRecording: CaptureRecordingSummary | null = null;
+let checkpointTrace: CheckpointTrace | null = null;
 
 function itemAt(index: number): ReviewItem {
   const id = STACKED_DECK_IDS[index];
@@ -482,13 +489,7 @@ async function performNormalGesture(
   const normalGesture = scenario.config.normalGesture;
   if (!normalGesture) throw new Error("The curve scenario has no normal gesture chapter.");
   const held = await beginHeldAtCurrent(page, originIndex);
-  const schedule = createStimulusSchedule(
-    normalGesture.durationMs,
-    normalGesture.cadenceMs,
-    [],
-    0,
-    normalGesture.progress,
-  );
+  const schedule = createStimulusSchedule(normalGesture.durationMs, normalGesture.cadenceMs);
   const startedAt = performance.now();
   let previousElapsedMs = 0;
   for (const point of schedule) {
@@ -523,63 +524,95 @@ async function sweepHeldTraversal(
   trace: StimulusTraceSample[],
 ): Promise<DeckFrame> {
   const traversal = scenario.config.slowTraversal;
-  const checkpoints =
-    direction === "forward" ? traversal.checkpoints : traversal.checkpoints.toReversed();
-  const schedule = createStimulusSchedule(
-    traversal.durationMs,
-    traversal.inputCadenceMs,
-    checkpoints,
-    from,
-    to,
-  );
+  const schedule = createStimulusSchedule(traversal.durationMs, traversal.inputCadenceMs);
   const startedAt = performance.now();
-  let previousElapsedMs = 0;
+  let previousExecutionTimeMs = 0;
   let lastFrame = await readFrame(page);
-  for (const point of schedule) {
+  let scheduleIndex = 0;
+  while (scheduleIndex < schedule.length) {
+    const point = schedule[scheduleIndex]!;
     const remainingMs = point.atMs - (performance.now() - startedAt);
     if (remainingMs > 0) await page.waitForTimeout(remainingMs);
-    const actualElapsedMs = Math.min(traversal.durationMs, performance.now() - startedAt);
-    const fraction = Math.min(1, actualElapsedMs / traversal.durationMs);
-    const requestedProgress = point.checkpointProgress ?? from + (to - from) * fraction;
-    const eventElapsedMs = Math.max(1, actualElapsedMs - previousElapsedMs);
+    const actualExecutionTimeMs = performance.now() - startedAt;
+    const requestedProgress = idealProgressAtElapsedTime(
+      from,
+      to,
+      actualExecutionTimeMs,
+      traversal.durationMs,
+    );
+    const eventElapsedMs = Math.max(1, actualExecutionTimeMs - previousExecutionTimeMs);
     lastFrame = await holdPhysicalIndex(
       page,
       held,
       startIndex + pairDirection * requestedProgress,
       eventElapsedMs,
     );
-    previousElapsedMs = actualElapsedMs;
-    trace.push({
+    previousExecutionTimeMs = actualExecutionTimeMs;
+    const sample: StimulusTraceSample = {
       ...motionObservation(lastFrame),
-      ...(point.checkpointProgress === undefined
-        ? {}
-        : { checkpointProgress: point.checkpointProgress }),
+      actualExecutionTimeMs,
       direction,
+      latenessMs: Math.max(0, actualExecutionTimeMs - point.atMs),
       relativeTimeMs: recording.now(),
       requestedProgress,
-      sampleKind: point.sampleKind,
+      sampleKind: "stimulus",
       scheduledTimeMs: point.atMs,
-    });
+    };
+    const previous = trace.findLast((entry) => entry.direction === direction);
+    if (previous) {
+      if (!progressIsMonotonic(previous.requestedProgress, sample.requestedProgress, direction)) {
+        throw new Error(
+          `${direction} live requested progress reversed: ${previous.requestedProgress} -> ${sample.requestedProgress}.`,
+        );
+      }
+      if (
+        !progressIsMonotonic(
+          previous.actualPhysicalProgress,
+          sample.actualPhysicalProgress,
+          direction,
+        )
+      ) {
+        throw new Error(
+          `${direction} live actual physical progress reversed: ${previous.actualPhysicalProgress} -> ${sample.actualPhysicalProgress}.`,
+        );
+      }
+    }
+    trace.push(sample);
+    if (scheduleIndex === schedule.length - 1) break;
+    scheduleIndex = nextStimulusScheduleIndex(
+      schedule,
+      scheduleIndex,
+      performance.now() - startedAt,
+    );
   }
   return lastFrame;
 }
 
-async function captureReviewCheckpoints(page: Page): Promise<readonly string[]> {
+async function captureReviewCheckpoints(page: Page): Promise<{
+  readonly files: readonly string[];
+  readonly samples: readonly ExactCheckpointSample[];
+}> {
   await pagination(page).nth(startIndex).click();
   await expectCarouselAt(viewport(page), STACKED_DECK_IDS[startIndex]!);
   const held = await beginHeldAtCurrent(page, startIndex);
   const files: string[] = [];
+  const samples: ExactCheckpointSample[] = [];
   for (const [direction, progressValues] of [
     ["forward", scenario.config.slowTraversal.checkpoints],
     ["reverse", scenario.config.slowTraversal.checkpoints.toReversed()],
   ] as const) {
     for (const progress of progressValues) {
-      await holdPhysicalIndex(
+      const frame = await holdPhysicalIndex(
         page,
         held,
         startIndex + pairDirection * progress,
         scenario.config.slowTraversal.inputCadenceMs,
       );
+      samples.push({
+        ...motionObservation(frame),
+        direction,
+        requestedProgress: progress,
+      });
       if (!scenario.config.slowTraversal.screenshotCheckpoints.includes(progress)) continue;
       const filename = `${direction}-${progress.toFixed(2)}.png`;
       await page.screenshot({
@@ -591,7 +624,7 @@ async function captureReviewCheckpoints(page: Page): Promise<readonly string[]> 
   }
   await finishPointer(page, held.origin, 0, held.elapsedMs + 40, "pointercancel");
   await expectCarouselAt(viewport(page), STACKED_DECK_IDS[startIndex]!);
-  return files;
+  return { files, samples };
 }
 
 async function assertArtifact(filename: string): Promise<void> {
@@ -640,7 +673,7 @@ function captureWarnings(
     metrics.directManipulation.reverse.maximumCheckpointError,
   );
   if (maximumCheckpointError > 0.001) {
-    warnings.push(`Maximum named-checkpoint error was ${maximumCheckpointError}.`);
+    warnings.push(`Maximum exact checkpoint-replay error was ${maximumCheckpointError}.`);
   }
   return warnings;
 }
@@ -872,12 +905,25 @@ test("records the deterministic mouse review", async ({ page }) => {
     await page.screencast.stop();
   }
 
-  const checkpointFiles = await captureReviewCheckpoints(page);
+  const checkpointReplay = await captureReviewCheckpoints(page);
+  const liveCheckpointCrossings = deriveLiveCheckpointCrossings(
+    stimulusTrace,
+    scenario.config.slowTraversal.checkpoints,
+  );
+  checkpointTrace = {
+    captureMode: "post-recording deterministic held-gesture replay",
+    samples: checkpointReplay.samples,
+    scenarioId: scenario.id,
+    scenarioVersion: scenario.version,
+    schemaVersion: STACKED_DECK_VISUAL_SCHEMA_VERSION,
+  };
   mouseTimeline = {
     checkpointCapture: {
       mode: "post-recording deterministic held-gesture replay",
-      progress: scenario.config.slowTraversal.screenshotCheckpoints,
+      progress: scenario.config.slowTraversal.checkpoints,
+      traceFilename: "checkpoint-trace.json",
     },
+    liveCheckpointCrossings,
     phases,
     recordingDurationMs,
     scenarioId: scenario.id,
@@ -903,10 +949,12 @@ test("records the deterministic mouse review", async ({ page }) => {
   };
   await writeJsonFile(join(reviewDirectory, "mouse-timeline.json"), mouseTimeline);
   await writeJsonFile(join(reviewDirectory, "mouse-render-trace.json"), mouseRenderTrace);
+  await writeJsonFile(join(reviewDirectory, "checkpoint-trace.json"), checkpointTrace);
   await assertArtifact("mouse-review.webm");
   await assertArtifact("mouse-timeline.json");
   await assertArtifact("mouse-render-trace.json");
-  for (const checkpoint of checkpointFiles) await assertArtifact(checkpoint);
+  await assertArtifact("checkpoint-trace.json");
+  for (const checkpoint of checkpointReplay.files) await assertArtifact(checkpoint);
   expect(unexpectedPageErrors(pageErrors)).toEqual([]);
 });
 
@@ -1008,7 +1056,13 @@ test("records the deterministic keyboard review", async ({ page }) => {
 });
 
 test.afterAll(async () => {
-  if (!capturedEnvironment || !mouseTimeline || !mouseRenderTrace || !mouseRecording) {
+  if (
+    !capturedEnvironment ||
+    !mouseTimeline ||
+    !mouseRenderTrace ||
+    !mouseRecording ||
+    !checkpointTrace
+  ) {
     throw new Error("The mouse capture did not produce the required artifact data.");
   }
   if (
@@ -1018,11 +1072,23 @@ test.afterAll(async () => {
     throw new Error("The full review did not produce the required keyboard artifact data.");
   }
   const metrics = deriveStackedDeckMetrics({
+    checkpointSamples: checkpointTrace.samples,
     ...(keyboardTimeline ? { keyboardPhases: keyboardTimeline.phases } : {}),
     mouseRenderedSamples: mouseRenderTrace.samples,
     stimulusSamples: mouseTimeline.stimulusTrace,
     targetIndex,
   });
+  for (const direction of ["forward", "reverse"] as const) {
+    const directionMetrics = metrics.directManipulation[direction];
+    if (
+      directionMetrics.requestedProgressMonotonicityViolations > 0 ||
+      directionMetrics.actualProgressMonotonicityViolations > 0
+    ) {
+      throw new Error(
+        `${direction} live stimulus failed monotonicity: ${directionMetrics.requestedProgressMonotonicityViolations} requested and ${directionMetrics.actualProgressMonotonicityViolations} actual reversals.`,
+      );
+    }
+  }
   const recordings = [mouseRecording, ...(keyboardRecording ? [keyboardRecording] : [])];
   const checkpointFiles = (await readdir(checkpointDirectory))
     .map((file) => `checkpoints/${file}`)
@@ -1033,6 +1099,7 @@ test.afterAll(async () => {
     "mouse-review.webm",
     "mouse-timeline.json",
     "mouse-render-trace.json",
+    "checkpoint-trace.json",
     ...(keyboardRecording
       ? ["keyboard-review.webm", "keyboard-timeline.json", "keyboard-render-trace.json"]
       : []),
@@ -1043,6 +1110,17 @@ test.afterAll(async () => {
     artifactFiles,
     canonical: scenario.canonical,
     capture: {
+      exactCheckpointReplay: {
+        purpose:
+          "Exact named states for machine inspection and checkpoint PNGs; excluded from the WebM live stimulus.",
+        sampleCount: checkpointTrace.samples.length,
+        traceFilename: "checkpoint-trace.json",
+      },
+      liveStimulus: {
+        checkpointBehavior: "observational-crossings-only",
+        checkpointCrossingCount: mouseTimeline.liveCheckpointCrossings?.length ?? 0,
+        progressSource: "monotonic-elapsed-time",
+      },
       recordings,
       video: {
         codec: "vp8",
