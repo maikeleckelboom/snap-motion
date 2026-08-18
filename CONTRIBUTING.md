@@ -34,6 +34,16 @@ It deliberately analyses with its own bundled TypeScript rather than the workspa
 `messageCallback` hook so the runner states it once instead of once per entrypoint, and every real
 extractor, compiler, TSDoc, and API-report diagnostic keeps its normal reporting.
 
+## Stacked Deck visual review
+
+Run `pnpm visual:stacked-deck` to write revision-scoped recordings, timelines, and crossover
+checkpoints under `.artifacts/stacked-deck-visual-review/<short-git-sha>/`. The mouse recording
+covers direct manipulation, crossover, and reversal; the keyboard recording isolates autonomous
+spring and settlement motion.
+
+This is a deterministic human visual-review capture, not a visual regression golden test and not a
+CI gate. The normal Playwright suite remains the correctness authority.
+
 Changes to a publishable package need a Changeset unless they are documentation-only. Public API
 changes must include the reviewed API report diff. Browser-visible changes require Chromium,
 Firefox, and WebKit evidence. Never claim physical assistive-technology certification from automated

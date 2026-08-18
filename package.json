@@ -17,6 +17,7 @@
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "visual:stacked-deck": "playwright test --config playwright.visual.config.ts",
     "test:preview": "pnpm build:preview && pnpm test:preview:prepared",
     "test:preview:prepared": "playwright test --config playwright.preview.config.ts",
     "test:fixtures": "pnpm build:fixtures && pnpm test:fixtures:prepared",
