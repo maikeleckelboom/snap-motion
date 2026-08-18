@@ -43,7 +43,7 @@ function restAt(index: number): StackedDeckSnapshotInput {
 }
 
 describe("stacked deck authority stability", () => {
-  it("treats identity as contested for exactly as long as two faces are drawn", () => {
+  it("treats identity as stable after authority crosses the physical depth boundary", () => {
     const storage = createStackedDeckTraversal(2, ITEM_COUNT);
     const frameStorage = createStackedDeckFrame(ITEM_COUNT);
     const at = (physicalIndex: number, phase: "dragging" | "idle" | "settling" = "settling") => {
@@ -63,18 +63,19 @@ describe("stacked deck authority stability", () => {
       );
     };
 
-    // Mid-exchange: authority has moved to the incoming card, but the outgoing one is still there.
-    const contested = at(2.7);
-    expect(contested.authoritativeIndex).toBe(3);
-    expect(contested.poses[2]!.visible).toBe(true);
-    expect(isStackedDeckAuthorityStable(contested)).toBe(false);
+    // Before the depth crossing the outgoing card remains physically dominant, but the active
+    // transaction is still contested for inspection.
+    const beforeCrossing = at(2.4);
+    expect(beforeCrossing.authoritativeIndex).toBe(2);
+    expect(isStackedDeckAuthorityStable(beforeCrossing)).toBe(false);
 
-    // Fully occluded: one card, already parked. Residual travel toward the anchor is irrelevant.
-    const uncontested = at(2.95);
-    expect(uncontested.authoritativeIndex).toBe(3);
-    expect(uncontested.poses[2]!.visible).toBe(false);
-    expect(uncontested.poses.filter((pose) => pose.visible)).toHaveLength(1);
-    expect(isStackedDeckAuthorityStable(uncontested)).toBe(true);
+    // Past the crossing the target owns both physical depth and semantics. Every persistent card
+    // remains present and opaque; stability is not inferred from hiding another representation.
+    const afterCrossing = at(2.7);
+    expect(afterCrossing.authoritativeIndex).toBe(3);
+    expect(afterCrossing.poses.every((pose) => pose.visible && pose.opacity === 1)).toBe(true);
+    expect(afterCrossing.poses[3]!.layer).toBeGreaterThan(afterCrossing.poses[2]!.layer);
+    expect(isStackedDeckAuthorityStable(afterCrossing)).toBe(true);
 
     // Rest is stable, and so is a segment resting exactly on its own anchor.
     expect(isStackedDeckAuthorityStable(at(3, "idle"))).toBe(true);
@@ -87,20 +88,22 @@ describe("stacked deck authority stability", () => {
   it("makes inspection follow authority and ownership, never mechanical rest", () => {
     const deck = model();
     deck.beginInteraction();
-    deck.update(snapshot(2.95, { phase: "settling", targetIndex: 3 }));
 
-    // Still settling, and eligible: the card is unambiguous and nothing holds the surface.
+    // Before the physical depth crossing, neither card is eligible for inspection.
+    deck.update(snapshot(2.4, { phase: "settling", targetIndex: 3 }));
+    expect(deck.isInspectEligible({ index: 2, owned: false })).toBe(false);
+    expect(deck.isInspectEligible({ index: 3, owned: false })).toBe(false);
+
+    deck.update(snapshot(2.7, { phase: "settling", targetIndex: 3 }));
+
+    // Still settling, and eligible: semantics now agree with physical depth and nothing holds it.
     expect(deck.state.currentIndex).toBe(3);
     expect(deck.isInspectEligible({ index: 3, owned: false })).toBe(true);
     // Only the authoritative card is ever inspectable.
     expect(deck.isInspectEligible({ index: 2, owned: false })).toBe(false);
     expect(deck.isInspectEligible({ index: 4, owned: false })).toBe(false);
-    // Physical ownership still disqualifies it.
+    // Physical ownership still disqualifies it, regardless of depth.
     expect(deck.isInspectEligible({ index: 3, owned: true })).toBe(false);
-
-    // A visible exchange does too.
-    deck.update(snapshot(2.7, { phase: "settling", targetIndex: 3 }));
-    expect(deck.isInspectEligible({ index: 3, owned: false })).toBe(false);
   });
 });
 

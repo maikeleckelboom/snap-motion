@@ -44,6 +44,7 @@ import {
 } from "vue";
 
 import { useCarouselMotion } from "../carousel/use-carousel-motion";
+import { isHTMLElement } from "../internal/dom/realm";
 import { resolveDirectionalSnapKeyboardAction } from "../internal/input/keyboard-policy";
 import { useSurfaceGesture } from "../internal/input/surface-gesture";
 import {
@@ -148,7 +149,7 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
   readonly owned: ComputedRef<boolean>;
   readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
   readonly physicalIndex: ComputedRef<number>;
-  /** Full decorative physical projection for consumers composing their own renderer. */
+  /** Compatibility projection of the non-dominant persistent card shells. */
   readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer<Id>[]>;
   readonly pitch: ComputedRef<number>;
   /** Durable selection. It changes only at mechanical rest. */
@@ -187,7 +188,7 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
  * `StackedDeckModel` owns every semantic decision — the item collection, the interaction envelope,
  * visual authority, command origin, direct synchronization, and announcements. This binds that
  * model to a browser: pointer and wheel ownership, responsive tuning, reduced motion, frame
- * scheduling, hit testing, and the CSS projection of the frame and the pile.
+ * scheduling, hit testing, and the CSS projection of the persistent physical cards.
  */
 export function useStackedDeckMotion<Id extends string>(
   options: UseStackedDeckMotionOptions<Id>,
@@ -383,10 +384,8 @@ export function useStackedDeckMotion<Id extends string>(
   });
 
   /**
-   * Deck thickness. One decorative layer per screen still in the deck, fanned to the side its index
-   * lies on. The ordered item association owns node lifetime as well as visual treatment, while the
-   * continuously resolved slot owns placement. Compaction therefore moves an existing item's node
-   * instead of repainting a rank node with another item's material.
+   * Compatibility pile projection. Every value is copied from the same persistent card pose the
+   * frame publishes, so custom renderers cannot receive an alternate physical path for one item.
    */
   const pileLayers = computed<readonly StackedDeckPileLayer<Id>[]>(() => {
     const layers: StackedDeckPileLayer<Id>[] = [];
@@ -566,13 +565,25 @@ export function useStackedDeckMotion<Id extends string>(
     if (disabled()) return;
     const action = resolveDirectionalSnapKeyboardAction(event, motion.resolveDirection());
     if (!action) return;
+    const surface = isHTMLElement(event.currentTarget) ? event.currentTarget : root.value;
+    const focusBefore = surface?.ownerDocument.activeElement;
+    const focusOwnedBySurface = surface?.contains(focusBefore ?? null) === true;
+    const focusInsideViewport = options.viewport.value?.contains(focusBefore ?? null) === true;
     const accepted =
       action === "previous"
         ? requestRelative(-1, "keyboard")
         : action === "next"
           ? requestRelative(1, "keyboard")
           : requestIndex(action === "home" ? 0 : model.itemCount - 1, "keyboard");
-    if (accepted) event.preventDefault();
+    if (!accepted) return;
+    event.preventDefault();
+
+    // A key routed from a consumer-owned sibling control is now a deck operation. Move focus into
+    // the deck synchronously, before that control can become disabled and the browser falls back to
+    // <body>; this also gives a rapid follow-up Arrow key the same deterministic target.
+    if (focusOwnedBySurface && !focusInsideViewport) {
+      options.viewport.value?.focus({ preventScroll: true });
+    }
   }
 
   /**

@@ -229,6 +229,17 @@ const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {
   });
 });
 
+const pileLayersById = computed(
+  () =>
+    new Map<TId, readonly StackedDeckPileLayer<TId>[]>(
+      deck.pileLayers.value.map((projection) => [projection.id, [projection]]),
+    ),
+);
+
+function cardPileLayers(id: TId): readonly StackedDeckPileLayer<TId>[] {
+  return pileLayersById.value.get(id) ?? [];
+}
+
 function pileItem(projection: StackedDeckPileLayer<TId>): TItem {
   const item = props.items[projection.index];
   if (item?.id !== projection.id) {
@@ -238,18 +249,17 @@ function pileItem(projection: StackedDeckPileLayer<TId>): TItem {
 }
 
 watch(
-  () =>
-    deck.frame.value.poses
-      .map((pose, index) => (pose.interactive ? deck.model.idAt(index) : undefined))
-      .filter((id): id is TId => id !== undefined),
-  (semanticIds) => {
-    const semantic = new Set(semanticIds);
+  [() => deck.diagnostics.value.phase, () => deck.state.value.currentIndex] as const,
+  ([phase, currentIndex], previous) => {
+    if (phase === "idle" && currentIndex === previous?.[1]) return;
     preserveFocusBeforeSemanticChange(root.value, (activeElement) => {
       const card = activeElement.closest<HTMLElement>("[data-snap-motion-stacked-deck-card]");
-      return card !== null && semantic.has((card.dataset.itemId ?? "") as TId);
+      if (!card) return true;
+      const index = props.items.findIndex((item) => item.id === card.dataset.itemId);
+      return index >= 0 && deck.isInspectEligible(index);
     });
   },
-  { deep: true, flush: "sync" },
+  { flush: "sync" },
 );
 
 const stageStyle = computed(() => ({
@@ -333,33 +343,6 @@ defineExpose({
   >
     <slot name="backdrop" />
     <div ref="track" class="snap-motion-stacked-deck-stage">
-      <template v-for="projection in deck.pileLayers.value" :key="projection.key">
-        <div
-          v-if="items[projection.index]?.id === projection.id"
-          aria-hidden="true"
-          class="snap-motion-stacked-deck-pile-layer"
-          :data-pile-item-id="projection.id"
-          :data-pile-item-index="projection.index"
-          :data-pile-side="projection.side"
-          :data-pile-slot="projection.slot"
-          inert
-          :style="{
-            opacity: projection.opacity,
-            transform: projection.transform,
-            zIndex: projection.layer,
-            '--snap-motion-deck-shadow-strength': projection.shadowStrength.toFixed(4),
-          }"
-        >
-          <slot
-            name="pile-layer"
-            :item="pileItem(projection)"
-            :id="projection.id"
-            :index="projection.index"
-            :side="projection.side"
-            :slot="projection.slot"
-          />
-        </div>
-      </template>
       <div
         v-for="card in cards"
         :key="card.id"
@@ -380,7 +363,30 @@ defineExpose({
         :style="cardStyle(card)"
       >
         <div class="snap-motion-stacked-deck-card-motion" :style="cardMotionStyle(card)">
-          <slot name="card" v-bind="card" />
+          <template v-for="projection in cardPileLayers(card.id)" :key="projection.key">
+            <div
+              v-if="items[projection.index]?.id === projection.id"
+              aria-hidden="true"
+              class="snap-motion-stacked-deck-pile-layer"
+              :data-pile-item-id="projection.id"
+              :data-pile-item-index="projection.index"
+              :data-pile-side="projection.side"
+              :data-pile-slot="projection.slot"
+              inert
+            >
+              <slot
+                name="pile-layer"
+                :item="pileItem(projection)"
+                :id="projection.id"
+                :index="projection.index"
+                :side="projection.side"
+                :slot="projection.slot"
+              />
+            </div>
+          </template>
+          <div class="snap-motion-stacked-deck-card-content">
+            <slot name="card" v-bind="card" />
+          </div>
         </div>
       </div>
     </div>

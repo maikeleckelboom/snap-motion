@@ -249,7 +249,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       <template #card="card">
         <div
           class="screen-chrome"
-          :class="[`tone-${card.item.tone}`, { 'is-top': card.role === 'top' }]"
+          :class="`tone-${card.item.tone}`"
           v-bind="screenPoseAttributes(card)"
           :style="{ '--screen-accent': card.item.accent }"
         >
@@ -439,13 +439,10 @@ const diagnostics = computed<LabDiagnostics>(() => {
   pointer-events: none;
 }
 
-/* Decorative depth only. Snap Motion owns the physical layer; the lab supplies cheap material. */
+/* Compatibility substrate inside each persistent physical card. */
 .stacked-deck-demo :deep(.snap-motion-stacked-deck-pile-layer) {
   border-radius: 0.8rem;
   background: linear-gradient(158deg, #fdfefe 0%, #eef1f6 62%, #e4e9f0 100%);
-  box-shadow:
-    0 18px 38px -18px rgb(15 23 42 / calc(0.38 * var(--snap-motion-deck-shadow-strength))),
-    0 4px 10px -6px rgb(15 23 42 / calc(0.32 * var(--snap-motion-deck-shadow-strength)));
   overflow: hidden;
 }
 
@@ -470,6 +467,10 @@ const diagnostics = computed<LabDiagnostics>(() => {
 }
 
 .stacked-deck-demo :deep(.snap-motion-stacked-deck-card-motion) {
+  border-radius: 0.8rem;
+  box-shadow:
+    0 18px 38px -18px rgb(15 23 42 / calc(0.38 * var(--snap-motion-deck-shadow-strength))),
+    0 4px 10px -6px rgb(15 23 42 / calc(0.32 * var(--snap-motion-deck-shadow-strength)));
   cursor: pointer;
 }
 
@@ -481,9 +482,6 @@ const diagnostics = computed<LabDiagnostics>(() => {
   border-radius: 0.8rem;
   overflow: hidden;
   background: #fff;
-  box-shadow:
-    0 18px 38px -18px rgb(15 23 42 / calc(0.38 * var(--snap-motion-deck-shadow-strength))),
-    0 4px 10px -6px rgb(15 23 42 / calc(0.32 * var(--snap-motion-deck-shadow-strength)));
   color: #0f172a;
   filter: none;
 }
@@ -505,10 +503,6 @@ const diagnostics = computed<LabDiagnostics>(() => {
   background: #0f172a;
   color: #e2e8f0;
   border-color: rgb(255 255 255 / 0.08);
-}
-
-.screen-chrome.is-top {
-  border-color: rgb(15 23 42 / 0.23);
 }
 
 .stacked-screen-image {

@@ -46,48 +46,6 @@ function pointerDrag(type: string, clientX: number) {
   });
 }
 
-/**
- * What each screen is currently drawn from: its own face, and the decorative material it is made of
- * while it waits in the deck. Those are different pictures — the deck renders them from different
- * slots — so which one an item uses is a visible property, and it must never change in one step.
- */
-function readOpacity(style: string | undefined) {
-  const opacity = /(?:^|[^-\w])opacity:\s*([\d.]+)/.exec(style ?? "")?.[1];
-  return opacity === undefined ? 1 : Number(opacity);
-}
-
-function materialWeights(wrapper: ReturnType<typeof mountDeck>) {
-  const weights: Record<string, { face: number; material: number }> = {};
-  for (const card of wrapper.findAll(".snap-motion-stacked-deck-card")) {
-    const id = card.attributes("data-item-id") ?? "";
-    weights[id] ??= { face: 0, material: 0 };
-    weights[id]!.face =
-      card.attributes("data-deck-visible") === "true" ? readOpacity(card.attributes("style")) : 0;
-  }
-  for (const layer of wrapper.findAll(".snap-motion-stacked-deck-pile-layer")) {
-    const id = layer.attributes("data-pile-item-id") ?? "";
-    weights[id] ??= { face: 0, material: 0 };
-    weights[id]!.material = readOpacity(layer.attributes("style"));
-  }
-  return weights;
-}
-
-type MaterialWeights = ReturnType<typeof materialWeights>;
-
-/** Largest single-step change any screen makes in either of its representations. */
-function largestMaterialStep(before: MaterialWeights, after: MaterialWeights) {
-  let largest = { id: "", change: 0 };
-  for (const id of new Set([...Object.keys(before), ...Object.keys(after)])) {
-    const was = before[id] ?? { face: 0, material: 0 };
-    const now = after[id] ?? { face: 0, material: 0 };
-    for (const key of ["face", "material"] as const) {
-      const change = Math.abs(now[key] - was[key]);
-      if (change > largest.change) largest = { id, change };
-    }
-  }
-  return largest;
-}
-
 function mountDeck(props: Record<string, unknown> = {}) {
   return mount(TypedStackedDeck, {
     props: {
@@ -120,11 +78,12 @@ describe("StackedDeck", () => {
     expect(cards[1]!.attributes("aria-current")).toBe("true");
     expect(cards[1]!.attributes("aria-label")).toBe("System, 2 of 3");
     expect(cards[0]!.attributes("aria-hidden")).toBe("true");
-    // Only the current card is drawn at rest; the rest of the deck is depth, not content.
+    // Every card remains its own physical object; only the current card participates in semantics.
     expect(cards[1]!.attributes("data-deck-visible")).toBe("true");
-    expect(cards[0]!.attributes("data-deck-visible")).toBe("false");
+    expect(cards[0]!.attributes("data-deck-visible")).toBe("true");
+    expect(cards[2]!.attributes("data-deck-visible")).toBe("true");
     expect(cards[1]!.attributes("data-deck-role")).toBe("top");
-    // A swipe removes a card by thinning it out, never by cutting it, so nothing carries a clip.
+    expect(cards.every((card) => card.attributes("style")?.includes("opacity: 1"))).toBe(true);
     expect(wrapper.html()).not.toContain("clip-path");
     expect(
       wrapper
@@ -134,33 +93,41 @@ describe("StackedDeck", () => {
     wrapper.unmount();
   });
 
-  it("never switches what a backing card is made of when a segment starts or turns", async () => {
+  it("keeps one physical shell per item through direction changes", async () => {
     const wrapper = mountDeck({ reducedMotionOverride: false });
     await nextTick();
     const deck = wrapper.vm as unknown as DeckInstance & { pitch: number };
     const stage = wrapper.get(".snap-motion-stacked-deck").element as HTMLElement;
     stage.setPointerCapture = () => {};
     stage.releasePointerCapture = () => {};
+    const physicalShells = new Map(
+      wrapper
+        .findAll(".snap-motion-stacked-deck-card")
+        .map((card) => [
+          card.attributes("data-item-id"),
+          card.get(".snap-motion-stacked-deck-card-motion").element,
+        ]),
+    );
 
     stage.dispatchEvent(pointerDrag("pointerdown", 0));
     await nextTick();
-    let previous = materialWeights(wrapper);
-    // At rest every screen is drawn entirely from one representation or the other.
-    for (const weight of Object.values(previous)) {
-      expect(Math.max(weight.face, weight.material)).toBeCloseTo(1, 5);
-    }
-
-    // The smallest nudges that produce a direction at all, each way, and then a hand shaking on
-    // the boundary — which flips which neighbour is named the target on every crossing.
     for (const progress of [0.002, 0.02, 0.05, 0, -0.002, -0.02, -0.05, 0, 0.02, -0.02, 0.02]) {
       window.dispatchEvent(pointerDrag("pointermove", -deck.pitch * progress));
       await nextTick();
-      const current = materialWeights(wrapper);
-      const step = largestMaterialStep(previous, current);
-      expect(step.change, `${step.id} changed representation at progress ${progress}`).toBeLessThan(
-        0.1,
-      );
-      previous = current;
+      for (const card of wrapper.findAll(".snap-motion-stacked-deck-card")) {
+        const id = card.attributes("data-item-id")!;
+        expect(card.get(".snap-motion-stacked-deck-card-motion").element).toBe(
+          physicalShells.get(id),
+        );
+        expect(card.attributes("data-deck-visible")).toBe("true");
+        expect(card.attributes("style")).toContain("opacity: 1");
+        for (const layer of card.findAll(".snap-motion-stacked-deck-pile-layer")) {
+          expect(layer.attributes("data-pile-item-id")).toBe(id);
+          expect(layer.element.parentElement).toBe(
+            card.get(".snap-motion-stacked-deck-card-motion").element,
+          );
+        }
+      }
     }
 
     window.dispatchEvent(pointerDrag("pointercancel", 0));
