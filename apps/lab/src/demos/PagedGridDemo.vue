@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { createFixedStageGeometry, createPagedGridGeometry } from "@snap-motion/core";
+import { createPagedGridGeometry } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
 import { computed, nextTick, ref, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
-import RenderWindowFixture from "@/demos/RenderWindowFixture.vue";
-import VariableRailFixture from "@/demos/VariableRailFixture.vue";
 import {
   carouselReleaseFromSettings,
   springFromSettings,
@@ -52,28 +50,21 @@ const pages = computed(() => {
   return result;
 });
 
+/**
+ * Pages are the surface's semantic anchors, and the gap between two pages is not the gap between
+ * two cells. Saying so once is the whole geometry: the paged-grid primitive lays the cells out and
+ * spaces the pages, so the demo never composes a second geometry over the first.
+ */
 function geometry() {
-  const gridGeometry = createPagedGridGeometry({
+  return createPagedGridGeometry({
     columns: columns.value,
     gap: gap.value,
     getPageId: ({ pageIndex }) => `page-${pageIndex + 1}`,
     itemIds: items.value.map((item) => item.id),
+    pageGap: gap.value,
     rows: rows.value,
     viewportSize: Math.max(1, viewport.value?.clientWidth ?? props.stageWidth),
   });
-  const pageGeometry = createFixedStageGeometry({
-    gap: gap.value,
-    itemIds: gridGeometry.anchors.map((anchor) => anchor.id),
-    viewportSize: gridGeometry.viewportSize,
-  });
-
-  return {
-    ...gridGeometry,
-    anchors: pageGeometry.anchors,
-    bounds: pageGeometry.bounds,
-    stageSize: pageGeometry.stageSize,
-    trackExtent: pageGeometry.trackExtent,
-  };
 }
 
 const initialGeometry = geometry();
@@ -91,7 +82,7 @@ const motion = useCarouselMotion({
   viewport,
 });
 
-const currentPageId = computed(() => motion.targetId.value ?? motion.activeId.value ?? "page-1");
+const currentPageId = computed(() => motion.targetId.value ?? motion.nearestId.value ?? "page-1");
 const currentPageIndex = computed(() => {
   const index = pages.value.findIndex((page) => page.id === currentPageId.value);
   return index < 0 ? 0 : index;
@@ -107,7 +98,7 @@ const gridStyle = computed(() => ({
 const diagnostics = computed<LabDiagnostics>(() => {
   const measured = geometry();
   return {
-    ...(motion.activeId.value ? { activeId: motion.activeId.value } : {}),
+    ...(motion.nearestId.value ? { nearestId: motion.nearestId.value } : {}),
     anchors: motion.snapshot.value.anchors,
     bounds: motion.snapshot.value.bounds,
     isAnimating: motion.isAnimating.value,
@@ -172,8 +163,8 @@ watch(
   { flush: "post" },
 );
 
-watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
-  if (phase === "idle" && activeId !== undefined && activeId !== previousId) {
+watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
+  if (phase === "idle" && nearestId !== undefined && nearestId !== previousId) {
     announce();
   }
 });
@@ -314,12 +305,6 @@ watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
     </section>
 
     <DiagnosticsPanel :diagnostics="diagnostics" />
-    <VariableRailFixture
-      :reduced-motion-override="reducedMotionOverride"
-      :settings="settings"
-      :stage-width="stageWidth"
-    />
-    <RenderWindowFixture />
   </div>
 </template>
 

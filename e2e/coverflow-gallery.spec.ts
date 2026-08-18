@@ -1,4 +1,4 @@
-﻿import AxeBuilder from "@axe-core/playwright";
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { dragSyntheticPointerBy, expectCarouselAt, openLabDemo } from "./helpers";
@@ -17,7 +17,7 @@ function gallery(page: Page) {
 }
 
 function card(page: Page, id: string) {
-  return page.locator(`.coverflow-card[data-screen-id="${id}"]`);
+  return page.locator(`.snap-motion-coverflow-card[data-item-id="${id}"]`);
 }
 
 async function openGallery(page: Page) {
@@ -35,7 +35,7 @@ async function visibleCardPoint(target: Locator) {
         const y = rect.top + (rect.height * yStep) / 10;
         const hitCard = document
           .elementsFromPoint(x, y)
-          .map((hit) => hit.closest(".coverflow-card"))
+          .map((hit) => hit.closest(".snap-motion-coverflow-card"))
           .find(Boolean);
         if (hitCard === element) return { x, y };
       }
@@ -251,10 +251,13 @@ test("settled card, side card, touch tap, cancellation, and stage focus resolve 
   await expect(viewport).not.toBeFocused();
   await page.getByTestId("snap-motion-media-gallery-close").click();
   await expect(gallery(page)).not.toBeVisible();
+  await expect(page.getByTestId("coverflow-inspect")).toBeFocused();
 
   await clickVisibleCard(page, card(page, "team"));
   await expect(gallery(page)).not.toBeVisible();
   await expectCarouselAt(viewport, "team");
+  await expect(viewport).toHaveAttribute("data-visual-id", "team");
+  await expect(viewport).toHaveAttribute("data-settled-index", "3");
   await expect(viewport).not.toBeFocused();
   await clickVisibleCard(page, card(page, "team"));
   await expect(gallery(page)).toBeVisible();
@@ -489,7 +492,7 @@ test("native modal contains focus, guards the background, and restores scroll st
   ).toEqual(rootStyles);
 });
 
-test("backdrop closes only a true backdrop sequence and not an image gesture", async ({ page }) => {
+test("scrim closes only a true scrim sequence and not an image gesture", async ({ page }) => {
   await openGallery(page);
   const dialog = gallery(page);
   await dialog.dispatchEvent("pointerdown", {
@@ -529,7 +532,9 @@ test("close synchronizes every carousel owner and resumes navigation without cat
   const pagination = page.getByRole("group", { name: "Coverflow screens" }).getByRole("button");
   await pagination.nth(1).click();
   await expectCarouselAt(viewport, "project");
-  const coverflowMessageBeforeRace = await page.getByTestId("coverflow-status").textContent();
+  const coverflowMessageBeforeRace = await page
+    .getByTestId("snap-motion-coverflow-status")
+    .textContent();
   await openGallery(page);
 
   await gallery(page).evaluate((dialog) => {
@@ -541,16 +546,21 @@ test("close synchronizes every carousel owner and resumes navigation without cat
       ?.click();
   });
   await expect(gallery(page)).not.toBeVisible();
+  // The gallery requested `map`, but close happened in the same task before Vue could confirm that
+  // controlled value. Close details therefore retain the authoritative `project` ID and never
+  // manufacture a settlement for the pending destination.
   await expectCarouselAt(viewport, "project");
   await page.waitForTimeout(400);
   await expect(viewport).toHaveAttribute("data-active-id", "project");
   await expect(page.getByTestId("snap-motion-media-gallery-status")).toHaveText(
     "Project 24031 — Horizon, 2 of 5",
   );
-  await expect(page.getByTestId("coverflow-status")).toHaveText(coverflowMessageBeforeRace ?? "");
+  await expect(page.getByTestId("snap-motion-coverflow-status")).toHaveText(
+    coverflowMessageBeforeRace ?? "",
+  );
 
   await openGallery(page);
-  await page.getByTestId("coverflow-status").evaluate((element) => {
+  await page.getByTestId("snap-motion-coverflow-status").evaluate((element) => {
     const messages: string[] = [];
     const observer = new MutationObserver(() => {
       messages.push(element.textContent?.trim() ?? "");
@@ -597,7 +607,9 @@ test("close synchronizes every carousel owner and resumes navigation without cat
 
   await page.keyboard.press("ArrowLeft");
   await expectCarouselAt(viewport, "team");
-  await expect(page.getByTestId("coverflow-status")).toContainText("Team & rollen, 4 of 5");
+  await expect(page.getByTestId("snap-motion-coverflow-status")).toContainText(
+    "Team & rollen, 4 of 5",
+  );
 });
 
 test("buttons, keys, announcements, and item changes own bounded gallery navigation", async ({
@@ -937,7 +949,7 @@ test("fit swipe, zoomed pan, pinch, cancellation, and resize keep exclusive owne
   expect(resized.scale).toBeGreaterThanOrEqual(1);
 });
 
-test("loading preserves geometry, requests adjacent images, and reveals decoded content", async ({
+test("loading preserves geometry, requests only the current full image, and reveals decoded content", async ({
   page,
 }) => {
   await page.goto("about:blank");
@@ -953,7 +965,7 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
     releaseRetry = resolve;
   });
   await page.route(mapFullPattern, async (route) => {
-    if (route.request().url().includes("retry=")) {
+    if (route.request().url().includes("snap-motion-retry=")) {
       await retryHold;
       await route.continue();
     } else {
@@ -965,11 +977,23 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
     }
   });
   await openLabDemo(page, "coverflow", "no-preference");
+  expect(fullRequests).toEqual(new Set());
   await page.getByTestId("coverflow-inspect").click();
   await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
-  await page.getByTestId("snap-motion-media-gallery-shell").evaluate(async (element) => {
-    await Promise.all(element.getAnimations().map((animation) => animation.finished));
-  });
+  await expect(gallery(page)).toHaveAttribute("data-dialog-state", "open");
+  const shell = page.getByTestId("snap-motion-media-gallery-shell");
+  await expect
+    .poll(() =>
+      shell.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const matrix =
+          style.transform === "none"
+            ? new DOMMatrixReadOnly()
+            : new DOMMatrixReadOnly(style.transform);
+        return Math.max(Math.abs(1 - Number(style.opacity)), Math.abs(1 - matrix.a));
+      }),
+    )
+    .toBeLessThan(0.0001);
 
   const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
   const before = await viewport.boundingBox();
@@ -993,7 +1017,7 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
   const after = await viewport.boundingBox();
   expect(Math.abs((after?.width ?? 0) - (before?.width ?? 0))).toBeLessThan(1);
   expect(Math.abs((after?.height ?? 0) - (before?.height ?? 0))).toBeLessThan(1);
-  expect(fullRequests).toEqual(new Set(["project.svg", "map.svg", "team.svg"]));
+  expect(fullRequests).toEqual(new Set(["map.svg"]));
   await expect(
     page.locator('[data-slot-position="0"] .snap-motion-media-gallery-full.revealed'),
   ).toHaveCount(1);
@@ -1008,12 +1032,10 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
   const invalidPairGeometry = await gallery(page).evaluate(async (element) => {
     type GalleryItem = {
       alt: string;
-      fullSrc?: string;
-      height: number;
+      full: { height?: number; src: string; width?: number };
       id: string;
-      previewSrc: string;
+      preview: { height?: number; src: string; width?: number };
       title: string;
-      width: number;
     };
     const instance = Reflect.get(element, "__vueParentComponent") as
       | { props: { items: GalleryItem[] } }
@@ -1021,7 +1043,13 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
     const currentIndex = Number(element.dataset.galleryIndex);
     const current = instance?.props.items[currentIndex];
     if (!instance || !current) throw new Error("Gallery component props are unavailable.");
-    instance.props.items = [{ ...current, height: -1, width: 1_600 }];
+    instance.props.items = [
+      {
+        ...current,
+        preview: { ...current.preview, height: -1, width: 1_600 },
+        full: { ...current.full, height: -1, width: 1_600 },
+      },
+    ];
     await Promise.resolve();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const viewportElement = element.querySelector<HTMLElement>(
@@ -1039,17 +1067,73 @@ test("loading preserves geometry, requests adjacent images, and reveals decoded 
       width: rect?.width ?? 0,
     };
   });
-  expect(invalidPairGeometry.intrinsicWidth).toBe(1);
-  expect(invalidPairGeometry.intrinsicHeight).toBe(1);
+  expect(invalidPairGeometry.intrinsicWidth).toBe(0);
+  expect(invalidPairGeometry.intrinsicHeight).toBe(0);
   expect(invalidPairGeometry.aspectRatio).toBeCloseTo(1.6, 2);
   expect(invalidPairGeometry.width).toBeGreaterThan(100);
   expect(invalidPairGeometry.height).toBeGreaterThan(100);
 });
 
+test("default preload stays bounded across one move and rapid replacement navigation", async ({
+  page,
+}) => {
+  const fullRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/coverflow-gallery/") && request.url().includes("?full")) {
+      fullRequests.push(new URL(request.url()).pathname.split("/").at(-1) ?? "");
+    }
+  });
+
+  await openLabDemo(page, "coverflow", "no-preference");
+  expect(fullRequests).toEqual([]);
+  await page.getByTestId("coverflow-inspect").click();
+  const dialog = gallery(page);
+  await expect(dialog).toHaveAttribute("data-settled-id", "map");
+  await expect(dialog.locator(".snap-motion-media-gallery-preview")).toHaveCount(3);
+  await expect(dialog.locator(".snap-motion-media-gallery-full")).toHaveCount(1);
+  await expect(
+    dialog.locator('[data-slot-position="0"] .snap-motion-media-gallery-preview'),
+  ).toHaveAttribute("srcset", /thumbnail-800 800w.*thumbnail 1600w/);
+  await expect(
+    dialog.locator('[data-slot-position="0"] .snap-motion-media-gallery-preview'),
+  ).toHaveAttribute("sizes", "(max-width: 48rem) 100vw, 50vw");
+  await expect(
+    dialog.locator('[data-slot-position="0"] .snap-motion-media-gallery-full'),
+  ).toHaveAttribute("srcset", /full-1600 1600w.*full-2400 2400w/);
+  await expect(
+    dialog.locator('[data-slot-position="0"] .snap-motion-media-gallery-full'),
+  ).toHaveAttribute("sizes", "100vw");
+  await expect.poll(() => [...new Set(fullRequests)]).toEqual(["map.svg"]);
+
+  await dialog.getByRole("button", { name: /Next/ }).click();
+  await expect(dialog).toHaveAttribute("data-settled-id", "team");
+  await expect(dialog.locator(".snap-motion-media-gallery-full")).toHaveCount(1);
+  await expect.poll(() => [...new Set(fullRequests)]).toEqual(["map.svg", "team.svg"]);
+
+  await dialog.evaluate((element) => {
+    const instance = Reflect.get(element, "__vueParentComponent") as
+      | { parent?: { setupState?: { galleryActiveId?: string } } }
+      | undefined;
+    const state = instance?.parent?.setupState;
+    if (!state) throw new Error("Coverflow demo state is unavailable.");
+    state.galleryActiveId = "settings";
+    state.galleryActiveId = "templates";
+  });
+  await expect(dialog).toHaveAttribute("data-settled-id", "templates");
+  await expect(dialog.locator(".snap-motion-media-gallery-full")).toHaveCount(1);
+  await expect(
+    dialog.locator('[data-slot-position="0"] .snap-motion-media-gallery-full'),
+  ).toHaveAttribute("src", /templates\.svg\?full/);
+  await expect
+    .poll(() => [...new Set(fullRequests)])
+    .toEqual(["map.svg", "team.svg", "templates.svg"]);
+  expect(fullRequests).not.toContain("settings.svg");
+});
+
 test("a failed full image retains its preview and leaves navigation and close usable", async ({
   page,
 }) => {
-  await page.route("**/coverflow-gallery/map.svg?full", async (route) => {
+  await page.route("**/coverflow-gallery/map.svg?full*", async (route) => {
     await route.fulfill({
       body: "invalid image",
       contentType: "image/png",

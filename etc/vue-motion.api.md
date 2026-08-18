@@ -4,6 +4,7 @@
 
 ```ts
 
+import { ActiveIdRequestDetails } from '@snap-motion/core';
 import { AnimationDriver } from '@snap-motion/core';
 import { ComputedRef } from 'vue';
 import { ControllerConfigurationUpdate } from '@snap-motion/core';
@@ -12,25 +13,59 @@ import { ControllerMoveByOptions } from '@snap-motion/core';
 import { ControllerMoveOptions } from '@snap-motion/core';
 import { ControllerPhase } from '@snap-motion/core';
 import { ControllerSnapshot } from '@snap-motion/core';
+import { NavigationReason } from '@snap-motion/core';
 import { Ref } from 'vue';
+import type { ScalarBounds } from '@snap-motion/core';
+import type { SemanticId } from '@snap-motion/core';
+import { SettlementDetails } from '@snap-motion/core';
 import { ShallowRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
 import { SnapController } from '@snap-motion/core';
 import { SnapControllerOptions } from '@snap-motion/core';
 import { SnapDirection } from '@snap-motion/core';
 
+export { ActiveIdRequestDetails }
+
 // @public (undocumented)
 export function createMotionDriver(): AnimationDriver;
 
-// @public (undocumented)
-export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "route";
+export { NavigationReason }
 
-// @public (undocumented)
+// @public
 export type PointerIntent = "horizontal" | "pending" | "vertical";
+
+export { SettlementDetails }
+
+// @public
+export interface SurfaceMotionDiagnostics<Id extends SemanticId = SemanticId> {
+    // (undocumented)
+    readonly anchors: readonly SnapAnchor<Id>[];
+    // (undocumented)
+    readonly bounds: ScalarBounds;
+    // (undocumented)
+    readonly isAnimating: boolean;
+    readonly nearestId: Id | undefined;
+    // (undocumented)
+    readonly phase: ControllerPhase;
+    // (undocumented)
+    readonly pointerInteractionActive: boolean;
+    // (undocumented)
+    readonly pointerOwned: boolean;
+    // (undocumented)
+    readonly position: number;
+    // (undocumented)
+    readonly reducedMotion: boolean;
+    // (undocumented)
+    readonly targetId: Id | undefined;
+    // (undocumented)
+    readonly velocity: number;
+}
+
+// @public
+export function useBoundedSpringDriver(cardPitchPx: () => number): AnimationDriver;
 
 // @public (undocumented)
 export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<Id>): {
-    activeId: ComputedRef<Id | undefined>;
     configure: (update: ControllerConfigurationUpdate) => void;
     controller: SnapController<Id>;
     interrupt: () => void;
@@ -38,10 +73,12 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     isDragging: Ref<boolean, boolean>;
     moveBy: (direction: SnapDirection, options?: ControllerMoveByOptions) => SnapAnchor<Id> | null;
     moveTo: (id: Id, options?: ControllerMoveOptions) => SnapAnchor<Id> | null;
+    nearestId: ComputedRef<Id | undefined>;
     next: (options?: ControllerMoveByOptions) => SnapAnchor<Id> | null;
     onNativeDragStart: (event: DragEvent) => void;
     onPointerDown: (event: PointerEvent) => void;
     phase: ComputedRef<ControllerPhase>;
+    pointerInteractionActive: Ref<boolean, boolean>;
     pointerIntent: Ref<PointerIntent, PointerIntent>;
     pointerOwned: Ref<boolean, boolean>;
     position: ComputedRef<number>;
@@ -69,6 +106,7 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<SnapContro
     pointerIntent?: "horizontal" | "immediate";
     // (undocumented)
     reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
+    resolveDragOrigin?: () => Id | undefined;
     // (undocumented)
     resolveReleaseTarget?: (context: {
         controller: SnapController<Id>;

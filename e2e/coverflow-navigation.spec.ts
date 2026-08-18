@@ -228,11 +228,9 @@ test("a swipe gives the stage keyboard ownership without disturbing retained in-
   await expectCarouselAt(viewport, "settings");
 });
 
-test("Arrow keys share one-step retargeting while focus and announcements remain independent", async ({
-  page,
-}) => {
+test("an interrupted Arrow transition announces only the settlement it earns", async ({ page }) => {
   const viewport = page.getByTestId("coverflow-viewport");
-  const status = page.getByTestId("coverflow-status");
+  const status = page.getByTestId("snap-motion-coverflow-status");
   const buttons = pagination(page);
   await buttons.first().click();
   await expectCarouselAt(viewport, "templates");
@@ -253,9 +251,23 @@ test("Arrow keys share one-step retargeting while focus and announcements remain
     ).coverflowKeyboardAnnouncements = { messages, observer };
   });
 
-  await page.keyboard.press("ArrowRight");
-  await expect(viewport).toHaveAttribute("data-target-id", "project");
-  await page.keyboard.press("ArrowRight");
+  await page.evaluate(async () => {
+    const target = document.activeElement;
+    if (!(target instanceof HTMLElement))
+      throw new Error("Coverflow keyboard target is not focused.");
+    for (let index = 0; index < 2; index += 1) {
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          key: "ArrowRight",
+        }),
+      );
+      // Let Vue publish the host's controlled confirmation before the next request, without
+      // allowing an animation frame in which the first transition could settle.
+      await Promise.resolve();
+    }
+  });
   await expect(viewport).toHaveAttribute("data-target-id", "map");
   await expectCarouselAt(viewport, "map");
   await expect(buttons.first()).toBeFocused();
@@ -277,10 +289,50 @@ test("Arrow keys share one-step retargeting while focus and announcements remain
   await expect(viewport).toHaveAttribute("data-target-id", "templates");
   await expectCarouselAt(viewport, "templates");
   await page.keyboard.press("ArrowRight");
-  await expect(viewport).toHaveAttribute("data-phase", "settling");
+  await expect(viewport).toHaveAttribute("data-active-id", "project");
   await page.keyboard.press("ArrowLeft");
   await expect(viewport).toHaveAttribute("data-target-id", "templates");
   await expectCarouselAt(viewport, "templates");
+});
+
+test("fully settled sequential Arrow transitions each announce exactly once", async ({ page }) => {
+  const viewport = page.getByTestId("coverflow-viewport");
+  const status = page.getByTestId("snap-motion-coverflow-status");
+  const buttons = pagination(page);
+  await buttons.first().click();
+  await expectCarouselAt(viewport, "templates");
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(buttons.first()).toBeFocused();
+
+  await status.evaluate((element) => {
+    const messages: string[] = [];
+    const observer = new MutationObserver(() => {
+      messages.push(element.textContent?.trim() ?? "");
+    });
+    observer.observe(element, { characterData: true, childList: true, subtree: true });
+    (
+      window as typeof window & {
+        coverflowSequentialAnnouncements?: { messages: string[]; observer: MutationObserver };
+      }
+    ).coverflowSequentialAnnouncements = { messages, observer };
+  });
+
+  await page.keyboard.press("ArrowRight");
+  await expectCarouselAt(viewport, "project");
+  await page.keyboard.press("ArrowRight");
+  await expectCarouselAt(viewport, "map");
+
+  const announcements = await page.evaluate(() => {
+    const trace = (
+      window as typeof window & {
+        coverflowSequentialAnnouncements?: { messages: string[]; observer: MutationObserver };
+      }
+    ).coverflowSequentialAnnouncements;
+    trace?.observer.disconnect();
+    return trace?.messages ?? [];
+  });
+  expect(announcements).toEqual(["Project 24031 — Horizon, 2 of 5", "Locatie & planning, 3 of 5"]);
 });
 
 test("boundaries, Home/End, native buttons, and form controls keep their keyboard contracts", async ({

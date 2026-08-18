@@ -1,7 +1,12 @@
 # Composables
 
-Import carousel composables from `@snap-motion/vue/carousel`, sheet composables from
+Import carousel composables from `@snap-motion/vue/carousel`, spatial-surface composables from
+`@snap-motion/vue/coverflow` and `@snap-motion/vue/stacked-deck`, sheet composables from
 `@snap-motion/vue/sheet`, and the lower-level scalar adapter from `@snap-motion/vue/motion`.
+
+`useStackedDeckMotion` and `useCoverflowMotion` are the surface layer beneath `StackedDeck` and
+`Coverflow`: the same behaviour with your own markup. See
+[Spatial surfaces](./spatial-surfaces.md).
 The root entrypoint also re-exports these stable composables.
 
 ## `useCarouselMotion`

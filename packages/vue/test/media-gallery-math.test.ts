@@ -1,4 +1,5 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { expectTypeOf } from "vitest";
 
 import {
   type GallerySwipeInput,
@@ -10,6 +11,7 @@ import {
   clampGalleryIndex,
   constrainMediaTransform,
   galleryPreloadIndices,
+  hasDistinctMediaGallerySource,
   isRepeatedGalleryTap,
   resolveGalleryCommitOffset,
   resolveGalleryMediaVisibility,
@@ -46,10 +48,8 @@ const galleryItem = (changes: Partial<MediaGalleryItem> = {}): MediaGalleryItem 
   id: "one",
   title: "One",
   alt: "One",
-  previewSrc: "/one-preview.jpg",
-  fullSrc: "/one-full.jpg",
-  width: 1_600,
-  height: 1_000,
+  preview: { src: "/one-preview.jpg", width: 800, height: 500 },
+  full: { src: "/one-full.jpg", width: 1_600, height: 1_000 },
   ...changes,
 });
 
@@ -408,6 +408,33 @@ describe("gallery boundary invariants", () => {
 });
 
 describe("gallery item normalization", () => {
+  it("widens normalized fields while preserving literal identity and custom metadata", () => {
+    const source = {
+      id: "wide" as const,
+      title: "Wide",
+      alt: "Wide",
+      preview: { src: "/wide.jpg", width: 0 as const, height: -1 as const },
+      full: { src: "/wide.jpg", width: 0 as const, height: -1 as const },
+      attribution: { source: "archive" as const },
+    };
+    const normalized = normalizeMediaGalleryItems([source])[0]!;
+
+    expectTypeOf(normalized.id).toEqualTypeOf<"wide">();
+    expectTypeOf(normalized.intrinsicWidth).toEqualTypeOf<number>();
+    expectTypeOf(normalized.intrinsicHeight).toEqualTypeOf<number>();
+    expectTypeOf(normalized.full.src).toEqualTypeOf<string>();
+    expectTypeOf(normalized.attribution.source).toEqualTypeOf<"archive">();
+    expect(normalized).not.toBe(source);
+    expect(normalized).toMatchObject({
+      attribution: { source: "archive" },
+      intrinsicHeight: 1,
+      id: "wide",
+      intrinsicWidth: 1,
+    });
+    expect(normalized.full).toEqual({ src: "/wide.jpg" });
+    expect(source.full).toMatchObject({ src: "/wide.jpg", height: -1, width: 0 });
+  });
+
   it("clamps invalid and out-of-range indices", () => {
     expect(clampGalleryIndex(Number.NaN, 3)).toBe(0);
     expect(clampGalleryIndex(-8, 3)).toBe(0);
@@ -417,8 +444,8 @@ describe("gallery item normalization", () => {
 
   it("preserves a valid positive finite intrinsic-dimension pair", () => {
     expect(normalizeMediaGalleryItems([galleryItem()])[0]).toMatchObject({
-      height: 1_000,
-      width: 1_600,
+      intrinsicHeight: 1_000,
+      intrinsicWidth: 1_600,
     });
   });
 
@@ -431,13 +458,18 @@ describe("gallery item normalization", () => {
     ["negative values", -20, -30],
     ["mixed invalid values", 1_600, Number.NEGATIVE_INFINITY],
   ])("falls back the complete pair for %s", (_label, width, height) => {
-    const normalized = normalizeMediaGalleryItems([galleryItem({ width, height })])[0]!;
-    expect({ height: normalized.height, width: normalized.width }).toEqual({
+    const normalized = normalizeMediaGalleryItems([
+      galleryItem({
+        preview: { src: "/one-preview.jpg", width, height },
+        full: { src: "/one-full.jpg", width, height },
+      }),
+    ])[0]!;
+    expect({ height: normalized.intrinsicHeight, width: normalized.intrinsicWidth }).toEqual({
       height: 1,
       width: 1,
     });
-    expect(Number.isFinite(normalized.width / normalized.height)).toBe(true);
-    expect(normalized.width / normalized.height).toBeGreaterThan(0);
+    expect(Number.isFinite(normalized.intrinsicWidth / normalized.intrinsicHeight)).toBe(true);
+    expect(normalized.intrinsicWidth / normalized.intrinsicHeight).toBeGreaterThan(0);
   });
 
   it.each([
@@ -462,11 +494,11 @@ describe("gallery item normalization", () => {
   it("validates every ID before partially normalizing item fields", () => {
     let previewReads = 0;
     const first = galleryItem();
-    Object.defineProperty(first, "previewSrc", {
+    Object.defineProperty(first, "preview", {
       configurable: true,
       get() {
         previewReads += 1;
-        return "/one-preview.jpg";
+        return { src: "/one-preview.jpg" };
       },
     });
 
@@ -474,31 +506,151 @@ describe("gallery item normalization", () => {
     expect(previewReads).toBe(0);
   });
 
-  it("rejects a duplicate after trimming", () => {
+  it("rejects non-canonical IDs before comparing identity", () => {
     expect(() =>
       normalizeMediaGalleryItems([galleryItem(), galleryItem({ id: " one " })]),
-    ).toThrowError(/"one" at index 1 duplicates an earlier item/);
+    ).toThrowError(/has surrounding whitespace/);
   });
 
-  it("trims unique IDs while preserving item order", () => {
-    expect(
+  it("rejects rather than rewriting otherwise unique semantic IDs", () => {
+    expect(() =>
       normalizeMediaGalleryItems([
         galleryItem({ id: " first ", title: "First" }),
         galleryItem({ id: " second ", title: "Second" }),
-      ]).map(({ id, title }) => ({ id, title })),
-    ).toEqual([
-      { id: "first", title: "First" },
-      { id: "second", title: "Second" },
-    ]);
+      ]),
+    ).toThrowError(/has surrounding whitespace/);
   });
 
   it("does not duplicate a full layer when full and preview sources match", () => {
-    const { fullSrc: _fullSrc, ...previewOnly } = galleryItem({ id: "two" });
-    expect(
-      normalizeMediaGalleryItems([galleryItem({ fullSrc: "/one-preview.jpg" }), previewOnly]).map(
-        ({ fullSrc }) => fullSrc,
-      ),
-    ).toEqual([undefined, undefined]);
+    const normalized = normalizeMediaGalleryItems([
+      galleryItem({ full: { src: "/one-preview.jpg", width: 800, height: 500 } }),
+    ])[0]!;
+    expect(normalized.full).toEqual(normalized.preview);
+  });
+
+  describe("responsive source distinctness", () => {
+    const shared = {
+      src: "/image.jpg",
+      srcset: "/image-640.jpg 640w, /image-1280.jpg 1280w",
+      sizes: "100vw",
+    };
+
+    it("collapses equal normalized selection metadata regardless of intrinsic geometry", () => {
+      expect(
+        hasDistinctMediaGallerySource(
+          { ...shared, width: 640, height: 400 },
+          { ...shared, width: 1_280, height: 800 },
+        ),
+      ).toBe(false);
+      expect(
+        hasDistinctMediaGallerySource(
+          { ...shared, srcset: `  ${shared.srcset}  `, sizes: " 100vw " },
+          shared,
+        ),
+      ).toBe(false);
+    });
+
+    it("treats sizes as selection identity when the shared srcset can resolve differently", () => {
+      expect(hasDistinctMediaGallerySource(shared, { ...shared, sizes: "50vw" })).toBe(true);
+      expect(
+        hasDistinctMediaGallerySource(shared, {
+          src: shared.src,
+          srcset: shared.srcset,
+        }),
+      ).toBe(true);
+    });
+
+    it("treats different src and srcset values as network-distinct", () => {
+      expect(hasDistinctMediaGallerySource(shared, { ...shared, src: "/other.jpg" })).toBe(true);
+      expect(
+        hasDistinctMediaGallerySource(shared, {
+          ...shared,
+          srcset: "/image-800.jpg 800w, /image-1600.jpg 1600w",
+        }),
+      ).toBe(true);
+      expect(
+        hasDistinctMediaGallerySource(
+          { src: "/image.jpg" },
+          { src: "/image.jpg", srcset: shared.srcset },
+        ),
+      ).toBe(true);
+    });
+
+    it("ignores sizes without srcset and normalizes empty optional metadata", () => {
+      expect(
+        hasDistinctMediaGallerySource(
+          { src: "/image.jpg", sizes: "100vw" },
+          { src: "/image.jpg", sizes: "50vw" },
+        ),
+      ).toBe(false);
+      expect(
+        hasDistinctMediaGallerySource(
+          { src: "/image.jpg", srcset: " ", sizes: " " },
+          { src: "/image.jpg" },
+        ),
+      ).toBe(false);
+    });
+  });
+
+  it("forwards responsive source metadata and prefers full intrinsic dimensions", () => {
+    const normalized = normalizeMediaGalleryItems([
+      galleryItem({
+        preview: {
+          src: "/preview.jpg",
+          srcset: "/preview-400.jpg 400w, /preview-800.jpg 800w",
+          sizes: "50vw",
+          width: 800,
+          height: 500,
+        },
+        full: {
+          src: "/full.jpg",
+          srcset: "/full-1600.jpg 1600w, /full-2400.jpg 2400w",
+          sizes: "100vw",
+          width: 2_400,
+          height: 1_500,
+        },
+      }),
+    ])[0]!;
+
+    expect(normalized.preview).toEqual({
+      src: "/preview.jpg",
+      srcset: "/preview-400.jpg 400w, /preview-800.jpg 800w",
+      sizes: "50vw",
+      width: 800,
+      height: 500,
+    });
+    expect(normalized.full).toEqual({
+      src: "/full.jpg",
+      srcset: "/full-1600.jpg 1600w, /full-2400.jpg 2400w",
+      sizes: "100vw",
+      width: 2_400,
+      height: 1_500,
+    });
+    expect({ height: normalized.intrinsicHeight, width: normalized.intrinsicWidth }).toEqual({
+      height: 1_500,
+      width: 2_400,
+    });
+  });
+
+  it("normalizes surrounding and empty optional source metadata", () => {
+    const normalized = normalizeMediaGalleryItems([
+      galleryItem({
+        preview: { src: "/preview.jpg", srcset: "  /preview-800.jpg 800w  ", sizes: " " },
+        full: { src: "/full.jpg", srcset: "", sizes: " 100vw " },
+      }),
+    ])[0]!;
+
+    expect(normalized.preview).toEqual({
+      src: "/preview.jpg",
+      srcset: "/preview-800.jpg 800w",
+    });
+    expect(normalized.full).toEqual({ src: "/full.jpg", sizes: "100vw" });
+  });
+
+  it.each(["preview", "full"] as const)("rejects an empty %s source", (key) => {
+    expect(() => normalizeMediaGalleryItems([galleryItem({ [key]: { src: "   " } })])).toThrowError(
+      new RangeError(`Media gallery item 0 ${key}.src must be a non-empty string.`),
+    );
   });
 
   it("preserves the current item by identity and otherwise clamps its prior index", () => {

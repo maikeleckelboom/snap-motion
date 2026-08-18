@@ -15,8 +15,15 @@ Preparation does not change any physical result below.
 | TalkBack + Chrome Android certification      | Not executed |
 | Windows forced-colors physical review        | Not executed |
 | Text-only zoom and physical 200%/400% review | Not executed |
-| Repository visibility/provenance decision    | Pending      |
 | Manual publication approval                  | Not granted  |
 
-Packages remain private and unpublished. These blockers also mean downstream maikel.site integration
-is not unblocked.
+The repository is publicly visible and its package manifests point to it; this was verified through
+GitHub on 2026-08-08 and is no longer a blocker. Both npm registry lookups returned `404` on the same
+date. That proves no public version was found, not that the current account owns the scope or names,
+so ownership remains unverified.
+
+Packages remain private and unpublished. A verified local candidate may be installed from its
+checksummed tarballs for private maikel.site integration and dogfooding. That does not authorize
+public production activation: the physical accessibility rows must pass or record an accepted
+limitation first. Public npm publication additionally requires verified name ownership and manual
+publication approval.

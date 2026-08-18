@@ -1,6 +1,3 @@
-import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
-
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
@@ -348,6 +345,37 @@ test("scenario controls preserve focus, never auto-open, and clear only the trac
   await expect(gallery(page)).not.toBeVisible();
 });
 
+test("settled item description and application actions share the native modal", async ({
+  page,
+}) => {
+  await page.getByTestId("at-open-gallery").click();
+
+  const dialog = gallery(page);
+  await expect(dialog).toHaveAttribute("data-active-id", "wide-timeline");
+  await expect(dialog).toHaveAttribute("data-settled-id", "wide-timeline");
+  await expect(page.getByTestId("snap-motion-media-gallery-title")).toHaveText("Wide timeline");
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 3");
+  await expect(page.getByTestId("snap-motion-media-gallery-description")).toHaveText(
+    "Wide timeline description for the exact mechanically settled Gallery item.",
+  );
+  await expect(dialog.getByRole("img", { name: /wide blue timeline/i })).toBeVisible();
+  await expect(page.getByTestId("snap-motion-media-gallery-previous")).toBeEnabled();
+  await expect(page.getByTestId("snap-motion-media-gallery-next")).toBeEnabled();
+
+  const actionLink = page.getByTestId("at-gallery-action-link");
+  const actionButton = page.getByTestId("at-gallery-action-button");
+  await expect(actionLink).toBeVisible();
+  await expect(actionButton).toBeVisible();
+  expect(await actionLink.evaluate((element) => element.closest("dialog") !== null)).toBe(true);
+  expect(await actionButton.evaluate((element) => element.closest("dialog") !== null)).toBe(true);
+
+  await expect(page.getByTestId("snap-motion-media-gallery-close")).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(actionButton).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(actionLink).toBeFocused();
+});
+
 test("baseline event order ends with a bounded focus-restoration trace entry", async ({ page }) => {
   const opener = page.getByTestId("at-open-gallery");
   await opener.click();
@@ -369,14 +397,15 @@ test("baseline event order ends with a bounded focus-restoration trace entry", a
   await expect(opener).toBeFocused();
   await expect
     .poll(() => traceEvents(page))
-    .toBe("open-requested,opened,indexChanged,requestClose,update:open,closed,focus-restored");
+    .toBe(
+      "open-requested,opened,update:activeId,activeIdRequest,settled,update:open,openRequest,closed,focus-restored",
+    );
   await expect(trace(page).locator("li").last()).toContainText("at-open-gallery");
-  await expect(trace(page)).toContainText("reason next");
+  await expect(trace(page)).toContainText("reason keyboard");
   await expect(trace(page)).toContainText("reason escape");
 });
 
 test("mixed-aspect navigation preserves usable geometry through both transition directions", async ({
-  browserName,
   page,
 }) => {
   await page.setViewportSize({ width: 2_560, height: 1_312 });
@@ -406,13 +435,6 @@ test("mixed-aspect navigation preserves usable geometry through both transition 
 
   await holdButtonTransitionAtMidpoint(page, "next");
   const wideToTall = await captureGalleryGeometry(page, ["wide-timeline", "tall-document"]);
-  if (browserName === "chromium") {
-    const artifactDirectory = resolve(".artifacts/media-gallery-at-certification");
-    await mkdir(artifactDirectory, { recursive: true });
-    await page.screenshot({
-      path: resolve(artifactDirectory, "07-wide-to-tall-button-mid-transition.png"),
-    });
-  }
   expectRectStable(wideToTall.viewport, wideSettled.viewport);
   expectRectStable(wideToTall.header, wideSettled.header);
   expectRectStable(wideToTall.footer, wideSettled.footer);
@@ -500,9 +522,7 @@ test("named first, final, and single-item boundaries start at their exact states
   await expectNoHarnessViolations(page);
 });
 
-test("preview-only, delayed full, retry success, and terminal failures are deterministic", async ({
-  page,
-}) => {
+test("preview-only, delayed full, and terminal failures are deterministic", async ({ page }) => {
   await openScenario(page, "preview-only");
   await expect(gallery(page)).toHaveAttribute("data-image-state", "preview");
   await expect(page.getByTestId("snap-motion-media-gallery-loading")).toHaveCount(0);
@@ -515,13 +535,6 @@ test("preview-only, delayed full, retry success, and terminal failures are deter
     "Loading full image…",
   );
   await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded", { timeout: 4_000 });
-  await closeGallery(page);
-
-  await openScenario(page, "retry-success");
-  await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
-  await gallery(page).getByRole("button", { name: "Retry" }).click();
-  await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded");
-  await expect(gallery(page).getByRole("button", { name: "Retry" })).toHaveCount(0);
   await closeGallery(page);
 
   await openScenario(page, "full-failure");
@@ -541,14 +554,109 @@ test("preview-only, delayed full, retry success, and terminal failures are deter
   await expectNoHarnessViolations(page);
 });
 
-test("cancelled swipe and close-during-navigation trace only committed indices", async ({
+test("responsive retry follows the selected candidate across retry, navigation, and reopen", async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  await page.route("**/__at-media__/retry.svg*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.has("snap-motion-retry")) {
+      await route.fulfill({
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500"></svg>',
+        contentType: "image/svg+xml",
+        headers: { "Cache-Control": "no-store" },
+        status: 200,
+      });
+      return;
+    }
+    await route.fulfill({
+      body: "intentionally invalid image bytes",
+      contentType: "image/png",
+      headers: { "Cache-Control": "no-store" },
+      status: 200,
+    });
+  });
+  page.on("request", (request) => {
+    if (request.url().includes("/__at-media__/retry")) requests.push(request.url());
+  });
+
+  await openScenario(page, "retry-success");
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
+  const currentSlot = gallery(page).locator('[data-slot-position="0"]');
+  await expect(currentSlot.locator(".snap-motion-media-gallery-preview")).toBeVisible();
+  await expect(currentSlot.locator(".snap-motion-media-gallery-full")).toHaveCount(0);
+  await expect(
+    gallery(page).locator(
+      '[data-slot-position]:not([data-slot-position="0"]) .snap-motion-media-gallery-full',
+    ),
+  ).toHaveCount(0);
+  expect(requests.map((source) => new URL(source).pathname)).toEqual([
+    expect.stringMatching(/\/__at-media__\/retry\.svg$/),
+  ]);
+  expect(requests.some((source) => source.includes("retry-fallback.svg"))).toBe(false);
+
+  await gallery(page).getByRole("button", { name: "Retry" }).click();
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded");
+  const retriedFull = currentSlot.locator(".snap-motion-media-gallery-full");
+  await expect(retriedFull).not.toHaveAttribute("srcset");
+  const retrySource = await retriedFull.evaluate((element) => element.currentSrc);
+  const retryUrl = new URL(retrySource);
+  expect(retryUrl.pathname).toMatch(/\/__at-media__\/retry\.svg$/);
+  expect(retryUrl.searchParams.get("snap-motion-retry")).toMatch(/^\d+-\d+-\d+$/);
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toBe(retrySource);
+  expect(requests.some((source) => source.includes("retry-fallback.svg"))).toBe(false);
+
+  await page.getByTestId("snap-motion-media-gallery-next").click();
+  await expect(gallery(page)).toHaveAttribute("data-settled-id", "wide-timeline");
+  const navigatedSource = await gallery(page)
+    .locator('[data-slot-position="0"] .snap-motion-media-gallery-full')
+    .evaluate((element) => element.currentSrc);
+  expect(navigatedSource).not.toContain("snap-motion-retry");
+
+  await page.getByTestId("snap-motion-media-gallery-previous").click();
+  await expect(gallery(page)).toHaveAttribute("data-settled-id", "retry-success-image");
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
+  await gallery(page).getByRole("button", { name: "Retry" }).click();
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded");
+  await expect
+    .poll(() => requests.filter((source) => source.includes("snap-motion-retry=")).length)
+    .toBe(2);
+  const navigationRetryUrl = new URL(
+    requests.filter((source) => source.includes("snap-motion-retry=")).at(-1)!,
+  );
+  expect(navigationRetryUrl.pathname).toMatch(/\/__at-media__\/retry\.svg$/);
+  expect(navigationRetryUrl.searchParams.get("snap-motion-retry")).toMatch(/^\d+-\d+-\d+$/);
+  expect(navigationRetryUrl.search).not.toBe(retryUrl.search);
+
+  await closeGallery(page);
+  await selectScenario(page, "baseline");
+  await selectScenario(page, "retry-success");
+  await page.getByTestId("at-open-gallery").click();
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
+  await gallery(page).getByRole("button", { name: "Retry" }).click();
+  await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded");
+  await expect
+    .poll(() => requests.filter((source) => source.includes("snap-motion-retry=")).length)
+    .toBe(3);
+  const reopenRetryUrl = new URL(
+    requests.filter((source) => source.includes("snap-motion-retry=")).at(-1)!,
+  );
+  expect(reopenRetryUrl.pathname).toMatch(/\/__at-media__\/retry\.svg$/);
+  expect(reopenRetryUrl.searchParams.get("snap-motion-retry")).toMatch(/^\d+-\d+-\d+$/);
+  expect(reopenRetryUrl.search).not.toBe(navigationRetryUrl.search);
+  expect(requests.length).toBeLessThanOrEqual(6);
+  expect(requests.some((source) => source.includes("retry-fallback.svg"))).toBe(false);
+});
+
+test("cancelled swipe emits no semantic change and close cancels pending settlement", async ({
   page,
 }) => {
   await page.getByTestId("at-open-gallery").click();
   const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
   await cancelPointerGesture(page, viewport);
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 3");
-  expect((await traceEvents(page)).split(",")).not.toContain("indexChanged");
+  expect((await traceEvents(page)).split(",")).not.toContain("activeIdRequest");
   await closeGallery(page);
 
   await page.getByTestId("reduced-motion-mode").selectOption("no-preference");
@@ -566,9 +674,10 @@ test("cancelled swipe and close-during-navigation trace only committed indices",
   });
   await expect(gallery(page)).not.toBeVisible();
   await expect.poll(() => traceEvents(page)).toContain("focus-restored");
-  expect((await traceEvents(page)).split(",")).not.toContain("indexChanged");
+  expect((await traceEvents(page)).split(",")).toContain("activeIdRequest");
+  expect((await traceEvents(page)).split(",")).not.toContain("settled");
   await expect(trace(page)).toContainText("closed");
-  await expect(trace(page)).toContainText("final index 1");
+  await expect(trace(page)).toContainText("final id");
 });
 
 test("long localized content reflows at 320 CSS pixels and 200%-equivalent geometry", async ({
@@ -582,6 +691,52 @@ test("long localized content reflows at 320 CSS pixels and 200%-equivalent geome
       name: "Mediagalerij sluiten en terugkeren naar de scenario-opener",
     }),
   ).toBeVisible();
+  const description = page.getByTestId("snap-motion-media-gallery-description");
+  await expect(description).toHaveText(
+    "Deze beschrijving is opzettelijk lang om tekstterugloop, vergroting en kleine schermen zonder afkapping te kunnen controleren.",
+  );
+  const descriptionGeometry = await description.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper must execute in the browser evaluation scope.
+    const dimensions = (candidate: Element | null) => {
+      if (!(candidate instanceof HTMLElement)) return null;
+      const rect = candidate.getBoundingClientRect();
+      return {
+        clientWidth: candidate.clientWidth,
+        left: rect.left,
+        right: rect.right,
+        scrollWidth: candidate.scrollWidth,
+        width: rect.width,
+      };
+    };
+    const header = element.closest("header");
+    return {
+      actions: dimensions(header?.querySelector(".snap-motion-media-gallery-actions") ?? null),
+      close: dimensions(header?.querySelector(".snap-motion-media-gallery-close") ?? null),
+      description: dimensions(element),
+      gridColumns: header ? getComputedStyle(header).gridTemplateColumns : "",
+      header: dimensions(header),
+      height: box.height,
+      identity: dimensions(element.parentElement),
+      lineHeight,
+      right: box.right,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  expect(descriptionGeometry.height).toBeGreaterThan(descriptionGeometry.lineHeight * 1.5);
+  expect(descriptionGeometry.header).not.toBeNull();
+  expect(descriptionGeometry.header!.scrollWidth).toBe(descriptionGeometry.header!.clientWidth);
+  expect(descriptionGeometry.right, JSON.stringify(descriptionGeometry)).toBeLessThanOrEqual(
+    descriptionGeometry.header!.right,
+  );
+  expect(descriptionGeometry.identity!.right).toBeLessThanOrEqual(
+    descriptionGeometry.header!.right,
+  );
+  expect(descriptionGeometry.actions!.right).toBeLessThanOrEqual(descriptionGeometry.header!.right);
+  expect(descriptionGeometry.close!.right).toBeLessThanOrEqual(descriptionGeometry.header!.right);
+  await expect(page.getByTestId("at-gallery-action-link")).toBeVisible();
+  await expect(page.getByTestId("at-gallery-action-button")).toBeVisible();
   expect(
     await page.evaluate(() => ({
       bodyOverflow: document.body.scrollWidth - window.innerWidth,
@@ -640,10 +795,24 @@ test("the complete harness remains usable under forced-colors emulation", async 
   await expect(page.getByTestId("at-scenario-long-localized")).toBeFocused();
   await page.getByTestId("at-open-gallery").click();
   await expect(page.getByTestId("snap-motion-media-gallery-close")).toBeFocused();
+  await expect(page.getByTestId("snap-motion-media-gallery-description")).toBeVisible();
+  const actionLink = page.getByTestId("at-gallery-action-link");
+  await expect(actionLink).toBeVisible();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(actionLink).toBeFocused();
+  expect(
+    await page
+      .getByTestId("snap-motion-media-gallery-actions")
+      .evaluate((element) => getComputedStyle(element).forcedColorAdjust),
+  ).toBe("auto");
+  expect(await actionLink.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe(
+    "none",
+  );
   await expectNoHarnessViolations(page);
 });
 
-test("a sub-threshold completed swipe does not add an index event", async ({ page }) => {
+test("a sub-threshold completed swipe does not add a semantic change", async ({ page }) => {
   await page.getByTestId("at-open-gallery").click();
   await dragSyntheticPointerBy(
     page,
@@ -653,56 +822,5 @@ test("a sub-threshold completed swipe does not add an index event", async ({ pag
     { eventIntervalMs: 20, stepDelay: 0 },
   );
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 3");
-  expect((await traceEvents(page)).split(",")).not.toContain("indexChanged");
-});
-
-test("captures the canonical visual evidence set", async ({ browserName, page }) => {
-  test.skip(browserName !== "chromium", "One canonical Chromium evidence set is sufficient.");
-  const artifactDirectory = resolve(".artifacts/media-gallery-at-certification");
-  await mkdir(artifactDirectory, { recursive: true });
-
-  await page.setViewportSize({ width: 1_440, height: 1_000 });
-  await page.screenshot({
-    fullPage: true,
-    path: resolve(artifactDirectory, "01-harness-setup.png"),
-  });
-
-  await page.getByTestId("at-open-gallery").click();
-  await expect(gallery(page)).toBeVisible();
-  await page.screenshot({
-    path: resolve(artifactDirectory, "02-standard-open.png"),
-  });
-  await closeGallery(page);
-
-  await openScenario(page, "single-item");
-  await page.screenshot({
-    path: resolve(artifactDirectory, "03-one-item-state.png"),
-  });
-  await closeGallery(page);
-
-  await openScenario(page, "full-failure");
-  await expect(gallery(page)).toHaveAttribute("data-image-state", "failed");
-  await page.screenshot({
-    path: resolve(artifactDirectory, "04-failure-state.png"),
-  });
-  await closeGallery(page);
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  await selectScenario(page, "long-localized");
-  await page.screenshot({
-    fullPage: true,
-    path: resolve(artifactDirectory, "05-mobile-harness.png"),
-  });
-
-  await page.setViewportSize({ width: 1_440, height: 1_000 });
-  await selectScenario(page, "baseline");
-  await page.getByTestId("at-open-gallery").click();
-  await page.keyboard.press("ArrowRight");
-  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("3 / 3");
-  await page.keyboard.press("Escape");
-  await expect.poll(() => traceEvents(page)).toContain("focus-restored");
-  await trace(page).evaluate((element) => element.scrollIntoView({ block: "center" }));
-  await trace(page).screenshot({
-    path: resolve(artifactDirectory, "06-event-trace-after-close.png"),
-  });
+  expect((await traceEvents(page)).split(",")).not.toContain("activeIdRequest");
 });

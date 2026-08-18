@@ -1,11 +1,14 @@
 # Tuning in the lab
 
-Run `pnpm dev`, choose one interaction surface, and manipulate it directly before changing values.
-The primary decision in each lab state is the physical response of the selected surface; fixtures,
-controls, and diagnostics exist only to support that decision.
+Run `pnpm dev` and choose one interaction surface. The default Showcase keeps the interaction as the
+primary decision. Select **Workbench** or **Inspect motion** to use the same surface with compact live
+telemetry; expand **Advanced physics** for numeric tuning and **Full diagnostics** for surface-specific
+state. **Fixtures** contains deterministic package-default, assistive-technology, adaptive-host,
+variable-geometry, and render-window evidence without duplicating product demos.
 
-The preset selector loads a coherent baseline. Editable controls then create a temporary tuning
-variant. **Reset to preset** discards those edits.
+Inside Advanced physics, the preset selector loads a coherent baseline. Editable controls then
+create a temporary tuning variant. **Reset to preset** discards those edits. Controls appear only
+when the active registry entry declares that the surface consumes them.
 
 - **Stiffness** increases acceleration toward the target.
 - **Damping** removes oscillation and slows the final approach when raised.
@@ -21,10 +24,11 @@ variant. **Reset to preset** discards those edits.
 - **Programmatic impulse** gives button and keyboard actions directional momentum inside the same
   spring system.
 
-Use the stage width presets and free resize handle to test remeasurement. Exercise regular,
+Use the stage width presets and slider to test remeasurement. Exercise regular,
 extremely wide, extremely tall, transformed, delayed, unequal-width, and one-item fixtures. Toggle
 reduced motion explicitly rather than relying only on the host preference.
 
-Diagnostics expose phase, rendered position and velocity, intended target, active semantic ID,
-bounds, anchors, viewport, extent, reduced-motion state, pointer ownership, and animation status.
-They live in the lab and are not part of reusable primitives.
+Compact telemetry exposes phase, active or visual item, rendered position, and velocity. Full
+diagnostics retain intended target, semantic ID, bounds, viewport, extent, reduced-motion state,
+pointer ownership, animation status, and surface-specific values. Measured anchors have a separate
+disclosure. All remain lab-only observability and are not part of reusable primitives.

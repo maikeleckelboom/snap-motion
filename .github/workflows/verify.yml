@@ -3,6 +3,7 @@ name: Verify
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,13 +13,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Quality (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  repository-admission:
+    name: Repository admission
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      browser_required: ${{ steps.classify.outputs.browser_required }}
+      reason: ${{ steps.classify.outputs.reason }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .node-version
+      - name: Validate release-candidate history
+        run: node scripts/check-release-candidate-history.ts
+      - id: classify
+        name: Classify browser change scope
+        run: node scripts/classify-browser-change.ts
+
+  linux-verification:
+    name: Linux verification
+    needs: repository-admission
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
@@ -31,32 +50,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint
-      - run: pnpm typecheck
+      - name: Build package authority
+        run: pnpm build:packages
+      - run: pnpm typecheck:prepared
       - run: pnpm test:unit
-      - run: pnpm build
-
-  package-contract:
-    name: Package and API contract
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          run_install: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          cache: pnpm
-          node-version-file: .node-version
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm api:check
-      - run: pnpm performance:check
+      - name: Build application and fixture authority
+        run: pnpm build:apps:prepared
+      - run: pnpm api:check:prepared
       - run: pnpm size:check
-      - run: pnpm verify:packages
+      - name: Pack prepared package authority
+        run: pnpm pack:packages:prepared
+      - name: Certify browser-free packed packages
+        run: pnpm verify:packages:prepared
 
-  browser:
-    name: Browser regression
-    runs-on: ubuntu-latest
+  windows-portability:
+    name: Windows portability
+    needs: repository-admission
+    runs-on: windows-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
@@ -67,15 +78,162 @@ jobs:
           cache: pnpm
           node-version-file: .node-version
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium firefox webkit
-      - run: pnpm test:e2e
-      - run: pnpm test:fixtures
-      - name: Upload Playwright failure traces
-        if: failure()
+      - name: Verify Windows package and CLI portability
+        run: pnpm verify:portability
+
+  chromium:
+    name: Chromium ${{ matrix.shard }}/2
+    if: ${{ needs.repository-admission.result == 'success' && needs.repository-admission.outputs.browser_required == 'true' }}
+    needs: repository-admission
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          cache: pnpm
+          node-version-file: .node-version
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run Chromium ${{ matrix.shard }}/2
+        run: pnpm exec playwright test --project=chromium --shard=${{ matrix.shard }}/2 --workers=1 --reporter=line --output=test-results/chromium-${{ matrix.shard }}
+      - name: Upload Chromium failure evidence
+        if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: playwright-failures
-          path: test-results/**/trace.zip
+          name: playwright-chromium-${{ matrix.shard }}-of-2-attempt-${{ github.run_attempt }}
+          path: test-results/chromium-${{ matrix.shard }}
           if-no-files-found: ignore
           retention-days: 7
+
+  cross-browser:
+    name: Cross-browser interoperability
+    if: ${{ needs.repository-admission.result == 'success' && needs.repository-admission.outputs.browser_required == 'true' }}
+    needs: repository-admission
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --user 1001
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          cache: pnpm
+          node-version-file: .node-version
+      - run: pnpm install --frozen-lockfile
+      - name: Run Firefox and WebKit interoperability
+        run: pnpm exec playwright test --project=firefox --project=webkit --project=webkit-stacked-deck --workers=1 --reporter=line --output=test-results/cross-browser
+      - name: Upload cross-browser failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-cross-browser-attempt-${{ github.run_attempt }}
+          path: test-results/cross-browser
+          if-no-files-found: ignore
+          retention-days: 7
+
+  browser-integration:
+    name: Browser integration
+    if: ${{ needs.repository-admission.result == 'success' && needs.repository-admission.outputs.browser_required == 'true' }}
+    needs: repository-admission
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          cache: pnpm
+          node-version-file: .node-version
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build package authority
+        run: pnpm build:packages
+      - name: Build production preview
+        run: pnpm build:preview:prepared
+      - name: Build framework fixtures
+        run: pnpm build:fixtures:prepared
+      - name: Pack prepared package authority
+        run: pnpm pack:packages:prepared
+      - name: Certify production preview
+        run: pnpm exec playwright test --config playwright.preview.config.ts --workers=1 --reporter=line --output=test-results/preview
+      - name: Upload preview failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-preview-attempt-${{ github.run_attempt }}
+          path: test-results/preview
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Certify framework fixtures
+        run: pnpm exec playwright test --config playwright.fixtures.config.ts --workers=1 --reporter=line --output=test-results/fixtures
+      - name: Upload fixture failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-fixtures-attempt-${{ github.run_attempt }}
+          path: test-results/fixtures
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Certify packed Nuxt build and hydration
+        run: pnpm verify:packages:browser:prepared
+
+  browser-certification:
+    name: Browser certification
+    if: ${{ always() }}
+    needs:
+      - repository-admission
+      - chromium
+      - cross-browser
+      - browser-integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Certify browser evidence
+        env:
+          BROWSER_REQUIRED: ${{ needs.repository-admission.outputs.browser_required }}
+          SCOPE_REASON: ${{ needs.repository-admission.outputs.reason }}
+          ADMISSION_RESULT: ${{ needs.repository-admission.result }}
+          CHROMIUM_RESULT: ${{ needs.chromium.result }}
+          CROSS_BROWSER_RESULT: ${{ needs.cross-browser.result }}
+          INTEGRATION_RESULT: ${{ needs.browser-integration.result }}
+        run: |
+          set -eu
+          certified=false
+          if [ "$ADMISSION_RESULT" != "success" ]; then
+            message="Browser certification failed: repository admission did not succeed."
+          elif [ "$BROWSER_REQUIRED" = "false" ]; then
+            if [ "$CHROMIUM_RESULT" = "skipped" ] && [ "$CROSS_BROWSER_RESULT" = "skipped" ] && [ "$INTEGRATION_RESULT" = "skipped" ]; then
+              certified=true
+              message="Browser certification passed without browser work: $SCOPE_REASON"
+            else
+              message="Browser certification failed: browser work did not skip coherently for an irrelevant change."
+            fi
+          elif [ "$BROWSER_REQUIRED" = "true" ]; then
+            if [ "$CHROMIUM_RESULT" = "success" ] && [ "$CROSS_BROWSER_RESULT" = "success" ] && [ "$INTEGRATION_RESULT" = "success" ]; then
+              certified=true
+              message="Browser certification passed with Chromium, cross-browser interoperability, and browser integration clean."
+            else
+              message="Browser certification failed: chromium=$CHROMIUM_RESULT cross-browser=$CROSS_BROWSER_RESULT integration=$INTEGRATION_RESULT."
+            fi
+          else
+            message="Browser certification failed: change-scope output was missing or invalid."
+          fi
+          printf '## Browser certification\n\n%s\n' "$message" >> "$GITHUB_STEP_SUMMARY"
+          echo "$message"
+          if [ "$certified" != "true" ]; then exit 1; fi

@@ -1,10 +1,12 @@
 import { sortAnchors, type ControllerMeasurement } from "@snap-motion/core";
+import type { UseSnapMotionOptions } from "@snap-motion/vue/motion";
 import { computed, isRef, type Ref } from "vue";
 
+import { isHTMLElement } from "../internal/dom/realm";
 import { isSupportedPrimaryPointerStart } from "../internal/input/pointer-policy";
 import { useRemeasurement } from "../internal/layout/remeasurement";
-import { useSnapMotion, type UseSnapMotionOptions } from "../motion/use-snap-motion";
-import type { SnapMotionDirection } from "./carousel-contracts";
+import { useSnapMotion } from "../motion/use-snap-motion";
+import type { CarouselMotion, SnapMotionDirection } from "./carousel-contracts";
 import { carouselKeyAction } from "./carousel-keyboard";
 import { useHorizontalWheel } from "./carousel-wheel";
 
@@ -22,7 +24,9 @@ export interface UseCarouselMotionOptions<Id extends string> extends Omit<
   wheelSettleDelay?: number;
 }
 
-export function useCarouselMotion<Id extends string>(options: UseCarouselMotionOptions<Id>) {
+export function useCarouselMotion<Id extends string>(
+  options: UseCarouselMotionOptions<Id>,
+): CarouselMotion<Id> {
   const {
     direction = "auto",
     measure,
@@ -83,8 +87,13 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
     disabled: () => motion.isDragging.value,
     onDelta(delta) {
       if (!wheelActive) {
-        wheelOriginId = motion.snapshot.value.target?.id ?? motion.snapshot.value.active?.id;
-        motion.controller.beginDrag();
+        // One coalesced burst is one drag, so it resolves its origin exactly like a pointer gesture
+        // and receives the same drag envelope.
+        wheelOriginId =
+          snapOptions.resolveDragOrigin?.() ??
+          motion.snapshot.value.target?.id ??
+          motion.snapshot.value.active?.id;
+        motion.controller.beginDrag(wheelOriginId === undefined ? {} : { originId: wheelOriginId });
         wheelActive = true;
         wheelRawPosition = motion.position.value;
       }
@@ -140,14 +149,9 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
   });
 
   function onKeyDown(event: KeyboardEvent) {
-    let action = carouselKeyAction(event);
+    const action = carouselKeyAction(event, resolvedDirection());
     if (!action) {
       return;
-    }
-
-    if (resolvedDirection() === "rtl") {
-      if (action === "previous") action = "next";
-      else if (action === "next") action = "previous";
     }
 
     const anchors = orderedAnchors.value;
@@ -186,7 +190,7 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
     if (
       wheelActive &&
       isSupportedPrimaryPointerStart(event) &&
-      event.currentTarget instanceof HTMLElement
+      isHTMLElement(event.currentTarget)
     ) {
       stopWheelGesture();
       motion.controller.interrupt();
@@ -229,6 +233,7 @@ export function useCarouselMotion<Id extends string>(options: UseCarouselMotionO
     canNext,
     canPrevious,
     direction: computed(resolvedDirection),
+    resolveDirection: resolvedDirection,
     isWheeling: wheel.isWheeling,
     interrupt,
     moveBy,

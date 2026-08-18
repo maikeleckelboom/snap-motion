@@ -1,0 +1,14 @@
+export { default as StackedDeck } from "./components/StackedDeck.vue";
+export type {
+  StackedDeckCardState,
+  StackedDeckPileLayer,
+  StackedDeckPileLayerSlotState,
+  StackedDeckPose,
+  StackedDeckRole,
+} from "./stacked-deck-contracts";
+export { useStackedDeckMotion } from "./use-stacked-deck-motion";
+export type {
+  StackedDeckHandle,
+  UseStackedDeckMotionOptions,
+  UseStackedDeckMotionReturn,
+} from "./use-stacked-deck-motion";

@@ -1,9 +1,19 @@
 <script setup lang="ts" generic="Id extends string = SheetOpenSnapId">
 import type {
+  ActiveIdRequestDetails,
   ElasticityOptions,
+  NavigationReason,
   ReleaseTargetPolicy,
+  SettlementDetails,
   SpringConfiguration,
 } from "@snap-motion/core";
+import type {
+  CloseReason,
+  FocusReturnOptions,
+  InitialFocus,
+  OpenRequestDetails,
+} from "@snap-motion/vue/dialog";
+import type { SnapMotionMessages } from "@snap-motion/vue/localization";
 import {
   computed,
   nextTick,
@@ -16,21 +26,21 @@ import {
   watch,
 } from "vue";
 
-import type { CloseReason } from "../../dialog/dialog-contracts";
 import {
   captureFocusOpener,
   focusInitial,
   maintainModalTabOrder,
   restoreFocus,
-  type FocusReturnOptions,
-  type InitialFocus,
 } from "../../internal/accessibility/focus";
 import {
-  createEnglishSnapMotionMessages,
-  type SnapMotionMessages,
-} from "../../localization/messages";
+  observeFocusHandoffFromOpener,
+  scheduleVerifiedFocusRestore,
+  type FocusHandoffObservation,
+  type FocusRestoreVerification,
+} from "../../internal/accessibility/focus-restore";
+import { createEnglishSnapMotionMessages } from "../../localization/messages";
 import { sheetContextKey, type SheetContext } from "../sheet-context";
-import type { SheetNavigationReason, SheetSide } from "../sheet-contracts";
+import type { SheetSide } from "../sheet-contracts";
 import {
   createDefaultSheetSnapPoints,
   defaultSheetOpenSnapId,
@@ -38,6 +48,7 @@ import {
   type SheetSnapPoint,
   type SheetViewportPolicy,
 } from "../sheet-policy";
+import type { SheetDiagnostics } from "../sheetDiagnostics";
 import { useSheetMotion, type SheetViewportDimensions } from "../use-sheet-motion";
 import SheetSnapPicker from "./SheetSnapPicker.vue";
 
@@ -75,12 +86,11 @@ const props = withDefaults(
 const emit = defineEmits<{
   (event: "update:open", open: boolean): void;
   (event: "update:activeId", id: Id): void;
-  (event: "requestClose", reason: CloseReason): void;
-  (event: "requestActiveId", id: Id, reason: SheetNavigationReason): void;
+  (event: "openRequest", open: false, details: OpenRequestDetails): void;
+  (event: "activeIdRequest", id: Id, details: ActiveIdRequestDetails): void;
   (event: "opened"): void;
   (event: "closed"): void;
-  (event: "settled", id: Id): void;
-  (event: "targetChanged", id: Id, reason: SheetNavigationReason): void;
+  (event: "settled", id: Id, details: SettlementDetails): void;
 }>();
 
 const slots = useSlots();
@@ -117,24 +127,87 @@ function preferredIdForSide() {
     : configuredPoints.value[0]!.id;
 }
 
+function hasConfiguredPoint(id: Id) {
+  return configuredPoints.value.some((point) => point.id === id);
+}
+
+function retainedConfiguredId() {
+  if (props.activeId !== undefined && hasConfiguredPoint(props.activeId)) return props.activeId;
+  return hasConfiguredPoint(intendedId.value) ? intendedId.value : preferredIdForSide();
+}
+
 const intendedId = ref<Id>(preferredIdForSide());
+const internalActiveId = ref<Id>(intendedId.value);
+const semanticActiveId = computed<Id>(() => props.activeId ?? internalActiveId.value);
+const latestValidAuthorityId = ref<Id | undefined>(
+  props.activeId !== undefined && hasConfiguredPoint(props.activeId) ? props.activeId : undefined,
+);
+const mechanicalAnchorId = ref<Id | undefined>(intendedId.value);
 let mounted = false;
 let capturedOpener: HTMLElement | undefined;
+let capturedOpenerGeneration = 0;
+let capturedOpenerWasExplicit = false;
 let closeReason: CloseReason = "programmatic";
 let targetGeneration = 0;
 let settledGeneration = 0;
-let focusRestoreFrame: number | undefined;
-let suppressNextFocusRestore = false;
-let presentationChangeClosing = false;
+let focusRestoreVerification: FocusRestoreVerification | undefined;
+let lifecycleGeneration = 0;
+let openedGeneration = 0;
+let finalizedGeneration = 0;
+let closingGeneration: number | undefined;
+const nativeCloseLifecycles: {
+  focusHandoff?: FocusHandoffObservation;
+  generation: number;
+}[] = [];
+const presentationCloseGenerations = new Set<number>();
+let suppressedFocusRestoreGeneration: number | undefined;
 
-function acceptTarget(id: Id, reason: SheetNavigationReason, userOriginated: boolean) {
+function explicitOpenerForCurrentLifecycle() {
+  if (capturedOpener) return capturedOpenerWasExplicit ? capturedOpener : undefined;
+  return props.focusReturn?.opener;
+}
+
+function cancelPendingCloseHandoffs() {
+  for (const lifecycle of nativeCloseLifecycles) lifecycle.focusHandoff?.cancel();
+}
+
+function clearPendingCloseHandoffs() {
+  cancelPendingCloseHandoffs();
+  nativeCloseLifecycles.length = 0;
+}
+
+let settlementReason: NavigationReason = "external";
+
+function resolveRollbackId(): Id | undefined {
+  if (
+    latestValidAuthorityId.value !== undefined &&
+    hasConfiguredPoint(latestValidAuthorityId.value)
+  ) {
+    return latestValidAuthorityId.value;
+  }
+  return mechanicalAnchorId.value !== undefined && hasConfiguredPoint(mechanicalAnchorId.value)
+    ? mechanicalAnchorId.value
+    : configuredPoints.value[0]?.id;
+}
+
+function retainConfiguredAuthority(fallback: Id) {
+  const id = props.activeId;
+  if (id === undefined) return;
+  const valid = hasConfiguredPoint(id);
+  mechanicalAnchorId.value = valid ? id : fallback;
+  if (valid) latestValidAuthorityId.value = id;
+}
+
+function acceptTarget(id: Id, reason: NavigationReason, componentOriginated: boolean) {
   if (id === intendedId.value) return false;
   intendedId.value = id;
+  if (props.activeId === undefined) mechanicalAnchorId.value = id;
+  settlementReason = reason;
   targetGeneration += 1;
-  emit("targetChanged", id, reason);
-  if (userOriginated) {
-    emit("requestActiveId", id, reason);
+  if (componentOriginated && reason !== "external") {
+    if (props.activeId === undefined) internalActiveId.value = id;
     emit("update:activeId", id);
+    emit("activeIdRequest", id, { reason });
   }
   return true;
 }
@@ -149,13 +222,22 @@ const motion = useSheetMotion<Id>({
   onSnap(id) {
     queueMicrotask(() => {
       if (id !== intendedId.value || settledGeneration === targetGeneration) return;
+      if (props.activeId !== undefined && id !== props.activeId) {
+        settledGeneration = targetGeneration;
+        const authoritativeId = resolveRollbackId();
+        if (authoritativeId !== undefined) synchronizeExact(authoritativeId, false);
+        return;
+      }
+      mechanicalAnchorId.value = id;
       settledGeneration = targetGeneration;
       const label =
         props.snapLabels?.[id] ??
         motion.resolvedSnapPoints.value.find((point) => point.id === id)?.label ??
         id;
-      statusText.value = messages.value.sheetStatus({ id, label });
-      emit("settled", id);
+      if (settlementReason !== "external") {
+        statusText.value = messages.value.sheetStatus({ id, label });
+      }
+      emit("settled", id, { reason: settlementReason });
     });
   },
   onTargetSelected(id) {
@@ -189,18 +271,53 @@ const shouldShowPicker = computed(
     (slots.picker !== undefined ||
       resolvedPoints.value.filter((point) => !point.disabled).length > 1),
 );
+const diagnostics = computed<SheetDiagnostics<Id>>(() => {
+  const snapshot = motion.snapshot.value;
+  return {
+    anchors: snapshot.anchors,
+    bounds: snapshot.bounds,
+    geometry: motion.geometry.value,
+    isAnimating: motion.isAnimating.value,
+    nearestId: snapshot.active?.id,
+    phase: snapshot.phase,
+    pointerInteractionActive: motion.isDragging.value,
+    pointerOwned: motion.pointerOwned.value,
+    position: motion.position.value,
+    primarySurfaceExtent: motion.primarySurfaceExtent.value,
+    reducedMotion: motion.reducedMotion.value,
+    sheetState: motion.sheetState.value,
+    side: motion.side.value,
+    targetId: snapshot.target?.id,
+    velocity: motion.velocity.value,
+  };
+});
 
-async function show() {
-  const target = dialog.value;
-  if (!mounted || !target || target.open) return;
-  if (focusRestoreFrame !== undefined) {
-    window.cancelAnimationFrame(focusRestoreFrame);
-    focusRestoreFrame = undefined;
+function captureLifecycleOpener(target: HTMLDialogElement, generation: number) {
+  if (capturedOpenerGeneration === generation) return;
+  capturedOpenerGeneration = generation;
+  const explicitOpener = props.focusReturn?.opener;
+  if (explicitOpener) {
+    capturedOpener = explicitOpener;
+    capturedOpenerWasExplicit = true;
+    return;
   }
-  suppressNextFocusRestore = false;
-  capturedOpener = props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
-  target.showModal();
+  capturedOpenerWasExplicit = false;
+  const activeElement = captureFocusOpener(target.ownerDocument);
+  if (activeElement && !target.contains(activeElement)) {
+    capturedOpener = activeElement;
+  }
+}
+
+async function show(generation: number) {
+  const target = dialog.value;
+  if (!mounted || !props.open || generation !== lifecycleGeneration || !target) return;
+  focusRestoreVerification?.cancel();
+  focusRestoreVerification = undefined;
+  closingGeneration = undefined;
+  captureLifecycleOpener(target, generation);
+  if (!target.open) target.showModal();
   await nextTick();
+  if (!mounted || !props.open || generation !== lifecycleGeneration || !target.open) return;
   body.value?.scrollTo(0, 0);
   motion.remeasure(intendedId.value);
   motion.open(intendedId.value);
@@ -209,22 +326,47 @@ async function show() {
     container: panel.value,
     title: title.value,
   });
+  if (openedGeneration === generation) return;
+  openedGeneration = generation;
   emit("opened");
 }
 
-function requestClose(reason: CloseReason) {
-  if (!dialog.value?.open) return;
+function beginOpenLifecycle() {
+  cancelPendingCloseHandoffs();
+  lifecycleGeneration += 1;
+  void show(lifecycleGeneration);
+}
+
+function requestClose(reason: CloseReason = "programmatic") {
+  if (!props.open || !dialog.value?.open) return;
   closeReason = reason;
-  emit("requestClose", reason);
   emit("update:open", false);
+  emit("openRequest", false, { reason });
 }
 
 function beginClose() {
-  if (dialog.value?.open && motion.sheetState.value !== "closing") motion.close();
+  if (dialog.value?.open && motion.sheetState.value !== "closing") {
+    closingGeneration = lifecycleGeneration;
+    motion.close();
+  }
 }
 
 function completeClose() {
-  if (dialog.value?.open) dialog.value.close();
+  const target = dialog.value;
+  if (!target?.open) return;
+  const generation = closingGeneration ?? lifecycleGeneration;
+  if (generation !== lifecycleGeneration) return;
+  if (props.open) {
+    closeReason = "programmatic";
+    emit("update:open", false);
+    emit("openRequest", false, { reason: closeReason });
+  }
+  closingGeneration = undefined;
+  nativeCloseLifecycles.push({
+    focusHandoff: observeFocusHandoffFromOpener(explicitOpenerForCurrentLifecycle()),
+    generation,
+  });
+  target.close();
 }
 
 /** Immediate host-swap path: no exit animation and no focus return to an unmounting trigger. */
@@ -232,11 +374,13 @@ function closeForPresentationChange() {
   const target = dialog.value;
   if (!target?.open) return false;
   const focusedInside = target.contains(target.ownerDocument.activeElement);
-  suppressNextFocusRestore = true;
-  presentationChangeClosing = true;
   closeReason = "programmatic";
   motion.interrupt();
   motion.sheetState.value = "closed";
+  const generation = lifecycleGeneration;
+  suppressedFocusRestoreGeneration = generation;
+  presentationCloseGenerations.add(generation);
+  nativeCloseLifecycles.push({ generation });
   target.close();
   if (props.open) emit("update:open", false);
   return focusedInside;
@@ -247,68 +391,147 @@ function onCancel(event: Event) {
   requestClose("escape");
 }
 
-function onClose() {
+async function onClose() {
+  const target = dialog.value;
+  const closeLifecycle = nativeCloseLifecycles.shift();
+  const closeGeneration = closeLifecycle?.generation;
+  const initialTransferredOwner = closeLifecycle?.focusHandoff?.consume();
+  const presentationChange =
+    closeGeneration !== undefined && presentationCloseGenerations.delete(closeGeneration);
+  if (target?.open) return;
   if (!mounted) {
-    capturedOpener = undefined;
-    suppressNextFocusRestore = false;
-    presentationChangeClosing = false;
     return;
   }
-  motion.interrupt();
-  body.value?.scrollTo(0, 0);
-  const presentationChange = presentationChangeClosing;
-  const opener = capturedOpener ?? props.focusReturn?.opener;
-  const shouldRestoreFocus = !suppressNextFocusRestore;
-  capturedOpener = undefined;
-  if (!presentationChange) suppressNextFocusRestore = false;
-  if (shouldRestoreFocus) {
-    focusRestoreFrame = window.requestAnimationFrame(() => {
-      focusRestoreFrame = undefined;
-      restoreFocus({ fallback: props.focusReturn?.fallback, opener });
-    });
-  }
-  emit("closed");
+  if (closeGeneration !== undefined && closeGeneration !== lifecycleGeneration) return;
   if (presentationChange) {
-    presentationChangeClosing = false;
+    if (finalizedGeneration === lifecycleGeneration) return;
+    finalizedGeneration = lifecycleGeneration;
+    if (suppressedFocusRestoreGeneration === lifecycleGeneration) {
+      suppressedFocusRestoreGeneration = undefined;
+    }
+    capturedOpener = undefined;
+    capturedOpenerWasExplicit = false;
+    emit("closed");
     return;
+  }
+  // A reduced or very short close can beat Vue's parent-to-child prop flush. Let an already
+  // accepted `update:open(false)` arrive before classifying the native close as unexpected.
+  if (props.open) await nextTick();
+  if (props.open) {
+    if (closeGeneration === undefined) {
+      emit("update:open", false);
+      emit("openRequest", false, { reason: closeReason });
+      await nextTick();
+    }
   }
   if (props.open) {
-    emit("requestClose", closeReason);
-    emit("update:open", false);
+    await show(lifecycleGeneration);
+    return;
   }
+  if (finalizedGeneration === lifecycleGeneration) return;
+  finalizedGeneration = lifecycleGeneration;
+  motion.interrupt();
+  body.value?.scrollTo(0, 0);
+  const opener = capturedOpener ?? props.focusReturn?.opener;
+  const explicitOpener = capturedOpener ? capturedOpenerWasExplicit : opener !== undefined;
+  const focusGeneration = lifecycleGeneration;
+  capturedOpener = undefined;
+  capturedOpenerWasExplicit = false;
+  focusRestoreVerification = scheduleVerifiedFocusRestore({
+    explicitOpener,
+    fallback: props.focusReturn?.fallback,
+    initialTransferredOwner,
+    isCurrent: () => mounted && !props.open && focusGeneration === lifecycleGeneration,
+    opener,
+  });
+  emit("closed");
 }
 
-function requestSnap(id: Id, reason: SheetNavigationReason) {
-  if (!acceptTarget(id, reason, reason !== "route")) return;
+function navigateWithReason(id: Id, reason: ActiveIdRequestDetails["reason"]) {
+  if (!hasConfiguredPoint(id) || !acceptTarget(id, reason, true)) {
+    return false;
+  }
   motion.snapTo(id);
+  return true;
+}
+
+function navigateTo(id: Id) {
+  return navigateWithReason(id, "programmatic");
+}
+
+function synchronizeExact(id: Id, reportSettlement = true) {
+  if (!hasConfiguredPoint(id)) return false;
+  mechanicalAnchorId.value = id;
+  if (id === props.activeId) latestValidAuthorityId.value = id;
+  settlementReason = "external";
+  const changed = acceptTarget(id, "external", false);
+  if (!reportSettlement) settledGeneration = targetGeneration;
+  if (!props.open) return changed || intendedId.value === id;
+  motion.interrupt();
+  motion.remeasure(id);
+  motion.sheetState.value = "open";
+  return true;
+}
+
+function synchronizeTo(id: Id) {
+  if (props.activeId !== undefined && id !== props.activeId) return false;
+  if (props.activeId === undefined) internalActiveId.value = id;
+  return synchronizeExact(id);
 }
 
 watch(
   () => props.open,
   (open) => {
-    if (open) void show();
+    if (open) beginOpenLifecycle();
     else beginClose();
   },
 );
 
 watch(
   () => props.activeId,
-  (id) => {
-    if (id !== undefined && props.open && id !== intendedId.value) requestSnap(id, "route");
+  (id, previousId) => {
+    // A v-model confirmation of the semantic destination already accepted by the Sheet is not an
+    // external takeover. Re-synchronizing would cancel the spring and lose its original reason.
+    if (id !== undefined && hasConfiguredPoint(id)) {
+      latestValidAuthorityId.value = id;
+      mechanicalAnchorId.value = id;
+      if (id !== intendedId.value) synchronizeExact(id);
+    } else if (id === undefined) {
+      const releasedId = resolveRollbackId() ?? intendedId.value;
+      internalActiveId.value = releasedId;
+      if (releasedId !== intendedId.value) synchronizeExact(releasedId);
+      if (previousId !== undefined) {
+        // The released authority seeds the uncontrolled snap, then its ownership epoch ends.
+        latestValidAuthorityId.value = undefined;
+      }
+    }
   },
+  { flush: "sync" },
 );
 
 watch(
   () => props.side,
   async (side) => {
-    const retained = configuredPoints.value.some((point) => point.id === intendedId.value)
-      ? intendedId.value
-      : preferredIdForSide();
-    acceptTarget(retained, "side-change", true);
+    const retained = retainedConfiguredId();
+    retainConfiguredAuthority(retained);
+    if (retained !== intendedId.value) {
+      acceptTarget(
+        retained,
+        props.activeId === undefined ? "reconcile" : "external",
+        props.activeId === undefined,
+      );
+    }
     motion.setSide(side, retained);
     await nextTick();
     const target = motion.remeasure(retained);
-    if (target && target.id !== intendedId.value) acceptTarget(target.id, "side-change", true);
+    if (target && target.id !== intendedId.value) {
+      mechanicalAnchorId.value = target.id;
+      acceptTarget(
+        target.id,
+        props.activeId === undefined ? "reconcile" : "external",
+        props.activeId === undefined,
+      );
+    }
   },
   { flush: "post" },
 );
@@ -316,12 +539,24 @@ watch(
 watch(
   configuredPoints,
   () => {
-    const retained = configuredPoints.value.some((point) => point.id === intendedId.value)
-      ? intendedId.value
-      : preferredIdForSide();
-    acceptTarget(retained, "side-change", true);
+    const retained = retainedConfiguredId();
+    retainConfiguredAuthority(retained);
+    if (retained !== intendedId.value) {
+      acceptTarget(
+        retained,
+        props.activeId === undefined ? "reconcile" : "external",
+        props.activeId === undefined,
+      );
+    }
     const target = motion.remeasure(retained);
-    if (target && target.id !== intendedId.value) acceptTarget(target.id, "side-change", true);
+    if (target && target.id !== intendedId.value) {
+      mechanicalAnchorId.value = target.id;
+      acceptTarget(
+        target.id,
+        props.activeId === undefined ? "reconcile" : "external",
+        props.activeId === undefined,
+      );
+    }
   },
   { deep: true, flush: "post" },
 );
@@ -342,27 +577,28 @@ watch(
 );
 
 provide(sheetContextKey, {
-  activeId: computed(() => motion.activeSnapId.value ?? intendedId.value),
+  activeId: semanticActiveId,
   messages,
   name: pickerName,
   points: resolvedPoints,
-  requestSnap,
+  navigateTo: navigateWithReason,
 } as unknown as SheetContext);
 
 onMounted(() => {
   mounted = true;
-  if (props.open) void show();
+  if (props.open) beginOpenLifecycle();
 });
 
 onBeforeUnmount(() => {
+  const suppressFocusRestore = suppressedFocusRestoreGeneration === lifecycleGeneration;
   mounted = false;
+  lifecycleGeneration += 1;
+  clearPendingCloseHandoffs();
   motion.interrupt();
   if (dialog.value?.open) dialog.value.close();
-  if (focusRestoreFrame !== undefined) {
-    window.cancelAnimationFrame(focusRestoreFrame);
-    focusRestoreFrame = undefined;
-  }
-  if (!suppressNextFocusRestore) {
+  focusRestoreVerification?.cancel();
+  focusRestoreVerification = undefined;
+  if (!suppressFocusRestore) {
     restoreFocus({
       fallback: props.focusReturn?.fallback,
       opener: capturedOpener ?? props.focusReturn?.opener,
@@ -375,11 +611,15 @@ defineExpose({
   chrome,
   closeForPresentationChange,
   dialog,
+  diagnostics,
   intrinsicBodyContent,
-  motion,
   panel,
+  activeId: semanticActiveId,
+  sheetState: motion.sheetState,
+  side: motion.side,
   requestClose,
-  requestSnap,
+  navigateTo,
+  synchronizeTo,
   titleId: resolvedTitleId,
   viewport,
 });
@@ -392,7 +632,7 @@ defineExpose({
     class="snap-motion-sheet"
     :data-sheet-axis="motion.axis.value"
     :data-sheet-side="motion.side.value"
-    :data-sheet-snap="motion.activeSnapId.value"
+    :data-sheet-snap="intendedId"
     :data-sheet-state="motion.sheetState.value"
     v-bind="descriptionId ? { 'aria-describedby': descriptionId } : {}"
     @cancel="onCancel"
@@ -410,7 +650,7 @@ defineExpose({
       class="snap-motion-sheet-panel"
       :data-sheet-axis="motion.axis.value"
       :data-sheet-side="motion.side.value"
-      :data-sheet-snap="motion.activeSnapId.value"
+      :data-sheet-snap="intendedId"
       :data-sheet-state="motion.sheetState.value"
       :style="motion.panelStyle.value"
     >

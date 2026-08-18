@@ -1,4 +1,6 @@
-﻿<script setup lang="ts">
+<script setup lang="ts" generic="TItem extends MediaGalleryItem">
+import type { ActiveIdRequestDetails, SettlementDetails } from "@snap-motion/core";
+import type { CloseReason, FocusReturnOptions, InitialFocus } from "@snap-motion/vue/dialog";
 import { useEventListener, useResizeObserver, useScrollLock, useTimeoutFn } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from "vue";
 
@@ -9,13 +11,20 @@ import {
   restoreFocus,
 } from "../../internal/accessibility/focus";
 import {
+  observeFocusHandoffFromOpener,
+  scheduleVerifiedFocusRestore,
+  type FocusHandoffObservation,
+  type FocusRestoreVerification,
+} from "../../internal/accessibility/focus-restore";
+import { isElement, isHTMLElement, isHTMLImageElement } from "../../internal/dom/realm";
+import {
   fittedMediaTransform,
   type GalleryMediaAction,
   type GalleryTap,
-  type MediaGalleryCloseReason,
-  type MediaGalleryDialogProps,
   type MediaGalleryItem,
-  type MediaGalleryNavigationReason,
+  type MediaGalleryMessages,
+  type MediaGalleryOpenRequestDetails,
+  type MediaGalleryPreloadPolicy,
   type MediaPoint,
   type MediaTransform,
   type MediaTransformContext,
@@ -23,6 +32,7 @@ import {
 import {
   canonicalMediaGalleryTransform,
   clampGalleryIndex,
+  hasDistinctMediaGallerySource,
   isRepeatedGalleryTap,
   normalizeMediaGalleryItems,
   panMediaTransform,
@@ -43,6 +53,7 @@ type ImageLoadState = "failed" | "loaded" | "pending" | "preview";
 type MediaTransitionMode = "direct" | "discrete";
 type PointerMode = "blocked" | "pan" | "pending" | "swipe";
 type TrackNavigationState = "idle" | "recentering" | "settling";
+type TId = TItem["id"];
 
 interface PointerSample {
   readonly id: number;
@@ -71,20 +82,40 @@ interface PinchSession {
   readonly pointerIds: readonly [number, number];
 }
 
-const props = withDefaults(defineProps<MediaGalleryDialogProps>(), {
-  eyebrow: "Media",
-  initialFocus: "close",
-  initialIndex: 0,
-  reducedMotionOverride: undefined,
-  title: "Gallery",
-});
+const props = withDefaults(
+  defineProps<{
+    activeId?: TId;
+    descriptionId?: string;
+    eyebrow?: string;
+    focusReturn?: FocusReturnOptions;
+    initialFocus?: InitialFocus;
+    items: readonly TItem[];
+    messages?: Partial<MediaGalleryMessages>;
+    open: boolean;
+    preloadPolicy?: MediaGalleryPreloadPolicy;
+    reducedMotionOverride?: boolean | undefined;
+    title?: string;
+  }>(),
+  {
+    eyebrow: "Media",
+    initialFocus: "close",
+    preloadPolicy: "current-only",
+    reducedMotionOverride: undefined,
+    title: "Gallery",
+  },
+);
 
 const emit = defineEmits<{
   (event: "update:open", open: boolean): void;
-  (event: "requestClose", finalIndex: number, reason: MediaGalleryCloseReason): void;
-  (event: "opened", index: number): void;
-  (event: "closed", finalIndex: number): void;
-  (event: "indexChanged", index: number, reason: MediaGalleryNavigationReason): void;
+  (event: "update:activeId", id: TId | undefined): void;
+  (event: "openRequest", open: false, details: MediaGalleryOpenRequestDetails<TId>): void;
+  (event: "activeIdRequest", id: TId | undefined, details: ActiveIdRequestDetails): void;
+  (event: "opened", id: TId | undefined): void;
+  (event: "closed", finalId: TId | undefined): void;
+  (event: "settled", id: TId, details: SettlementDetails): void;
+}>();
+const slots = defineSlots<{
+  actions?: () => unknown;
 }>();
 
 const items = computed(() => normalizeMediaGalleryItems(props.items));
@@ -97,10 +128,21 @@ const shell = ref<HTMLElement>();
 const closeButton = ref<HTMLButtonElement>();
 const titleHeading = ref<HTMLElement>();
 const imageViewport = ref<HTMLElement>();
-const galleryIndex = ref(clampIndex(props.initialIndex));
+const intendedActiveId = shallowRef<TId | undefined>(props.activeId ?? items.value[0]?.id);
+const internalActiveId = shallowRef<TId | undefined>(intendedActiveId.value);
+const latestValidAuthorityId = shallowRef<TId | undefined>(
+  props.activeId !== undefined && items.value.some((item) => item.id === props.activeId)
+    ? props.activeId
+    : undefined,
+);
+const mechanicalAnchorId = shallowRef<TId | undefined>(intendedActiveId.value);
+const galleryIndex = ref(indexForId(intendedActiveId.value));
 const dialogState = ref<DialogState>("closed");
 const imageLoadStateByItem = ref<Record<string, ImageLoadState>>({});
 const imageRetryAttemptByItem = ref<Record<string, number>>({});
+const imageRetryAuthorityByItem = ref<Record<string, number>>({});
+const imageRetryRequestByItem = ref<Record<string, string>>({});
+const selectedFullSourceByItem = ref<Record<string, string>>({});
 const previewFailedByItem = ref<Record<string, boolean>>({});
 const mounted = ref(false);
 const openCycleGeneration = ref(0);
@@ -133,15 +175,27 @@ let openingFrame: number | undefined;
 let trackFrame: number | undefined;
 let lockedRoot: HTMLElement | undefined;
 let previousPaddingInlineEnd = "";
-let closeRequested = false;
 let pendingTrackDestination: number | undefined;
-let pendingTrackDestinationId: string | undefined;
+let pendingTrackDestinationId: TId | undefined;
 let pendingTrackAnnouncement = true;
-let pendingTrackReason: MediaGalleryNavigationReason | undefined;
+let pendingTrackReason: ActiveIdRequestDetails["reason"] | undefined;
 let pendingTrackGeneration: number | undefined;
 let navigationGeneration = 0;
 let closeGeneration = 0;
+let activeAuthorityGeneration = 0;
+let retryRequestIdentity = 0;
 let capturedOpener: HTMLElement | undefined;
+let capturedOpenerGeneration = 0;
+let capturedOpenerWasExplicit = false;
+let focusRestoreVerification: FocusRestoreVerification | undefined;
+let lifecycleGeneration = 0;
+let openedLifecycleGeneration = 0;
+let finalizedLifecycleGeneration = 0;
+let closingLifecycleGeneration: number | undefined;
+const nativeCloseLifecycles: {
+  focusHandoff: FocusHandoffObservation;
+  generation: number;
+}[] = [];
 let geometry = {
   height: 0,
   left: 0,
@@ -149,7 +203,23 @@ let geometry = {
   width: 0,
 };
 
+function explicitOpenerForCurrentLifecycle() {
+  if (capturedOpener) return capturedOpenerWasExplicit ? capturedOpener : undefined;
+  return props.focusReturn?.opener;
+}
+
+function cancelPendingCloseHandoffs() {
+  for (const lifecycle of nativeCloseLifecycles) lifecycle.focusHandoff.cancel();
+}
+
+function clearPendingCloseHandoffs() {
+  cancelPendingCloseHandoffs();
+  nativeCloseLifecycles.length = 0;
+}
+
 const activeItem = computed(() => items.value[galleryIndex.value] ?? items.value[0]);
+const semanticActiveId = computed<TId | undefined>(() => props.activeId ?? internalActiveId.value);
+const settledId = computed<TId | undefined>(() => activeItem.value?.id);
 const trackSlots = computed(() =>
   resolveGalleryTrackSlots(galleryIndex.value, items.value.length, trackDestinationIndex.value).map(
     (slot) => ({ ...slot, item: items.value[slot.itemIndex] }),
@@ -167,6 +237,12 @@ const scalePercentage = computed(() => Math.round(transform.value.scale * 100));
 const activeImageLoadState = computed<ImageLoadState>(() => {
   const item = activeItem.value;
   return item ? (imageLoadStateByItem.value[item.id] ?? imageLoadDefault(item)) : "preview";
+});
+const canRetryActiveImage = computed(() => {
+  const item = activeItem.value;
+  if (!item) return false;
+  const selectedSource = selectedFullSourceByItem.value[item.id];
+  return selectedSource !== undefined && resolveRetryRequestUrl(selectedSource) !== undefined;
 });
 const transformStyle = computed(() => ({
   "--_gallery-pan-x": `${transform.value.x.toFixed(3)}px`,
@@ -281,6 +357,7 @@ function isMediaOperationCurrent(
   collectionGeneration: number,
   item: MediaGalleryItem,
   attempt?: number,
+  retryAuthority?: number,
 ): boolean {
   return (
     mounted.value &&
@@ -289,7 +366,10 @@ function isMediaOperationCurrent(
     openGeneration === openCycleGeneration.value &&
     collectionGeneration === itemCollectionGeneration.value &&
     items.value.some((candidate) => candidate.id === item.id) &&
-    (attempt === undefined || attempt === imageRetryAttempt(item))
+    (attempt === undefined || attempt === imageRetryAttempt(item)) &&
+    (attempt === undefined ||
+      attempt === 0 ||
+      (retryAuthority === activeAuthorityGeneration && item.id === activeItem.value?.id))
   );
 }
 
@@ -297,10 +377,39 @@ function clampIndex(index: number): number {
   return clampGalleryIndex(index, items.value.length);
 }
 
+function indexForId(id: TId | undefined): number {
+  if (id === undefined) return 0;
+  const index = items.value.findIndex((item) => item.id === id);
+  return index < 0 ? 0 : index;
+}
+
+function hasItem(id: TId | undefined): id is TId {
+  return id !== undefined && items.value.some((item) => item.id === id);
+}
+
+function resolveRollbackId(): TId | undefined {
+  if (hasItem(latestValidAuthorityId.value)) return latestValidAuthorityId.value;
+  if (hasItem(mechanicalAnchorId.value)) return mechanicalAnchorId.value;
+  return items.value[0]?.id;
+}
+
+function acceptActiveId(id: TId | undefined, reason: ActiveIdRequestDetails["reason"]): void {
+  if (id === intendedActiveId.value) return;
+  intendedActiveId.value = id;
+  if (props.activeId === undefined) {
+    internalActiveId.value = id;
+    mechanicalAnchorId.value = id;
+  }
+  emit("update:activeId", id);
+  emit("activeIdRequest", id, { reason });
+}
+
 function activeContext(): MediaTransformContext {
   const item = activeItem.value;
   return {
-    intrinsicSize: item ? { height: item.height, width: item.width } : { height: 1, width: 1 },
+    intrinsicSize: item
+      ? { height: item.intrinsicHeight, width: item.intrinsicWidth }
+      : { height: 1, width: 1 },
     viewportSize: { height: geometry.height, width: geometry.width },
   };
 }
@@ -367,6 +476,10 @@ function resetToFit(action: GalleryMediaAction = "fit") {
   resetTransform();
 }
 
+function resetToFitPublic(): void {
+  resetToFit();
+}
+
 function announceCurrent() {
   const item = activeItem.value;
   if (item) {
@@ -379,7 +492,18 @@ function announceCurrent() {
 }
 
 function imageLoadDefault(item: MediaGalleryItem): ImageLoadState {
-  return item.fullSrc ? "pending" : "preview";
+  return hasDistinctFullSource(item) ? "pending" : "preview";
+}
+
+function hasDistinctFullSource(item: MediaGalleryItem): boolean {
+  return hasDistinctMediaGallerySource(item.full, item.preview);
+}
+
+function shouldMountFull(item: MediaGalleryItem): boolean {
+  return (
+    hasDistinctFullSource(item) &&
+    (props.preloadPolicy === "adjacent-full" || item.id === activeItem.value?.id)
+  );
 }
 
 function ensureImageState(item: MediaGalleryItem | undefined, reset = false) {
@@ -405,11 +529,67 @@ function imageRetryAttempt(item: MediaGalleryItem): number {
 }
 
 function visibleFullSrc(item: MediaGalleryItem): string {
-  if (!item.fullSrc) return "";
-  const attempt = imageRetryAttempt(item);
-  if (attempt === 0) return item.fullSrc;
-  const separator = item.fullSrc.includes("?") ? "&" : "?";
-  return `${item.fullSrc}${separator}retry=${attempt}`;
+  return imageRetryRequestByItem.value[item.id] ?? item.full.src;
+}
+
+function visibleFullSrcset(item: MediaGalleryItem): string | undefined {
+  return imageRetryAttempt(item) === 0 ? item.full.srcset : undefined;
+}
+
+function selectedFullSource(image: HTMLImageElement): string | undefined {
+  const source = image.currentSrc.trim();
+  return source || undefined;
+}
+
+function captureSelectedFullSource(
+  image: HTMLImageElement,
+  item: MediaGalleryItem,
+  attempt: number,
+) {
+  if (attempt !== 0 || selectedFullSourceByItem.value[item.id]) return;
+  const source = selectedFullSource(image);
+  if (!source) return;
+  selectedFullSourceByItem.value = { ...selectedFullSourceByItem.value, [item.id]: source };
+}
+
+function resolveRetryRequestUrl(source: string): URL | undefined {
+  let url: URL;
+  try {
+    url = new URL(source, dialog.value?.ownerDocument.baseURI);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+
+  return url;
+}
+
+function createRetryRequestSource(source: string): string | undefined {
+  const url = resolveRetryRequestUrl(source);
+  if (!url) return undefined;
+
+  retryRequestIdentity += 1;
+  url.searchParams.append(
+    "snap-motion-retry",
+    `${openCycleGeneration.value}-${itemCollectionGeneration.value}-${retryRequestIdentity}`,
+  );
+  return url.href;
+}
+
+function clearItemRetry(itemId: string) {
+  imageRetryAttemptByItem.value = withoutKey(imageRetryAttemptByItem.value, itemId);
+  imageRetryAuthorityByItem.value = withoutKey(imageRetryAuthorityByItem.value, itemId);
+  imageRetryRequestByItem.value = withoutKey(imageRetryRequestByItem.value, itemId);
+  selectedFullSourceByItem.value = withoutKey(selectedFullSourceByItem.value, itemId);
+}
+
+function resetMediaSourceState() {
+  imageLoadStateByItem.value = {};
+  imageRetryAttemptByItem.value = {};
+  imageRetryAuthorityByItem.value = {};
+  imageRetryRequestByItem.value = {};
+  selectedFullSourceByItem.value = {};
+  previewFailedByItem.value = {};
 }
 
 function setImageLoadState(item: MediaGalleryItem, state: ImageLoadState) {
@@ -418,23 +598,33 @@ function setImageLoadState(item: MediaGalleryItem, state: ImageLoadState) {
 
 async function onFullImageLoad(event: Event, item: MediaGalleryItem) {
   const image = event.currentTarget;
-  if (!(image instanceof HTMLImageElement)) {
+  if (!isHTMLImageElement(image)) {
     return;
   }
+  if (!shouldMountFull(item)) return;
   const attempt = Number(image.dataset.retryAttempt);
+  const retryAuthority = Number(image.dataset.retryAuthority);
   const openGeneration = Number(image.dataset.openCycle);
   const collectionGeneration = Number(image.dataset.itemCollection);
-  if (!isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt)) return;
+  if (
+    !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority)
+  ) {
+    return;
+  }
+  captureSelectedFullSource(image, item, attempt);
   try {
     await image.decode();
   } catch {
-    if (isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt)) {
+    if (
+      isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority)
+    ) {
       setImageLoadState(item, "failed");
     }
     return;
   }
   if (
-    !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt) ||
+    !shouldMountFull(item) ||
+    !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority) ||
     !image.complete ||
     image.naturalWidth <= 0 ||
     image.naturalHeight <= 0
@@ -444,22 +634,30 @@ async function onFullImageLoad(event: Event, item: MediaGalleryItem) {
   setImageLoadState(item, "loaded");
   if (item.id === activeItem.value?.id) {
     await nextTick();
-    if (!isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt)) return;
+    if (
+      !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority)
+    ) {
+      return;
+    }
     measureGeometry();
   }
 }
 
 function onFullImageError(event: Event, item: MediaGalleryItem) {
   const image = event.currentTarget;
+  const attempt = isHTMLImageElement(image) ? Number(image.dataset.retryAttempt) : Number.NaN;
   if (
-    image instanceof HTMLImageElement &&
+    isHTMLImageElement(image) &&
+    shouldMountFull(item) &&
     isMediaOperationCurrent(
       Number(image.dataset.openCycle),
       Number(image.dataset.itemCollection),
       item,
-      Number(image.dataset.retryAttempt),
+      attempt,
+      Number(image.dataset.retryAuthority),
     )
   ) {
+    captureSelectedFullSource(image, item, attempt);
     setImageLoadState(item, "failed");
   }
 }
@@ -467,7 +665,7 @@ function onFullImageError(event: Event, item: MediaGalleryItem) {
 function onPreviewImageError(event: Event, item: MediaGalleryItem) {
   const image = event.currentTarget;
   if (
-    image instanceof HTMLImageElement &&
+    isHTMLImageElement(image) &&
     isMediaOperationCurrent(
       Number(image.dataset.openCycle),
       Number(image.dataset.itemCollection),
@@ -480,16 +678,32 @@ function onPreviewImageError(event: Event, item: MediaGalleryItem) {
 
 function retryImage() {
   const item = activeItem.value;
-  if (!item) return;
+  if (!item || !shouldMountFull(item)) return;
+  const selectedSource = selectedFullSourceByItem.value[item.id];
+  if (!selectedSource) return;
+  const retrySource = createRetryRequestSource(selectedSource);
+  if (!retrySource) return;
+  const attempt = imageRetryAttempt(item) + 1;
+  imageRetryRequestByItem.value = { ...imageRetryRequestByItem.value, [item.id]: retrySource };
+  imageRetryAuthorityByItem.value = {
+    ...imageRetryAuthorityByItem.value,
+    [item.id]: activeAuthorityGeneration,
+  };
   imageRetryAttemptByItem.value = {
     ...imageRetryAttemptByItem.value,
-    [item.id]: imageRetryAttempt(item) + 1,
+    [item.id]: attempt,
   };
   setImageLoadState(item, "pending");
 }
 
+function withoutKey<TValue>(record: Record<string, TValue>, key: string): Record<string, TValue> {
+  const remaining = { ...record };
+  delete remaining[key];
+  return remaining;
+}
+
 function setMediaTransformElement(itemId: string, element: Element | null) {
-  if (element instanceof HTMLElement) mediaTransformElements.set(itemId, element);
+  if (isHTMLElement(element)) mediaTransformElements.set(itemId, element);
   else mediaTransformElements.delete(itemId);
 }
 
@@ -529,9 +743,9 @@ function interruptDiscreteTransform() {
 function beginTrackSettlement(
   destinationIndex?: number,
   announcement = true,
-  reason?: MediaGalleryNavigationReason,
+  reason?: ActiveIdRequestDetails["reason"],
   generation = navigationGeneration,
-  destinationId?: string,
+  destinationId?: TId,
 ) {
   if (!isNavigationCurrent(generation)) return;
   stopTrackFallback();
@@ -603,7 +817,14 @@ async function completeTrackSettlement(generation = pendingTrackGeneration) {
     if (!isNavigationCurrent(generation) || pendingTrackGeneration !== generation) return;
     trackNavigationState.value = "idle";
     pendingTrackGeneration = undefined;
-    if (reason) emit("indexChanged", galleryIndex.value, reason);
+    const id = items.value[galleryIndex.value]?.id;
+    if (props.activeId !== undefined && id !== props.activeId) {
+      const authoritativeId = resolveRollbackId();
+      if (authoritativeId !== undefined) synchronizeExact(authoritativeId, false);
+      return;
+    }
+    mechanicalAnchorId.value = id;
+    if (id && reason) emit("settled", id, { reason });
     if (announcement) announceCurrent();
   });
 }
@@ -616,15 +837,31 @@ function onTrackTransitionEnd(event: TransitionEvent) {
 
 async function changeIndex(
   index: number,
-  reason: MediaGalleryNavigationReason,
+  reason: ActiveIdRequestDetails["reason"],
   announcement = true,
 ): Promise<boolean> {
   const nextIndex = clampIndex(index);
-  if (nextIndex === galleryIndex.value || galleryBusy.value) return false;
+  if (galleryBusy.value) return false;
+  if (nextIndex === galleryIndex.value) {
+    const id = items.value[nextIndex]?.id;
+    if (!id || id === intendedActiveId.value) return false;
+    acceptActiveId(id, reason);
+    await nextTick();
+    if (props.activeId === undefined || props.activeId === id) {
+      mechanicalAnchorId.value = id;
+      emit("settled", id, { reason });
+      if (announcement) announceCurrent();
+    } else {
+      const authoritativeId = resolveRollbackId();
+      if (authoritativeId !== undefined) synchronizeExact(authoritativeId, false);
+    }
+    return true;
+  }
   clearPointerState();
   const generation = beginNavigation();
   const destinationId = items.value[nextIndex]?.id;
   if (!destinationId) return false;
+  acceptActiveId(destinationId, reason);
   trackDestinationIndex.value = nextIndex;
   ensureTrackImageStates();
   await nextTick();
@@ -644,12 +881,51 @@ async function changeIndex(
   return true;
 }
 
-function previous() {
-  if (canGoPrevious.value) void changeIndex(galleryIndex.value - 1, "previous");
+function previous(): boolean {
+  if (!canGoPrevious.value || galleryBusy.value) return false;
+  void changeIndex(galleryIndex.value - 1, "previous");
+  return true;
 }
 
-function next() {
-  if (canGoNext.value) void changeIndex(galleryIndex.value + 1, "next");
+function next(): boolean {
+  if (!canGoNext.value || galleryBusy.value) return false;
+  void changeIndex(galleryIndex.value + 1, "next");
+  return true;
+}
+
+function navigateTo(id: TId): boolean {
+  const index = items.value.findIndex((item) => item.id === id);
+  if (
+    index < 0 ||
+    galleryBusy.value ||
+    (index === galleryIndex.value && id === intendedActiveId.value)
+  ) {
+    return false;
+  }
+  void changeIndex(index, "programmatic");
+  return true;
+}
+
+/** Exact authoritative adoption: cancels interaction, emits no change, and never announces. */
+function synchronizeExact(id: TId, reportSettlement = true): boolean {
+  const index = items.value.findIndex((item) => item.id === id);
+  if (index < 0) return false;
+  mechanicalAnchorId.value = id;
+  if (id === props.activeId) latestValidAuthorityId.value = id;
+  intendedActiveId.value = id;
+  invalidateNavigation();
+  clearPointerState();
+  galleryIndex.value = index;
+  resetTransform();
+  ensureTrackImageStates();
+  if (reportSettlement && dialog.value?.open) emit("settled", id, { reason: "external" });
+  return true;
+}
+
+function synchronizeTo(id: TId): boolean {
+  if (props.activeId !== undefined && id !== props.activeId) return false;
+  if (props.activeId === undefined) internalActiveId.value = id;
+  return synchronizeExact(id);
 }
 
 function pointerDistance(first: PointerSample, second: PointerSample): number {
@@ -719,7 +995,7 @@ function onImagePointerDown(event: PointerEvent) {
   if (
     dialogState.value !== "open" ||
     galleryBusy.value ||
-    (event.target instanceof Element && event.target.closest("button")) ||
+    (isElement(event.target) && event.target.closest("button")) ||
     (event.pointerType === "mouse" && event.button !== 0)
   ) {
     return;
@@ -878,9 +1154,10 @@ function onWindowPointerUp(event: PointerEvent) {
     const generation = beginNavigation(true);
     const destinationId = items.value[destination]?.id;
     if (!destinationId) return;
+    acceptActiveId(destinationId, "drag");
     trackDestinationIndex.value = destination;
     ensureTrackImageStates();
-    beginTrackSettlement(destination, true, "swipe", generation, destinationId);
+    beginTrackSettlement(destination, true, "drag", generation, destinationId);
   } else {
     if (Math.abs(trackOffsetX.value) > 0.01) {
       const generation = beginNavigation(true);
@@ -924,13 +1201,13 @@ function onDialogKeyDown(event: KeyboardEvent) {
 
   let handled = true;
   if (event.key === "ArrowLeft") {
-    previous();
+    void changeIndex(galleryIndex.value - 1, "keyboard");
   } else if (event.key === "ArrowRight") {
-    next();
+    void changeIndex(galleryIndex.value + 1, "keyboard");
   } else if (event.key === "Home") {
-    void changeIndex(0, "home");
+    void changeIndex(0, "keyboard");
   } else if (event.key === "End") {
-    void changeIndex(items.value.length - 1, "end");
+    void changeIndex(items.value.length - 1, "keyboard");
   } else if (event.key === "+" || event.key === "=") {
     zoomIn("keyboard");
   } else if (event.key === "-") {
@@ -970,19 +1247,48 @@ function unlockDocumentScroll() {
   previousPaddingInlineEnd = "";
 }
 
-async function openDialog() {
-  const target = dialog.value;
-  if (!mounted.value || !target || target.open) return;
-  const generation = invalidateOpenCycle();
-  invalidateNavigation();
-  invalidateClose();
-  capturedOpener = props.focusReturn?.opener ?? captureFocusOpener(target.ownerDocument);
-  if (items.value.length === 0) {
-    requestClose("programmatic");
+function captureLifecycleOpener(target: HTMLDialogElement, generation: number) {
+  if (capturedOpenerGeneration === generation) return;
+  capturedOpenerGeneration = generation;
+  const explicitOpener = props.focusReturn?.opener;
+  if (explicitOpener) {
+    capturedOpener = explicitOpener;
+    capturedOpenerWasExplicit = true;
     return;
   }
-  closeRequested = false;
-  galleryIndex.value = clampIndex(props.initialIndex);
+  capturedOpenerWasExplicit = false;
+  const activeElement = captureFocusOpener(target.ownerDocument);
+  if (activeElement && !target.contains(activeElement)) {
+    capturedOpener = activeElement;
+  }
+}
+
+function emitCloseRequest(reason: CloseReason) {
+  emit("update:open", false);
+  emit("openRequest", false, { activeId: semanticActiveId.value, reason });
+}
+
+async function openDialog(lifecycle: number) {
+  const target = dialog.value;
+  if (!mounted.value || !props.open || lifecycle !== lifecycleGeneration || !target) return;
+  if (target.open && dialogState.value === "open" && openedLifecycleGeneration === lifecycle) {
+    return;
+  }
+  focusRestoreVerification?.cancel();
+  focusRestoreVerification = undefined;
+  const generation = invalidateOpenCycle();
+  activeAuthorityGeneration += 1;
+  resetMediaSourceState();
+  invalidateNavigation();
+  invalidateClose();
+  closingLifecycleGeneration = undefined;
+  captureLifecycleOpener(target, lifecycle);
+  if (items.value.length === 0) {
+    emitCloseRequest("programmatic");
+    return;
+  }
+  const requestedIndex = items.value.findIndex((item) => item.id === intendedActiveId.value);
+  galleryIndex.value = requestedIndex < 0 ? 0 : requestedIndex;
   trackDestinationIndex.value = undefined;
   trackOffsetX.value = 0;
   trackTransitionEnabled.value = false;
@@ -990,7 +1296,7 @@ async function openDialog() {
   mediaTransitionMode.value = "direct";
   resetTransform();
   dialogState.value = "opening";
-  target.showModal();
+  if (!target.open) target.showModal();
   lockDocumentScroll();
   for (const slot of trackSlots.value) ensureImageState(slot.item, true);
   await nextTick();
@@ -1003,7 +1309,10 @@ async function openDialog() {
   });
   if (!isOpenCycleCurrent(generation, target)) return;
   announceCurrent();
-  emit("opened", galleryIndex.value);
+  if (openedLifecycleGeneration !== lifecycle) {
+    openedLifecycleGeneration = lifecycle;
+    emit("opened", semanticActiveId.value);
+  }
   if (!isOpenCycleCurrent(generation, target)) return;
 
   if (reducedMotion.value) {
@@ -1019,14 +1328,15 @@ async function openDialog() {
   });
 }
 
-function requestClose(reason: MediaGalleryCloseReason = "programmatic") {
-  if (closeRequested || (!dialog.value?.open && !props.open)) return;
-  closeRequested = true;
-  invalidateOpenCycle();
-  invalidateNavigation();
-  clearPointerState();
-  emit("requestClose", galleryIndex.value, reason);
-  emit("update:open", false);
+function beginOpenLifecycle() {
+  cancelPendingCloseHandoffs();
+  lifecycleGeneration += 1;
+  void openDialog(lifecycleGeneration);
+}
+
+function requestClose(reason: CloseReason = "programmatic") {
+  if (!props.open || !dialog.value?.open) return;
+  emitCloseRequest(reason);
 }
 
 function onCancel(event: Event) {
@@ -1036,6 +1346,7 @@ function onCancel(event: Event) {
 
 function startClose() {
   if (!dialog.value?.open || dialogState.value === "closing") return;
+  closingLifecycleGeneration = lifecycleGeneration;
   invalidateOpenCycle();
   invalidateNavigation();
   const generation = invalidateClose();
@@ -1050,15 +1361,24 @@ function startClose() {
 }
 
 function finishClose(generation = closeGeneration) {
+  const lifecycle = closingLifecycleGeneration;
   if (
     !mounted.value ||
     generation !== closeGeneration ||
+    lifecycle === undefined ||
+    lifecycle !== lifecycleGeneration ||
+    props.open ||
     dialogState.value !== "closing" ||
     !dialog.value?.open
   ) {
     return;
   }
   stopCloseFallback();
+  closingLifecycleGeneration = undefined;
+  nativeCloseLifecycles.push({
+    focusHandoff: observeFocusHandoffFromOpener(explicitOpenerForCurrentLifecycle()),
+    generation: lifecycle,
+  });
   dialog.value.close();
 }
 
@@ -1072,25 +1392,47 @@ function onShellTransitionEnd(event: TransitionEvent) {
   }
 }
 
-function onClose() {
+async function onClose() {
+  const nativeCloseLifecycle = nativeCloseLifecycles.shift();
+  const closeLifecycle = nativeCloseLifecycle?.generation;
+  const initialTransferredOwner = nativeCloseLifecycle?.focusHandoff.consume();
   if (dialog.value?.open) return;
+  if (closeLifecycle !== undefined && closeLifecycle !== lifecycleGeneration) return;
+  if (!mounted.value) return;
+  // A reduced or very short close can beat Vue's parent-to-child prop flush. The same flush also
+  // re-enables an opener disabled while the modal is present, so focus restoration waits for it.
+  await nextTick();
+  if (props.open && closeLifecycle === undefined) {
+    emitCloseRequest("programmatic");
+    await nextTick();
+  }
+  if (props.open) {
+    await openDialog(lifecycleGeneration);
+    return;
+  }
+  if (finalizedLifecycleGeneration === lifecycleGeneration) return;
+  finalizedLifecycleGeneration = lifecycleGeneration;
   invalidateOpenCycle();
   invalidateNavigation();
   invalidateClose();
   clearPointerState();
   dialogState.value = "closed";
-  closeRequested = false;
   mediaTransitionMode.value = "direct";
   resetTransform();
   unlockDocumentScroll();
-  if (!mounted.value) return;
-  restoreFocus({
-    fallback: props.focusReturn?.fallback,
-    opener: capturedOpener ?? props.focusReturn?.opener,
-  });
+  const opener = capturedOpener ?? props.focusReturn?.opener;
+  const explicitOpener = capturedOpener ? capturedOpenerWasExplicit : opener !== undefined;
+  const focusGeneration = lifecycleGeneration;
   capturedOpener = undefined;
-  emit("closed", galleryIndex.value);
-  if (props.open) void openDialog();
+  capturedOpenerWasExplicit = false;
+  focusRestoreVerification = scheduleVerifiedFocusRestore({
+    explicitOpener,
+    fallback: props.focusReturn?.fallback,
+    initialTransferredOwner,
+    isCurrent: () => mounted.value && !props.open && focusGeneration === lifecycleGeneration,
+    opener,
+  });
+  emit("closed", semanticActiveId.value);
 }
 
 function onBackdropPointerDown(event: PointerEvent) {
@@ -1105,7 +1447,7 @@ function onBackdropPointerUp(event: PointerEvent) {
     gesture === undefined &&
     pinch === undefined;
   backdropPointerId = undefined;
-  if (closes) requestClose("backdrop");
+  if (closes) requestClose("scrim");
 }
 
 function onReducedMotionChange(event: MediaQueryListEvent) {
@@ -1127,58 +1469,124 @@ onMounted(() => {
     reducedMotionQuery.value = ownerWindow.matchMedia("(prefers-reduced-motion: reduce)");
     systemReducedMotion.value = reducedMotionQuery.value.matches;
   }
-  if (props.open) void openDialog();
+  if (props.open) beginOpenLifecycle();
 });
 
 watch(
   () => props.open,
   (open) => {
-    if (open) void openDialog();
+    if (open) beginOpenLifecycle();
     else {
-      if (dialog.value?.open && !closeRequested) requestClose("programmatic");
       startClose();
     }
   },
 );
 
 watch(
-  () => props.initialIndex,
-  (index) => {
-    if (!props.open) ensureImageState(items.value[clampIndex(index)]);
+  () => props.activeId,
+  (id, previousId) => {
+    // A host confirming the stable ID emitted by this navigation is acknowledgement, not an
+    // external takeover. Keep the transition and its provenance intact.
+    if (id === undefined) {
+      const releasedId = resolveRollbackId() ?? intendedActiveId.value ?? activeItem.value?.id;
+      internalActiveId.value = releasedId;
+      if (previousId !== undefined && releasedId !== intendedActiveId.value && releasedId) {
+        synchronizeExact(releasedId, false);
+      }
+      if (previousId !== undefined) {
+        // The released authority seeds the uncontrolled identity, then its ownership epoch ends.
+        latestValidAuthorityId.value = undefined;
+      }
+      return;
+    }
+    const index = items.value.findIndex((item) => item.id === id);
+    if (index < 0) {
+      const fallbackId = resolveRollbackId();
+      if (fallbackId !== undefined) {
+        // An accepted uncontrolled identity is already committed semantic state even when its
+        // track transition has not settled. Preserve it as this unavailable epoch's mechanics.
+        synchronizeExact(fallbackId, false);
+        return;
+      }
+      invalidateNavigation();
+      clearPointerState();
+      intendedActiveId.value = undefined;
+      mechanicalAnchorId.value = undefined;
+      return;
+    }
+    latestValidAuthorityId.value = id;
+    mechanicalAnchorId.value = id;
+    if (id !== intendedActiveId.value) synchronizeExact(id);
   },
-  { immediate: true },
+  { flush: "sync", immediate: true },
+);
+
+watch(
+  () => activeItem.value?.id,
+  (id, previousId) => {
+    if (id === previousId) return;
+    activeAuthorityGeneration += 1;
+    if (!id) return;
+
+    const item = items.value.find((candidate) => candidate.id === id);
+    if (!item || !selectedFullSourceByItem.value[id]) return;
+    clearItemRetry(id);
+    setImageLoadState(item, imageLoadDefault(item));
+  },
+  { flush: "sync" },
 );
 
 watch(items, (nextItems, previousItems) => {
   itemCollectionGeneration.value += 1;
+  activeAuthorityGeneration += 1;
   const collectionGeneration = itemCollectionGeneration.value;
   const openGeneration = openCycleGeneration.value;
   const navigation = invalidateNavigation();
   const previousId = previousItems[galleryIndex.value]?.id;
+  const previousSemanticId = semanticActiveId.value;
   const nextIds = new Set(nextItems.map((item) => item.id));
-  imageLoadStateByItem.value = Object.fromEntries(
-    Object.entries(imageLoadStateByItem.value).filter(([id]) => nextIds.has(id)),
-  );
-  imageRetryAttemptByItem.value = Object.fromEntries(
-    Object.entries(imageRetryAttemptByItem.value).filter(([id]) => nextIds.has(id)),
-  );
-  previewFailedByItem.value = Object.fromEntries(
-    Object.entries(previewFailedByItem.value).filter(([id]) => nextIds.has(id)),
-  );
+  resetMediaSourceState();
   for (const id of mediaTransformElements.keys()) {
     if (!nextIds.has(id)) mediaTransformElements.delete(id);
   }
 
   if (nextItems.length === 0) {
+    if (props.activeId === undefined && previousSemanticId !== undefined) {
+      acceptActiveId(undefined, "reconcile");
+    }
     if (props.open) {
       invalidateOpenCycle();
-      requestClose("programmatic");
+      emitCloseRequest("programmatic");
     }
     galleryIndex.value = 0;
     return;
   }
 
-  galleryIndex.value = resolvePreservedGalleryIndex(previousId, galleryIndex.value, nextItems);
+  const controlledIndex =
+    props.activeId === undefined
+      ? -1
+      : nextItems.findIndex((candidate) => candidate.id === props.activeId);
+  const semanticIndex =
+    intendedActiveId.value === undefined
+      ? -1
+      : nextItems.findIndex((candidate) => candidate.id === intendedActiveId.value);
+  if (controlledIndex >= 0) {
+    intendedActiveId.value = props.activeId;
+    latestValidAuthorityId.value = props.activeId;
+    mechanicalAnchorId.value = props.activeId;
+    galleryIndex.value = controlledIndex;
+  } else if (semanticIndex >= 0) {
+    galleryIndex.value = semanticIndex;
+    if (props.activeId !== undefined) mechanicalAnchorId.value = intendedActiveId.value;
+  } else {
+    galleryIndex.value = resolvePreservedGalleryIndex(previousId, galleryIndex.value, nextItems);
+    const fallbackId = nextItems[galleryIndex.value]?.id;
+    if (props.activeId === undefined) acceptActiveId(fallbackId, "reconcile");
+    else {
+      intendedActiveId.value = fallbackId;
+      mechanicalAnchorId.value = fallbackId;
+    }
+  }
   resetTransform();
   ensureTrackImageStates();
   void (async () => {
@@ -1189,13 +1597,16 @@ watch(items, (nextItems, previousItems) => {
       openGeneration === openCycleGeneration.value &&
       navigation === navigationGeneration
     ) {
-      measureGeometry();
+      if (props.open && !dialog.value?.open) void openDialog(lifecycleGeneration);
+      else measureGeometry();
     }
   })();
 });
 
 onBeforeUnmount(() => {
   mounted.value = false;
+  lifecycleGeneration += 1;
+  clearPendingCloseHandoffs();
   invalidateOpenCycle();
   invalidateNavigation();
   invalidateClose();
@@ -1203,6 +1614,8 @@ onBeforeUnmount(() => {
   unlockDocumentScroll();
   mediaTransformElements.clear();
   if (dialog.value?.open) dialog.value.close();
+  focusRestoreVerification?.cancel();
+  focusRestoreVerification = undefined;
   restoreFocus({
     fallback: props.focusReturn?.fallback,
     opener: capturedOpener ?? props.focusReturn?.opener,
@@ -1211,11 +1624,14 @@ onBeforeUnmount(() => {
 
 defineExpose({
   dialog,
-  activeIndex: galleryIndex,
-  previous,
+  activeId: semanticActiveId,
+  settledId,
+  navigateTo,
   next,
-  resetToFit,
+  previous,
+  resetToFit: resetToFitPublic,
   requestClose,
+  synchronizeTo,
 });
 </script>
 
@@ -1227,8 +1643,11 @@ defineExpose({
     class="snap-motion-media-gallery"
     data-testid="snap-motion-media-gallery"
     :data-dialog-state="dialogState"
+    :data-active-id="semanticActiveId"
     :data-gallery-index="galleryIndex"
+    :data-settled-id="settledId"
     :data-image-state="activeImageLoadState"
+    :data-preload-policy="preloadPolicy"
     :data-pan-x="transform.x.toFixed(3)"
     :data-pan-y="transform.y.toFixed(3)"
     :data-reduced-motion="reducedMotion ? 'true' : 'false'"
@@ -1246,35 +1665,53 @@ defineExpose({
       data-testid="snap-motion-media-gallery-shell"
       @transitionend="onShellTransitionEnd"
     >
-      <header class="snap-motion-media-gallery-header">
+      <header class="snap-motion-media-gallery-header" :class="{ 'has-actions': slots.actions }">
         <div>
-          <p v-if="eyebrow">{{ eyebrow }}</p>
+          <p v-if="eyebrow" class="snap-motion-media-gallery-eyebrow">{{ eyebrow }}</p>
           <h2 :id="titleId" ref="titleHeading" tabindex="-1">{{ title }}</h2>
         </div>
         <div class="snap-motion-media-gallery-identity" aria-live="off">
-          <strong data-testid="snap-motion-media-gallery-title">{{ activeItem?.title }}</strong>
-          <span class="tabular" data-testid="snap-motion-media-gallery-position">
-            {{ galleryPosition }}
-          </span>
+          <div class="snap-motion-media-gallery-item-heading">
+            <strong data-testid="snap-motion-media-gallery-title">{{ activeItem?.title }}</strong>
+            <span class="tabular" data-testid="snap-motion-media-gallery-position">
+              {{ galleryPosition }}
+            </span>
+          </div>
+          <p
+            v-if="activeItem?.description"
+            class="snap-motion-media-gallery-description"
+            data-testid="snap-motion-media-gallery-description"
+          >
+            {{ activeItem.description }}
+          </p>
         </div>
-        <button
-          ref="closeButton"
-          :aria-label="messages.closeGallery"
-          class="snap-motion-media-gallery-control snap-motion-media-gallery-close"
-          data-testid="snap-motion-media-gallery-close"
-          type="button"
-          @click="requestClose('close-button')"
-        >
-          <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
-            <path
-              d="M5 5l14 14M19 5 5 19"
-              fill="none"
-              stroke="currentColor"
-              stroke-linecap="square"
-              stroke-width="2"
-            />
-          </svg>
-        </button>
+        <div class="snap-motion-media-gallery-header-actions">
+          <div
+            v-if="slots.actions"
+            class="snap-motion-media-gallery-actions"
+            data-testid="snap-motion-media-gallery-actions"
+          >
+            <slot name="actions" />
+          </div>
+          <button
+            ref="closeButton"
+            :aria-label="messages.closeGallery"
+            class="snap-motion-media-gallery-control snap-motion-media-gallery-close"
+            data-testid="snap-motion-media-gallery-close"
+            type="button"
+            @click="requestClose('close-button')"
+          >
+            <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
+              <path
+                d="M5 5l14 14M19 5 5 19"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="square"
+                stroke-width="2"
+              />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <div class="snap-motion-media-gallery-workspace">
@@ -1334,17 +1771,23 @@ defineExpose({
                 :style="slot.item.id === activeItem?.id ? transformStyle : undefined"
               >
                 <img
-                  v-if="mounted && open"
+                  v-if="open"
                   class="snap-motion-media-gallery-media snap-motion-media-gallery-preview"
-                  :class="{ concealed: imageLoadState(slot.item) === 'loaded' }"
-                  :src="slot.item.previewSrc"
+                  :class="{
+                    concealed: shouldMountFull(slot.item) && imageLoadState(slot.item) === 'loaded',
+                  }"
+                  :sizes="slot.item.preview.sizes"
+                  :srcset="slot.item.preview.srcset"
+                  :src="slot.item.preview.src"
                   :alt="
-                    slot.item.id === activeItem?.id && imageLoadState(slot.item) !== 'loaded'
+                    slot.item.id === activeItem?.id &&
+                    (!shouldMountFull(slot.item) || imageLoadState(slot.item) !== 'loaded')
                       ? slot.item.alt
                       : ''
                   "
                   :aria-hidden="
-                    slot.item.id !== activeItem?.id || imageLoadState(slot.item) === 'loaded'
+                    slot.item.id !== activeItem?.id ||
+                    (shouldMountFull(slot.item) && imageLoadState(slot.item) === 'loaded')
                       ? 'true'
                       : undefined
                   "
@@ -1352,13 +1795,13 @@ defineExpose({
                   :data-open-cycle="openCycleGeneration"
                   decoding="async"
                   draggable="false"
-                  :height="slot.item.height"
-                  :width="slot.item.width"
+                  :height="slot.item.preview.height"
+                  :width="slot.item.preview.width"
                   @error="onPreviewImageError($event, slot.item)"
                 />
                 <img
                   v-if="
-                    mounted && open && slot.item.fullSrc && imageLoadState(slot.item) !== 'failed'
+                    open && shouldMountFull(slot.item) && imageLoadState(slot.item) !== 'failed'
                   "
                   :key="`${openCycleGeneration}-${itemCollectionGeneration}-${slot.item.id}-${imageRetryAttempt(slot.item)}`"
                   class="snap-motion-media-gallery-media snap-motion-media-gallery-full"
@@ -1366,6 +1809,9 @@ defineExpose({
                   :data-item-collection="itemCollectionGeneration"
                   :data-open-cycle="openCycleGeneration"
                   :data-retry-attempt="imageRetryAttempt(slot.item)"
+                  :data-retry-authority="imageRetryAuthorityByItem[slot.item.id] ?? 0"
+                  :sizes="slot.item.full.sizes"
+                  :srcset="visibleFullSrcset(slot.item)"
                   :src="visibleFullSrc(slot.item)"
                   :alt="
                     slot.item.id === activeItem?.id && imageLoadState(slot.item) === 'loaded'
@@ -1380,8 +1826,8 @@ defineExpose({
                   decoding="async"
                   draggable="false"
                   :fetchpriority="slot.item.id === activeItem?.id ? 'high' : 'low'"
-                  :height="slot.item.height"
-                  :width="slot.item.width"
+                  :height="slot.item.full.height"
+                  :width="slot.item.full.width"
                   @error="onFullImageError($event, slot.item)"
                   @load="onFullImageLoad($event, slot.item)"
                 />
@@ -1431,7 +1877,9 @@ defineExpose({
             <span data-testid="snap-motion-media-gallery-error">
               {{ messages.fullImageUnavailable }} {{ messages.previewFallback }}
             </span>
-            <button type="button" @click="retryImage">{{ messages.retry }}</button>
+            <button v-if="canRetryActiveImage" type="button" @click="retryImage">
+              {{ messages.retry }}
+            </button>
           </template>
         </div>
         <div

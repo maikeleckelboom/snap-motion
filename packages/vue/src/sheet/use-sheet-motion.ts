@@ -7,6 +7,7 @@ import type {
   SnapAnchor,
   SpringConfiguration,
 } from "@snap-motion/core";
+import type { PointerIntent } from "@snap-motion/vue/motion";
 import { useEventListener } from "@vueuse/core";
 import {
   computed,
@@ -21,7 +22,6 @@ import {
   type Ref,
 } from "vue";
 
-import type { PointerIntent } from "../internal/input/pointer-policy";
 import { useRemeasurement } from "../internal/layout/remeasurement";
 import { useSnapMotion } from "../motion/use-snap-motion";
 import type { SheetAxis, SheetSide, SheetState } from "./sheet-contracts";
@@ -77,7 +77,6 @@ export interface UseSheetMotionOptions<Id extends string = SheetOpenSnapId> {
 }
 
 export interface UseSheetMotionReturn<Id extends string = SheetOpenSnapId> {
-  readonly activeId: ComputedRef<Id | undefined>;
   readonly activeSnapId: ComputedRef<Id | undefined>;
   readonly axis: ComputedRef<SheetAxis>;
   /** Latest measured body client block extent; not read on every motion frame. */
@@ -618,7 +617,6 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
   });
 
   return {
-    activeId: activeSnapId,
     activeSnapId,
     axis: computed(() => getSheetSideDescriptor(currentSide.value).axis),
     bodyClientBlockExtent,

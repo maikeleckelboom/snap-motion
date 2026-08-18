@@ -1,6 +1,16 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export type DemoId = "coverflow" | "gallery-at" | "grid" | "media" | "sheet" | "stacked-deck";
+export type DemoId =
+  | "adaptive-sheet"
+  | "coverflow"
+  | "defaults"
+  | "gallery-at"
+  | "grid"
+  | "media"
+  | "render-window"
+  | "sheet"
+  | "stacked-deck"
+  | "variable-rail";
 export type ReducedMotionMode = "no-preference" | "reduce" | "system";
 
 interface DragOptions {
@@ -28,18 +38,48 @@ export async function openLabDemo(
   reducedMotion: ReducedMotionMode = "reduce",
 ) {
   // Base-relative, so this also resolves under the preview build's non-root base.
-  await page.goto(`./?demo=${demo}`);
-  await page.getByTestId("reduced-motion-mode").selectOption(reducedMotion);
+  // The lab URL resolver owns fixture/workbench normalization, so this helper does not duplicate
+  // the demo registry. Render Window is the one accepted demo without a motion preference input.
+  await page.goto(`./?demo=${demo}&view=workbench`);
+  const motionPreference = page.getByTestId("reduced-motion-mode");
+  if (demo === "render-window") {
+    await expect(motionPreference).toHaveCount(0);
+  } else {
+    await motionPreference.selectOption(reducedMotion);
+  }
 
-  const tab = page.locator(`#tab-${demo}`);
-  await tab.click();
-  await expect(tab).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator(`#panel-${demo}`)).toBeVisible();
+  const navigationItem = page.locator(`#nav-${demo}`);
+  await navigationItem.click();
+  await expect(navigationItem).toHaveAttribute("aria-pressed", "true");
+  const panel = page.locator(`#panel-${demo}`);
+  await expect(panel).toBeVisible();
+
+  const publishesMotionState = new Set<DemoId>([
+    "coverflow",
+    "defaults",
+    "gallery-at",
+    "stacked-deck",
+  ]);
+  if (publishesMotionState.has(demo) && reducedMotion !== "system") {
+    const expected = reducedMotion === "reduce" ? "true" : "false";
+    const motionSurfaces = panel.locator("[data-reduced-motion]");
+    await expect
+      .poll(async () => {
+        const states = await motionSurfaces.evaluateAll((elements) =>
+          elements.map((element) => element.getAttribute("data-reduced-motion")),
+        );
+        return states.length > 0 && states.every((state) => state === expected);
+      })
+      .toBe(true);
+  }
+
+  const advancedPhysics = page.getByText("Advanced physics", { exact: true });
+  if (await advancedPhysics.isVisible()) await advancedPhysics.click();
 }
 
 export async function expectCarouselAt(carousel: Locator, id: string) {
-  await expect(carousel).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
   await expect(carousel).toHaveAttribute("data-active-id", id);
+  await expect(carousel).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
 }
 
 export async function expectSheetOpenAt(dialog: Locator, id: string) {
@@ -56,6 +96,7 @@ export async function dragMouseBy(
   options: DragOptions = {},
 ) {
   await expect(target).toBeVisible();
+  await target.scrollIntoViewIfNeeded();
   const box = await target.boundingBox();
   if (!box) {
     throw new Error("Cannot drag an element without a layout box.");
@@ -88,6 +129,7 @@ export async function dragTouchBy(
   options: Omit<DragOptions, "beforeRelease"> = {},
 ) {
   await expect(target).toBeVisible();
+  await target.scrollIntoViewIfNeeded();
   const box = await target.boundingBox();
   if (!box) {
     throw new Error("Cannot drag an element without a layout box.");
@@ -173,6 +215,7 @@ export async function dragSyntheticPointerBy(
   options: DragOptions = {},
 ) {
   await expect(target).toBeVisible();
+  await target.scrollIntoViewIfNeeded();
   const start = await target.evaluate((element) => {
     const box = element.getBoundingClientRect();
     return { x: box.left + box.width / 2, y: box.top + box.height / 2 };

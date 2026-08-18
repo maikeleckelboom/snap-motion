@@ -4,14 +4,22 @@
 
 ```ts
 
-import { ComponentOptionsMixin } from 'vue';
-import { ComponentProvideOptions } from 'vue';
-import { DefineComponent } from 'vue';
+import type { ActiveIdRequestDetails } from '@snap-motion/core';
+import type { CloseReason } from '@snap-motion/vue/dialog';
+import { ComputedRef } from 'vue';
+import type { FocusReturnOptions } from '@snap-motion/vue/dialog';
+import type { InitialFocus } from '@snap-motion/vue/dialog';
+import type { OpenRequestDetails } from '@snap-motion/vue/dialog';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
+import type { SettlementDetails } from '@snap-motion/core';
+import { ShallowUnwrapRef } from 'vue';
+import { VNode } from 'vue';
 
 // @public (undocumented)
 export function clampMediaScale(scale: number, limits?: MediaTransformLimits): number;
+
+export { CloseReason }
 
 // @public (undocumented)
 export function constrainMediaTransform(transform: MediaTransform, context: MediaTransformContext, limits?: MediaTransformLimits): MediaTransform;
@@ -25,16 +33,9 @@ export function fitMediaWithinViewport(viewportSize: MediaSize, intrinsicSize: M
 // @public (undocumented)
 export const fittedMediaTransform: Readonly<MediaTransform>;
 
-// @public (undocumented)
-export interface FocusReturnOptions {
-    // (undocumented)
-    fallback?: HTMLElement | (() => HTMLElement | undefined) | undefined;
-    // (undocumented)
-    opener?: HTMLElement | undefined;
-}
+export { FocusReturnOptions }
 
-// @public
-export type InitialFocus = "close" | "title" | "first-interactive" | HTMLElement | (() => HTMLElement | undefined);
+export { InitialFocus }
 
 // @public (undocumented)
 export function interpolateMediaTransform(from: MediaTransform, to: MediaTransform, progress: number): MediaTransform;
@@ -42,107 +43,145 @@ export function interpolateMediaTransform(from: MediaTransform, to: MediaTransfo
 // @public (undocumented)
 export function isFittedMediaTransform(transform: MediaTransform): boolean;
 
-// @public (undocumented)
-export type MediaGalleryCloseReason = "backdrop" | "close-button" | "escape" | "programmatic";
-
-// Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const MediaGalleryDialog: typeof __VLS_export;
+export const MediaGalleryDialog: <TItem extends MediaGalleryItem>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
+    props: PublicProps & __VLS_PrettifyLocal<{
+        activeId?: TItem["id"];
+        descriptionId?: string;
+        eyebrow?: string;
+        focusReturn?: FocusReturnOptions;
+        initialFocus?: InitialFocus;
+        items: readonly TItem[];
+        messages?: Partial<MediaGalleryMessages>;
+        open: boolean;
+        preloadPolicy?: MediaGalleryPreloadPolicy;
+        reducedMotionOverride?: boolean | undefined;
+        title?: string;
+    } & {
+        onClosed?: (finalId: TItem["id"] | undefined) => any;
+        onActiveIdRequest?: (id: TItem["id"] | undefined, details: ActiveIdRequestDetails) => any;
+        onSettled?: (id: TItem["id"], details: SettlementDetails) => any;
+        "onUpdate:activeId"?: (id: TItem["id"] | undefined) => any;
+        "onUpdate:open"?: (open: boolean) => any;
+        onOpenRequest?: (open: false, details: MediaGalleryOpenRequestDetails<TItem["id"]>) => any;
+        onOpened?: (id: TItem["id"] | undefined) => any;
+    }> & (typeof globalThis extends {
+        __VLS_PROPS_FALLBACK: infer P;
+    } ? P : {});
+    expose: (exposed: ShallowUnwrapRef<    {
+    dialog: Ref<HTMLDialogElement | undefined, HTMLDialogElement | undefined>;
+    activeId: ComputedRef<TItem["id"] | undefined>;
+    settledId: ComputedRef<TItem["id"] | undefined>;
+    navigateTo: (id: TItem["id"]) => boolean;
+    next: () => boolean;
+    previous: () => boolean;
+    resetToFit: () => void;
+    requestClose: (reason?: CloseReason) => void;
+    synchronizeTo: (id: TItem["id"]) => boolean;
+    }>) => void;
+    attrs: any;
+    slots: {
+        actions?: () => unknown;
+    };
+    emit: {
+        (event: "update:open", open: boolean): void;
+        (event: "update:activeId", id: TItem["id"] | undefined): void;
+        (event: "openRequest", open: false, details: MediaGalleryOpenRequestDetails<TItem["id"]>): void;
+        (event: "activeIdRequest", id: TItem["id"] | undefined, details: ActiveIdRequestDetails): void;
+        (event: "opened", id: TItem["id"] | undefined): void;
+        (event: "closed", finalId: TItem["id"] | undefined): void;
+        (event: "settled", id: TItem["id"], details: SettlementDetails): void;
+    };
+}>) => VNode & {
+    __ctx?: NonNullable<Awaited<typeof __VLS_setup>>;
+};
 
 // @public (undocumented)
-export interface MediaGalleryDialogProps {
-    // (undocumented)
+export interface MediaGalleryDialogProps<TItem extends MediaGalleryItem = MediaGalleryItem> {
+    activeId?: TItem["id"];
     descriptionId?: string;
-    // (undocumented)
     eyebrow?: string;
-    // (undocumented)
     focusReturn?: FocusReturnOptions;
-    // (undocumented)
     initialFocus?: InitialFocus;
-    // (undocumented)
-    initialIndex?: number;
-    // (undocumented)
-    items: readonly MediaGalleryItem[];
-    // (undocumented)
+    items: readonly TItem[];
     messages?: Partial<MediaGalleryMessages>;
-    // (undocumented)
     open: boolean;
-    // (undocumented)
+    preloadPolicy?: MediaGalleryPreloadPolicy;
     reducedMotionOverride?: boolean | undefined;
-    // (undocumented)
     title?: string;
 }
 
-// @public (undocumented)
+// @public
+export interface MediaGalleryHandle<Id extends string = string> {
+    readonly activeId: Id | undefined;
+    readonly dialog: HTMLDialogElement | undefined;
+    navigateTo(id: Id): boolean;
+    next(): boolean;
+    previous(): boolean;
+    requestClose(reason?: CloseReason): void;
+    resetToFit(): void;
+    readonly settledId: Id | undefined;
+    synchronizeTo(id: Id): boolean;
+}
+
+// @public
+export interface MediaGalleryImageSource {
+    readonly height?: number;
+    readonly sizes?: string;
+    readonly src: string;
+    readonly srcset?: string;
+    readonly width?: number;
+}
+
+// @public
 export interface MediaGalleryItem {
-    // (undocumented)
     readonly alt: string;
-    // (undocumented)
     readonly description?: string;
-    // (undocumented)
-    readonly fullSrc?: string;
-    // (undocumented)
-    readonly height: number;
-    // (undocumented)
+    readonly full: MediaGalleryImageSource;
     readonly id: string;
-    // (undocumented)
-    readonly previewSrc: string;
-    // (undocumented)
+    readonly preview: MediaGalleryImageSource;
     readonly title: string;
-    // (undocumented)
-    readonly width: number;
 }
 
 // @public (undocumented)
 export interface MediaGalleryMessages {
-    // (undocumented)
     closeGallery: string;
-    // (undocumented)
     currentItem(context: {
         title: string;
         index: number;
         count: number;
     }): string;
-    // (undocumented)
     fit: string;
-    // (undocumented)
     fullImageUnavailable: string;
-    // (undocumented)
     gestureInstructions: string;
-    // (undocumented)
     loadingFullImage: string;
-    // (undocumented)
     nextItem(context: {
         title: string | undefined;
     }): string;
-    // (undocumented)
     position(context: {
         index: number;
         count: number;
     }): string;
-    // (undocumented)
     previewFallback: string;
-    // (undocumented)
     previewUnavailable: string;
-    // (undocumented)
     previousItem(context: {
         title: string | undefined;
     }): string;
-    // (undocumented)
     retry: string;
-    // (undocumented)
     zoomControls: string;
-    // (undocumented)
     zoomIn: string;
-    // (undocumented)
     zoomLabel: string;
-    // (undocumented)
     zoomOut: string;
 }
 
 // @public (undocumented)
-export type MediaGalleryNavigationReason = "previous" | "next" | "swipe" | "home" | "end";
+export interface MediaGalleryOpenRequestDetails<Id extends string = string> extends OpenRequestDetails {
+    readonly activeId: Id | undefined;
+}
+
+// @public
+export type MediaGalleryPreloadPolicy = "adjacent-full" | "current-only";
 
 // @public (undocumented)
 export interface MediaPoint {

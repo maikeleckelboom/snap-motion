@@ -1,4 +1,10 @@
-import { assertFiniteNumber, assertNonNegative, clampToBounds, createBounds } from "./bounds";
+import {
+  assertFiniteNumber,
+  assertNonNegative,
+  clamp,
+  clampToBounds,
+  createBounds,
+} from "./bounds";
 import { projectPosition } from "./projection";
 import type {
   ReleaseTargetPolicy,
@@ -139,7 +145,7 @@ export function directionalAnchor<Id extends SemanticId>(
     return null;
   }
 
-  const targetIndex = Math.min(ordered.length - 1, Math.max(0, currentIndex + direction * steps));
+  const targetIndex = clamp(currentIndex + direction * steps, 0, ordered.length - 1);
   return ordered[targetIndex] ?? null;
 }
 
@@ -163,14 +169,8 @@ function capAnchorSkip<Id extends SemanticId>(
   const candidateIndex = candidate
     ? ordered.findIndex((anchor) => anchor.id === candidate.id)
     : baseIndex;
-  const targetIndex = Math.min(
-    ordered.length - 1,
-    Math.max(
-      0,
-      baseIndex + Math.max(-maximumSkip, Math.min(maximumSkip, candidateIndex - baseIndex)),
-    ),
-  );
-  return ordered[targetIndex] ?? base;
+  const skip = clamp(candidateIndex - baseIndex, -maximumSkip, maximumSkip);
+  return ordered[clamp(baseIndex + skip, 0, ordered.length - 1)] ?? base;
 }
 
 export function resolveReleaseTarget<Id extends SemanticId>(

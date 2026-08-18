@@ -1,92 +1,121 @@
 <script setup lang="ts">
 import { useUrlSearchParams } from "@vueuse/core";
-import { computed, ref, shallowRef } from "vue";
+import { computed, nextTick, ref, shallowRef, watch } from "vue";
 
 import PhysicsControls from "@/components/PhysicsControls.vue";
 import StageControls from "@/components/StageControls.vue";
-import CoverflowDemo from "@/demos/CoverflowDemo.vue";
-import MediaGalleryAtCertificationDemo from "@/demos/MediaGalleryAtCertificationDemo.vue";
-import MediaLightboxDemo from "@/demos/MediaLightboxDemo.vue";
-import PagedGridDemo from "@/demos/PagedGridDemo.vue";
-import SheetDemo from "@/demos/SheetDemo.vue";
-import StackedDeckDemo from "@/demos/StackedDeckDemo.vue";
+import {
+  demos,
+  resolveLabLocation,
+  type DemoGroup,
+  type DemoId,
+  type LabLocation,
+  type LabView,
+} from "@/fixtures/demo-registry";
 import { settingsFromPreset } from "@/fixtures/lab-settings";
 import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fixtures/lab-types";
 
-type DemoId = "coverflow" | "stacked-deck" | "gallery-at" | "media" | "grid" | "sheet";
-
-function isDemoId(value: unknown): value is DemoId {
-  return (
-    value === "coverflow" ||
-    value === "stacked-deck" ||
-    value === "gallery-at" ||
-    value === "media" ||
-    value === "grid" ||
-    value === "sheet"
-  );
+interface LabParams {
+  demo?: string;
+  view?: string;
 }
 
-const demos = [
-  {
-    id: "coverflow" as const,
-    label: "Coverflow stack",
-    shortLabel: "Coverflow",
-    description: "Physical 2.5D stack: 1:1 drag, spring settle, elastic ends.",
-    component: CoverflowDemo,
-  },
-  {
-    id: "stacked-deck" as const,
-    label: "Stacked deck",
-    shortLabel: "Deck",
-    description: "Tight settled overlap with a controlled foreground passing corridor.",
-    component: StackedDeckDemo,
-  },
-  {
-    id: "gallery-at" as const,
-    label: "Gallery AT harness",
-    shortLabel: "Gallery AT",
-    description: "Deterministic manual assistive-technology certification scenarios and trace.",
-    component: MediaGalleryAtCertificationDemo,
-  },
-  {
-    id: "media" as const,
-    label: "Media lightbox",
-    shortLabel: "Media",
-    description: "Containment, semantic resize, interruption, and boundary behavior.",
-    component: MediaLightboxDemo,
-  },
-  {
-    id: "grid" as const,
-    label: "Paged grid",
-    shortLabel: "Grid",
-    description: "Rows, columns, gaps, dynamic pages, and direct manipulation.",
-    component: PagedGridDemo,
-  },
-  {
-    id: "sheet" as const,
-    label: "Sheet",
-    shortLabel: "Sheet",
-    description: "Four physical sides, canonical closing motion, and adaptive host composition.",
-    component: SheetDemo,
-  },
-];
-
-const labParams = useUrlSearchParams<{ demo?: string }>("history", { write: false });
-const activeDemoId = ref<DemoId>(isDemoId(labParams.demo) ? labParams.demo : "coverflow");
-const activeDemo = computed(
-  () => demos.find((demo) => demo.id === activeDemoId.value) ?? demos[0]!,
-);
-const activeComponent = computed(() => activeDemo.value.component);
+const showcaseGroups: DemoGroup[] = ["Spatial", "Media", "Surfaces"];
+const fixtureGroups: DemoGroup[] = ["Certification", "Geometry"];
+const labParams = useUrlSearchParams<LabParams>("history", { write: true, writeMode: "replace" });
 const preset = ref<LabPresetName>("balanced");
 const settings = shallowRef<LabPhysicsSettings>(settingsFromPreset(preset.value));
 const stageWidth = ref(1_120);
 const reducedMotionMode = ref<ReducedMotionMode>("system");
+
+const labLocation = computed(() => resolveLabLocation(labParams.demo, labParams.view));
+const activeDemoId = computed(() => labLocation.value.demo);
+const view = computed(() => labLocation.value.view);
+const activeDemo = computed(
+  () => demos.find((demo) => demo.id === activeDemoId.value) ?? demos[0]!,
+);
+const activeComponent = computed(() => activeDemo.value.component);
+const navigationGroups = computed(() => {
+  const audience = view.value === "fixtures" ? "fixture" : "showcase";
+  const groups = audience === "fixture" ? fixtureGroups : showcaseGroups;
+  return groups.map((group) => ({
+    group,
+    demos: demos.filter((demo) => demo.audience === audience && demo.group === group),
+  }));
+});
+const workbench = computed(() => view.value === "workbench");
+const inspectionPresentation = computed(
+  () =>
+    "inspectionPresentation" in activeDemo.value.capabilities &&
+    activeDemo.value.capabilities.inspectionPresentation,
+);
 const reducedMotionOverride = computed<boolean | undefined>(() => {
-  if (reducedMotionMode.value === "system") {
-    return undefined;
-  }
+  if (reducedMotionMode.value === "system") return undefined;
   return reducedMotionMode.value === "reduce";
 });
+const activeComponentProps = computed<Record<string, unknown>>(() => {
+  const capabilities = activeDemo.value.capabilities;
+  const props: Record<string, unknown> = {};
+
+  if (capabilities.motionPreference) props.reducedMotionOverride = reducedMotionOverride.value;
+  if (capabilities.physics) props.settings = settings.value;
+  if (capabilities.stageWidth) props.stageWidth = stageWidth.value;
+  if (inspectionPresentation.value) props.inspectionMode = workbench.value;
+
+  return props;
+});
+const notApplicableControls = computed<Partial<Record<keyof LabPhysicsSettings, string>>>(() =>
+  "notApplicablePhysics" in activeDemo.value ? activeDemo.value.notApplicablePhysics : {},
+);
+
+watch(
+  () => [labParams.demo, labParams.view] as const,
+  () => {
+    // VueUse pauses its URL writer while applying a popstate snapshot and resumes on nextTick.
+    // Canonicalize one tick later so history-driven conflicts update both rendered and URL state.
+    void nextTick(() => writeLabLocation(resolveLabLocation(labParams.demo, labParams.view)));
+  },
+  { immediate: true },
+);
+
+function writeLabLocation(location: LabLocation) {
+  if (labParams.demo !== location.demo) labParams.demo = location.demo;
+
+  if (location.view === "showcase") {
+    if (labParams.view !== undefined) delete labParams.view;
+  } else if (labParams.view !== location.view) {
+    labParams.view = location.view;
+  }
+}
+
+function selectDemo(id: DemoId) {
+  const selected = demos.find((demo) => demo.id === id);
+  if (!selected) return;
+
+  writeLabLocation({
+    demo: id,
+    view:
+      selected.audience === "fixture"
+        ? "fixtures"
+        : view.value === "fixtures"
+          ? "showcase"
+          : view.value,
+  });
+}
+
+function selectView(nextView: LabView) {
+  writeLabLocation({
+    demo:
+      nextView === "fixtures"
+        ? activeDemo.value.audience === "fixture"
+          ? activeDemoId.value
+          : "defaults"
+        : activeDemo.value.audience === "showcase"
+          ? activeDemoId.value
+          : "coverflow",
+    view: nextView,
+  });
+}
 
 function applyPreset(name: LabPresetName) {
   preset.value = name;
@@ -99,81 +128,148 @@ function resetPreset() {
 </script>
 
 <template>
-  <div class="lab-app">
+  <div class="lab-app" :data-view="view">
     <header class="lab-header">
-      <div class="lab-identity">
-        <span aria-hidden="true" class="identity-mark">SM</span>
-        <div>
-          <p>Interaction research</p>
-          <h1>Snap Motion</h1>
+      <div class="lab-header-topline">
+        <div class="lab-identity">
+          <span aria-hidden="true" class="identity-mark">SM</span>
+          <div>
+            <p>Interaction research</p>
+            <h1>Snap Motion</h1>
+          </div>
+        </div>
+
+        <div aria-label="Lab view" class="view-nav" role="group">
+          <button :aria-pressed="view === 'showcase'" type="button" @click="selectView('showcase')">
+            Showcase
+          </button>
+          <button
+            :aria-pressed="view === 'workbench'"
+            type="button"
+            @click="selectView('workbench')"
+          >
+            Workbench
+          </button>
+          <button :aria-pressed="view === 'fixtures'" type="button" @click="selectView('fixtures')">
+            Fixtures
+          </button>
         </div>
       </div>
 
-      <nav aria-label="Lab surfaces" class="demo-tabs" role="tablist">
-        <button
-          v-for="demo in demos"
-          :id="`tab-${demo.id}`"
-          :key="demo.id"
-          :aria-controls="`panel-${demo.id}`"
-          :aria-selected="activeDemoId === demo.id"
-          role="tab"
-          type="button"
-          @click="activeDemoId = demo.id"
+      <div
+        :aria-label="view === 'fixtures' ? 'Engineering fixtures' : 'Showcase surfaces'"
+        class="demo-navigation"
+        role="group"
+      >
+        <section
+          v-for="group in navigationGroups"
+          :key="group.group"
+          :aria-labelledby="`group-${group.group.toLowerCase()}`"
+          class="demo-group"
+          role="group"
         >
-          <span class="wide-label">{{ demo.label }}</span>
-          <span class="short-label">{{ demo.shortLabel }}</span>
-        </button>
-      </nav>
-
-      <label class="motion-override">
-        <span>Motion</span>
-        <select
-          v-model="reducedMotionMode"
-          aria-label="Motion preference"
-          data-testid="reduced-motion-mode"
-        >
-          <option value="system">System</option>
-          <option value="no-preference">Full</option>
-          <option value="reduce">Reduced</option>
-        </select>
-      </label>
+          <h2 :id="`group-${group.group.toLowerCase()}`">{{ group.group }}</h2>
+          <div>
+            <button
+              v-for="demo in group.demos"
+              :id="`nav-${demo.id}`"
+              :key="demo.id"
+              :aria-controls="activeDemoId === demo.id ? `panel-${demo.id}` : undefined"
+              :aria-pressed="activeDemoId === demo.id"
+              type="button"
+              @click="selectDemo(demo.id)"
+            >
+              {{ demo.label }}
+            </button>
+          </div>
+        </section>
+      </div>
     </header>
 
-    <div class="lab-workspace">
+    <div class="lab-workspace" :class="{ 'has-workbench': workbench }">
       <main class="lab-main">
         <section class="demo-intro" aria-live="polite">
           <div>
-            <p class="eyebrow">Current surface</p>
-            <h2>{{ activeDemo.label }}</h2>
+            <p class="eyebrow">
+              {{ view === "fixtures" ? "Engineering fixture" : "Interaction surface" }}
+            </p>
+            <h2 :id="`surface-${activeDemo.id}`">{{ activeDemo.label }}</h2>
             <p>{{ activeDemo.description }}</p>
           </div>
-          <StageControls v-model="stageWidth" />
+          <button
+            v-if="view === 'showcase'"
+            class="inspect-motion"
+            type="button"
+            @click="selectView('workbench')"
+          >
+            Inspect motion
+          </button>
+          <button
+            v-else-if="view === 'workbench'"
+            class="inspect-motion"
+            type="button"
+            @click="selectView('showcase')"
+          >
+            Close workbench
+          </button>
+        </section>
+
+        <section
+          v-if="activeDemo.capabilities.stageWidth || activeDemo.capabilities.motionPreference"
+          class="surface-controls"
+          aria-label="Surface presentation"
+        >
+          <StageControls
+            v-if="activeDemo.capabilities.stageWidth"
+            v-model="stageWidth"
+            :compact="!workbench"
+          />
+          <label v-if="activeDemo.capabilities.motionPreference" class="motion-override">
+            <span>Motion</span>
+            <select
+              v-model="reducedMotionMode"
+              aria-label="Motion preference"
+              data-testid="reduced-motion-mode"
+            >
+              <option value="system">System</option>
+              <option value="no-preference">Full</option>
+              <option value="reduce">Reduced</option>
+            </select>
+          </label>
         </section>
 
         <section
           :id="`panel-${activeDemo.id}`"
-          :aria-labelledby="`tab-${activeDemo.id}`"
+          :aria-labelledby="`surface-${activeDemo.id}`"
           class="demo-panel"
-          role="tabpanel"
         >
-          <component
-            :is="activeComponent"
-            :key="activeDemo.id"
-            :reduced-motion-override="reducedMotionOverride"
-            :settings="settings"
-            :stage-width="stageWidth"
-          />
+          <component :is="activeComponent" :key="activeDemo.id" v-bind="activeComponentProps" />
         </section>
       </main>
 
-      <aside class="lab-inspector" aria-label="Physics inspector">
-        <PhysicsControls
-          :model-value="settings"
-          :preset="preset"
-          @reset="resetPreset"
-          @update:model-value="settings = $event"
-          @update:preset="applyPreset"
-        />
+      <aside v-if="workbench" class="lab-inspector" aria-label="Motion workbench">
+        <div class="workbench-heading">
+          <p>Surface tools</p>
+          <h2>Workbench</h2>
+          <span
+            >Telemetry stays live below the interaction. Expand only the tuning depth you
+            need.</span
+          >
+        </div>
+        <details v-if="activeDemo.capabilities.physics" class="advanced-physics">
+          <summary>Advanced physics</summary>
+          <PhysicsControls
+            :model-value="settings"
+            :not-applicable="notApplicableControls"
+            :preset="preset"
+            @reset="resetPreset"
+            @update:model-value="settings = $event"
+            @update:preset="applyPreset"
+          />
+        </details>
+        <p v-else class="workbench-unavailable">
+          This surface intentionally uses its public defaults and has no lab physics override.
+        </p>
       </aside>
     </div>
   </div>
@@ -188,12 +284,17 @@ function resetPreset() {
   position: sticky;
   z-index: 20;
   inset-block-start: 0;
-  display: grid;
-  grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr) minmax(10rem, 16rem);
-  align-items: stretch;
-  min-block-size: 4.5rem;
   border-block-end: 1px solid var(--strong);
-  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 96%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.lab-header-topline {
+  display: flex;
+  min-block-size: 4rem;
+  align-items: stretch;
+  justify-content: space-between;
+  border-block-end: 1px solid var(--line);
 }
 
 .lab-identity {
@@ -218,12 +319,13 @@ function resetPreset() {
   letter-spacing: 0.03em;
 }
 
-.lab-identity p,
-.lab-identity h1 {
+.lab-identity :is(p, h1),
+.workbench-heading :is(p, h2, span) {
   margin: 0;
 }
 
-.lab-identity p {
+.lab-identity p,
+.workbench-heading p {
   color: var(--muted);
   font-size: 0.67rem;
   font-weight: 700;
@@ -235,76 +337,140 @@ function resetPreset() {
   font-size: 1rem;
 }
 
-.demo-tabs {
+.view-nav {
   display: flex;
   align-items: stretch;
-  border-inline: 1px solid var(--strong);
-  overflow-x: auto;
+  border-inline-start: 1px solid var(--strong);
 }
 
-.demo-tabs button {
-  flex: 1;
-  min-inline-size: 7.25rem;
-  padding: 0.75rem 0.85rem;
+.view-nav button {
+  min-inline-size: 7rem;
+  padding: 0.75rem 1rem;
   border: 0;
   border-inline-end: 1px solid var(--line);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
-.demo-tabs button:last-child {
+.view-nav button:last-child {
   border-inline-end: 0;
 }
 
-.demo-tabs button[aria-selected="true"] {
+.view-nav button[aria-pressed="true"] {
   background: var(--ink);
   color: var(--paper);
 }
 
-.short-label {
-  display: none;
-}
-
-.motion-override {
+.demo-navigation {
   display: flex;
-  align-items: center;
-  justify-self: end;
-  gap: 0.65rem;
-  padding-inline: clamp(1rem, 2vw, 2rem);
-  font-size: 0.72rem;
-  font-weight: 700;
+  min-inline-size: 0;
+  align-items: stretch;
+  justify-content: center;
+  overflow-x: auto;
 }
 
-.motion-override select {
-  min-block-size: 2rem;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--paper);
+.demo-group {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border-inline-start: 1px solid var(--line);
+}
+
+.demo-group:last-child {
+  border-inline-end: 1px solid var(--line);
+}
+
+.demo-group h2 {
+  margin: 0;
+  padding-inline: 0.8rem 0.45rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.demo-group > div {
+  display: flex;
+  align-items: stretch;
+}
+
+.demo-group button {
+  min-block-size: 3rem;
+  padding: 0.65rem 0.9rem;
+  border: 0;
+  background: transparent;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.demo-group button[aria-pressed="true"] {
+  box-shadow: inset 0 -3px var(--ink);
+  font-weight: 800;
 }
 
 .lab-workspace {
+  min-block-size: calc(100vh - 7rem);
+}
+
+.lab-workspace.has-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(19rem, 23rem);
-  min-block-size: calc(100vh - 4.5rem);
 }
 
 .lab-main {
   min-inline-size: 0;
+  padding: clamp(1.25rem, 3vw, 3.5rem);
+}
+
+.lab-workspace.has-workbench .lab-main {
   padding: clamp(1rem, 2.5vw, 2.5rem);
 }
 
 .lab-inspector {
-  padding: clamp(1rem, 2vw, 1.5rem);
+  padding: clamp(1.25rem, 2vw, 1.75rem);
   border-inline-start: 1px solid var(--strong);
   background: var(--paper);
 }
 
-.demo-intro {
+.workbench-heading {
   display: grid;
-  grid-template-columns: minmax(16rem, 1fr) auto;
+  gap: 0.3rem;
+  padding-block-end: 1rem;
+}
+
+.workbench-heading h2 {
+  font-size: 1.15rem;
+}
+
+.workbench-heading span,
+.workbench-unavailable {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.advanced-physics {
+  border-block: 1px solid var(--strong);
+}
+
+.advanced-physics > summary {
+  padding-block: 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.advanced-physics > :deep(.physics-controls) {
+  padding-block-end: 1rem;
+}
+
+.demo-intro {
+  display: flex;
   align-items: end;
+  justify-content: space-between;
   gap: 1.5rem;
-  max-inline-size: 90rem;
-  margin: 0 auto clamp(1.25rem, 2.5vw, 2.5rem);
+  max-inline-size: 96rem;
+  margin: 0 auto clamp(1rem, 2vw, 1.75rem);
 }
 
 .demo-intro .eyebrow {
@@ -318,65 +484,82 @@ function resetPreset() {
 
 .demo-intro h2 {
   margin: 0;
-  font-size: clamp(1.4rem, 2vw, 2rem);
+  font-size: clamp(1.55rem, 3vw, 2.5rem);
 }
 
 .demo-intro p:last-child {
-  max-inline-size: 42rem;
+  max-inline-size: 48rem;
   margin: 0.45rem 0 0;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.86rem;
+}
+
+.inspect-motion {
+  min-block-size: 2.6rem;
+  flex: 0 0 auto;
+  padding: 0.6rem 0.9rem;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.surface-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  max-inline-size: 96rem;
+  margin: 0 auto 1rem;
+  padding-block: 0.6rem;
+  border-block: 1px solid var(--line);
+}
+
+.surface-controls :deep(.stage-controls) {
+  flex: 1 1 auto;
+}
+
+.motion-override {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.motion-override select {
+  min-block-size: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
 }
 
 .demo-panel {
   min-inline-size: 0;
-  max-inline-size: 90rem;
+  max-inline-size: 96rem;
   margin-inline: auto;
+}
+
+.lab-app[data-view="fixtures"] .demo-panel {
+  max-inline-size: 76rem;
+}
+
+.lab-app[data-view="fixtures"] #panel-defaults {
+  max-inline-size: 53rem;
+}
+
+.lab-app[data-view="showcase"] :deep(.diagnostics) {
+  display: none;
 }
 
 @media (max-width: 72rem) {
   .lab-header {
-    grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr) minmax(9rem, auto);
-  }
-
-  .demo-tabs button {
-    min-inline-size: 5rem;
-  }
-
-  .wide-label {
-    display: none;
-  }
-
-  .short-label {
-    display: inline;
-  }
-
-  .lab-workspace {
-    grid-template-columns: minmax(0, 1fr) 19rem;
-  }
-}
-
-@media (max-width: 54rem) {
-  .lab-header {
     position: static;
-    grid-template-columns: 1fr auto;
   }
 
-  .demo-tabs {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    border-block-start: 1px solid var(--strong);
-    border-inline: 0;
-  }
-
-  .demo-tabs button {
-    flex: 1;
-    min-inline-size: 0;
-    padding-inline: 0.4rem;
-  }
-
-  .lab-workspace {
-    grid-template-columns: minmax(0, 1fr);
+  .lab-workspace.has-workbench {
+    display: block;
   }
 
   .lab-inspector {
@@ -384,31 +567,70 @@ function resetPreset() {
     border-inline-start: 0;
   }
 
+  .advanced-physics[open] :deep(.physics-fields) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 48rem) {
+  .lab-header-topline {
+    display: grid;
+  }
+
+  .view-nav {
+    border-block-start: 1px solid var(--line);
+    border-inline-start: 0;
+  }
+
+  .view-nav button {
+    min-inline-size: 0;
+    flex: 1;
+  }
+
+  .demo-navigation {
+    justify-content: start;
+  }
+
   .demo-intro {
-    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .surface-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .motion-override {
+    align-self: end;
   }
 }
 
 @media (max-width: 34rem) {
-  .lab-identity {
+  .lab-identity,
+  .lab-main {
     padding-inline: 0.75rem;
   }
 
   .lab-identity p,
-  .identity-mark {
+  .identity-mark,
+  .demo-group h2 {
     display: none;
   }
 
-  .motion-override {
+  .demo-group button {
     padding-inline: 0.75rem;
   }
 
-  .motion-override > span {
-    display: none;
+  .demo-intro {
+    display: grid;
   }
 
-  .lab-main {
-    padding-inline: 0.75rem;
+  .inspect-motion {
+    justify-self: start;
+  }
+
+  .advanced-physics[open] :deep(.physics-fields) {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

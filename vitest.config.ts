@@ -1,27 +1,12 @@
-import { fileURLToPath } from "node:url";
-
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vitest/config";
+
+import { workspaceSourceAliases } from "./config/source-entrypoints";
 
 export default defineConfig({
   plugins: [vue()],
   resolve: {
-    alias: [
-      {
-        find: "@snap-motion/vue/media-gallery",
-        replacement: fileURLToPath(
-          new URL("./packages/vue/src/media-gallery/index.ts", import.meta.url),
-        ),
-      },
-      {
-        find: "@snap-motion/core",
-        replacement: fileURLToPath(new URL("./packages/core/src/index.ts", import.meta.url)),
-      },
-      {
-        find: "@snap-motion/vue",
-        replacement: fileURLToPath(new URL("./packages/vue/src/index.ts", import.meta.url)),
-      },
-    ],
+    alias: workspaceSourceAliases(),
   },
   test: {
     mockReset: true,
@@ -40,6 +25,14 @@ export default defineConfig({
           name: "lab",
           environment: "node",
           include: ["apps/lab/test/**/*.{test,spec}.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "scripts",
+          environment: "node",
+          include: ["scripts/**/*.{test,spec}.ts"],
         },
       },
       {

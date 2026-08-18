@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { renderToString } from "@vue/server-renderer";
 import { describe, expect, it } from "vitest";
 import { createSSRApp, h } from "vue";
@@ -9,9 +11,11 @@ import CarouselSlide from "../src/carousel/components/CarouselSlide.vue";
 import CarouselStatus from "../src/carousel/components/CarouselStatus.vue";
 import CarouselTrack from "../src/carousel/components/CarouselTrack.vue";
 import CarouselViewport from "../src/carousel/components/CarouselViewport.vue";
+import Coverflow from "../src/coverflow/components/Coverflow.vue";
 import ModalDialog from "../src/dialog/components/ModalDialog.vue";
 import MediaGalleryDialog from "../src/media-gallery/components/MediaGalleryDialog.vue";
 import Sheet from "../src/sheet/components/Sheet.vue";
+import StackedDeck from "../src/stacked-deck/components/StackedDeck.vue";
 
 function carousel(activeId: string, label: string) {
   return h(
@@ -36,6 +40,12 @@ function carousel(activeId: string, label: string) {
   );
 }
 
+interface SpatialItem {
+  readonly id: "one" | "two" | "three";
+}
+
+const spatialItems: readonly SpatialItem[] = [{ id: "one" }, { id: "two" }, { id: "three" }];
+
 function createCertificationApp() {
   return createSSRApp({
     render() {
@@ -52,20 +62,46 @@ function createCertificationApp() {
           { activeId: "comfortable", open: true },
           { title: () => "Sheet title", default: () => h("p", "Sheet content") },
         ),
-        h(MediaGalleryDialog, {
-          open: true,
-          items: [
-            {
-              id: "one",
-              title: "Media title",
-              alt: "Media description",
-              previewSrc: "/preview.jpg",
-              width: 1_600,
-              height: 1_000,
-            },
-          ],
-          initialIndex: 8,
-        }),
+        h(
+          MediaGalleryDialog,
+          {
+            open: true,
+            items: [
+              {
+                id: "one",
+                title: "Media title",
+                description: "Settled media item description",
+                alt: "Media alternative text",
+                preview: {
+                  src: "/preview.jpg",
+                  srcset: "/preview-400.jpg 400w, /preview-800.jpg 800w",
+                  sizes: "50vw",
+                  width: 800,
+                  height: 500,
+                },
+                full: {
+                  src: "/full.jpg",
+                  srcset: "/full-1600.jpg 1600w, /full-2400.jpg 2400w",
+                  sizes: "100vw",
+                  width: 2_400,
+                  height: 1_500,
+                },
+              },
+            ],
+            activeId: "one",
+          },
+          { actions: () => h("a", { href: "/nl/case?media=one" }, "Switch locale") },
+        ),
+        h(
+          Coverflow,
+          { items: spatialItems, label: "Coverflow rail" },
+          { card: ({ item }: { item: SpatialItem }) => h("p", item.id) },
+        ),
+        h(
+          StackedDeck,
+          { items: spatialItems, label: "Stacked deck" },
+          { card: ({ item }: { item: SpatialItem }) => h("p", item.id) },
+        ),
       ]);
     },
   });
@@ -82,6 +118,14 @@ describe("production component SSR contract", () => {
     expect(html).toContain("<dialog");
     expect(html).toContain("snap-motion-media-gallery");
     expect(html).toContain("Media title");
+    expect(html).toContain("Settled media item description");
+    expect(html).toContain("Switch locale");
+    expect(html).toContain('src="/preview.jpg"');
+    expect(html).toContain('srcset="/preview-400.jpg 400w, /preview-800.jpg 800w"');
+    expect(html).toContain('sizes="50vw"');
+    expect(html).toContain('src="/full.jpg"');
+    expect(html).toContain('srcset="/full-1600.jpg 1600w, /full-2400.jpg 2400w"');
+    expect(html).toContain('sizes="100vw"');
     expect(html).not.toMatch(/<dialog[^>]*\sopen(?:=|\s|>)/);
     expect(html).not.toContain("teleport");
   });
@@ -106,17 +150,15 @@ describe("production component SSR contract", () => {
             id: "item",
             title: "First",
             alt: "First",
-            previewSrc: "/first.jpg",
-            width: 1_600,
-            height: 1_000,
+            preview: { src: "/first.jpg", width: 800, height: 500 },
+            full: { src: "/first-full.jpg", width: 1_600, height: 1_000 },
           },
           {
-            id: " item ",
+            id: "item",
             title: "Second",
             alt: "Second",
-            previewSrc: "/second.jpg",
-            width: 1_600,
-            height: 1_000,
+            preview: { src: "/second.jpg", width: 800, height: 500 },
+            full: { src: "/second-full.jpg", width: 1_600, height: 1_000 },
           },
         ],
       }),

@@ -14,13 +14,23 @@ async function collectStaticGraph(entryPath, visited = new Set()) {
   const imports = [...text.matchAll(/(?:from\s*|import\s*)["'](\.\/[^"']+\.js)["']/g)].map(
     (match) => resolve(dirname(resolvedPath), match[1]),
   );
-  const dependencies = (
-    await Promise.all(imports.map((item) => collectStaticGraph(item, visited)))
-  ).flat();
+  // Visit shared dependencies in source order so concatenated gzip input is deterministic.
+  const dependencies = [];
+  for (const item of imports) {
+    dependencies.push(...(await collectStaticGraph(item, visited)));
+  }
   return [{ path: resolvedPath, source }, ...dependencies];
 }
 
 const measurements = {};
+const forbiddenEntryEdges = {
+  vueCarousel: ["coverflow", "stacked-deck", "sheet", "media-gallery"],
+  vueCoverflow: ["stacked-deck", "sheet", "dialog", "media-gallery"],
+  vueStackedDeck: ["coverflow", "sheet", "dialog", "media-gallery"],
+  vueSheet: ["carousel", "coverflow", "stacked-deck", "media-gallery"],
+  vueDialog: ["carousel", "coverflow", "stacked-deck", "sheet", "media-gallery"],
+  vueMotion: ["carousel", "coverflow", "stacked-deck", "sheet", "dialog", "media-gallery"],
+};
 for (const [name, budget] of Object.entries(budgets)) {
   const files = await collectStaticGraph(resolve(repoRoot, budget.entry));
   const source = Buffer.concat(files.map((file) => file.source));
@@ -42,6 +52,17 @@ for (const [name, budget] of Object.entries(budgets)) {
           .join(", ")}`,
       );
     }
+  }
+  const forbiddenFeatures = forbiddenEntryEdges[name] ?? [];
+  const emittedImports = files
+    .flatMap((file) => [
+      basename(file.path),
+      ...file.source.toString("utf8").matchAll(/from["']([^"']+)["']/g),
+    ])
+    .join("\n");
+  const leakedFeatures = forbiddenFeatures.filter((feature) => emittedImports.includes(feature));
+  if (leakedFeatures.length > 0) {
+    throw new Error(`${name} pulls unrelated feature chunks: ${leakedFeatures.join(", ")}`);
   }
   const result = {
     bytes: source.byteLength,

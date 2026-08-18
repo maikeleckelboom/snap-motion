@@ -1,0 +1,10 @@
+{
+  "name": "snap-motion-packed-typescript7-consumer",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@snap-motion/vue": "file:__VUE_TARBALL__",
+    "typescript": "__TYPESCRIPT7_VERSION__",
+    "vue": "3.5.40"
+  }
+}

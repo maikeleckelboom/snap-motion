@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig, type Plugin } from "vite";
 
+import { workspaceSourceAliases } from "../../config/source-entrypoints";
+
 const certificationImage = `
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
   <rect width="1600" height="1000" fill="#174b72"/>
@@ -35,7 +37,7 @@ function certificationMediaMiddleware(
   }
 
   if (url.pathname.endsWith("/__at-media__/retry.svg")) {
-    if (url.searchParams.has("retry")) {
+    if (url.searchParams.has("snap-motion-retry")) {
       sendCertificationImage(response);
       return;
     }
@@ -44,6 +46,11 @@ function certificationMediaMiddleware(
     response.setHeader("Cache-Control", "no-store");
     response.setHeader("Content-Type", "image/png");
     response.end("intentionally invalid image bytes");
+    return;
+  }
+
+  if (url.pathname.endsWith("/__at-media__/retry-fallback.svg")) {
+    sendCertificationImage(response);
     return;
   }
 
@@ -70,17 +77,22 @@ function certificationMediaPlugin(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   build: {
     assetsInlineLimit: 0,
   },
   plugins: [certificationMediaPlugin(), vue()],
   resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
+    alias: [
+      { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
+      // Serve only. `vite dev` (and the E2E server it backs) resolves the workspace packages from
+      // source so the lab hot-reloads package edits with no build step. `vite build` keeps its
+      // node_modules resolution, so every production bundle, preview, and packaged-consumer check
+      // still exercises the real published entrypoints and distributable artifacts.
+      ...(command === "serve" ? workspaceSourceAliases() : []),
+    ],
   },
   server: {
     host: "127.0.0.1",
   },
-});
+}));

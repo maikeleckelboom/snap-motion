@@ -13,11 +13,10 @@
     "untrimmedFilePath": "<projectFolder>/dist/index.d.ts"
   },
   "tsdocMetadata": { "enabled": false },
-  "compiler": { "tsconfigFilePath": "<projectFolder>/tsconfig.build.json" },
+  "compiler": { "tsconfigFilePath": "<projectFolder>/tsconfig.api.json" },
   "newlineKind": "lf",
   "messages": {
     "extractorMessageReporting": {
-      "ae-forgotten-export": { "logLevel": "none" },
       "ae-missing-release-tag": { "logLevel": "none" }
     }
   }

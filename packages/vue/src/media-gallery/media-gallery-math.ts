@@ -7,6 +7,7 @@ import {
   type GallerySwipeInput,
   type GalleryTap,
   type GalleryTrackSlot,
+  type MediaGalleryImageSource,
   type MediaGalleryItem,
   type MediaPoint,
   type MediaSize,
@@ -32,12 +33,66 @@ function positive(value: number): number {
 }
 
 function normalizeIntrinsicSize(item: MediaGalleryItem): MediaSize {
-  return Number.isFinite(item.width) &&
-    item.width > 0 &&
-    Number.isFinite(item.height) &&
-    item.height > 0
-    ? { height: item.height, width: item.width }
-    : { height: 1, width: 1 };
+  for (const source of [item.full, item.preview]) {
+    if (
+      Number.isFinite(source.width) &&
+      Number(source.width) > 0 &&
+      Number.isFinite(source.height) &&
+      Number(source.height) > 0
+    ) {
+      return { height: Number(source.height), width: Number(source.width) };
+    }
+  }
+  return { height: 1, width: 1 };
+}
+
+function normalizeImageSource(
+  source: MediaGalleryImageSource,
+  label: string,
+): MediaGalleryImageSource {
+  if (!source.src.trim()) throw new RangeError(`${label}.src must be a non-empty string.`);
+  if (source.src !== source.src.trim()) {
+    throw new RangeError(`${label}.src must not contain surrounding whitespace.`);
+  }
+  const hasIntrinsicSize =
+    Number.isFinite(source.width) &&
+    Number(source.width) > 0 &&
+    Number.isFinite(source.height) &&
+    Number(source.height) > 0;
+  const srcset = normalizeOptionalSourceMetadata(source.srcset);
+  const sizes = normalizeOptionalSourceMetadata(source.sizes);
+  return {
+    src: source.src,
+    ...(srcset ? { srcset } : {}),
+    ...(sizes ? { sizes } : {}),
+    ...(hasIntrinsicSize ? { width: source.width, height: source.height } : {}),
+  };
+}
+
+function normalizeOptionalSourceMetadata(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+/**
+ * Returns whether two image sources can select different network resources.
+ * Intrinsic dimensions reserve geometry only. `sizes` affects identity only when a shared
+ * non-empty `srcset` gives the browser responsive candidates to choose between.
+ */
+export function hasDistinctMediaGallerySource(
+  first: MediaGalleryImageSource,
+  second: MediaGalleryImageSource,
+): boolean {
+  if (first.src !== second.src) return true;
+
+  const firstSrcset = normalizeOptionalSourceMetadata(first.srcset);
+  const secondSrcset = normalizeOptionalSourceMetadata(second.srcset);
+  if (firstSrcset !== secondSrcset) return true;
+  if (!firstSrcset) return false;
+
+  return (
+    normalizeOptionalSourceMetadata(first.sizes) !== normalizeOptionalSourceMetadata(second.sizes)
+  );
 }
 
 function normalizedLimits(limits: MediaTransformLimits): MediaTransformLimits {
@@ -325,37 +380,50 @@ export function clampGalleryIndex(index: number, itemCount: number): number {
   return clamp(Math.round(finiteOr(index, 0)), 0, Math.max(0, itemCount - 1));
 }
 
-export function normalizeMediaGalleryItems(items: readonly MediaGalleryItem[]): MediaGalleryItem[] {
+export type NormalizedMediaGalleryItem<TItem extends MediaGalleryItem> = Omit<
+  TItem,
+  keyof MediaGalleryItem
+> &
+  Omit<MediaGalleryItem, "id"> &
+  Pick<TItem, "id"> & {
+    readonly intrinsicHeight: number;
+    readonly intrinsicWidth: number;
+  };
+
+export function normalizeMediaGalleryItems<TItem extends MediaGalleryItem>(
+  items: readonly TItem[],
+): Array<NormalizedMediaGalleryItem<TItem>> {
   const ids = new Set<string>();
-  const normalizedIds = items.map((item, index) => {
-    const id = item.id.trim();
-    if (!id) {
+  items.forEach((item, index) => {
+    const trimmedId = item.id.trim();
+    if (!trimmedId) {
       throw new RangeError(
         `Media gallery item IDs must be unique non-empty strings; item at index ${index} has an empty ID.`,
       );
     }
-    if (ids.has(id)) {
+    if (trimmedId !== item.id) {
       throw new RangeError(
-        `Media gallery item IDs must be unique non-empty strings; "${id}" at index ${index} duplicates an earlier item.`,
+        `Media gallery item IDs must already be canonical; "${item.id}" at index ${index} has surrounding whitespace.`,
       );
     }
-    ids.add(id);
-    return id;
+    if (ids.has(item.id)) {
+      throw new RangeError(
+        `Media gallery item IDs must be unique non-empty strings; "${item.id}" at index ${index} duplicates an earlier item.`,
+      );
+    }
+    ids.add(item.id);
   });
 
   return items.map((item, index) => {
     const intrinsicSize = normalizeIntrinsicSize(item);
-    const { fullSrc: _fullSrc, ...itemWithoutFullSrc } = item;
-    const previewSrc = item.previewSrc;
-    const fullSrc = item.fullSrc && item.fullSrc !== previewSrc ? item.fullSrc : undefined;
     return {
-      ...itemWithoutFullSrc,
-      id: normalizedIds[index]!,
-      previewSrc,
-      width: intrinsicSize.width,
-      height: intrinsicSize.height,
-      ...(fullSrc ? { fullSrc } : {}),
-    };
+      ...item,
+      id: item.id,
+      preview: normalizeImageSource(item.preview, `Media gallery item ${index} preview`),
+      full: normalizeImageSource(item.full, `Media gallery item ${index} full`),
+      intrinsicWidth: intrinsicSize.width,
+      intrinsicHeight: intrinsicSize.height,
+    } as NormalizedMediaGalleryItem<TItem>;
   });
 }
 

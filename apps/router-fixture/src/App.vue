@@ -8,9 +8,10 @@ import {
   CarouselTrack,
   CarouselViewport,
   ModalDialog,
-  type CloseReason,
-  type NavigationReason,
+  type ActiveIdRequestDetails,
+  type OpenRequestDetails,
 } from "@snap-motion/vue";
+import { useEventListener } from "@vueuse/core";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
@@ -24,6 +25,21 @@ type MediaId = (typeof media)[number]["id"];
 const route = useRoute();
 const router = useRouter();
 const opener = ref<HTMLButtonElement>();
+type RequestPolicy = "accept" | "delay" | "refuse";
+type PendingRequest =
+  | { readonly kind: "active"; readonly id: MediaId }
+  | { readonly kind: "close" };
+const requestPolicy = ref<RequestPolicy>("accept");
+const pendingRequest = ref<PendingRequest>();
+const activeRequestSequence = ref<MediaId[]>([]);
+const settledSequence = ref<MediaId[]>([]);
+
+declare global {
+  interface WindowEventMap {
+    "snap-motion:resolve-pending": Event;
+    "snap-motion:set-request-policy": CustomEvent<RequestPolicy>;
+  }
+}
 const basePath = computed(() => `/work/${String(route.params.slug ?? "factif")}`);
 const routeMediaId = computed(() => {
   const candidate = String(route.params.mediaId ?? "");
@@ -36,15 +52,50 @@ function openMedia() {
   void router.push(`${basePath.value}/media/${media[0].id}`);
 }
 
-function requestActiveId(id: MediaId, _reason: NavigationReason) {
+function acceptActiveId(id: MediaId) {
   void router.replace(`${basePath.value}/media/${id}`);
 }
 
-function requestClose(_reason: CloseReason) {
+function acceptClose() {
   const historyBack = window.history.state.back as string | null | undefined;
   if (historyBack === basePath.value) router.back();
   else void router.replace(basePath.value);
 }
+
+function changeActiveId(id: MediaId, _details: ActiveIdRequestDetails) {
+  activeRequestSequence.value = [...activeRequestSequence.value, id];
+  if (requestPolicy.value === "refuse") return;
+  if (requestPolicy.value === "delay") {
+    pendingRequest.value = { kind: "active", id };
+    return;
+  }
+  acceptActiveId(id);
+}
+
+function changeOpen(_open: false, _details: OpenRequestDetails) {
+  if (requestPolicy.value === "refuse") return;
+  if (requestPolicy.value === "delay") {
+    pendingRequest.value = { kind: "close" };
+    return;
+  }
+  acceptClose();
+}
+
+function recordSettlement(id: MediaId) {
+  settledSequence.value = [...settledSequence.value, id];
+}
+
+function resolvePendingRequest() {
+  const pending = pendingRequest.value;
+  pendingRequest.value = undefined;
+  if (pending?.kind === "active") acceptActiveId(pending.id);
+  else if (pending?.kind === "close") acceptClose();
+}
+
+useEventListener("snap-motion:resolve-pending", resolvePendingRequest);
+useEventListener("snap-motion:set-request-policy", (event) => {
+  requestPolicy.value = event.detail;
+});
 </script>
 
 <template>
@@ -53,15 +104,38 @@ function requestClose(_reason: CloseReason) {
       <p>Vue Router controlled fixture</p>
       <h1>Factif case study</h1>
       <button ref="opener" type="button" @click="openMedia">Open media</button>
+      <fieldset>
+        <legend>Route request policy</legend>
+        <button type="button" @click="requestPolicy = 'accept'">Accept requests</button>
+        <button type="button" @click="requestPolicy = 'delay'">Delay requests</button>
+        <button type="button" @click="requestPolicy = 'refuse'">Refuse requests</button>
+        <button
+          :disabled="pendingRequest === undefined"
+          type="button"
+          @click="resolvePendingRequest"
+        >
+          Resolve pending request
+        </button>
+      </fieldset>
+      <output
+        data-testid="router-authority"
+        :data-active-id="activeId"
+        :data-policy="requestPolicy"
+        :data-request-sequence="activeRequestSequence.join(',')"
+        :data-settled-sequence="settledSequence.join(',')"
+      >
+        {{ activeId }}
+      </output>
     </article>
 
-    <ModalDialog :focus-return="{ opener }" :open="open" @request-close="requestClose">
+    <ModalDialog :focus-return="{ opener }" :open="open" @open-request="changeOpen">
       <template #title>{{ media.find((item) => item.id === activeId)?.title }}</template>
       <CarouselRoot
         :active-id="activeId"
         :ids="media.map((item) => item.id)"
         label="Case study media"
-        @request-active-id="requestActiveId"
+        @active-id-request="changeActiveId"
+        @settled="recordSettlement"
       >
         <CarouselPrevious />
         <CarouselViewport>

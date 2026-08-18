@@ -57,7 +57,7 @@ describe("useSnapMotion", () => {
     first?.complete();
     expect(motion?.targetId.value).toBe("c");
     second?.complete();
-    expect(motion?.activeId.value).toBe("c");
+    expect(motion?.nearestId.value).toBe("c");
     expect(motion?.position.value).toBe(-200);
 
     wrapper.unmount();
@@ -83,7 +83,7 @@ describe("useSnapMotion", () => {
 
     expect(driver.latest?.stopped).toBe(true);
     expect(motion?.phase.value).toBe("idle");
-    expect(motion?.activeId.value).toBe("b");
+    expect(motion?.nearestId.value).toBe("b");
     expect(motion?.position.value).toBe(-100);
     wrapper.unmount();
   });

@@ -81,6 +81,7 @@ required contract makes the row `Fail` or `Blocked`; explain any accepted platfo
 | C12 | Not run |                     |                                   |       |
 | C13 | Not run |                     |                                   |       |
 | C14 | Not run |                     |                                   |       |
+| C15 | Not run |                     |                                   |       |
 
 ## Scenario results
 
@@ -96,6 +97,8 @@ required contract makes the row `Fail` or `Blocked`; explain any accepted platfo
 | Complete reverse traversal     |               | C03-C07           | Not run |                                              |
 | Zoom in/out/Fit                |               | C07               | Not run |                                              |
 | Navigate while zoomed          |               | C07               | Not run |                                              |
+| Read settled description       |               | C15               | Not run |                                              |
+| Traverse application actions   |               | C03, C15          | Not run |                                              |
 | Close button                   |               | C10               | Not run |                                              |
 | Escape, if available           |               | C10               | Not run |                                              |
 | Reduced-motion repeat          |               | C06               | Not run |                                              |
@@ -191,14 +194,14 @@ Paste or transcribe the non-live trace only after completing the spoken-interact
 
 ```
 
-| Check                                                                            | Result  | Notes |
-| -------------------------------------------------------------------------------- | ------- | ----- |
-| `opened` follows the open request                                                | Not run |       |
-| Each committed navigation has one `indexChanged`                                 | Not run |       |
-| Spoken item output corresponds to the committed index                            | Not run |       |
-| Close order ends `requestClose`, `update:open false`, `closed`, `focus-restored` | Not run |       |
-| `focus-restored` identifies `at-open-gallery`                                    | Not run |       |
-| Trace itself was not announced as a live update                                  | Not run |       |
+| Check                                                                           | Result  | Notes |
+| ------------------------------------------------------------------------------- | ------- | ----- |
+| `opened` follows the open request                                               | Not run |       |
+| Each accepted navigation has one `activeIdRequest` and one later `settled`      | Not run |       |
+| Spoken item output corresponds to the committed index                           | Not run |       |
+| Close order ends `update:open false`, `openRequest`, `closed`, `focus-restored` | Not run |       |
+| `focus-restored` identifies `at-open-gallery`                                   | Not run |       |
+| Trace itself was not announced as a live update                                 | Not run |       |
 
 ## Defects and limitations
 

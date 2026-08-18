@@ -9,7 +9,11 @@ export { default as CarouselSlide } from "./components/CarouselSlide.vue";
 export { default as CarouselStatus } from "./components/CarouselStatus.vue";
 export { default as CarouselTrack } from "./components/CarouselTrack.vue";
 export { default as CarouselViewport } from "./components/CarouselViewport.vue";
-export type { CarouselKeyboardScope, SnapMotionDirection } from "./carousel-contracts";
+export type {
+  CarouselKeyboardScope,
+  CarouselMotion,
+  SnapMotionDirection,
+} from "./carousel-contracts";
 export {
   createFixedStageCarouselGeometryStrategy,
   createVariableWidthCenteredCarouselGeometryStrategy,
@@ -26,4 +30,3 @@ export { useCarouselContext } from "./use-carousel-context";
 export type { PublicCarouselContext } from "./use-carousel-context";
 export { useCarouselMotion } from "./use-carousel-motion";
 export type { UseCarouselMotionOptions } from "./use-carousel-motion";
-export type { NavigationReason } from "../motion/motion-contracts";

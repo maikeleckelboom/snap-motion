@@ -4,6 +4,15 @@
 
 ```ts
 
+// @public
+export interface ActiveIdRequestDetails {
+    // (undocumented)
+    readonly reason: Exclude<NavigationReason, "external">;
+}
+
+// @public
+export function advanceBoundedSpring(state: MutableSpringState, target: number, spring: SpringConfiguration, cardPitchPx: number, deltaTime: number): void;
+
 // @public (undocumented)
 export interface AnimationDriver {
     // (undocumented)
@@ -48,6 +57,15 @@ export const balancedPreset: {
     readonly programmaticImpulse: 280;
 };
 
+// @public
+export const BOUNDED_SPRING_TUNING: {
+    readonly maximumFreeVelocity: 12;
+    readonly maximumFreeAcceleration: 520;
+    readonly releaseVelocityKnee: 6.5;
+    readonly maximumFrameDelta: 0.05;
+    readonly integrationStep: number;
+};
+
 // @public (undocumented)
 export function calculateFixedCellSize(viewportSize: number, columns: number, gap: number): number;
 
@@ -71,6 +89,7 @@ export function clampToBounds(position: number, bounds: ScalarBounds): number;
 
 // @public (undocumented)
 export interface ControllerConfiguration {
+    readonly dragEnvelopeElasticity: ElasticityOptions;
     // (undocumented)
     readonly elasticity: ElasticityOptions;
     // (undocumented)
@@ -84,6 +103,8 @@ export interface ControllerConfiguration {
 // @public (undocumented)
 export interface ControllerConfigurationUpdate {
     // (undocumented)
+    readonly dragEnvelopeElasticity?: ElasticityOptions;
+    // (undocumented)
     readonly elasticity?: ElasticityOptions;
     // (undocumented)
     readonly programmaticImpulse?: number;
@@ -91,6 +112,11 @@ export interface ControllerConfigurationUpdate {
     readonly releasePolicy?: Partial<ReleaseTargetPolicy>;
     // (undocumented)
     readonly spring?: Partial<SpringConfiguration>;
+}
+
+// @public (undocumented)
+export interface ControllerDragOptions<Id extends SemanticId = SemanticId> {
+    readonly originId?: Id;
 }
 
 // @public (undocumented)
@@ -143,6 +169,28 @@ export interface ControllerSnapshot<Id extends SemanticId = SemanticId> {
     readonly velocity: number;
 }
 
+// @public
+export const COVERFLOW_KINETIC_TUNING: {
+    readonly kineticStartSpeed: 1.5;
+    readonly kineticFullSpeed: 5.5;
+    readonly centerInnerRadius: 0.08;
+    readonly centerOuterRadius: 0.42;
+    readonly maximumKineticScaleLoss: 0.014;
+    readonly maximumKineticRecess: 16;
+    readonly maximumKineticYaw: 1.5;
+    readonly maximumShadowAttenuation: 0.55;
+    readonly settledSpeedStart: 0.75;
+    readonly settledSpeedEnd: 2.5;
+};
+
+// @public (undocumented)
+export type CoverflowCommand = {
+    readonly kind: "none";
+} | {
+    readonly kind: "move";
+    readonly targetIndex: number;
+};
+
 // @public (undocumented)
 export interface CoverflowGeometry<Id extends SemanticId = SemanticId> extends CarouselGeometry<Id> {
     // (undocumented)
@@ -158,16 +206,74 @@ export interface CoverflowGeometryOptions<Id extends SemanticId = SemanticId> {
     readonly viewportSize: number;
 }
 
-// @public @deprecated (undocumented)
-export interface CoverflowModularProgressOptions {
+// @public (undocumented)
+export interface CoverflowKineticState {
     // (undocumented)
-    readonly count: number;
+    centerInfluence: number;
     // (undocumented)
-    readonly index: number;
+    contactShadowStrength: number;
     // (undocumented)
-    readonly pitch: number;
+    kinetic: number;
     // (undocumented)
-    readonly position: number;
+    kineticFocus: number;
+    // (undocumented)
+    recess: number;
+    // (undocumented)
+    retainedYaw: number;
+    // (undocumented)
+    scaleLoss: number;
+    // (undocumented)
+    settledness: number;
+    // (undocumented)
+    speedInCards: number;
+}
+
+// @public
+export class CoverflowModel<Id extends SemanticId = SemanticId> {
+    constructor(options: CoverflowModelOptions<Id>);
+    idAt(index: number): Id | undefined;
+    // (undocumented)
+    get ids(): readonly Id[];
+    indexOf(id: Id): number;
+    // (undocumented)
+    get itemCount(): number;
+    reconfigure(nextIds: readonly Id[]): number;
+    resolveNavigationCommand(index: number, context: {
+        readonly owned: boolean;
+    }): CoverflowCommand;
+    // (undocumented)
+    resolveRelativeCommand(direction: -1 | 1, context: {
+        readonly owned: boolean;
+    }): CoverflowCommand;
+    // (undocumented)
+    get state(): CoverflowModelState;
+    synchronize(index: number, options?: SettledSelectionAdoption): number;
+    // (undocumented)
+    update(input: CoverflowSnapshotInput): CoverflowModelState;
+}
+
+// @public (undocumented)
+export interface CoverflowModelOptions<Id extends SemanticId = SemanticId> {
+    readonly ids: readonly Id[];
+    readonly initialId?: Id;
+}
+
+// @public
+export interface CoverflowModelState {
+    // (undocumented)
+    readonly announcementIndex: number | null;
+    // (undocumented)
+    readonly canNext: boolean;
+    // (undocumented)
+    readonly canPrevious: boolean;
+    readonly commandIndex: number;
+    // (undocumented)
+    readonly pendingTargetIndex: number | null;
+    readonly physicalIndex: number;
+    // (undocumented)
+    readonly settledIndex: number;
+    // (undocumented)
+    readonly visualIndex: number;
 }
 
 // @public (undocumented)
@@ -226,11 +332,41 @@ export interface CoverflowProgressOptions {
     readonly position: number;
 }
 
+// @public
+export interface CoverflowSnapshotInput {
+    readonly nearestIndex: number;
+    // (undocumented)
+    readonly phase: SettledSelectionUpdate["phase"];
+    readonly physicalIndex: number;
+    readonly targetIndex: number | null;
+}
+
+// @public
+export interface CoverflowTuning {
+    // (undocumented)
+    readonly cardHeight: number;
+    // (undocumented)
+    readonly cardWidth: number;
+    // (undocumented)
+    readonly hideAfter: number;
+    // (undocumented)
+    readonly maxRotateY: number;
+    readonly perspective: number;
+    readonly pitch: number;
+    // (undocumented)
+    readonly sideDepth: number;
+    readonly sidePeakX: number;
+    readonly stackGap: number;
+}
+
 // @public (undocumented)
 export function createBounds(min: number, max: number): ScalarBounds;
 
 // @public
 export function createCoverflowGeometry<Id extends SemanticId>(options: CoverflowGeometryOptions<Id>): CoverflowGeometry<Id>;
+
+// @public
+export function createCoverflowKineticState(): CoverflowKineticState;
 
 // @public (undocumented)
 export function createFixedStageGeometry<Id extends SemanticId>(options: {
@@ -243,7 +379,13 @@ export function createFixedStageGeometry<Id extends SemanticId>(options: {
 export function createPagedGridGeometry<ItemId extends SemanticId>(options: PagedGridGeometryOptions<ItemId>): PagedGridGeometry;
 
 // @public
-export function createStackedCoverflowFrame(itemCount: number): MutableStackedCoverflowFrame;
+export function createPaginationIndicatorState(): PaginationIndicatorState;
+
+// @public
+export function createStackedDeckFrame(itemCount: number): MutableStackedDeckFrame;
+
+// @public
+export function createStackedDeckTraversal(initialIndex: number, itemCount: number): MutableStackedDeckTraversal;
 
 // @public (undocumented)
 export function createSymmetricElasticity(boundary: ElasticBoundaryOptions): ElasticityOptions;
@@ -254,8 +396,40 @@ export function createVariableWidthGeometry<Id extends SemanticId>(options: Vari
 // @public (undocumented)
 export const DEFAULT_MOTION_PRESET: MotionPresetName;
 
+// @public
+export const DIRECT_MANIPULATION_TUNING: {
+    readonly activationThreshold: 8;
+    readonly horizontalIntentRatio: 1.25;
+};
+
 // @public (undocumented)
 export function directionalAnchor<Id extends SemanticId>(anchors: readonly SnapAnchor<Id>[], activeId: Id, direction: SnapDirection, steps?: number): SnapAnchor<Id> | null;
+
+// @public (undocumented)
+export type DirectManipulationAction = "none" | "open" | "select" | "swipe";
+
+// @public (undocumented)
+export interface DirectManipulationInput {
+    // (undocumented)
+    readonly cancelled: boolean;
+    // (undocumented)
+    readonly crossedDragThreshold: boolean;
+    // (undocumented)
+    readonly horizontalIntent: boolean;
+    // (undocumented)
+    readonly involvedMultiplePointers: boolean;
+    readonly openEligibleAtStart: boolean;
+    // (undocumented)
+    readonly releasedOnOrigin: boolean;
+}
+
+// @public (undocumented)
+export interface DirectManipulationResolution {
+    // (undocumented)
+    readonly action: DirectManipulationAction;
+    // (undocumented)
+    readonly shouldFocusStage: boolean;
+}
 
 // @public (undocumented)
 export interface ElasticBoundaryOptions {
@@ -314,6 +488,15 @@ export const heavyPreset: {
     };
     readonly programmaticImpulse: 360;
 };
+
+// @public
+export function isSettledOnAnchor(input: SettledOnAnchorInput): boolean;
+
+// @public
+export function isStackedDeckAuthorityStable(traversal: StackedDeckTraversal): boolean;
+
+// @public
+export function isStackedDeckInspectEligible(state: StackedDeckModelState, context: StackedDeckInspectContext): boolean;
 
 // @public (undocumented)
 export function isWithinBounds(position: number, bounds: ScalarBounds): boolean;
@@ -487,44 +670,69 @@ export interface MotionPreset {
 export type MotionPresetName = "tight" | "balanced" | "heavy" | "loose";
 
 // @public
-export interface MutableStackedCoverflowFrame {
+export interface MutableSpringState {
     // (undocumented)
-    ownerIndex: number;
+    position: number;
     // (undocumented)
-    pairFraction: number;
-    // (undocumented)
-    pairStartIndex: number;
-    // (undocumented)
-    passingLane: number;
-    // (undocumented)
-    physicalIndex: number;
-    // (undocumented)
-    poses: MutableStackedCoverflowPose[];
+    velocity: number;
 }
 
 // @public
-export interface MutableStackedCoverflowPose {
+export interface MutableStackedDeckFrame extends MutableStackedDeckTraversal {
     // (undocumented)
-    blur: number;
+    poses: MutableStackedDeckPose[];
+}
+
+// @public
+export interface MutableStackedDeckPose {
+    // (undocumented)
+    contentExposure: number;
     // (undocumented)
     interactive: boolean;
     // (undocumented)
     layer: number;
     // (undocumented)
-    projectedScale: number;
+    opacity: number;
     // (undocumented)
-    rotateY: number;
+    role: StackedDeckRole;
+    // (undocumented)
+    rotate: number;
+    // (undocumented)
+    scale: number;
+    // (undocumented)
+    shadowStrength: number;
     // (undocumented)
     translateX: number;
     // (undocumented)
     translateY: number;
     // (undocumented)
-    veil: number;
-    // (undocumented)
-    virtualZ: number;
-    // (undocumented)
     visible: boolean;
 }
+
+// @public
+export interface MutableStackedDeckTraversal {
+    // (undocumented)
+    authoritativeIndex: number;
+    // (undocumented)
+    direction: -1 | 0 | 1;
+    // (undocumented)
+    localProgress: number;
+    // (undocumented)
+    phase: StackedDeckTraversalPhase;
+    // (undocumented)
+    segmentOriginIndex: number;
+    // (undocumented)
+    segmentTargetIndex: number | null;
+    // (undocumented)
+    settledIndex: number;
+    // (undocumented)
+    signedLocalDistance: number;
+    // (undocumented)
+    visualTopIndex: number;
+}
+
+// @public
+export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "programmatic" | "reconcile" | "external";
 
 // @public (undocumented)
 export function nearestAnchor<Id extends SemanticId>(anchors: readonly SnapAnchor<Id>[], position: number, options?: NearestAnchorOptions<Id>): SnapAnchor<Id> | null;
@@ -554,9 +762,11 @@ export interface PagedGridGeometry extends CarouselGeometry<SemanticId> {
     // (undocumented)
     readonly pageCount: number;
     // (undocumented)
+    readonly pageGap: number;
     readonly pageSize: number;
     // (undocumented)
     readonly rows: number;
+    readonly stageSize: number;
 }
 
 // @public (undocumented)
@@ -569,6 +779,7 @@ export interface PagedGridGeometryOptions<ItemId extends SemanticId = SemanticId
     readonly getPageId?: (context: PagedGridPageContext<ItemId>) => SemanticId;
     // (undocumented)
     readonly itemIds: readonly ItemId[];
+    readonly pageGap?: number;
     // (undocumented)
     readonly rows: number;
     // (undocumented)
@@ -581,6 +792,40 @@ export interface PagedGridPageContext<ItemId extends SemanticId = SemanticId> {
     readonly itemIds: readonly ItemId[];
     // (undocumented)
     readonly pageIndex: number;
+}
+
+// @public
+export const PAGINATION_INDICATOR_TUNING: {
+    readonly slotSize: 44;
+    readonly slotGap: 2;
+    readonly restingWidth: 22.4;
+    readonly height: 8.8;
+    readonly maximumStretchRatio: 0.42;
+    readonly stretchStartSpeed: 0.35;
+    readonly stretchFullSpeed: 4.5;
+    readonly directionSofteningSpeed: 1.5;
+    readonly directionalBias: 0.18;
+    readonly visualHysteresis: 0.04;
+};
+
+// @public (undocumented)
+export interface PaginationIndicatorState {
+    // (undocumented)
+    leftStretch: number;
+    // (undocumented)
+    position: number;
+    // (undocumented)
+    rightStretch: number;
+    // (undocumented)
+    scaleX: number;
+    // (undocumented)
+    softDirection: number;
+    // (undocumented)
+    speedInCards: number;
+    // (undocumented)
+    stretchRatio: number;
+    // (undocumented)
+    x: number;
 }
 
 // @public (undocumented)
@@ -620,14 +865,41 @@ export interface ReleaseTargetPolicy {
     readonly projectionSeconds: number;
 }
 
-// @public @deprecated (undocumented)
-export function resolveCoverflowModularProgress(options: CoverflowModularProgressOptions): number;
+// @public
+export function resolveAdjacentIndex(currentIndex: number, direction: -1 | 1, itemCount: number): number;
+
+// @public
+export function resolveAutonomousReleaseVelocity(velocityPxPerSecond: number, cardPitchPx: number, isDragging: boolean): number;
+
+// @public
+export function resolveCommandOriginIndex(currentIndex: number, pendingTargetIndex: number | null): number;
+
+// @public
+export function resolveCoverflowKinetics(relativePosition: number, velocityPxPerSecond: number, cardPitchPx: number, output: CoverflowKineticState): CoverflowKineticState;
 
 // @public
 export function resolveCoverflowPresentation(options: CoverflowPresentationOptions): CoverflowPresentation;
 
 // @public
 export function resolveCoverflowProgress(options: CoverflowProgressOptions): number;
+
+// @public
+export function resolveCoverflowTuning(options: ResolveCoverflowTuningOptions): CoverflowTuning;
+
+// @public (undocumented)
+export interface ResolveCoverflowTuningOptions {
+    // (undocumented)
+    readonly stageWidth: number;
+}
+
+// @public
+export function resolveDirectManipulationGesture(input: DirectManipulationInput): DirectManipulationResolution;
+
+// @public
+export function resolveHystereticIndex(physicalIndex: number, currentIndex: number, itemCount: number, hysteresis?: number): number;
+
+// @public
+export function resolvePaginationIndicator(physicalIndex: number, velocityPxPerSecond: number, cardPitchPx: number, itemCount: number, output: PaginationIndicatorState): PaginationIndicatorState;
 
 // @public (undocumented)
 export function resolveProgrammaticTarget<Id extends SemanticId>(input: ProgrammaticTargetInput<Id>): SnapAnchor<Id> | null;
@@ -636,25 +908,55 @@ export function resolveProgrammaticTarget<Id extends SemanticId>(input: Programm
 export function resolveReleaseTarget<Id extends SemanticId>(input: ReleaseTargetInput<Id>): SnapAnchor<Id> | null;
 
 // @public
-export function resolveStackedCoverflowFrame(options: ResolveStackedCoverflowFrameOptions, output: MutableStackedCoverflowFrame): StackedCoverflowFrame;
+export function resolveSnapKeyboardAction(input: SnapKeyboardInput): SnapKeyboardAction | undefined;
+
+// @public
+export function resolveSpeedInCards(velocityPxPerSecond: number, cardPitchPx: number): number;
+
+// @public
+export function resolveStackedDeckFrame(options: ResolveStackedDeckFrameOptions, output: MutableStackedDeckFrame): StackedDeckFrame;
 
 // @public (undocumented)
-export interface ResolveStackedCoverflowFrameOptions {
+export interface ResolveStackedDeckFrameOptions {
+    // (undocumented)
+    readonly itemCount: number;
+    // (undocumented)
+    readonly traversal: StackedDeckTraversal;
+    // (undocumented)
+    readonly tuning: StackedDeckTuning;
+}
+
+// @public
+export function resolveStackedDeckPile(options: ResolveStackedDeckPileOptions): readonly StackedDeckPilePose[];
+
+// @public (undocumented)
+export interface ResolveStackedDeckPileOptions {
+    readonly frame: StackedDeckFrame;
+    // (undocumented)
+    readonly tuning: StackedDeckTuning;
+}
+
+// @public
+export function resolveStackedDeckTraversal(options: ResolveStackedDeckTraversalOptions, output: MutableStackedDeckTraversal): StackedDeckTraversal;
+
+// @public (undocumented)
+export interface ResolveStackedDeckTraversalOptions {
+    // (undocumented)
+    readonly controllerPhase: ControllerPhase;
     // (undocumented)
     readonly itemCount: number;
     // (undocumented)
     readonly physicalIndex: number;
     // (undocumented)
-    readonly previousOwnerIndex?: number;
-    // (undocumented)
-    readonly tuning: StackedCoverflowTuning;
+    readonly settledIndex: number;
+    readonly traversalBounds?: StackedDeckTraversalBounds;
 }
 
 // @public
-export function resolveStackedCoverflowTuning(options: ResolveStackedCoverflowTuningOptions): StackedCoverflowTuning;
+export function resolveStackedDeckTuning(options: ResolveStackedDeckTuningOptions): StackedDeckTuning;
 
 // @public (undocumented)
-export interface ResolveStackedCoverflowTuningOptions {
+export interface ResolveStackedDeckTuningOptions {
     // (undocumented)
     readonly reducedMotion?: boolean;
     // (undocumented)
@@ -692,6 +994,61 @@ export interface ScalarBounds {
 // @public (undocumented)
 export type SemanticId = string;
 
+// @public
+export interface SettledOnAnchorInput {
+    readonly activeMatches: boolean;
+    // (undocumented)
+    readonly anchorPosition: number | undefined;
+    // (undocumented)
+    readonly index: number;
+    // (undocumented)
+    readonly phase: SettledSelectionUpdate["phase"];
+    // (undocumented)
+    readonly physicalIndex: number;
+    // (undocumented)
+    readonly position: number;
+    // (undocumented)
+    readonly restDistance: number;
+    // (undocumented)
+    readonly restSpeed: number;
+    // (undocumented)
+    readonly settledIndex: number;
+    // (undocumented)
+    readonly targetMatches: boolean;
+    // (undocumented)
+    readonly velocity: number;
+}
+
+// @public
+export class SettledSelection {
+    constructor(initialIndex: number, itemCount: number);
+    adopt(index: number, options?: SettledSelectionAdoption): number | null;
+    // (undocumented)
+    pendingTargetIndex: number | null;
+    // (undocumented)
+    settledIndex: number;
+    update(input: SettledSelectionUpdate): number | null;
+}
+
+// @public (undocumented)
+export interface SettledSelectionAdoption {
+    readonly announce?: boolean | undefined;
+}
+
+// @public (undocumented)
+export interface SettledSelectionUpdate {
+    readonly activeIndex: number;
+    // (undocumented)
+    readonly phase: ControllerPhase;
+    readonly targetIndex: number | null;
+}
+
+// @public
+export interface SettlementDetails {
+    // (undocumented)
+    readonly reason: NavigationReason;
+}
+
 // @public (undocumented)
 export interface SnapAnchor<Id extends SemanticId = SemanticId> {
     // (undocumented)
@@ -708,7 +1065,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     // (undocumented)
     get activeAnchor(): SnapAnchor<Id> | null;
     // (undocumented)
-    beginDrag(): void;
+    beginDrag(options?: ControllerDragOptions<Id>): void;
     // (undocumented)
     get configuration(): ControllerConfiguration;
     // (undocumented)
@@ -756,6 +1113,8 @@ export interface SnapControllerOptions<Id extends SemanticId = SemanticId> {
     // (undocumented)
     readonly bounds: ScalarBounds;
     // (undocumented)
+    readonly dragEnvelopeElasticity?: ElasticityOptions;
+    // (undocumented)
     readonly driver: AnimationDriver;
     // (undocumented)
     readonly elasticity?: ElasticityOptions;
@@ -781,6 +1140,24 @@ export interface SnapControllerOptions<Id extends SemanticId = SemanticId> {
 export type SnapDirection = -1 | 1;
 
 // @public (undocumented)
+export type SnapKeyboardAction = "end" | "home" | "next" | "previous";
+
+// @public (undocumented)
+export interface SnapKeyboardInput {
+    // (undocumented)
+    readonly altKey?: boolean | undefined;
+    // (undocumented)
+    readonly ctrlKey?: boolean | undefined;
+    // (undocumented)
+    readonly defaultPrevented?: boolean | undefined;
+    // (undocumented)
+    readonly key: string;
+    // (undocumented)
+    readonly metaKey?: boolean | undefined;
+    readonly ownedByDescendant?: boolean | undefined;
+}
+
+// @public (undocumented)
 export function sortAnchors<Id extends SemanticId>(anchors: readonly SnapAnchor<Id>[]): readonly SnapAnchor<Id>[];
 
 // @public (undocumented)
@@ -797,93 +1174,223 @@ export interface SpringConfiguration {
     readonly stiffness: number;
 }
 
-// @public (undocumented)
-export interface StackedCoverflowFrame {
-    // (undocumented)
-    readonly ownerIndex: number;
-    // (undocumented)
-    readonly pairFraction: number;
-    // (undocumented)
-    readonly pairStartIndex: number;
-    // (undocumented)
-    readonly passingLane: number;
-    // (undocumented)
-    readonly physicalIndex: number;
-    // (undocumented)
-    readonly poses: readonly StackedCoverflowPose[];
+// @public
+export const STACKED_DECK_ANCHOR_SKIP = 1;
+
+// @public
+export const STACKED_DECK_INTERIOR_ELASTICITY: ElasticityOptions;
+
+// @public
+export type StackedDeckCommand = {
+    readonly kind: "none";
+}
+/** One adjacent exchange, opened as its own interaction and measured from `originIndex`. */
+| {
+    readonly kind: "traverse";
+    readonly originIndex: number;
+    readonly targetIndex: number;
+}
+/**
+* A named destination that is not one physical throw. It synchronizes directly rather than
+* animating through every intermediate card, and says so truthfully by announcing immediately.
+*/
+| {
+    readonly kind: "synchronize";
+    readonly targetIndex: number;
+    readonly announce: boolean;
+};
+
+// @public
+export interface StackedDeckCommandContext {
+    readonly atRest: boolean;
+    readonly owned: boolean;
 }
 
 // @public (undocumented)
-export interface StackedCoverflowPose {
+export interface StackedDeckFrame extends StackedDeckTraversal {
     // (undocumented)
-    readonly blur: number;
+    readonly poses: readonly StackedDeckPose[];
+}
+
+// @public (undocumented)
+export interface StackedDeckInspectContext {
+    // (undocumented)
+    readonly index: number;
+    readonly owned: boolean;
+}
+
+// @public
+export class StackedDeckModel<Id extends SemanticId = SemanticId> {
+    constructor(options: StackedDeckModelOptions<Id>);
+    beginInteraction(): number;
+    endInteraction(): void;
+    idAt(index: number): Id | undefined;
+    // (undocumented)
+    get ids(): readonly Id[];
+    indexOf(id: Id): number;
+    isInspectEligible(context: StackedDeckInspectContext): boolean;
+    // (undocumented)
+    get itemCount(): number;
+    openInteraction(originIndex: number): void;
+    reconfigure(nextIds: readonly Id[]): number;
+    resolveAbsoluteCommand(index: number, context: StackedDeckCommandContext): StackedDeckCommand;
+    resolveRelativeCommand(direction: -1 | 1, context: Pick<StackedDeckCommandContext, "owned">): StackedDeckCommand;
+    // (undocumented)
+    get state(): StackedDeckModelState;
+    synchronize(index: number, options?: SettledSelectionAdoption): number;
+    get traversalBounds(): StackedDeckTraversalBounds | undefined;
+    update(input: StackedDeckSnapshotInput): StackedDeckModelState;
+}
+
+// @public (undocumented)
+export interface StackedDeckModelOptions<Id extends SemanticId = SemanticId> {
+    readonly ids: readonly Id[];
+    readonly initialId?: Id;
+}
+
+// @public
+export interface StackedDeckModelState {
+    readonly announcementIndex: number | null;
+    readonly authorityStable: boolean;
+    // (undocumented)
+    readonly canNext: boolean;
+    // (undocumented)
+    readonly canPrevious: boolean;
+    // (undocumented)
+    readonly commandOriginIndex: number;
+    // (undocumented)
+    readonly currentIndex: number;
+    // (undocumented)
+    readonly interactionOriginIndex: number | null;
+    // (undocumented)
+    readonly pendingTargetIndex: number | null;
+    // (undocumented)
+    readonly settledIndex: number;
+    readonly traversal: StackedDeckTraversal;
+    // (undocumented)
+    readonly visualTopIndex: number;
+}
+
+// @public
+export interface StackedDeckPilePose {
+    readonly itemIndex: number;
+    // (undocumented)
+    readonly layer: number;
+    // (undocumented)
+    readonly opacity: number;
+    // (undocumented)
+    readonly rotate: number;
+    // (undocumented)
+    readonly scale: number;
+    // (undocumented)
+    readonly shadowStrength: number;
+    readonly slot: number;
+    // (undocumented)
+    readonly translateX: number;
+    // (undocumented)
+    readonly translateY: number;
+}
+
+// @public (undocumented)
+export interface StackedDeckPose {
+    readonly contentExposure: number;
     // (undocumented)
     readonly interactive: boolean;
     // (undocumented)
     readonly layer: number;
     // (undocumented)
-    readonly projectedScale: number;
+    readonly opacity: number;
     // (undocumented)
-    readonly rotateY: number;
+    readonly role: StackedDeckRole;
+    // (undocumented)
+    readonly rotate: number;
+    // (undocumented)
+    readonly scale: number;
+    // (undocumented)
+    readonly shadowStrength: number;
     // (undocumented)
     readonly translateX: number;
     // (undocumented)
     readonly translateY: number;
     // (undocumented)
-    readonly veil: number;
-    // (undocumented)
-    readonly virtualZ: number;
-    // (undocumented)
     readonly visible: boolean;
 }
 
 // @public (undocumented)
-export type StackedCoverflowProfile = "compact" | "medium" | "wide";
+export type StackedDeckProfile = "compact" | "medium" | "wide";
+
+// @public
+export type StackedDeckReleasePolicy = Partial<Omit<ReleaseTargetPolicy, "maxAnchorSkip">>;
 
 // @public (undocumented)
-export interface StackedCoverflowTuning {
+export type StackedDeckRole = "top" | "target" | "hidden";
+
+// @public
+export interface StackedDeckSnapshotInput {
+    readonly nearestIndex: number;
+    // (undocumented)
+    readonly phase: SettledSelectionUpdate["phase"];
+    readonly physicalIndex: number;
+    readonly targetIndex: number | null;
+}
+
+// @public
+export interface StackedDeckTraversal {
+    // (undocumented)
+    readonly authoritativeIndex: number;
+    // (undocumented)
+    readonly direction: -1 | 0 | 1;
+    // (undocumented)
+    readonly localProgress: number;
+    // (undocumented)
+    readonly phase: StackedDeckTraversalPhase;
+    // (undocumented)
+    readonly segmentOriginIndex: number;
+    // (undocumented)
+    readonly segmentTargetIndex: number | null;
+    // (undocumented)
+    readonly settledIndex: number;
+    // (undocumented)
+    readonly signedLocalDistance: number;
+    // (undocumented)
+    readonly visualTopIndex: number;
+}
+
+// @public
+export interface StackedDeckTraversalBounds {
+    // (undocumented)
+    readonly maxIndex: number;
+    // (undocumented)
+    readonly minIndex: number;
+}
+
+// @public (undocumented)
+export type StackedDeckTraversalPhase = "idle" | "neutral" | "traversing" | "elastic";
+
+// @public (undocumented)
+export interface StackedDeckTuning {
     // (undocumented)
     readonly cardHeight: number;
     // (undocumented)
     readonly cardWidth: number;
     // (undocumented)
-    readonly handoffLower: number;
-    // (undocumented)
-    readonly handoffUpper: number;
-    // (undocumented)
-    readonly hideAfter: number;
-    // (undocumented)
     readonly motionPitch: number;
     // (undocumented)
-    readonly passingRecess: number;
+    readonly pileOffsetX: number;
     // (undocumented)
-    readonly passingRotateY: number;
+    readonly pileOffsetY: number;
     // (undocumented)
-    readonly passingX: number;
+    readonly pileRotate: number;
     // (undocumented)
-    readonly perspective: number;
+    readonly pileScaleStep: number;
     // (undocumented)
-    readonly profile: StackedCoverflowProfile;
+    readonly profile: StackedDeckProfile;
     // (undocumented)
-    readonly sideBlur: number;
+    readonly topDropY: number;
     // (undocumented)
-    readonly sideLift: number;
+    readonly topRotate: number;
     // (undocumented)
-    readonly sideProjectedX: number;
-    // (undocumented)
-    readonly sideRotateY: number;
-    // (undocumented)
-    readonly sideVeil: number;
-    // (undocumented)
-    readonly sideVirtualZ: number;
-    // (undocumented)
-    readonly stackStrideX: number;
-    // (undocumented)
-    readonly stackStrideY: number;
-    // (undocumented)
-    readonly stackStrideZ: number;
-    // (undocumented)
-    readonly stackVeil: number;
+    readonly topScaleReduction: number;
 }
 
 // @public (undocumented)

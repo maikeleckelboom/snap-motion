@@ -17,7 +17,7 @@ if (!context) throw new Error("CarouselPagination must be used inside CarouselRo
       :active-id="context.activeId.value"
       :direction="context.direction.value"
       :ids="context.ids.value"
-      :navigate="context.navigate"
+      :navigate="context.pick"
     />
   </nav>
 </template>

@@ -31,19 +31,11 @@ export {
   toPhysicalSheetPosition,
 } from "./sheet-side";
 export type { SheetSideDescriptor } from "./sheet-side";
-export type {
-  SheetAxis,
-  SheetEdge,
-  SheetNavigationReason,
-  SheetSide,
-  SheetState,
-} from "./sheet-contracts";
+export type { SheetAxis, SheetEdge, SheetSide, SheetState } from "./sheet-contracts";
+export type { SheetDiagnostics } from "./sheetDiagnostics";
 export { useSheetMotion } from "./use-sheet-motion";
 export type {
   SheetViewportDimensions,
   UseSheetMotionOptions,
   UseSheetMotionReturn,
 } from "./use-sheet-motion";
-export type { CloseReason } from "../dialog/dialog-contracts";
-export type { PointerIntent } from "../internal/input/pointer-policy";
-export type { NavigationReason } from "../motion/motion-contracts";

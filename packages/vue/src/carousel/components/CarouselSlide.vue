@@ -19,7 +19,6 @@ onBeforeUnmount(() => context.unregisterSlide(props.id));
     aria-roledescription="slide"
     class="snap-motion-carousel-slide"
     :data-slide-id="id"
-    :dir="context.direction.value"
     :inert="inactive"
     role="group"
   >

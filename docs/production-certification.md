@@ -49,9 +49,10 @@ Axe passing is a regression gate, not a conformance claim.
 
 > Prepared for manual assistive-technology certification
 
-Run this matrix on representative physical devices before maikel.site integration. Record the OS,
-browser/AT versions, result, issue link, and retest date. A blank result means certification is not
-complete.
+Run this matrix on representative physical devices before public maikel.site production activation.
+Private integration and dogfooding may use a verified, checksummed local release candidate, but do
+not satisfy this gate. Record the OS, browser/AT versions, result, issue link, and retest date. A
+blank result means certification is not complete.
 
 | Environment                   | Required checks                                              | Result                             |
 | ----------------------------- | ------------------------------------------------------------ | ---------------------------------- |
@@ -88,5 +89,5 @@ For the remaining component-wide screen reader/browser checks:
 10. Change the route while open, use browser Back, delete the active item, and unmount the overlay.
     Confirm focus never lands on body or remains inside inert content.
 
-maikel.site integration remains blocked until every required row has a recorded passing result or a
-documented, accepted browser/AT limitation.
+Public maikel.site production activation remains blocked until every required row has a recorded
+passing result or a documented, accepted browser/AT limitation.

@@ -1,0 +1,6 @@
+{
+  "extends": "./api-extractor.json",
+  "mainEntryPointFilePath": "<projectFolder>/../../temp/declarations/vue/stacked-deck/index.d.ts",
+  "apiReport": { "reportFileName": "vue-stacked-deck.api.md" },
+  "dtsRollup": { "untrimmedFilePath": "<projectFolder>/dist/stacked-deck.d.ts" }
+}

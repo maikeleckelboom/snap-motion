@@ -1,4 +1,8 @@
-import { MOTION_PRESETS, type MotionPresetName } from "@snap-motion/core";
+import {
+  MOTION_PRESETS,
+  type MotionPresetName,
+  type StackedDeckReleasePolicy,
+} from "@snap-motion/core";
 
 import type { LabPhysicsSettings, LabPresetName } from "./lab-types";
 
@@ -38,6 +42,18 @@ export function carouselReleaseFromSettings(settings: LabPhysicsSettings) {
     maxAnchorSkip: Math.max(1, Math.round(settings.maxAnchorSkip)),
     forwardSign: -1 as const,
   };
+}
+
+/**
+ * The same release physics as any other surface, minus the anchor skip.
+ *
+ * A stacked deck fixes its own skip at one adjacent card, and its release-policy input type says
+ * so — passing the lab's slider value would not be overridden quietly, it would not compile. This
+ * is what a consumer writes instead, which is the point of stating the invariant in the type.
+ */
+export function deckReleaseFromSettings(settings: LabPhysicsSettings): StackedDeckReleasePolicy {
+  const { maxAnchorSkip: _fixedByTheDeck, ...release } = carouselReleaseFromSettings(settings);
+  return release;
 }
 
 export function symmetricElasticityFromSettings(settings: LabPhysicsSettings) {

@@ -32,34 +32,111 @@ export type {
   VariableWidthGeometryOptions,
 } from "./carousel-geometry";
 export {
+  COVERFLOW_KINETIC_TUNING,
   createCoverflowGeometry,
-  resolveCoverflowModularProgress,
+  createCoverflowKineticState,
+  resolveCoverflowKinetics,
   resolveCoverflowPresentation,
   resolveCoverflowProgress,
+  resolveCoverflowTuning,
 } from "./coverflow";
 export type {
   CoverflowGeometry,
   CoverflowGeometryOptions,
-  CoverflowModularProgressOptions,
+  CoverflowKineticState,
   CoverflowPresentation,
   CoverflowPresentationOptions,
   CoverflowProgressOptions,
+  CoverflowTuning,
+  ResolveCoverflowTuningOptions,
 } from "./coverflow";
-export {
-  createStackedCoverflowFrame,
-  resolveStackedCoverflowFrame,
-  resolveStackedCoverflowTuning,
-} from "./stackedCoverflow";
+export { CoverflowModel, isSettledOnAnchor } from "./coverflow-model";
 export type {
-  MutableStackedCoverflowFrame,
-  MutableStackedCoverflowPose,
-  ResolveStackedCoverflowFrameOptions,
-  ResolveStackedCoverflowTuningOptions,
-  StackedCoverflowFrame,
-  StackedCoverflowPose,
-  StackedCoverflowProfile,
-  StackedCoverflowTuning,
-} from "./stackedCoverflow";
+  CoverflowCommand,
+  CoverflowModelOptions,
+  CoverflowModelState,
+  CoverflowSnapshotInput,
+  SettledOnAnchorInput,
+} from "./coverflow-model";
+export {
+  DIRECT_MANIPULATION_TUNING,
+  resolveDirectManipulationGesture,
+  resolveSnapKeyboardAction,
+} from "./gestures";
+export type {
+  DirectManipulationAction,
+  DirectManipulationInput,
+  DirectManipulationResolution,
+  SnapKeyboardAction,
+  SnapKeyboardInput,
+} from "./gestures";
+export {
+  advanceBoundedSpring,
+  BOUNDED_SPRING_TUNING,
+  resolveAutonomousReleaseVelocity,
+  resolveSpeedInCards,
+} from "./kinetics";
+export type { MutableSpringState } from "./kinetics";
+export type {
+  ActiveIdRequestDetails,
+  NavigationReason,
+  SettlementDetails,
+} from "./interactionContracts";
+export {
+  createPaginationIndicatorState,
+  PAGINATION_INDICATOR_TUNING,
+  resolvePaginationIndicator,
+} from "./pagination";
+export type { PaginationIndicatorState } from "./pagination";
+export {
+  resolveAdjacentIndex,
+  resolveCommandOriginIndex,
+  resolveHystereticIndex,
+  SettledSelection,
+} from "./selection";
+export type { SettledSelectionAdoption, SettledSelectionUpdate } from "./selection";
+export {
+  createStackedDeckFrame,
+  createStackedDeckTraversal,
+  isStackedDeckAuthorityStable,
+  resolveStackedDeckFrame,
+  resolveStackedDeckPile,
+  resolveStackedDeckTraversal,
+  resolveStackedDeckTuning,
+} from "./stackedDeck";
+export type {
+  MutableStackedDeckFrame,
+  MutableStackedDeckPose,
+  MutableStackedDeckTraversal,
+  ResolveStackedDeckFrameOptions,
+  ResolveStackedDeckPileOptions,
+  ResolveStackedDeckTraversalOptions,
+  ResolveStackedDeckTuningOptions,
+  StackedDeckFrame,
+  StackedDeckPilePose,
+  StackedDeckPose,
+  StackedDeckProfile,
+  StackedDeckRole,
+  StackedDeckTraversal,
+  StackedDeckTraversalBounds,
+  StackedDeckTraversalPhase,
+  StackedDeckTuning,
+} from "./stackedDeck";
+export {
+  isStackedDeckInspectEligible,
+  STACKED_DECK_ANCHOR_SKIP,
+  STACKED_DECK_INTERIOR_ELASTICITY,
+  StackedDeckModel,
+} from "./stacked-deck-model";
+export type {
+  StackedDeckCommand,
+  StackedDeckCommandContext,
+  StackedDeckInspectContext,
+  StackedDeckModelOptions,
+  StackedDeckModelState,
+  StackedDeckReleasePolicy,
+  StackedDeckSnapshotInput,
+} from "./stacked-deck-model";
 export { SnapController } from "./controller";
 export type { ControllerListener, SnapControllerOptions } from "./controller";
 export { applyElasticity, createSymmetricElasticity, nonlinearElasticDistance } from "./elastic";
@@ -89,6 +166,7 @@ export type {
 export type {
   ControllerConfiguration,
   ControllerConfigurationUpdate,
+  ControllerDragOptions,
   ControllerMeasurement,
   ControllerMoveByOptions,
   ControllerMoveOptions,

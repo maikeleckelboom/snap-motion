@@ -1,4 +1,4 @@
-﻿.snap-motion-visually-hidden {
+.snap-motion-visually-hidden {
   position: absolute !important;
   inline-size: 1px !important;
   block-size: 1px !important;
@@ -8,6 +8,11 @@
   overflow: hidden !important;
   clip-path: inset(50%) !important;
   white-space: nowrap !important;
+}
+
+/* Keep physical rail coordinates LTR while slide content follows the root's live direction. */
+.snap-motion-carousel-slide {
+  direction: var(--snap-motion-content-direction, ltr);
 }
 
 .snap-motion-dialog {
@@ -383,7 +388,7 @@
   --snap-motion-gallery-control-border: ButtonBorder;
   --snap-motion-gallery-focus: Highlight;
   --snap-motion-gallery-radius: 1rem;
-  --snap-motion-gallery-backdrop: color-mix(in srgb, CanvasText 82%, transparent);
+  --snap-motion-gallery-scrim: color-mix(in srgb, CanvasText 82%, transparent);
   --snap-motion-gallery-chrome-surface: var(--snap-motion-gallery-surface);
   --snap-motion-gallery-control-hover-surface: color-mix(
     in srgb,
@@ -415,7 +420,7 @@
 }
 
 .snap-motion-media-gallery::backdrop {
-  background: var(--snap-motion-gallery-backdrop);
+  background: var(--snap-motion-gallery-scrim);
   transition: background-color 220ms cubic-bezier(0.22, 0.8, 0.2, 1);
 }
 
@@ -430,6 +435,7 @@
 
 .snap-motion-media-gallery-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   inline-size: min(100%, 96rem);
   block-size: 100%;
@@ -461,6 +467,7 @@
 .snap-motion-media-gallery-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(2.75rem, 1fr);
+  min-inline-size: 0;
   align-items: center;
   gap: 1rem;
   padding: 0.75rem clamp(0.75rem, 2vw, 1.25rem);
@@ -468,14 +475,15 @@
   background: var(--snap-motion-gallery-chrome-surface);
 }
 
-.snap-motion-media-gallery-header p,
+.snap-motion-media-gallery-eyebrow,
 .snap-motion-media-gallery-header h2,
 .snap-motion-media-gallery-identity,
+.snap-motion-media-gallery-description,
 .snap-motion-media-gallery-footer p {
   margin: 0;
 }
 
-.snap-motion-media-gallery-header p {
+.snap-motion-media-gallery-eyebrow {
   color: var(--_gallery-muted);
   font-size: 0.7rem;
   font-weight: 700;
@@ -489,23 +497,61 @@
 }
 
 .snap-motion-media-gallery-identity {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 0.75rem;
+  display: grid;
+  gap: 0.25rem;
   min-inline-size: 0;
   text-align: center;
 }
 
-.snap-motion-media-gallery-identity strong {
+.snap-motion-media-gallery-item-heading {
+  display: flex;
+  min-inline-size: 0;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.snap-motion-media-gallery-item-heading strong {
+  min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.snap-motion-media-gallery-identity span {
+.snap-motion-media-gallery-item-heading span {
   color: var(--_gallery-muted);
   white-space: nowrap;
+}
+
+.snap-motion-media-gallery-description {
+  color: var(--_gallery-muted);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.snap-motion-media-gallery-header-actions,
+.snap-motion-media-gallery-actions {
+  display: flex;
+  min-inline-size: 0;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.snap-motion-media-gallery-header-actions {
+  gap: 0.75rem;
+  justify-self: end;
+}
+
+.snap-motion-media-gallery-actions {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.snap-motion-media-gallery-actions :where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--_gallery-focus);
+  outline-offset: 2px;
 }
 
 .snap-motion-media-gallery-control,
@@ -735,9 +781,20 @@
     text-align: start;
   }
 
-  .snap-motion-media-gallery-close {
+  .snap-motion-media-gallery-item-heading {
+    justify-content: start;
+  }
+
+  .snap-motion-media-gallery-header-actions {
     grid-column: 2;
     grid-row: 1;
+  }
+
+  .snap-motion-media-gallery-header.has-actions .snap-motion-media-gallery-header-actions {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-content: space-between;
+    justify-self: stretch;
   }
 
   .snap-motion-media-gallery-workspace {
@@ -835,7 +892,8 @@
   .snap-motion-media-gallery-viewport,
   .snap-motion-media-gallery-control,
   .snap-motion-media-gallery-zoom-controls button,
-  .snap-motion-media-gallery-status button {
+  .snap-motion-media-gallery-status button,
+  .snap-motion-media-gallery-actions {
     forced-color-adjust: auto;
   }
 
@@ -845,4 +903,119 @@
   .snap-motion-media-gallery-viewport {
     border-color: CanvasText;
   }
+}
+
+/*
+ * Spatial surfaces. These rules own containment, the stage box, the camera, and the per-card
+ * coordinate space — the structure a rigid-panel projection cannot be correct without. Palette,
+ * material, radius, and chrome remain the product's.
+ */
+.snap-motion-coverflow {
+  --snap-motion-coverflow-stage-width: 1120px;
+  --snap-motion-coverflow-card-width: 420px;
+  --snap-motion-coverflow-card-height: 294px;
+  --snap-motion-coverflow-perspective: 900px;
+
+  position: relative;
+  inline-size: min(100%, var(--snap-motion-coverflow-stage-width));
+  min-block-size: calc(var(--snap-motion-coverflow-card-height) + 7rem);
+  margin-inline: auto;
+  overflow: hidden;
+  /* One camera for the whole stage. Every panel receives only its own rigid transform. */
+  perspective: var(--snap-motion-coverflow-perspective);
+  perspective-origin: 50% 46%;
+  user-select: none;
+}
+
+.snap-motion-coverflow-stage {
+  position: relative;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: calc(var(--snap-motion-coverflow-card-height) + 7rem);
+  transform-style: preserve-3d;
+}
+
+.snap-motion-coverflow-card {
+  --snap-motion-coverflow-depth: 0;
+  --snap-motion-coverflow-deep-rail: 0;
+  --snap-motion-coverflow-center-influence: 1;
+  --snap-motion-coverflow-kinetic-focus: 0;
+  --snap-motion-coverflow-settledness: 1;
+  --snap-motion-coverflow-contact-shadow: 1;
+  --snap-motion-coverflow-yaw: 0;
+  --snap-motion-coverflow-sheen: 0;
+  --snap-motion-coverflow-occlusion: 0;
+  --snap-motion-coverflow-edge-offset: 0px;
+  --snap-motion-coverflow-edge-strength: 0;
+
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: var(--snap-motion-coverflow-card-width);
+  block-size: var(--snap-motion-coverflow-card-height);
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  transform-style: preserve-3d;
+  transform-origin: center center;
+}
+
+/*
+ * A deck is a pile, so it deliberately does not clip: the cards may lean outside the stage box, and
+ * an ancestor that clipped them would cut the exchange in half.
+ */
+.snap-motion-stacked-deck {
+  --snap-motion-deck-stage-width: 1120px;
+  --snap-motion-deck-card-width: 520px;
+  --snap-motion-deck-card-height: 325px;
+
+  position: relative;
+  inline-size: min(100%, var(--snap-motion-deck-stage-width));
+  min-block-size: calc(var(--snap-motion-deck-card-height) + 5.5rem);
+  margin-inline: auto;
+  contain: layout;
+  overflow: visible;
+  isolation: isolate;
+  user-select: none;
+}
+
+.snap-motion-stacked-deck-stage {
+  position: relative;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: calc(var(--snap-motion-deck-card-height) + 5.5rem);
+  transform-style: flat;
+}
+
+.snap-motion-stacked-deck-card,
+.snap-motion-stacked-deck-card-aperture {
+  position: absolute;
+  inset: 0;
+}
+
+.snap-motion-stacked-deck-card {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: none;
+  pointer-events: none;
+}
+
+.snap-motion-stacked-deck-card-motion,
+.snap-motion-stacked-deck-pile-layer {
+  --snap-motion-deck-shadow-strength: 1;
+
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: var(--snap-motion-deck-card-width);
+  block-size: var(--snap-motion-deck-card-height);
+  transform-origin: center center;
+  backface-visibility: hidden;
+}
+
+/* Decorative depth only. Visual item association never grants content or semantics. */
+.snap-motion-stacked-deck-pile-layer {
+  pointer-events: none;
 }

@@ -23,7 +23,7 @@ async function expectActiveItemCentered(page: Page, id: string) {
 test("unequal-width rail advances by measured centers and preserves edge insets", async ({
   page,
 }) => {
-  await openLabDemo(page, "grid");
+  await openLabDemo(page, "variable-rail");
   await expectActiveItemCentered(page, "rail-alpha");
 
   const next = page.getByTestId("variable-next");

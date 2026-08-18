@@ -35,6 +35,12 @@ export interface PagedGridGeometryOptions<ItemId extends SemanticId = SemanticId
   readonly rows: number;
   readonly columns: number;
   readonly gap: number;
+  /**
+   * Space between whole pages, in CSS pixels. Cell gaps stay inside a page and never leak into the
+   * distance between semantic page anchors, so a rail that separates its pages says so here rather
+   * than by composing a second geometry over the first.
+   */
+  readonly pageGap?: number;
   readonly getPageId?: (context: PagedGridPageContext<ItemId>) => SemanticId;
 }
 
@@ -42,8 +48,12 @@ export interface PagedGridGeometry extends CarouselGeometry<SemanticId> {
   readonly rows: number;
   readonly columns: number;
   readonly gap: number;
+  readonly pageGap: number;
   readonly cellSize: number;
+  /** Items per page. */
   readonly pageSize: number;
+  /** Physical extent of one page, which is the stage the grid is laid out inside. */
+  readonly stageSize: number;
   readonly pageCount: number;
 }
 
@@ -63,7 +73,8 @@ function assertPositiveInteger(value: number, name: string): void {
   }
 }
 
-function assertUniqueIds(ids: readonly SemanticId[], name: string): void {
+/** Shared by every geometry factory, so an id contract violation always reads the same way. */
+export function assertUniqueIds(ids: readonly SemanticId[], name: string): void {
   const seen = new Set<SemanticId>();
   for (const id of ids) {
     if (typeof id !== "string" || id.length === 0) {
@@ -87,6 +98,30 @@ export function calculateFixedCellSize(viewportSize: number, columns: number, ga
   return (viewportSize - occupiedGaps) / columns;
 }
 
+/**
+ * Anchors on one evenly spaced scalar. Every stage-like surface — a fixed stage, a coverflow rail —
+ * is this geometry under a different name for its pitch, so they cannot drift apart.
+ */
+export function createEqualPitchGeometry<Id extends SemanticId>(
+  itemIds: readonly Id[],
+  pitch: number,
+  viewportSize: number,
+): CarouselGeometry<Id> {
+  const count = itemIds.length;
+  const trackExtent = count === 0 ? 0 : (count - 1) * pitch + viewportSize;
+  const bounds = getTrackBounds(viewportSize, trackExtent);
+  return {
+    viewportSize,
+    trackExtent,
+    bounds,
+    anchors: itemIds.map((id, order) => ({
+      id,
+      order,
+      position: clampToBounds(-order * pitch, bounds),
+    })),
+  };
+}
+
 export function createFixedStageGeometry<Id extends SemanticId>(options: {
   readonly viewportSize: number;
   readonly itemIds: readonly Id[];
@@ -97,20 +132,8 @@ export function createFixedStageGeometry<Id extends SemanticId>(options: {
   assertNonNegative(gap, "gap");
   assertUniqueIds(options.itemIds, "item");
 
-  const count = options.itemIds.length;
-  const trackExtent = count === 0 ? 0 : count * options.viewportSize + (count - 1) * gap;
-  const bounds = getTrackBounds(options.viewportSize, trackExtent);
-  const anchors = options.itemIds.map((id, order) => ({
-    id,
-    order,
-    position: clampToBounds(-order * (options.viewportSize + gap), bounds),
-  }));
-
   return {
-    viewportSize: options.viewportSize,
-    trackExtent,
-    bounds,
-    anchors,
+    ...createEqualPitchGeometry(options.itemIds, options.viewportSize + gap, options.viewportSize),
     stageSize: options.viewportSize,
     gap,
   };
@@ -125,37 +148,28 @@ export function createPagedGridGeometry<ItemId extends SemanticId>(
   assertNonNegative(options.gap, "gap");
   assertUniqueIds(options.itemIds, "item");
 
+  const pageGap = options.pageGap ?? 0;
+  assertNonNegative(pageGap, "pageGap");
   const cellSize = calculateFixedCellSize(options.viewportSize, options.columns, options.gap);
   const pageSize = options.rows * options.columns;
   const pageCount = Math.ceil(options.itemIds.length / pageSize);
   // Pages are explicit stage-width groups. Cell gaps remain inside each page and never
-  // leak into the distance between semantic page anchors.
-  const trackExtent = pageCount * options.viewportSize;
-  const bounds = getTrackBounds(options.viewportSize, trackExtent);
-  const anchors: SnapAnchor<SemanticId>[] = [];
-
-  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+  // leak into the distance between semantic page anchors; only `pageGap` separates pages.
+  const pageIds = Array.from({ length: pageCount }, (_unused, pageIndex) => {
     const pageItems = options.itemIds.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
-    const id = options.getPageId?.({ pageIndex, itemIds: pageItems }) ?? `page:${pageItems[0]}`;
-    const pageStart = pageIndex * options.viewportSize;
-    anchors.push({ id, order: pageIndex, position: clampToBounds(-pageStart, bounds) });
-  }
-
-  assertUniqueIds(
-    anchors.map((anchor) => anchor.id),
-    "page",
-  );
+    return options.getPageId?.({ pageIndex, itemIds: pageItems }) ?? `page:${pageItems[0]}`;
+  });
+  assertUniqueIds(pageIds, "page");
 
   return {
-    viewportSize: options.viewportSize,
-    trackExtent,
-    bounds,
-    anchors,
+    ...createEqualPitchGeometry(pageIds, options.viewportSize + pageGap, options.viewportSize),
     rows: options.rows,
     columns: options.columns,
     gap: options.gap,
+    pageGap,
     cellSize,
     pageSize,
+    stageSize: options.viewportSize,
     pageCount,
   };
 }

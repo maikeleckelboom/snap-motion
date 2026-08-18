@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { createFixedStageGeometry } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
-import {
-  captureFocusOpener,
-  focusInitial,
-  maintainModalTabOrder,
-  restoreFocus,
-} from "@snap-motion/vue/dialog";
 import type { MediaSize } from "@snap-motion/vue/media-gallery";
 import { until, useElementSize, useImage, useTimeoutFn } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
@@ -22,10 +16,17 @@ import { mediaFixtures, type MediaFixture, type MediaFixtureId } from "@/fixture
 import { runMediaTransition, supportsMediaTransition } from "@/media-inspection/media-transition";
 import MediaZoomControls from "@/media-inspection/MediaZoomControls.vue";
 import { useMediaTransform } from "@/media-inspection/use-media-transform";
+import {
+  captureFocusOpener,
+  focusCloseButton,
+  maintainModalTabOrder,
+  restoreFocus,
+} from "@/utils/dialogFocus";
 
 type MediaLoadState = "pending" | "loaded" | "failed";
 
 const props = defineProps<{
+  inspectionMode: boolean;
   reducedMotionOverride: boolean | undefined;
   settings: LabPhysicsSettings;
   stageWidth: number;
@@ -116,7 +117,7 @@ const motion = useCarouselMotion({
 });
 
 const semanticId = computed(
-  () => motion.targetId.value ?? motion.activeId.value ?? fixtureIds.value[0],
+  () => motion.targetId.value ?? motion.nearestId.value ?? fixtureIds.value[0],
 );
 const activeIndex = computed(() => {
   const currentId = semanticId.value;
@@ -142,7 +143,7 @@ const stageStyle = computed(() => ({
 const diagnostics = computed<LabDiagnostics>(() => {
   const geometry = measureGeometry();
   return {
-    ...(motion.activeId.value ? { activeId: motion.activeId.value } : {}),
+    ...(motion.nearestId.value ? { nearestId: motion.nearestId.value } : {}),
     anchors: motion.snapshot.value.anchors,
     bounds: motion.snapshot.value.bounds,
     isAnimating: motion.isAnimating.value,
@@ -360,7 +361,7 @@ async function openLightbox(fixtureId?: MediaFixtureId) {
           destinationReady = fixtureLoadState(fixture) === "loaded";
         }
         motion.remeasure();
-        focusInitial("close", { close: closeButton.value, container: target });
+        focusCloseButton(closeButton.value, target);
         announceCurrent();
       },
     });
@@ -440,8 +441,8 @@ watch(fixtureMode, async () => {
 
 watch(semanticId, () => mediaTransform.reset({ animated: false }));
 
-watch([motion.activeId, motion.phase], ([activeId, phase], [previousId]) => {
-  if (phase === "idle" && activeId !== undefined && activeId !== previousId) {
+watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
+  if (phase === "idle" && nearestId !== undefined && nearestId !== previousId) {
     announceCurrent();
   }
 });
@@ -481,34 +482,38 @@ onBeforeUnmount(() => {
       </button>
     </section>
 
-    <label class="fixture-mode">
-      <span>Fixture set</span>
-      <select v-model="fixtureMode" data-testid="media-fixture-mode">
-        <option value="all">All five media cases</option>
-        <option value="one">One-item boundary</option>
-      </select>
-    </label>
+    <div v-if="props.inspectionMode" class="media-fixture-controls">
+      <label class="fixture-mode">
+        <span>Fixture set</span>
+        <select v-model="fixtureMode" data-testid="media-fixture-mode">
+          <option value="all">All five media cases</option>
+          <option value="one">One-item boundary</option>
+        </select>
+      </label>
 
-    <label class="fixture-mode">
-      <span>Direction</span>
-      <select v-model="directionMode" data-testid="media-direction-mode">
-        <option value="ltr">LTR</option>
-        <option value="rtl">RTL</option>
-      </select>
-    </label>
+      <label class="fixture-mode">
+        <span>Direction</span>
+        <select v-model="directionMode" data-testid="media-direction-mode">
+          <option value="ltr">LTR</option>
+          <option value="rtl">RTL</option>
+        </select>
+      </label>
 
-    <label class="transition-option">
-      <input
-        v-model="transitionMotionEnabled"
-        data-testid="media-transition-toggle"
-        :disabled="!transitionSupported"
-        type="checkbox"
-      />
-      <span>
-        Thumbnail opening motion
-        <small>{{ transitionSupported ? "View Transition" : "Unavailable in this browser" }}</small>
-      </span>
-    </label>
+      <label class="transition-option">
+        <input
+          v-model="transitionMotionEnabled"
+          data-testid="media-transition-toggle"
+          :disabled="!transitionSupported"
+          type="checkbox"
+        />
+        <span>
+          Thumbnail opening motion
+          <small>{{
+            transitionSupported ? "View Transition" : "Unavailable in this browser"
+          }}</small>
+        </span>
+      </label>
+    </div>
 
     <div class="fixture-index" aria-label="Included media fixtures">
       <button
@@ -844,6 +849,7 @@ onBeforeUnmount(() => {
           </section>
 
           <section
+            v-if="props.inspectionMode"
             class="test-rail"
             aria-labelledby="ownership-rail-title"
             data-testid="media-test-rail"
@@ -945,6 +951,11 @@ onBeforeUnmount(() => {
   gap: 1px;
   background: var(--line);
   border-block-end: 1px solid var(--line);
+}
+
+.media-fixture-controls {
+  display: grid;
+  gap: 1rem;
 }
 
 .fixture-mode {

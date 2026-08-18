@@ -1,4 +1,5 @@
-export type PointerIntent = "horizontal" | "pending" | "vertical";
+import type { PointerIntent } from "../../contracts/motion-contracts";
+import { isElement } from "../dom/realm";
 
 export interface PointerIntentOptions {
   dominanceRatio?: number;
@@ -35,7 +36,7 @@ export function resolvePointerIntent(
 
 /** Returns true when a descendant has explicitly retained pointer-drag ownership. */
 export function elementOwnsSnapMotionDrag(target: EventTarget | null) {
-  if (typeof Element === "undefined" || !(target instanceof Element)) {
+  if (!isElement(target)) {
     return false;
   }
   return (

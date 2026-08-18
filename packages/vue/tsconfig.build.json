@@ -7,7 +7,12 @@
     "emitDeclarationOnly": true,
     "noEmit": false,
     "outDir": "../../temp/declarations/vue",
-    "paths": {},
+    "paths": {
+      "@snap-motion/vue/carousel": ["./src/carousel/index.ts"],
+      "@snap-motion/vue/dialog": ["./src/dialog/index.ts"],
+      "@snap-motion/vue/localization": ["./src/localization/index.ts"],
+      "@snap-motion/vue/motion": ["./src/motion/index.ts"]
+    },
     "rootDir": "src",
     "types": []
   },

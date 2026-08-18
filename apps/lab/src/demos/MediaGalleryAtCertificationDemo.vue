@@ -1,15 +1,14 @@
 <script setup lang="ts">
+import type { ActiveIdRequestDetails, SettlementDetails } from "@snap-motion/vue";
 import {
   MediaGalleryDialog,
   type FocusReturnOptions,
-  type MediaGalleryCloseReason,
   type MediaGalleryItem,
   type MediaGalleryMessages,
-  type MediaGalleryNavigationReason,
+  type MediaGalleryOpenRequestDetails,
 } from "@snap-motion/vue/media-gallery";
 import { computed, nextTick, ref } from "vue";
 
-import type { LabPhysicsSettings } from "@/fixtures/lab-types";
 import { mediaFixtures } from "@/fixtures/media";
 
 type ScenarioId =
@@ -46,8 +45,6 @@ interface TraceEntry {
 
 const props = defineProps<{
   reducedMotionOverride: boolean | undefined;
-  settings: LabPhysicsSettings;
-  stageWidth: number;
 }>();
 
 const regular = mediaFixtures.find((fixture) => fixture.id === "regular")!;
@@ -56,34 +53,56 @@ const tall = mediaFixtures.find((fixture) => fixture.id === "extremely-tall")!;
 const invalidImageUrl = new URL("__at-media__/invalid.png", document.baseURI).href;
 const delayedImageUrl = new URL("__at-media__/delayed.svg", document.baseURI).href;
 const retryImageUrl = new URL("__at-media__/retry.svg", document.baseURI).href;
+const retryFallbackImageUrl = new URL("__at-media__/retry-fallback.svg", document.baseURI).href;
 
 const baselineItems: readonly MediaGalleryItem[] = [
   {
     id: "landscape-overview",
     title: "Landscape overview",
+    description: "Landscape overview description for the settled first Gallery item.",
     alt: "Blue landscape test card labelled regular landscape, with a 1600 by 1000 size marker.",
-    previewSrc: regular.src,
-    fullSrc: `${regular.src}?at-full`,
-    width: regular.intrinsicSize.width,
-    height: regular.intrinsicSize.height,
+    preview: {
+      src: regular.src,
+      width: regular.intrinsicSize.width,
+      height: regular.intrinsicSize.height,
+    },
+    full: {
+      src: `${regular.src}?at-full`,
+      width: regular.intrinsicSize.width,
+      height: regular.intrinsicSize.height,
+    },
   },
   {
     id: "wide-timeline",
     title: "Wide timeline",
+    description: "Wide timeline description for the exact mechanically settled Gallery item.",
     alt: "Wide blue timeline test card with a 12000 by 1600 size marker.",
-    previewSrc: wide.src,
-    fullSrc: `${wide.src}?at-full`,
-    width: wide.intrinsicSize.width,
-    height: wide.intrinsicSize.height,
+    preview: {
+      src: wide.src,
+      width: wide.intrinsicSize.width,
+      height: wide.intrinsicSize.height,
+    },
+    full: {
+      src: `${wide.src}?at-full`,
+      width: wide.intrinsicSize.width,
+      height: wide.intrinsicSize.height,
+    },
   },
   {
     id: "tall-document",
     title: "Tall document",
+    description: "Tall document description for the settled final Gallery item.",
     alt: "Tall green document test card with a 1600 by 12000 size marker.",
-    previewSrc: tall.src,
-    fullSrc: `${tall.src}?at-full`,
-    width: tall.intrinsicSize.width,
-    height: tall.intrinsicSize.height,
+    preview: {
+      src: tall.src,
+      width: tall.intrinsicSize.width,
+      height: tall.intrinsicSize.height,
+    },
+    full: {
+      src: `${tall.src}?at-full`,
+      width: tall.intrinsicSize.width,
+      height: tall.intrinsicSize.height,
+    },
   },
 ];
 
@@ -151,9 +170,8 @@ const scenarios: readonly CertificationScenario[] = [
         id: "preview-only-image",
         title: "Preview-only landscape",
         alt: baselineItems[0]!.alt,
-        previewSrc: baselineItems[0]!.previewSrc,
-        width: baselineItems[0]!.width,
-        height: baselineItems[0]!.height,
+        preview: baselineItems[0]!.preview,
+        full: baselineItems[0]!.preview,
       },
     ],
     expectedCurrentItem: "Preview-only landscape (item 1)",
@@ -173,7 +191,7 @@ const scenarios: readonly CertificationScenario[] = [
         ...baselineItems[0]!,
         id: "delayed-full-image",
         title: "Delayed full image",
-        fullSrc: delayedImageUrl,
+        full: { ...baselineItems[0]!.full, src: delayedImageUrl },
       },
     ],
     expectedCurrentItem: "Delayed full image (item 1)",
@@ -186,15 +204,21 @@ const scenarios: readonly CertificationScenario[] = [
     id: "retry-success",
     label: "Retry failure then success",
     purpose:
-      "The first full-image response is intentionally invalid. Retry requests a valid image so the same run deterministically changes from failure to success.",
+      "The browser selects a responsive candidate whose first response is intentionally invalid. Retry targets that exact selection with a fresh request identity, never the larger fallback.",
     initialIndex: 0,
     items: [
       {
         ...baselineItems[0]!,
         id: "retry-success-image",
         title: "Retry succeeds",
-        fullSrc: retryImageUrl,
+        full: {
+          ...baselineItems[0]!.full,
+          src: retryFallbackImageUrl,
+          srcset: `${retryImageUrl} 800w, ${retryFallbackImageUrl} 2400w`,
+          sizes: "400px",
+        },
       },
+      baselineItems[1]!,
     ],
     expectedCurrentItem: "Retry succeeds (item 1)",
     fullMedia: "Yes",
@@ -213,7 +237,7 @@ const scenarios: readonly CertificationScenario[] = [
         ...baselineItems[0]!,
         id: "failed-full-image",
         title: "Full image unavailable",
-        fullSrc: invalidImageUrl,
+        full: { ...baselineItems[0]!.full, src: invalidImageUrl },
       },
     ],
     expectedCurrentItem: "Full image unavailable (item 1)",
@@ -233,9 +257,8 @@ const scenarios: readonly CertificationScenario[] = [
         id: "failed-preview-image",
         title: "Preview unavailable",
         alt: "Intentionally unavailable preview used for assistive-technology failure testing.",
-        previewSrc: invalidImageUrl,
-        width: 1_600,
-        height: 1_000,
+        preview: { src: invalidImageUrl, width: 1_600, height: 1_000 },
+        full: { src: invalidImageUrl, width: 1_600, height: 1_000 },
       },
     ],
     expectedCurrentItem: "Preview unavailable (item 1)",
@@ -258,7 +281,7 @@ const scenarios: readonly CertificationScenario[] = [
         alt: "Een uitzonderlijk lang, smal groen testdocument met markeringen voor afmetingen en een beschrijvende titel die bewust over meerdere regels kan lopen.",
         description:
           "Deze beschrijving is opzettelijk lang om tekstterugloop, vergroting en kleine schermen zonder afkapping te kunnen controleren.",
-        fullSrc: `${tall.src}?at-long-localized`,
+        full: { ...baselineItems[2]!.full, src: `${tall.src}?at-long-localized` },
       },
     ],
     messages: {
@@ -294,6 +317,9 @@ const selectedScenario = computed(
   () => scenarios.find((scenario) => scenario.id === selectedScenarioId.value) ?? scenarios[0]!,
 );
 const selectedMessages = computed(() => selectedScenario.value.messages ?? {});
+const selectedActiveId = ref<string>(
+  selectedScenario.value.items[selectedScenario.value.initialIndex]!.id,
+);
 const focusReturn = computed<FocusReturnOptions>(() => ({
   opener: opener.value,
   fallback: () => harness.value,
@@ -311,6 +337,7 @@ function clearTrace() {
 
 function selectScenario(id: ScenarioId) {
   selectedScenarioId.value = id;
+  selectedActiveId.value = selectedScenario.value.items[selectedScenario.value.initialIndex]!.id;
   clearTrace();
   appendTrace("scenario-selected", `${id}; initial index ${selectedScenario.value.initialIndex}`);
 }
@@ -329,27 +356,37 @@ function onOpenUpdate(nextOpen: boolean) {
   open.value = nextOpen;
 }
 
-function onOpened(index: number) {
-  appendTrace(
-    "opened",
-    `index ${index}; ${selectedScenario.value.items[index]?.title ?? "unknown"}`,
-  );
+function onOpened(id: string | undefined) {
+  appendTrace("opened", `id ${id ?? "none"}`);
 }
 
-function onIndexChanged(index: number, reason: MediaGalleryNavigationReason) {
-  appendTrace(
-    "indexChanged",
-    `index ${index}; reason ${reason}; ${selectedScenario.value.items[index]?.title ?? "unknown"}`,
-  );
+function onActiveIdRequest(id: string | undefined, details: ActiveIdRequestDetails) {
+  appendTrace("activeIdRequest", `id ${id ?? "none"}; reason ${details.reason}`);
 }
 
-function onRequestClose(finalIndex: number, reason: MediaGalleryCloseReason) {
-  appendTrace("requestClose", `final index ${finalIndex}; reason ${reason}`);
+function onActiveIdUpdate(id: string | undefined) {
+  if (id !== undefined) selectedActiveId.value = id;
+  appendTrace("update:activeId", `id ${id ?? "none"}`);
 }
 
-async function onClosed(finalIndex: number) {
-  appendTrace("closed", `final index ${finalIndex}`);
+function onSettled(id: string, details: SettlementDetails) {
+  appendTrace("settled", `id ${id}; reason ${details.reason}`);
+}
+
+function onOpenRequest(_open: false, details: MediaGalleryOpenRequestDetails) {
+  appendTrace("openRequest", `final id ${details.activeId ?? "none"}; reason ${details.reason}`);
+}
+
+async function onClosed(finalId: string | undefined) {
+  appendTrace("closed", `final id ${finalId ?? "none"}`);
   await nextTick();
+  for (
+    let frame = 0;
+    frame < 4 && opener.value?.ownerDocument.activeElement !== opener.value;
+    frame += 1
+  ) {
+    await new Promise<void>((resolveFrame) => requestAnimationFrame(() => resolveFrame()));
+  }
   const activeElement = opener.value?.ownerDocument.activeElement;
   const focusTarget =
     activeElement instanceof HTMLElement
@@ -481,7 +518,7 @@ async function onClosed(finalIndex: number) {
 
     <MediaGalleryDialog
       :focus-return="focusReturn"
-      :initial-index="selectedScenario.initialIndex"
+      :active-id="selectedActiveId"
       :items="selectedScenario.items"
       :messages="selectedMessages"
       :open="open"
@@ -489,11 +526,22 @@ async function onClosed(finalIndex: number) {
       eyebrow="AT certification"
       title="Media gallery certification"
       @closed="onClosed"
-      @index-changed="onIndexChanged"
+      @active-id-request="onActiveIdRequest"
       @opened="onOpened"
-      @request-close="onRequestClose"
+      @open-request="onOpenRequest"
+      @settled="onSettled"
+      @update:active-id="onActiveIdUpdate"
       @update:open="onOpenUpdate"
-    />
+    >
+      <template #actions>
+        <div class="at-gallery-actions">
+          <a data-testid="at-gallery-action-link" href="#at-gallery-action-target" tabindex="0">
+            Switch locale
+          </a>
+          <button data-testid="at-gallery-action-button" type="button">Application action</button>
+        </div>
+      </template>
+    </MediaGalleryDialog>
   </section>
 </template>
 
@@ -615,6 +663,13 @@ async function onClosed(finalIndex: number) {
 .at-certification-actions button:first-child {
   background: var(--ink);
   color: var(--paper);
+}
+
+.at-gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .at-scenario-contract {

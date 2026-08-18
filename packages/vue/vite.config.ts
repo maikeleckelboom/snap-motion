@@ -27,6 +27,8 @@ export default defineConfig({
       entry: {
         sheet: "src/sheet/index.ts",
         carousel: "src/carousel/index.ts",
+        coverflow: "src/coverflow/index.ts",
+        "stacked-deck": "src/stacked-deck/index.ts",
         dialog: "src/dialog/index.ts",
         index: "src/index.ts",
         localization: "src/localization/index.ts",

@@ -1,15 +1,5 @@
-/** Native-dialog focus mechanics. Public access is curated by the dialog feature. */
-export type InitialFocus =
-  | "close"
-  | "title"
-  | "first-interactive"
-  | HTMLElement
-  | (() => HTMLElement | undefined);
-
-export interface FocusReturnOptions {
-  fallback?: HTMLElement | (() => HTMLElement | undefined) | undefined;
-  opener?: HTMLElement | undefined;
-}
+import type { FocusReturnOptions, InitialFocus } from "../../contracts/focus-contracts";
+import { isHTMLElement, isHTMLInputElement } from "../dom/realm";
 
 const interactiveSelector = [
   "button",
@@ -63,14 +53,10 @@ export function interactiveElements(container: HTMLElement | undefined) {
     isInteractive,
   );
   return candidates.filter((candidate) => {
-    if (
-      !(candidate instanceof HTMLInputElement) ||
-      candidate.type !== "radio" ||
-      candidate.checked
-    ) {
+    if (!isHTMLInputElement(candidate) || candidate.type !== "radio" || candidate.checked) {
       return true;
     }
-    const name = CSS.escape(candidate.name);
+    const name = candidate.ownerDocument.defaultView?.CSS?.escape(candidate.name) ?? candidate.name;
     return !container.querySelector<HTMLInputElement>(
       `input[type='radio'][name='${name}']:checked`,
     );
@@ -79,7 +65,9 @@ export function interactiveElements(container: HTMLElement | undefined) {
 
 export function captureFocusOpener(documentTarget?: Document) {
   const activeElement = documentTarget?.activeElement;
-  return typeof HTMLElement !== "undefined" && activeElement instanceof HTMLElement
+  return isHTMLElement(activeElement) &&
+    !activeElement.matches("body, html") &&
+    !activeElement.closest("dialog:not([open])")
     ? activeElement
     : undefined;
 }
@@ -114,7 +102,7 @@ export function resolveInitialFocus(
     title?: HTMLElement | undefined;
   },
 ) {
-  if (policy instanceof HTMLElement) {
+  if (isHTMLElement(policy)) {
     return policy;
   }
   if (typeof policy === "function") {
@@ -152,14 +140,34 @@ function resolveFocusTarget(target: HTMLElement | (() => HTMLElement | undefined
 }
 
 export function restoreFocus(options: FocusReturnOptions | HTMLElement | undefined) {
-  const normalized = options instanceof HTMLElement ? { opener: options } : (options ?? {});
-  const target = [normalized.opener, resolveFocusTarget(normalized.fallback)].find(
-    (candidate) => candidate?.isConnected,
-  );
-  if (!target) {
+  const normalized = isHTMLElement(options) ? { opener: options } : (options ?? {});
+  for (const candidate of [normalized.opener, resolveFocusTarget(normalized.fallback)]) {
+    if (!candidate?.isConnected) continue;
+    candidate.focus({ preventScroll: true });
+    if (candidate === candidate.ownerDocument.activeElement) return true;
+  }
+  return false;
+}
+
+/**
+ * Moves focus to a surface immediately before its focused descendant stops being semantic content.
+ *
+ * The caller owns the surface-specific definition of semantic. This helper owns the DOM invariant:
+ * focus is never left inside content that the same update is about to make inert or hidden.
+ */
+export function preserveFocusBeforeSemanticChange(
+  surface: HTMLElement | undefined,
+  remainsSemantic: (activeElement: HTMLElement) => boolean,
+): boolean {
+  const activeElement = surface?.ownerDocument.activeElement;
+  if (
+    !isHTMLElement(activeElement) ||
+    !surface?.contains(activeElement) ||
+    activeElement === surface ||
+    remainsSemantic(activeElement)
+  ) {
     return false;
   }
-
-  target.focus({ preventScroll: true });
-  return target === target.ownerDocument.activeElement;
+  surface.focus({ preventScroll: true });
+  return surface.ownerDocument.activeElement === surface;
 }

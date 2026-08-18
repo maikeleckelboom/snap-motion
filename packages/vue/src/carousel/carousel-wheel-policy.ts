@@ -1,3 +1,5 @@
+import { isElement, isHTMLElement } from "../internal/dom/realm";
+
 export interface NormalizedWheelDelta {
   x: number;
   y: number;
@@ -29,7 +31,7 @@ export function horizontalWheelDelta(
 
 /** Returns true when a descendant or nested scroll container owns a wheel gesture. */
 export function elementOwnsSnapMotionWheel(target: EventTarget | null) {
-  if (typeof Element === "undefined" || !(target instanceof Element)) return false;
+  if (!isElement(target)) return false;
   if (
     target.closest(
       "input, textarea, select, option, video[controls], audio[controls], [role='slider'], [role='spinbutton'], [role='combobox'], [role='listbox'], [role='menu'], [role='tree'], [role='grid'], [role='tablist'], [role='radiogroup'], [data-snap-motion-wheel-owner]",
@@ -39,7 +41,7 @@ export function elementOwnsSnapMotionWheel(target: EventTarget | null) {
   }
 
   for (let element: Element | null = target; element; element = element.parentElement) {
-    if (!(element instanceof HTMLElement)) continue;
+    if (!isHTMLElement(element)) continue;
     const view: Window | null = element.ownerDocument.defaultView;
     const style = view?.getComputedStyle(element);
     const scrollableX =

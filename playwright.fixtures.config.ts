@@ -3,8 +3,17 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./fixture-e2e",
   fullyParallel: false,
+  forbidOnly: Boolean(process.env.CI),
+  retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: Boolean(process.env.CI),
+  workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? "line" : "list",
-  use: { ...devices["Desktop Chrome"] },
+  use: {
+    ...devices["Desktop Chrome"],
+    screenshot: "only-on-failure",
+    trace: "on-first-retry",
+    video: "off",
+  },
   webServer: [
     {
       command:

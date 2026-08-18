@@ -4,7 +4,9 @@
 
 ```ts
 
+import type { ActiveIdRequestDetails } from '@snap-motion/core';
 import type { AnimationDriver } from '@snap-motion/core';
+import type { CloseReason } from '@snap-motion/vue/dialog';
 import { ComponentOptionsMixin } from 'vue';
 import { ComponentProvideOptions } from 'vue';
 import { ComputedRef } from 'vue';
@@ -13,17 +15,21 @@ import type { ControllerSnapshot } from '@snap-motion/core';
 import { CSSProperties } from 'vue';
 import { DefineComponent } from 'vue';
 import type { ElasticityOptions } from '@snap-motion/core';
+import type { FocusReturnOptions } from '@snap-motion/vue/dialog';
+import type { InitialFocus } from '@snap-motion/vue/dialog';
 import { MaybeRefOrGetter } from 'vue';
+import type { OpenRequestDetails } from '@snap-motion/vue/dialog';
+import type { PointerIntent } from '@snap-motion/vue/motion';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
 import type { ReleaseTargetPolicy } from '@snap-motion/core';
+import type { SettlementDetails } from '@snap-motion/core';
 import { ShallowUnwrapRef } from 'vue';
 import type { SnapAnchor } from '@snap-motion/core';
+import type { SnapMotionMessages } from '@snap-motion/vue/localization';
 import type { SpringConfiguration } from '@snap-motion/core';
+import type { SurfaceMotionDiagnostics } from '@snap-motion/vue/motion';
 import { VNode } from 'vue';
-
-// @public (undocumented)
-export type CloseReason = "close-button" | "escape" | "scrim" | "route" | "programmatic";
 
 // @public (undocumented)
 export function createDefaultSheetSnapPoints(side: SheetSide, overrides?: Partial<SheetViewportPolicy>): readonly SheetSnapPoint<SheetOpenSnapId>[];
@@ -39,12 +45,6 @@ export function defaultSheetOpenSnapId(side: SheetSide): SheetOpenSnapId;
 
 // @public (undocumented)
 export function getSheetSideDescriptor(side: SheetSide): SheetSideDescriptor;
-
-// @public (undocumented)
-export type NavigationReason = "previous" | "next" | "keyboard" | "drag" | "wheel" | "picker" | "route";
-
-// @public (undocumented)
-export type PointerIntent = "horizontal" | "pending" | "vertical";
 
 // @public (undocumented)
 export interface ResolvedSheetSnapPoint<Id extends string> {
@@ -68,13 +68,95 @@ export function resolveSheetGeometry(input: SheetGeometryInput): SheetGeometry;
 // @public
 export function resolveSheetSnapPoints<Id extends string>(points: readonly SheetSnapPoint<Id>[], context: SheetMeasureContext): ResolvedSheetSnapPoint<Id>[];
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const Sheet: typeof __VLS_export;
+export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
+    props: PublicProps & __VLS_PrettifyLocal<{
+        activeId?: Id;
+        closeLabel?: string;
+        descriptionId?: string;
+        elasticity?: ElasticityOptions;
+        focusReturn?: FocusReturnOptions;
+        initialFocus?: InitialFocus;
+        initialViewportDimensions?: Partial<SheetViewportDimensions>;
+        maximumScrimOpacity?: number;
+        messages?: Partial<SnapMotionMessages>;
+        open: boolean;
+        programmaticImpulse?: number;
+        reducedMotionOverride?: boolean;
+        releasePolicy?: Partial<ReleaseTargetPolicy>;
+        showSnapPicker?: boolean;
+        side?: SheetSide;
+        snapLabels?: Partial<Record<Id, string>>;
+        snapPoints?: readonly SheetSnapPoint<Id>[];
+        spring?: SpringConfiguration;
+        titleId?: string;
+        viewportPolicy?: Partial<SheetViewportPolicy>;
+    } & {
+        onClosed?: () => any;
+        onActiveIdRequest?: (id: Id, details: ActiveIdRequestDetails) => any;
+        onSettled?: (id: Id, details: SettlementDetails) => any;
+        "onUpdate:activeId"?: (id: Id) => any;
+        "onUpdate:open"?: (open: boolean) => any;
+        onOpenRequest?: (open: false, details: OpenRequestDetails) => any;
+        onOpened?: () => any;
+    }> & (typeof globalThis extends {
+        __VLS_PROPS_FALLBACK: infer P;
+    } ? P : {});
+    expose: (exposed: ShallowUnwrapRef<    {
+    body: Ref<HTMLElement | undefined, HTMLElement | undefined>;
+    chrome: Ref<HTMLElement | undefined, HTMLElement | undefined>;
+    closeForPresentationChange: () => boolean;
+    dialog: Ref<HTMLDialogElement | undefined, HTMLDialogElement | undefined>;
+    diagnostics: ComputedRef<SheetDiagnostics<Id>>;
+    intrinsicBodyContent: Ref<HTMLElement | undefined, HTMLElement | undefined>;
+    panel: Ref<HTMLElement | undefined, HTMLElement | undefined>;
+    activeId: ComputedRef<Id>;
+    sheetState: Ref<SheetState, SheetState>;
+    side: Ref<SheetEdge, SheetEdge>;
+    requestClose: (reason?: CloseReason) => void;
+    navigateTo: (id: Id) => boolean;
+    synchronizeTo: (id: Id) => boolean;
+    titleId: string;
+    viewport: Ref<HTMLElement | undefined, HTMLElement | undefined>;
+    }>) => void;
+    attrs: any;
+    slots: {
+        title?: (props: {}) => any;
+    } & {
+        close?: (props: {}) => any;
+    } & {
+        picker?: (props: {}) => any;
+    } & {
+        default?: (props: {}) => any;
+    };
+    emit: {
+        (event: "update:open", open: boolean): void;
+        (event: "update:activeId", id: Id): void;
+        (event: "openRequest", open: false, details: OpenRequestDetails): void;
+        (event: "activeIdRequest", id: Id, details: ActiveIdRequestDetails): void;
+        (event: "opened"): void;
+        (event: "closed"): void;
+        (event: "settled", id: Id, details: SettlementDetails): void;
+    };
+}>) => VNode & {
+    __ctx?: NonNullable<Awaited<typeof __VLS_setup>>;
+};
 
 // @public (undocumented)
 export type SheetAxis = "x" | "y";
+
+// @public
+export interface SheetDiagnostics<Id extends string = string> extends SurfaceMotionDiagnostics<Id> {
+    // (undocumented)
+    readonly geometry: SheetGeometry;
+    // (undocumented)
+    readonly primarySurfaceExtent: number;
+    // (undocumented)
+    readonly sheetState: SheetState;
+    // (undocumented)
+    readonly side: SheetSide;
+}
 
 // @public (undocumented)
 export type SheetEdge = "top" | "right" | "bottom" | "left";
@@ -180,9 +262,6 @@ export interface SheetMeasureContext {
 }
 
 // @public (undocumented)
-export type SheetNavigationReason = NavigationReason | "side-change";
-
-// @public (undocumented)
 export type SheetOpenSnapId = SheetViewportSnapId | SheetFixedSnapId;
 
 // @public (undocumented)
@@ -222,10 +301,9 @@ export const sheetSideDescriptors: Readonly<Record<SheetSide, SheetSideDescripto
 // @public (undocumented)
 export const sheetSides: readonly ["top", "right", "bottom", "left"];
 
-// Warning: (ae-forgotten-export) The symbol "__VLS_export_2" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const SheetSnapPicker: typeof __VLS_export_2;
+export const SheetSnapPicker: DefineComponent<__VLS_Props, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<__VLS_Props> & Readonly<{}>, {}, {}, {}, {}, string, ComponentProvideOptions, false, {}>;
 
 // @public
 export interface SheetSnapPoint<Id extends string> {
@@ -340,8 +418,6 @@ export interface UseSheetMotionOptions<Id extends string = SheetOpenSnapId> {
 
 // @public (undocumented)
 export interface UseSheetMotionReturn<Id extends string = SheetOpenSnapId> {
-    // (undocumented)
-    readonly activeId: ComputedRef<Id | undefined>;
     // (undocumented)
     readonly activeSnapId: ComputedRef<Id | undefined>;
     // (undocumented)

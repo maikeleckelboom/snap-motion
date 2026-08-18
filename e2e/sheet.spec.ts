@@ -209,6 +209,8 @@ test.describe("multi-edge Sheet", () => {
       await dragTouchBy(page, handle(page), inward.x, inward.y, { stepDelay: 30, steps: 12 });
       await expectSheetOpenAt(dialog(page), "full");
       await closeButton(page).click();
+      await expect(dialog(page)).not.toBeVisible();
+      await expect(page.getByTestId("open-sheet")).toBeFocused();
     }
 
     await setNumericInput(page.getByLabel("Fling threshold"), 100);
@@ -460,7 +462,7 @@ test.describe("multi-edge Sheet", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 600, height: 800 });
-    await openLabDemo(page, "sheet");
+    await openLabDemo(page, "adaptive-sheet");
     await expect(page.getByTestId("adaptive-sheet-trigger")).toBeVisible();
     await expect(page.getByTestId("inline-supporting-pane")).toHaveCount(0);
 

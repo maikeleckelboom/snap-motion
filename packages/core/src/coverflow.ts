@@ -1,6 +1,11 @@
-import { assertFiniteNumber, assertNonNegative, clampToBounds, getTrackBounds } from "./bounds";
-import type { CarouselGeometry } from "./carousel-geometry";
-import type { SemanticId, SnapAnchor } from "./types";
+import { assertFiniteNumber, assertNonNegative, clamp, mix, smoothstep } from "./bounds";
+import {
+  assertUniqueIds,
+  createEqualPitchGeometry,
+  type CarouselGeometry,
+} from "./carousel-geometry";
+import { resolveSpeedInCards } from "./kinetics";
+import type { SemanticId } from "./types";
 
 export interface CoverflowGeometryOptions<Id extends SemanticId = SemanticId> {
   readonly itemIds: readonly Id[];
@@ -134,33 +139,179 @@ export interface CoverflowPresentation {
   readonly edgeSide: -1 | 0 | 1;
 }
 
-function assertUniqueIds(ids: readonly SemanticId[], name: string): void {
-  const seen = new Set<SemanticId>();
-  for (const id of ids) {
-    if (typeof id !== "string" || id.length === 0) {
-      throw new TypeError(`${name} ids must be non-empty strings`);
-    }
-    if (seen.has(id)) {
-      throw new RangeError(`${name} ids must be unique: ${id}`);
-    }
-    seen.add(id);
-  }
+/**
+ * How a coverflow rail responds to speed.
+ *
+ * These are physical tuning rather than theme: they describe how much commitment the focused face
+ * gives up while the rail is genuinely moving, which is what stops a fast pass reading as a
+ * sequence of stationary posters. Colour, material, and whether any of it is drawn stay with the
+ * product.
+ */
+export const COVERFLOW_KINETIC_TUNING = {
+  kineticStartSpeed: 1.5,
+  kineticFullSpeed: 5.5,
+  centerInnerRadius: 0.08,
+  centerOuterRadius: 0.42,
+  maximumKineticScaleLoss: 0.014,
+  maximumKineticRecess: 16,
+  maximumKineticYaw: 1.5,
+  maximumShadowAttenuation: 0.55,
+  settledSpeedStart: 0.75,
+  settledSpeedEnd: 2.5,
+} as const;
+
+export interface CoverflowKineticState {
+  speedInCards: number;
+  centerInfluence: number;
+  kinetic: number;
+  kineticFocus: number;
+  settledness: number;
+  scaleLoss: number;
+  recess: number;
+  retainedYaw: number;
+  contactShadowStrength: number;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+/** Proportions of a coverflow stage: card box, rail spacing, and the pitch that keeps drag 1:1. */
+export interface CoverflowTuning {
+  readonly cardWidth: number;
+  readonly cardHeight: number;
+  /**
+   * Distance between adjacent snap anchors. It equals `sidePeakX`, which is what makes a drag of
+   * N pixels move the focused face exactly N pixels.
+   */
+  readonly pitch: number;
+  /** Absolute X of the first side slot, and so the gap between the crossing pair for a whole step. */
+  readonly sidePeakX: number;
+  /** Spacing between parked cards, measured along their shared normal. */
+  readonly stackGap: number;
+  /** Camera distance. The stage's CSS `perspective` must use the same number. */
+  readonly perspective: number;
+  readonly maxRotateY: number;
+  readonly sideDepth: number;
+  readonly hideAfter: number;
+}
+
+export interface ResolveCoverflowTuningOptions {
+  readonly stageWidth: number;
+}
+
+const COVERFLOW_PROPORTIONS = {
+  cardWidthRatio: 0.4,
+  cardWidthMin: 280,
+  cardWidthMax: 420,
+  cardAspectRatio: 0.7,
+  /**
+   * The first side slot has to clear a *foreshortened* card, not a flat one. Set below this and the
+   * panels tile the stage edge to edge — each one ending exactly where the next begins — which
+   * reads as a concertina no matter how the individual panels are shaded.
+   */
+  sidePeakRatio: 0.8,
+  stackGapRatio: 0.34,
+} as const;
+
+const COVERFLOW_RAIL = {
+  perspective: 900,
+  /** Steep enough that a parked card foreshortens to a sliver; a shallow wall lets panels tile. */
+  maxRotateY: 62,
+  sideDepth: -300,
+  hideAfter: 3.05,
+} as const;
+
+/** Pure responsive proportions for a coverflow stage of a given width. */
+export function resolveCoverflowTuning(options: ResolveCoverflowTuningOptions): CoverflowTuning {
+  assertFiniteNumber(options.stageWidth, "stageWidth");
+  if (options.stageWidth <= 0) {
+    throw new RangeError("coverflow stage must be positive");
+  }
+  const cardWidth = Math.round(
+    clamp(
+      options.stageWidth * COVERFLOW_PROPORTIONS.cardWidthRatio,
+      COVERFLOW_PROPORTIONS.cardWidthMin,
+      COVERFLOW_PROPORTIONS.cardWidthMax,
+    ),
+  );
+  const sidePeakX = Math.round(cardWidth * COVERFLOW_PROPORTIONS.sidePeakRatio);
+  return {
+    cardWidth,
+    cardHeight: Math.round(cardWidth * COVERFLOW_PROPORTIONS.cardAspectRatio),
+    pitch: sidePeakX,
+    sidePeakX,
+    stackGap: Math.round(cardWidth * COVERFLOW_PROPORTIONS.stackGapRatio),
+    ...COVERFLOW_RAIL,
+  };
+}
+
+/** Neutral kinetic storage: fully settled, fully centered, nothing given up. */
+export function createCoverflowKineticState(): CoverflowKineticState {
+  return {
+    speedInCards: 0,
+    centerInfluence: 1,
+    kinetic: 0,
+    kineticFocus: 0,
+    settledness: 1,
+    scaleLoss: 0,
+    recess: 0,
+    retainedYaw: 0,
+    contactShadowStrength: 1,
+  };
+}
+
+function smoothstepRange(minimum: number, maximum: number, value: number): number {
+  if (maximum <= minimum) return value < minimum ? 0 : 1;
+  return smoothstep((value - minimum) / (maximum - minimum));
+}
+
+/**
+ * Resolves visual commitment without changing horizontal position. The caller supplies a reusable
+ * output object so the per-card frame path does not need another allocation.
+ */
+export function resolveCoverflowKinetics(
+  relativePosition: number,
+  velocityPxPerSecond: number,
+  cardPitchPx: number,
+  output: CoverflowKineticState,
+): CoverflowKineticState {
+  const speedInCards = resolveSpeedInCards(velocityPxPerSecond, cardPitchPx);
+  const kinetic = smoothstepRange(
+    COVERFLOW_KINETIC_TUNING.kineticStartSpeed,
+    COVERFLOW_KINETIC_TUNING.kineticFullSpeed,
+    speedInCards,
+  );
+  const centerInfluence =
+    1 -
+    smoothstepRange(
+      COVERFLOW_KINETIC_TUNING.centerInnerRadius,
+      COVERFLOW_KINETIC_TUNING.centerOuterRadius,
+      Math.abs(relativePosition),
+    );
+  const kineticFocus = kinetic * centerInfluence;
+  const settledness =
+    1 -
+    smoothstepRange(
+      COVERFLOW_KINETIC_TUNING.settledSpeedStart,
+      COVERFLOW_KINETIC_TUNING.settledSpeedEnd,
+      speedInCards,
+    );
+
+  output.speedInCards = speedInCards;
+  output.centerInfluence = centerInfluence;
+  output.kinetic = kinetic;
+  output.kineticFocus = kineticFocus;
+  output.settledness = settledness;
+  output.scaleLoss = COVERFLOW_KINETIC_TUNING.maximumKineticScaleLoss * kineticFocus;
+  output.recess = COVERFLOW_KINETIC_TUNING.maximumKineticRecess * kineticFocus;
+  output.retainedYaw =
+    Math.sign(velocityPxPerSecond) * COVERFLOW_KINETIC_TUNING.maximumKineticYaw * kineticFocus;
+  output.contactShadowStrength =
+    centerInfluence *
+    settledness *
+    (1 - COVERFLOW_KINETIC_TUNING.maximumShadowAttenuation * kineticFocus);
+  return output;
 }
 
 function finiteOrZero(value: number): number {
   return Object.is(value, -0) || !Number.isFinite(value) ? 0 : value;
-}
-
-function lerp(from: number, to: number, t: number): number {
-  return from + (to - from) * t;
-}
-
-function smoothstep(t: number): number {
-  return t * t * (3 - 2 * t);
 }
 
 /**
@@ -177,20 +328,8 @@ export function createCoverflowGeometry<Id extends SemanticId>(
   }
   assertUniqueIds(options.itemIds, "item");
 
-  const count = options.itemIds.length;
-  const trackExtent = count === 0 ? 0 : (count - 1) * options.pitch + options.viewportSize;
-  const bounds = getTrackBounds(options.viewportSize, trackExtent);
-  const anchors: SnapAnchor<Id>[] = options.itemIds.map((id, order) => ({
-    id,
-    order,
-    position: clampToBounds(-order * options.pitch, bounds),
-  }));
-
   return {
-    viewportSize: options.viewportSize,
-    trackExtent,
-    bounds,
-    anchors,
+    ...createEqualPitchGeometry(options.itemIds, options.pitch, options.viewportSize),
     pitch: options.pitch,
   };
 }
@@ -361,9 +500,9 @@ export function resolveCoverflowPresentation(
   const projectionRelief = perspective === undefined ? 1 : (perspective - railDepth) / perspective;
   const travelX = direction * railT * sidePeakX * projectionRelief;
   const translateX = finiteOrZero(travelX + direction * stackT * stackStepX);
-  const scale = Math.max(0.01, lerp(1, sideScale, depthEase) + stackT * stackGapScale);
+  const scale = Math.max(0.01, mix(1, sideScale, depthEase) + stackT * stackGapScale);
   // Center stays solid. Only settled side cards dip slightly — never enough to read through.
-  const opacity = !visible ? 0 : magnitude <= flatZone ? 1 : lerp(1, sideOpacity, depthEase);
+  const opacity = !visible ? 0 : magnitude <= flatZone ? 1 : mix(1, sideOpacity, depthEase);
 
   const depth = depthEase + stackT;
   // Paint order reads off the same skewed depth the transform describes, so a flattened consumer

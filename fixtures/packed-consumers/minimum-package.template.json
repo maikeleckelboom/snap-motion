@@ -3,14 +3,13 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@snap-motion/core": "file:__CORE_TARBALL__",
     "@snap-motion/vue": "file:__VUE_TARBALL__",
     "@vitejs/plugin-vue": "6.0.8",
     "@vue/server-renderer": "3.5.0",
-    "typescript": "6.0.3",
+    "typescript": "npm:@typescript/typescript6@__TYPESCRIPT6_VERSION__",
     "vite": "8.1.5",
     "vue": "3.5.0",
-    "vue-router": "4.6.4",
-    "vue-tsc": "3.3.8"
+    "vue-router": "4.5.1",
+    "vue-tsc": "__VUE_TSC_VERSION__"
   }
 }

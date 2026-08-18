@@ -1,8 +1,16 @@
 # Getting started
 
-Snap Motion is currently installed only from a workspace or a reviewed release-candidate tarball.
-It is not on npm. Import the base CSS exactly once; it contains structure and accessibility rules,
-not a product theme.
+The packages remain private until the beta blockers close. A normal external Vue application will
+install only the Vue package; `@snap-motion/core` is its runtime dependency and does not belong in
+the application's manifest unless the application imports core directly:
+
+```sh
+pnpm add @snap-motion/vue@beta
+```
+
+Until publication, use the reviewed `@snap-motion/vue` release-candidate tarball in place of the
+registry specifier. Import the base CSS exactly once; it contains structural and accessibility
+rules, not a product theme.
 
 ```ts
 import "@snap-motion/vue/style.css";
@@ -10,8 +18,12 @@ import "@snap-motion/vue/style.css";
 
 ## Basic carousel
 
-Use stable string IDs. A user action emits `targetChanged`, `requestActiveId`, and
-`update:activeId` when the target is selected, followed by `settled` after physical completion.
+Use stable string IDs. A user action emits `update:activeId` and
+`activeIdRequest(id, { reason })` when the command is accepted. `v-model` immediately accepts the
+update and publishes that ID back through `activeId`; only a confirmed destination emits
+`settled(id, { reason })` after physical completion. If a one-way owner ignores the request,
+semantic state does not change and the mechanics reconcile without a settlement or announcement.
+External prop changes are authoritative and are never echoed through the request events.
 
 ```vue
 <script setup lang="ts">
@@ -44,6 +56,15 @@ const activeId = ref<(typeof ids)[number]>("a");
 </template>
 ```
 
+For route guards or any owner that may delay, refuse, or replace a request, use a one-way prop rather
+than `v-model`. See [immediate and guarded ownership](integration.md#semantic-selection).
+
+Use an exposed `navigateTo(id)` for a new programmatic request. Use `synchronizeTo(id)` only to
+adopt state that the same component already exposes as authoritative. On a controlled high-level
+component, it refuses any ID other than the current prop, so an imperative handle cannot become a
+second state store. Synchronization cancels conflicting interaction without replaying a request or
+live announcement.
+
 `CarouselTrack` accepts logical `startInset` and `endInset` values as numbers in pixels or CSS
 length strings. Use them with a track-measuring strategy when the first and last unequal-width item
 need breathing room or must be centerable; margins do not reliably extend measured scroll geometry.
@@ -60,10 +81,25 @@ export default defineNuxtConfig({
 
 Components do not access browser globals during SSR. Keep a route-provided `activeId` stable on
 the server and client; `useCarouselWindow` will include that item in its deterministic SSR window.
+The components render on the server and hydrate normally; do not wrap them in `ClientOnly`.
+
+## Spatial surfaces
+
+A stacked deck or coverflow rail is one component and typed domain items, with no physics vocabulary
+in the integration:
+
+```vue
+<StackedDeck v-model:active-id="activeId" :items="screens" label="Project screens">
+  <template #card="{ item }">
+    <ProjectScreen :screen="item" />
+  </template>
+</StackedDeck>
+```
 
 ## Next reading
 
 - [Components](components.md)
+- [Spatial surfaces](spatial-surfaces.md)
 - [Composables](composables.md)
 - [Keyboard ownership](keyboard.md)
 - [RTL](rtl.md)

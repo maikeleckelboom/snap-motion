@@ -1,4 +1,3 @@
-import { SnapController, createFixedStageGeometry, type AnimationDriver } from "@snap-motion/core";
 import { Sheet as RootSheet } from "@snap-motion/vue";
 import {
   CarouselPaginationItem,
@@ -7,7 +6,9 @@ import {
   useCarouselWindow,
   useCarouselContext,
   useCarouselMotion,
+  type PublicCarouselContext,
 } from "@snap-motion/vue/carousel";
+import { Coverflow, useCoverflowMotion, type CoverflowHandle } from "@snap-motion/vue/coverflow";
 import { ModalDialog, type CloseReason } from "@snap-motion/vue/dialog";
 import {
   createEnglishSnapMotionMessages,
@@ -16,30 +17,25 @@ import {
 import {
   createEnglishMediaGalleryMessages,
   MediaGalleryDialog,
-  type MediaGalleryCloseReason,
+  type MediaGalleryHandle,
   type MediaGalleryItem,
-  type MediaGalleryNavigationReason,
 } from "@snap-motion/vue/media-gallery";
-import { createMotionDriver, useSnapMotion } from "@snap-motion/vue/motion";
+import {
+  createMotionDriver,
+  useBoundedSpringDriver,
+  useSnapMotion,
+  type NavigationReason,
+} from "@snap-motion/vue/motion";
 import { Sheet, sheetSnapVisibleExtent, type SheetSnapPoint } from "@snap-motion/vue/sheet";
+import {
+  StackedDeck,
+  useStackedDeckMotion,
+  type StackedDeckHandle,
+} from "@snap-motion/vue/stacked-deck";
 import { h, ref } from "vue";
 
 type MediaId = "overview" | "system" | "outcome";
 const ids = ["overview", "system", "outcome"] as const satisfies readonly MediaId[];
-const driver: AnimationDriver = {
-  animate: ({ onComplete }) => {
-    onComplete();
-    return { stop() {} };
-  },
-};
-const geometry = createFixedStageGeometry({ itemIds: ids, viewportSize: 800 });
-const controller = new SnapController({
-  anchors: geometry.anchors,
-  bounds: geometry.bounds,
-  driver,
-  initialTargetId: "system",
-});
-void controller;
 
 const sheetPoints = [
   {
@@ -72,6 +68,13 @@ void useCarouselWindow(ids, ref<MediaId>("overview"), {
   preloadAfter: 2,
 });
 void useCarouselContext<MediaId>;
+declare const publicCarousel: PublicCarouselContext<MediaId>;
+publicCarousel.navigateTo("overview");
+publicCarousel.next();
+// @ts-expect-error public navigation owns its programmatic provenance.
+publicCarousel.navigateTo("overview", "drag");
+// @ts-expect-error next is semantically fixed and cannot be relabelled.
+publicCarousel.next("picker");
 void useCarouselMotion<MediaId>;
 void useSnapMotion<MediaId>;
 void createMotionDriver;
@@ -82,18 +85,66 @@ const galleryItems = [
     id: "preview",
     title: "Preview",
     alt: "Preview media",
-    previewSrc: "/preview.jpg",
-    width: 1_600,
-    height: 1_000,
+    preview: { src: "/preview.jpg", width: 800, height: 500 },
+    full: { src: "/full.jpg", width: 1_600, height: 1_000 },
   },
 ] as const satisfies readonly MediaGalleryItem[];
 void h(MediaGalleryDialog, { items: galleryItems, open: false });
 void createEnglishMediaGalleryMessages({ closeGallery: "Sluit galerij" });
-const mediaCloseReason: MediaGalleryCloseReason = "backdrop";
-const mediaNavigationReason: MediaGalleryNavigationReason = "swipe";
+const mediaCloseReason: CloseReason = "scrim";
+const mediaNavigationReason: NavigationReason = "drag";
 void mediaCloseReason;
 void mediaNavigationReason;
+type GalleryId = (typeof galleryItems)[number]["id"];
+const galleryHandle = ref<MediaGalleryHandle<GalleryId>>();
+const galleryActiveId: GalleryId | undefined = galleryHandle.value?.activeId;
+const galleryNextAccepted: boolean | undefined = galleryHandle.value?.next();
+const galleryPreviousAccepted: boolean | undefined = galleryHandle.value?.previous();
+void galleryActiveId;
+void galleryNextAccepted;
+void galleryPreviousAccepted;
+galleryHandle.value?.navigateTo("preview");
+galleryHandle.value?.requestClose();
+// @ts-expect-error the gallery handle retains the item collection's semantic ID union.
+galleryHandle.value?.navigateTo("missing");
 
-// @ts-expect-error Semantic IDs are strings.
-createFixedStageGeometry({ itemIds: [1, 2], viewportSize: 800 });
-createFixedStageGeometry({ itemIds: [] as const, viewportSize: 800 });
+// The anti-glue contract: typed domain items, inferred slot state, and no casts anywhere.
+const screens = [
+  { id: "overview", title: "Overview" },
+  { id: "system", title: "System" },
+  { id: "outcome", title: "Outcome" },
+] as const;
+type ScreenId = (typeof screens)[number]["id"];
+const deckHandle = ref<StackedDeckHandle<ScreenId>>();
+const railHandle = ref<CoverflowHandle<ScreenId>>();
+// `h()` erases a generic component's type parameters down to their constraints, so these calls
+// only certify that the render-function path accepts the props at all. Whether `items` alone still
+// infers the consumer's own item type and semantic ID union is a *template* question, and it is
+// answered by Inference.vue and InferenceRejection.vue under `vue-tsc`.
+void h(StackedDeck, { items: screens, activeId: "system", label: "Project screens" });
+void h(Coverflow, { items: screens, activeId: "system" });
+void h(StackedDeck, { items: screens });
+void deckHandle.value?.navigateTo("outcome");
+void railHandle.value?.synchronizeTo("overview");
+// A product handle publishes read-only telemetry, never a controller to navigate around it with.
+const deckPhase: string | undefined = deckHandle.value?.diagnostics.phase;
+void deckPhase;
+// @ts-expect-error the high-level handle deliberately exposes no raw motion surface.
+void deckHandle.value?.motion;
+// @ts-expect-error a semantic ID this collection does not contain is not a destination.
+void deckHandle.value?.navigateTo("chapter-one");
+void useStackedDeckMotion<ScreenId>;
+void useCoverflowMotion<ScreenId>;
+void useBoundedSpringDriver;
+
+// The deck states its one-card invariant in the type system: the anchor skip it fixes is simply
+// not a thing a consumer can pass, rather than a value it accepts and silently overwrites.
+// @ts-expect-error the deck fixes its own anchor skip, so this is not part of its release policy.
+void h(StackedDeck, { items: screens, releasePolicy: { maxAnchorSkip: 3 } });
+// @ts-expect-error a product method names its own operation; a caller cannot relabel it.
+void deckHandle.value?.next("drag");
+// @ts-expect-error the same holds for an imperative request, which is always `programmatic`.
+void railHandle.value?.navigateTo("system", "picker");
+
+// @ts-expect-error A stacked deck item must carry the semantic ID it is keyed by.
+void h(StackedDeck, { items: [{ title: "No ID" }] });

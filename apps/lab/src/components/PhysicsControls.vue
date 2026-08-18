@@ -4,6 +4,11 @@ import type { LabPhysicsSettings, LabPresetName } from "@/fixtures/lab-types";
 const props = defineProps<{
   modelValue: LabPhysicsSettings;
   preset: LabPresetName;
+  /**
+   * Controls the active surface does not consume, keyed by setting and explained in place. The
+   * stored value stays untouched so every other surface keeps using it.
+   */
+  notApplicable?: Partial<Record<keyof LabPhysicsSettings, string>>;
 }>();
 
 const emit = defineEmits<{
@@ -117,11 +122,20 @@ function updatePreset(event: Event) {
     </label>
 
     <div class="physics-fields">
-      <label v-for="control in controls" :key="control.key" class="physics-field">
+      <label
+        v-for="control in controls"
+        :key="control.key"
+        class="physics-field"
+        :class="{ inapplicable: notApplicable?.[control.key] !== undefined }"
+      >
         <span>{{ control.label }}</span>
         <span class="physics-value tabular">
           <input
+            :aria-describedby="
+              notApplicable?.[control.key] === undefined ? undefined : `physics-note-${control.key}`
+            "
             :aria-label="control.label"
+            :disabled="notApplicable?.[control.key] !== undefined"
             :max="control.max"
             :min="control.min"
             :step="control.step"
@@ -131,6 +145,14 @@ function updatePreset(event: Event) {
           />
           <small v-if="control.unit">{{ control.unit }}</small>
         </span>
+        <small
+          v-if="notApplicable?.[control.key] !== undefined"
+          :id="`physics-note-${control.key}`"
+          class="physics-note"
+          :data-testid="`physics-note-${control.key}`"
+        >
+          {{ notApplicable[control.key] }}
+        </small>
       </label>
     </div>
   </section>
@@ -217,6 +239,30 @@ input {
 .physics-value small {
   color: var(--muted);
   font-size: 0.68rem;
+}
+
+.physics-field.inapplicable {
+  grid-template-areas: "label value" "note note";
+}
+
+.physics-field.inapplicable > :first-child {
+  grid-area: label;
+}
+
+.physics-field.inapplicable > .physics-value {
+  grid-area: value;
+}
+
+.physics-note {
+  grid-area: note;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+input:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 @media (max-width: 46rem) {

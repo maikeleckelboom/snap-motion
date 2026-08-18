@@ -1,0 +1,34 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "target": "ES2023",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "browser-change-classifier.test.ts",
+    "browser-change-classifier.ts",
+    "browser-ci-workflow.test.ts",
+    "check-release-candidate-history.ts",
+    "classify-browser-change.ts",
+    "pack-packages.ts",
+    "packedArchive.ts",
+    "pnpm-cli.test.ts",
+    "pnpm-cli.ts",
+    "release-candidate-history.test.ts",
+    "release-candidate-history.ts",
+    "release-candidate-lifecycle.test.ts",
+    "release-candidate-lifecycle.ts",
+    "release-candidate-record.ts",
+    "release-candidate-verifier.test.ts",
+    "release-candidate-verifier.ts",
+    "release-candidate-workflow.test.ts",
+    "release-candidate.ts",
+    "release-package-assembly.test.ts",
+    "release-package-assembly.ts",
+    "verify-release-candidate.ts",
+    "verify-packages.ts",
+    "verifyPackagesBrowser.ts"
+  ]
+}

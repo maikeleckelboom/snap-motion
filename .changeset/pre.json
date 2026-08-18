@@ -1,0 +1,31 @@
+{
+  "mode": "pre",
+  "tag": "beta",
+  "initialVersions": {
+    "@snap-motion/lab": "0.0.0",
+    "@snap-motion/nuxt-fixture": "0.0.0",
+    "@snap-motion/router-fixture": "0.0.0",
+    "@snap-motion/core": "0.1.0-beta.0",
+    "@snap-motion/vue": "0.1.0-beta.0"
+  },
+  "changesets": [
+    "beta-eight-responsive-retry",
+    "beta-nine-closure",
+    "beta-seven-integration-hardening",
+    "beta-six-gallery-dogfood",
+    "external-consumer-ready",
+    "final-beta-correctness",
+    "final-dogfood-handoff",
+    "final-pre-integration-polish",
+    "multi-edge-sheet",
+    "one-card-interaction-envelope",
+    "public-api-contract-freeze",
+    "public-beta-candidate",
+    "rigid-coverflow-panels",
+    "spatial-surface-coherence",
+    "spatial-surface-hardening",
+    "spatial-surface-products",
+    "stacked-deck-shuffle",
+    "strict-controlled-authority"
+  ]
+}
