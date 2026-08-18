@@ -165,7 +165,12 @@ const SCREEN_ASPECT_RATIO = 1.6;
  */
 const PILE_SLOT_DECAY = 0.7;
 const PILE_SCALE_STEP = 0.05;
-const PILE_ROTATE = 0.62;
+/**
+ * The nearest hidden shell needs a visibly independent outer edge. Its angle is intentionally
+ * larger than a decorative lean, while depth growth is bounded separately in `setPilePose` so a
+ * long deck remains a compact stack rather than becoming a fan.
+ */
+const PILE_ROTATE = 2;
 const TOP_ROTATE = 4;
 const TOP_SCALE_REDUCTION = 0.11;
 const TOP_LAYER = 500;
@@ -196,13 +201,18 @@ const TUNING_NUMBER_KEYS = [
   "topScaleReduction",
 ] as const;
 
+/**
+ * The shallow vertical step works with scale recession and rotation: the outer bottom corner
+ * crosses the top card while the inner corner remains occluded. The resulting wedge identifies a
+ * second rectangle without outlining the foreground card's whole bottom edge.
+ */
 const PROFILE_VALUES: Record<StackedDeckProfile, ProfileValues> = {
   wide: {
     cardWidthRatio: 0.61,
     cardWidthMax: 680,
     motionPitchRatio: 0.88,
     pileOffsetXRatio: 0.05,
-    pileOffsetYRatio: 0.04,
+    pileOffsetYRatio: 0.026,
     topDropYRatio: 0.075,
   },
   medium: {
@@ -210,7 +220,7 @@ const PROFILE_VALUES: Record<StackedDeckProfile, ProfileValues> = {
     cardWidthMax: 520,
     motionPitchRatio: 0.86,
     pileOffsetXRatio: 0.051,
-    pileOffsetYRatio: 0.041,
+    pileOffsetYRatio: 0.027,
     topDropYRatio: 0.072,
   },
   compact: {
@@ -218,7 +228,7 @@ const PROFILE_VALUES: Record<StackedDeckProfile, ProfileValues> = {
     cardWidthMax: 300,
     motionPitchRatio: 0.8,
     pileOffsetXRatio: 0.053,
-    pileOffsetYRatio: 0.043,
+    pileOffsetYRatio: 0.028,
     topDropYRatio: 0.068,
   },
 };
@@ -615,10 +625,13 @@ function setPilePose(pose: MutableStackedDeckPose, slot: number, tuning: Stacked
   }
   const side = slot < 0 ? -1 : 1;
   const spread = pileSlotSpread(distance);
+  const rotationSpread = Math.sqrt(spread);
   pose.translateX = side * tuning.pileOffsetX * spread;
   pose.translateY = tuning.pileOffsetY * spread;
   pose.scale = 1 - tuning.pileScaleStep * spread;
-  pose.rotate = side * tuning.pileRotate * spread;
+  // Angular separation grows more slowly than positional depth. The first exposed corner stays
+  // legible, but successive shells converge instead of accumulating fan-like rotation.
+  pose.rotate = side * tuning.pileRotate * rotationSpread;
   pose.opacity = 1;
   pose.layer = Math.round(TARGET_LAYER - distance * PILE_LAYER_STEP);
   pose.role = "hidden";

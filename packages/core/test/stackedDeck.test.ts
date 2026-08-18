@@ -212,6 +212,21 @@ function exposedEdge(pose: { translateX: number; scale: number }, tuning = WIDE_
   return Math.abs(pose.translateX) + (tuning.cardWidth * pose.scale) / 2 - tuning.cardWidth / 2;
 }
 
+function transformedCorner(
+  pose: Pick<StackedDeckPose, "rotate" | "scale" | "translateX" | "translateY">,
+  tuning: StackedDeckTuning,
+  horizontal: -1 | 1,
+  vertical: -1 | 1,
+) {
+  const radians = (pose.rotate * Math.PI) / 180;
+  const x = (horizontal * tuning.cardWidth * pose.scale) / 2;
+  const y = (vertical * tuning.cardHeight * pose.scale) / 2;
+  return {
+    x: pose.translateX + x * Math.cos(radians) - y * Math.sin(radians),
+    y: pose.translateY + x * Math.sin(radians) + y * Math.cos(radians),
+  };
+}
+
 describe("stacked deck thickness projection", () => {
   it("describes one non-dominant shell per remaining screen on its ordered side", () => {
     // Position is legible from thickness alone: nothing behind the first screen, nothing ahead of
@@ -262,6 +277,33 @@ describe("stacked deck thickness projection", () => {
     );
   });
 
+  it("exposes a mirrored outer-corner wedge instead of a parallel bottom outline", () => {
+    const tunings = [
+      resolveStackedDeckTuning({ stageWidth: 360, stageHeight: 420 }),
+      resolveStackedDeckTuning({ stageWidth: 768, stageHeight: 520 }),
+      WIDE_TUNING,
+    ];
+    for (const tuning of tunings) {
+      const pile = resolvePile(traversal(), 5, tuning);
+      for (const side of [-1, 1] as const) {
+        const nearest = pile.find((layer) => layer.slot === side)!;
+        const innerSide = side === 1 ? -1 : 1;
+        const topOuter = transformedCorner(nearest, tuning, side, -1);
+        const bottomOuter = transformedCorner(nearest, tuning, side, 1);
+        const bottomInner = transformedCorner(nearest, tuning, innerSide, 1);
+
+        // The whole outer edge clears the foreground card and visibly changes angle along its run.
+        expect(side * topOuter.x).toBeGreaterThan(tuning.cardWidth / 2);
+        expect(side * bottomOuter.x).toBeGreaterThan(tuning.cardWidth / 2);
+        expect(side * (topOuter.x - bottomOuter.x)).toBeGreaterThan(tuning.cardWidth * 0.015);
+        // Only the outer part of the bottom edge emerges. A full-width parallel strip would read as
+        // the foreground card's border or shadow instead of another shell's transformed corner.
+        expect(bottomOuter.y).toBeGreaterThan(tuning.cardHeight / 2);
+        expect(bottomInner.y).toBeLessThan(tuning.cardHeight / 2);
+      }
+    }
+  });
+
   it("stays a compact stack of exposed edges rather than a horizontal rail", () => {
     const pile = resolvePile();
     for (const layer of pile) {
@@ -295,6 +337,10 @@ describe("stacked deck thickness projection", () => {
     expect(Math.max(...pile.map((layer) => exposedEdge(layer)))).toBeLessThan(
       WIDE_TUNING.cardWidth * 0.07,
     );
+    const near = pile.find((layer) => layer.slot === 1)!;
+    const farther = pile.find((layer) => layer.slot === 2)!;
+    expect(farther.rotate / near.rotate).toBeGreaterThan(1);
+    expect(farther.rotate / near.rotate).toBeLessThan(farther.translateX / near.translateX);
     // The spread converges, so even a very deep deck cannot walk off the stage or invert.
     const deep = resolvePile(traversal({ settledIndex: 0, visualTopIndex: 0 }), 40);
     expect(Math.max(...deep.map((layer) => exposedEdge(layer)))).toBeLessThan(
