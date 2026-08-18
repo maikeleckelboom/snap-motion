@@ -249,6 +249,15 @@ function pileShadow(depth: number): number {
   return clamp(0.58 - (depth - 1) * 0.13, 0.24, 0.58);
 }
 
+/**
+ * Relative cast-shadow elevation while two cards pass. Both cards meet the depth crossover with no
+ * cast shadow, so changing their discrete paint order cannot move one shadow across the other card.
+ * The smooth symmetric envelope has zero slope at the crossover and depends on progress alone.
+ */
+function crossoverElevation(progress: number): number {
+  return smoothstep(Math.abs(progress * 2 - 1));
+}
+
 function assertItemCount(itemCount: number): void {
   assertNonNegative(itemCount, "itemCount");
   if (!Number.isInteger(itemCount)) throw new RangeError("itemCount must be an integer");
@@ -267,7 +276,7 @@ function profileForWidth(stageWidth: number): StackedDeckProfile {
   return "compact";
 }
 
-/** Pure responsive tuning for the direct-manipulation deck compositor. */
+/** Pure responsive tuning for the direct-manipulation deck projection. */
 export function resolveStackedDeckTuning(
   options: ResolveStackedDeckTuningOptions,
 ): StackedDeckTuning {
@@ -639,6 +648,7 @@ function setExchangePair(
   const directRatio = (tuning.motionPitch - initialPileDerivative) / tuning.cardWidth;
   const detour = exchangeDetour(progress, directRatio);
   const targetDominant = progress >= AUTHORITY_MIDPOINT;
+  const exchangeElevation = crossoverElevation(progress);
 
   outgoing.translateX -= direction * tuning.cardWidth * detour;
   outgoing.translateY += tuning.topDropY * middle;
@@ -647,14 +657,14 @@ function setExchangePair(
   outgoing.opacity = 1;
   outgoing.layer = targetDominant ? TARGET_LAYER - 1 : TOP_LAYER;
   outgoing.role = "top";
-  outgoing.shadowStrength = mix(1, pileShadow(1), promotion);
+  outgoing.shadowStrength = mix(1, pileShadow(1), promotion) * exchangeElevation;
   outgoing.visible = true;
   outgoing.interactive = false;
 
   target.opacity = 1;
   target.layer = targetDominant ? TOP_LAYER : TARGET_LAYER;
   target.role = "target";
-  target.shadowStrength = mix(pileShadow(1), 1, promotion);
+  target.shadowStrength = mix(pileShadow(1), 1, promotion) * exchangeElevation;
   target.visible = true;
   target.interactive = false;
 }

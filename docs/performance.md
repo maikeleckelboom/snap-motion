@@ -48,15 +48,22 @@ ceilings. The tight unchanged base-CSS margin remains a useful regression signal
 reason to widen unrelated budgets.
 
 `applyEnvelopeElasticity` takes its active sides as scalars rather than an options object, so the
-per-pointermove constraint path allocates nothing. Stacked Deck validates a component pile layer by
-reading the item at the projected index and comparing its ID before rendering; it builds no item map,
-parallel view projection, or per-layer wrapper objects. The lab explicitly invalidates Vue's
-shallow signals after reuse, applies compositor hints only to visible cards, and gives hidden cards
-`will-change: auto` with no pointer input.
+per-pointermove constraint path allocates nothing. Stacked Deck intentionally keeps one persistent
+shell and one `#card` subtree per item. Its DOM, frame projection, and style updates are therefore
+linear in item count. The high-level component does not observe the advanced `pileLayers` projection,
+so it does not also allocate that array each frame; custom composable consumers pay that linear cost
+only when they observe it. Explicit `will-change: transform` promotion is bounded to the exchanging
+pair while moving and returns to zero cards at rest, avoiding one forced GPU layer per parked shell.
+
+This is a small-deck physical model, not virtualization. There is no arbitrary hard item cap, but
+large collections retain the full slotted content and update every shell pose. Consumers using more
+than a compact card set should profile their real content, memory, paint, and input latency instead of
+assuming the bounded promotion count makes the whole surface constant-cost.
 
 ## Manual profiling
 
 For real 60/120 Hz certification, use a physical 120 Hz display and Chrome/Firefox performance
 tools. Record main-thread long tasks, layout reads, Vue updates, retained listeners, and active Motion
-playback while dragging, interrupting springs, resizing, opening dialogs repeatedly, and running a
-100-item window. Update architecture only when traces show unnecessary frame-level reactive work.
+playback while dragging, interrupting springs, resizing, opening dialogs repeatedly, and exercising
+an intentionally large Stacked Deck. Update architecture only when traces show unnecessary
+frame-level reactive work.

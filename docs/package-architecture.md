@@ -89,8 +89,8 @@ modules but are no longer package exports.
 
 - Component and composable: `StackedDeck`, `useStackedDeckMotion`.
 - Types: `StackedDeckCardState`, `StackedDeckHandle`, `StackedDeckPileLayer`,
-  `StackedDeckPileLayerSlotState`, `StackedDeckPose`, `StackedDeckRole`,
-  `UseStackedDeckMotionOptions`, `UseStackedDeckMotionReturn`.
+  `StackedDeckPose`, `StackedDeckRole`, `UseStackedDeckMotionOptions`,
+  `UseStackedDeckMotionReturn`.
 
 ### `@snap-motion/vue/sheet`
 

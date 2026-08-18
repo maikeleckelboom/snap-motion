@@ -4,7 +4,7 @@ const mediaPreviewSpec = "media-preview.spec.ts";
 const showcaseSmokeSpec = "showcase-smoke.spec.ts";
 const stackedDeckSpec = "stacked-deck.spec.ts";
 const stackedDeckWebKitSmoke =
-  /real pointer movement maps|held exchange keeps persistent cards|successive rendered frames preserve one opaque physical card|one held gesture cannot discard|a re-grab during settlement rebases|an accepted arrow from the inspection control|cancel, lost capture, edge elasticity|inspection, visual semantics, and accessibility/;
+  /real pointer movement maps|high-contrast exchange changes depth|successive rendered frames preserve the physical exchange shells|one held gesture cannot discard|a re-grab during settlement rebases|an accepted arrow from the inspection control|cancel, lost capture, edge elasticity|inspection, visual semantics, and accessibility/;
 const testPort = process.env.SNAP_MOTION_TEST_PORT ?? "4173";
 const testUrl = `http://127.0.0.1:${testPort}`;
 

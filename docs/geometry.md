@@ -162,8 +162,8 @@ and cannot make incoherent geometry look like anything.
 
 ## Stacked deck
 
-The deck is a physical pile with one authoritative card at its centre and one restrained decorative
-layer for every screen it is not drawing, fanned to the side that screen's index lies on. It reuses
+The deck is a physical pile with one authoritative card at its centre and one persistent shell for
+every item, fanned to the side that item's index lies on. It reuses
 `createCoverflowGeometry` and `useCarouselMotion` only for generic scalar gesture,
 constraint, velocity, and settlement mechanics. It does not reuse the rail renderer. No card is
 assigned a horizontal slot from its index.
@@ -176,15 +176,15 @@ residual adjacent segment. `resolveStackedDeckFrame` projects that segment into 
 `hidden` roles. No active segment can have a non-adjacent target.
 
 The public Deck root owns layout containment without paint containment. It keeps `overflow: visible`,
-so transformed cards and pile layers stay visually intact throughout an exchange without
+so transformed card shells stay visually intact throughout an exchange without
 contributing transient width to the document. This boundary belongs to the package because the
 package owns those transforms; a consumer must not need to clip the surface or contain its host.
 
 ### Deck thickness
 
-`resolveStackedDeckPile` draws one decorative layer for every screen the frame does not already draw,
-on the side of the current card that screen sits on. The deck is therefore exactly as thick as what
-is left, and its shape says where you are:
+Every item keeps one persistent physical shell. At rest the current shell is centred and each other
+shell is placed on the side where that item's index lies. The deck is therefore exactly as thick as
+what is left, and its shape says where you are:
 
 ```text
 index 0 of 5    │▐▐▐▐        four ahead, none behind
@@ -192,33 +192,30 @@ index 2 of 5  ▌▌│▐▐          an even split
 index 4 of 5  ▌▌▌▌│          none ahead, four behind
 ```
 
-Every layer is placed from `index - centre` alone, where `centre` is the continuous position of the
+Every non-dominant shell is placed from `index - centre` alone, where `centre` is the continuous position of the
 card at the middle of the deck. The topology is therefore item ordering, not gesture direction: a
 reversal retraces the same slots rather than mirroring the deck, and travelling either way from one
 position lays out an exact mirror of the other.
 
 An exchange is one physical event. The adjacent target rises to centre out of the nearest slot on
-its own side. The outgoing screenshot fades out as a whole — it is never cut — and its decorative
-material arrives in the nearest slot on the far side on exactly that envelope, so one card is always
-fully accounted for between your hand and the deck. A `Next` therefore moves one card from the right stack to the left, and `Previous`
-mirrors it because the ordering genuinely is reversed. Because `centre` is continuous, the whole
-deck slides across by one slot rather than snapping, and a reversal part-way through an exchange
-retraces it.
+its own side while the outgoing shell follows a symmetric lateral detour into the nearest slot on the
+far side. Both remain opaque and retain their own material throughout. Their transformed bodies clear
+one another at the discrete depth crossover; the two cast-shadow elevations reach zero there so the
+paint-order swap cannot project one card's shadow across the other card's edge. A `Next` therefore
+moves one card from the right stack to the left, and `Previous` mirrors it because the ordering
+genuinely is reversed. Because `centre` is continuous, the whole deck slides across by one slot rather
+than snapping, and a reversal part-way through an exchange retraces it exactly.
 
 Slots are a geometric series rather than a straight multiple of one step: the nearest slot is
 exactly one step out — where every target rises from — while the total spread converges, so a deck
 of any length shows exposed edges and depth rather than widening into a horizontal rail.
 
-Each layer retains the ordered source index it came from as `StackedDeckPilePose.itemIndex`, so a
-renderer can associate the same ordered item with the topology that resolved its slot. That
-structural provenance does not name a semantic card, expose application metadata from core, or grant
-activation, selection, focus, hit testing, or accessibility ownership.
-
-The Vue projection uses that associated item's stable ID for decorative node lifetime and keeps the
-continuous slot as placement state. When a target leaves the pile, every remaining item's existing
-node therefore moves into its newly resolved slot; a physical rank is never repainted with another
-item's material. The target still changes from decorative to content-bearing representation at the
-same physical pose, without adding a second semantic card.
+`resolveStackedDeckPile` remains an advanced, read-only projection of the non-dominant shells. Each
+pose retains the ordered source index as `StackedDeckPilePose.itemIndex`, so a custom renderer can
+associate the same item with the topology that resolved its slot. The Vue composable adds that item's
+stable ID and data. Neither layer creates a second representation or grants activation, selection,
+focus, hit testing, or accessibility ownership; the high-level component renders only the persistent
+`#card` shell.
 
 ### One card per interaction
 
@@ -339,9 +336,9 @@ the same controller position and traversal resolver.
 
 ### Visual and accessibility invariants
 
-At rest only one semantic card is current and interactive. Decorative pile layers are hidden from
-the accessibility tree and expose only small translated edges; non-participating content cards never
-cross the stage. During motion, visible caption, counter, pagination emphasis, and `aria-current`
+At rest only one semantic card is current and interactive. Parked physical shells are hidden from
+the accessibility tree and expose only small translated edges; only the exchanging pair crosses the
+stage. During motion, visible caption, counter, pagination emphasis, and `aria-current`
 follow the visual top only after a completed handoff. Durable selection remains unchanged until
 controller idle, inspection stays disabled, and the live region announces only the final settled
 card. At idle the visual top and settled index must agree exactly.

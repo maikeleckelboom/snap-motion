@@ -2,7 +2,6 @@ export { default as StackedDeck } from "./components/StackedDeck.vue";
 export type {
   StackedDeckCardState,
   StackedDeckPileLayer,
-  StackedDeckPileLayerSlotState,
   StackedDeckPose,
   StackedDeckRole,
 } from "./stacked-deck-contracts";

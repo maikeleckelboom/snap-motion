@@ -22,7 +22,7 @@ function traversal(overrides: Partial<StackedDeckTraversal> = {}): StackedDeckTr
   return {
     settledIndex: 2,
     visualTopIndex: 2,
-    // The compositor never reads authority, so it defaults to the card that still owns the surface.
+    // The physical projection never reads authority, so it defaults to the segment-origin card.
     authoritativeIndex: overrides.visualTopIndex ?? 2,
     segmentOriginIndex: overrides.visualTopIndex ?? 2,
     segmentTargetIndex: null,
@@ -91,8 +91,12 @@ function resolveBounded(
   );
 }
 
-function span(pose: StackedDeckPose, tuning: StackedDeckTuning) {
-  const half = (tuning.cardWidth * pose.scale) / 2;
+function transformedHorizontalSpan(pose: StackedDeckPose, tuning: StackedDeckTuning) {
+  const radians = (pose.rotate * Math.PI) / 180;
+  const half =
+    (Math.abs(Math.cos(radians)) * tuning.cardWidth * pose.scale +
+      Math.abs(Math.sin(radians)) * tuning.cardHeight * pose.scale) /
+    2;
   return { left: pose.translateX - half, right: pose.translateX + half, width: half * 2 };
 }
 
@@ -148,8 +152,8 @@ describe("stacked deck tuning", () => {
       expect(ratio).toBeGreaterThan(0.75);
       expect(ratio).toBeLessThan(0.95);
       const crossing = resolveFrame(segment(2, 1, 0.5), 5, tuning);
-      const outgoing = span(crossing.poses[2]!, tuning);
-      const target = span(crossing.poses[3]!, tuning);
+      const outgoing = transformedHorizontalSpan(crossing.poses[2]!, tuning);
+      const target = transformedHorizontalSpan(crossing.poses[3]!, tuning);
       expect(
         Math.min(outgoing.right, target.right) - Math.max(outgoing.left, target.left),
       ).toBeLessThanOrEqual(0);
@@ -176,7 +180,8 @@ describe("stacked deck tuning", () => {
     const frame = resolveFrame(segment(2, 1, 0.6), 5, reduced);
     expect(frame.poses[2]!.translateX).toBeCloseTo(full.poses[2]!.translateX);
     expect(frame.poses.every((pose) => pose.rotate === 0)).toBe(true);
-    expect(frame.poses.every((pose) => pose.visible && pose.opacity === 1)).toBe(true);
+    expect(frame.poses[2]).toMatchObject({ opacity: 1, visible: true });
+    expect(frame.poses[3]).toMatchObject({ opacity: 1, visible: true });
     expect(frame.poses[2]!.translateY).toBeLessThan(full.poses[2]!.translateY);
     expect(frame.poses[2]!.scale).toBeGreaterThan(full.poses[2]!.scale);
   });
@@ -202,13 +207,13 @@ function mirrorOf<T>(source: readonly T[], read: (layer: T) => number) {
   return source.map((_unused, index) => -read(source[source.length - 1 - index]!));
 }
 
-/** Exposed edge of a layer beyond the top card, which is all a compact deck ever shows of it. */
+/** Exposed edge of a parked shell beyond the top card, which is all a compact deck shows of it. */
 function exposedEdge(pose: { translateX: number; scale: number }, tuning = WIDE_TUNING) {
   return Math.abs(pose.translateX) + (tuning.cardWidth * pose.scale) / 2 - tuning.cardWidth / 2;
 }
 
-describe("stacked deck thickness", () => {
-  it("shows one decorative pile layer per remaining screen, on the side that screen sits on", () => {
+describe("stacked deck thickness projection", () => {
+  it("describes one non-dominant shell per remaining screen on its ordered side", () => {
     // Position is legible from thickness alone: nothing behind the first screen, nothing ahead of
     // the last, and an even split in the middle. The deck always accounts for every screen exactly
     // once, whatever its length.
@@ -319,7 +324,6 @@ describe("stacked deck thickness", () => {
         const frame = resolveFrame(segment(2, direction, progress));
         const activePile = resolvePile(segment(2, direction, progress));
         expect(activePile).toHaveLength(4);
-        expect(frame.poses.every((pose) => pose.visible && pose.opacity === 1)).toBe(true);
         for (const projection of activePile) {
           expect(physicalValues(projection)).toEqual(
             physicalValues(frame.poses[projection.itemIndex]!),
@@ -542,7 +546,6 @@ describe("segment-local stacked deck traversal", () => {
       expect(sample.signedLocalDistance).toBeGreaterThan(0);
     }
     const overdrag = resolveFrame({ ...samples.at(-1)! });
-    expect(overdrag.poses.every((pose) => pose.visible && pose.opacity === 1)).toBe(true);
     expect(overdrag.poses.filter((pose) => pose.role === "top")).toHaveLength(1);
     expect(overdrag.poses[3]).toMatchObject({ role: "top", opacity: 1 });
   });
@@ -608,10 +611,9 @@ describe("segment-local stacked deck traversal", () => {
 });
 
 describe("stacked deck persistent physical cards", () => {
-  it("rests as one interactive top card over an opaque compact pile", () => {
+  it("rests as one interactive top card over compact persistent shells", () => {
     const frame = resolveFrame();
-    expect(frame.poses.filter((pose) => pose.visible)).toHaveLength(5);
-    expect(frame.poses.every((pose) => pose.opacity === 1)).toBe(true);
+    expect(frame.poses).toHaveLength(5);
     expect(frame.poses[2]).toMatchObject({
       translateX: 0,
       translateY: 0,
@@ -642,33 +644,44 @@ describe("stacked deck persistent physical cards", () => {
     expect(firstStep).toBeLessThan(WIDE_TUNING.motionPitch * 1.2);
   });
 
-  it("keeps one persistent opaque pose per item throughout the exchange", () => {
+  it("keeps one pose per item while the exchanging pair stays opaque", () => {
     for (const direction of [-1, 1] as const) {
       for (const progress of [0.0001, ...SEGMENT_SAMPLES, 1]) {
         const frame = resolveFrame(segment(2, direction, progress), 9);
         expect(frame.poses).toHaveLength(9);
-        expect(frame.poses.every((pose) => pose.visible && pose.opacity === 1)).toBe(true);
         expect(frame.poses.filter((pose) => pose.interactive)).toHaveLength(0);
-        expect(frame.poses[2]).toMatchObject({ role: "top" });
-        expect(frame.poses[2 + direction]).toMatchObject({ role: "target" });
+        expect(frame.poses[2]).toMatchObject({ opacity: 1, role: "top", visible: true });
+        expect(frame.poses[2 + direction]).toMatchObject({
+          opacity: 1,
+          role: "target",
+          visible: true,
+        });
         expect(frame.poses.filter((pose) => pose.layer === 500)).toHaveLength(1);
       }
     }
   });
 
-  it("changes depth only while the two physical cards are spatially disjoint", () => {
+  it("changes depth only with transformed-body clearance and no crossing cast shadow", () => {
     for (const direction of [-1, 1] as const) {
       const before = resolveFrame(segment(2, direction, 0.4999));
       const crossing = resolveFrame(segment(2, direction, 0.5));
       const after = resolveFrame(segment(2, direction, 0.5001));
-      const outgoingSpan = span(crossing.poses[2]!, WIDE_TUNING);
-      const targetSpan = span(crossing.poses[2 + direction]!, WIDE_TUNING);
+      const outgoingSpan = transformedHorizontalSpan(crossing.poses[2]!, WIDE_TUNING);
+      const targetSpan = transformedHorizontalSpan(crossing.poses[2 + direction]!, WIDE_TUNING);
       expect(outgoingSpan.right <= targetSpan.left || targetSpan.right <= outgoingSpan.left).toBe(
         true,
       );
       expect(before.poses[2]!.layer).toBeGreaterThan(before.poses[2 + direction]!.layer);
       expect(after.poses[2]!.layer).toBeLessThan(after.poses[2 + direction]!.layer);
-      expect(crossing.poses.every((pose) => pose.opacity === 1)).toBe(true);
+      expect(crossing.poses[2]!.shadowStrength).toBe(0);
+      expect(crossing.poses[2 + direction]!.shadowStrength).toBe(0);
+      for (const progress of [0.45, 0.47, 0.49, 0.5, 0.51, 0.53, 0.55]) {
+        const frame = resolveFrame(segment(2, direction, progress));
+        expect(frame.poses[2]!.shadowStrength).toBeLessThanOrEqual(0.025);
+        expect(frame.poses[2 + direction]!.shadowStrength).toBeLessThanOrEqual(0.025);
+      }
+      expect(crossing.poses[2]!.opacity).toBe(1);
+      expect(crossing.poses[2 + direction]!.opacity).toBe(1);
     }
   });
 
@@ -733,7 +746,6 @@ describe("stacked deck physical continuity", () => {
       const active = resolveTraversal(state, physicalIndex, "settling", 0);
       const frame = resolveFrame({ ...active }, 5, WIDE_TUNING, output);
       expect(frameIsFinite(frame)).toBe(true);
-      expect(frame.poses.every((pose) => pose.visible && pose.opacity === 1)).toBe(true);
       expect(frame.poses.filter((pose) => pose.layer === 500)).toHaveLength(1);
     }
     expect(state.visualTopIndex).toBe(3);

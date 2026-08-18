@@ -73,7 +73,8 @@ describe("stacked deck authority stability", () => {
     // remains present and opaque; stability is not inferred from hiding another representation.
     const afterCrossing = at(2.7);
     expect(afterCrossing.authoritativeIndex).toBe(3);
-    expect(afterCrossing.poses.every((pose) => pose.visible && pose.opacity === 1)).toBe(true);
+    expect(afterCrossing.poses[2]).toMatchObject({ opacity: 1, visible: true });
+    expect(afterCrossing.poses[3]).toMatchObject({ opacity: 1, visible: true });
     expect(afterCrossing.poses[3]!.layer).toBeGreaterThan(afterCrossing.poses[2]!.layer);
     expect(isStackedDeckAuthorityStable(afterCrossing)).toBe(true);
 

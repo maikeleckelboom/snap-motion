@@ -239,13 +239,6 @@ const diagnostics = computed<LabDiagnostics>(() => {
       <template #backdrop>
         <div aria-hidden="true" class="stacked-deck-backdrop" />
       </template>
-      <template #pile-layer="{ item }">
-        <div
-          class="stacked-deck-pile-surface"
-          :class="`tone-${item.tone}`"
-          :data-pile-tone="item.tone"
-        />
-      </template>
       <template #card="card">
         <div
           class="screen-chrome"
@@ -437,33 +430,6 @@ const diagnostics = computed<LabDiagnostics>(() => {
     rgb(15 23 42 / 0) 74%
   );
   pointer-events: none;
-}
-
-/* Compatibility substrate inside each persistent physical card. */
-.stacked-deck-demo :deep(.snap-motion-stacked-deck-pile-layer) {
-  border-radius: 0.8rem;
-  background: linear-gradient(158deg, #fdfefe 0%, #eef1f6 62%, #e4e9f0 100%);
-  overflow: hidden;
-}
-
-.stacked-deck-pile-surface {
-  position: absolute;
-  inset: 0;
-  border: 1px solid rgb(71 85 105 / 0.16);
-  border-radius: inherit;
-  background-color: #fff;
-  background-image: linear-gradient(158deg, #fdfefe 0%, #eef1f6 62%, #e4e9f0 100%);
-}
-
-.stacked-deck-pile-surface.tone-mist {
-  background-color: #f8fafc;
-  background-image: linear-gradient(158deg, #f8fafc 0%, #eef2f6 62%, #e5eaf0 100%);
-}
-
-.stacked-deck-pile-surface.tone-ink {
-  border-color: rgb(255 255 255 / 0.08);
-  background-color: #0f172a;
-  background-image: linear-gradient(158deg, #18243a 0%, #0f172a 62%, #0b1220 100%);
 }
 
 .stacked-deck-demo :deep(.snap-motion-stacked-deck-card-motion) {

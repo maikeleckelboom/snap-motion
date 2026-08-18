@@ -1010,17 +1010,7 @@
   backface-visibility: hidden;
 }
 
-.snap-motion-stacked-deck-card-content,
-.snap-motion-stacked-deck-pile-layer {
+.snap-motion-stacked-deck-card-content {
   position: absolute;
   inset: 0;
-}
-
-.snap-motion-stacked-deck-card-content {
-  z-index: 1;
-}
-
-.snap-motion-stacked-deck-pile-layer {
-  z-index: 0;
-  pointer-events: none;
 }

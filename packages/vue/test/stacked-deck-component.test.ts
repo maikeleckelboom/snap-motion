@@ -1,12 +1,9 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { h, nextTick } from "vue";
 
 import StackedDeck from "../src/stacked-deck/components/StackedDeck.vue";
-import type {
-  StackedDeckCardState,
-  StackedDeckPileLayerSlotState,
-} from "../src/stacked-deck/stacked-deck-contracts";
+import type { StackedDeckCardState } from "../src/stacked-deck/stacked-deck-contracts";
 
 const screens = [
   { id: "overview", title: "Overview" },
@@ -16,7 +13,6 @@ const screens = [
 
 type ScreenId = (typeof screens)[number]["id"];
 type Screen = (typeof screens)[number];
-type PileSlotState = StackedDeckPileLayerSlotState<Screen>;
 
 /** Instantiating the generic component up front is what lets the harness keep the item type. */
 const TypedStackedDeck = StackedDeck<Screen>;
@@ -78,12 +74,9 @@ describe("StackedDeck", () => {
     expect(cards[1]!.attributes("aria-current")).toBe("true");
     expect(cards[1]!.attributes("aria-label")).toBe("System, 2 of 3");
     expect(cards[0]!.attributes("aria-hidden")).toBe("true");
-    // Every card remains its own physical object; only the current card participates in semantics.
+    // Every item owns one persistent shell; only the current card participates in semantics.
     expect(cards[1]!.attributes("data-deck-visible")).toBe("true");
-    expect(cards[0]!.attributes("data-deck-visible")).toBe("true");
-    expect(cards[2]!.attributes("data-deck-visible")).toBe("true");
     expect(cards[1]!.attributes("data-deck-role")).toBe("top");
-    expect(cards.every((card) => card.attributes("style")?.includes("opacity: 1"))).toBe(true);
     expect(wrapper.html()).not.toContain("clip-path");
     expect(
       wrapper
@@ -114,20 +107,23 @@ describe("StackedDeck", () => {
     for (const progress of [0.002, 0.02, 0.05, 0, -0.002, -0.02, -0.05, 0, 0.02, -0.02, 0.02]) {
       window.dispatchEvent(pointerDrag("pointermove", -deck.pitch * progress));
       await nextTick();
-      for (const card of wrapper.findAll(".snap-motion-stacked-deck-card")) {
+      const cards = wrapper.findAll(".snap-motion-stacked-deck-card");
+      for (const card of cards) {
         const id = card.attributes("data-item-id")!;
         expect(card.get(".snap-motion-stacked-deck-card-motion").element).toBe(
           physicalShells.get(id),
         );
-        expect(card.attributes("data-deck-visible")).toBe("true");
-        expect(card.attributes("style")).toContain("opacity: 1");
-        for (const layer of card.findAll(".snap-motion-stacked-deck-pile-layer")) {
-          expect(layer.attributes("data-pile-item-id")).toBe(id);
-          expect(layer.element.parentElement).toBe(
-            card.get(".snap-motion-stacked-deck-card-motion").element,
-          );
-        }
       }
+      const exchangeCards = cards.filter((card) =>
+        ["top", "target"].includes(card.attributes("data-deck-role") ?? ""),
+      );
+      expect(
+        exchangeCards.every(
+          (card) =>
+            card.attributes("data-deck-visible") === "true" &&
+            card.attributes("style")?.includes("opacity: 1"),
+        ),
+      ).toBe(true);
     }
 
     window.dispatchEvent(pointerDrag("pointercancel", 0));
@@ -214,224 +210,36 @@ describe("StackedDeck", () => {
     wrapper.unmount();
   });
 
-  it("keeps visually associated pile layers inert and outside slide semantics", async () => {
-    const wrapper = mountDeck();
-    await nextTick();
-
-    const layers = wrapper.findAll(".snap-motion-stacked-deck-pile-layer");
-    expect(layers).toHaveLength(screens.length - 1);
-    for (const layer of layers) {
-      expect(layer.attributes("aria-hidden")).toBe("true");
-      expect(layer.element.hasAttribute("inert")).toBe(true);
-      expect(layer.attributes("role")).toBeUndefined();
-      expect(layer.attributes("tabindex")).toBeUndefined();
-      expect(layer.text()).toBe("");
-    }
-    expect(layers.map((layer) => layer.attributes("data-pile-item-id"))).toEqual([
-      "overview",
-      "outcome",
-    ]);
-    expect(layers.map((layer) => layer.attributes("data-pile-item-index"))).toEqual(["0", "2"]);
-    expect(new Set(layers.map((layer) => layer.attributes("data-pile-side")))).toEqual(
-      new Set(["-1", "1"]),
-    );
-    expect(wrapper.findAll('[aria-roledescription="slide"]')).toHaveLength(screens.length);
-    wrapper.unmount();
-  });
-
-  it("passes only item identity and pile placement to a decorative pile slot", async () => {
-    expectTypeOf<PileSlotState["id"]>().toEqualTypeOf<ScreenId>();
-
-    const wrapper = mount(TypedStackedDeck, {
-      props: {
-        items: screens,
-        label: "Project screens",
-        reducedMotionOverride: true,
-      },
-      slots: {
-        card: () => h("div", { class: "screen" }),
-        "pile-layer": (layer: PileSlotState) =>
-          h(
-            "button",
-            {
-              class: "pile-surface",
-              "data-slot-id": layer.id,
-              "data-slot-index": layer.index,
-              "data-slot-item": layer.item.title,
-              "data-slot-keys": Object.keys(layer).join(","),
-              "data-slot-side": layer.side,
-              "data-slot-slot": layer.slot,
-            },
-            layer.item.title,
-          ),
-      },
+  it("bounds explicit compositor hints to the exchanging pair in a larger deck", async () => {
+    const items = Array.from({ length: 40 }, (_unused, index) => ({
+      id: `screen-${index}`,
+      title: `Screen ${index}`,
+    }));
+    const LargeStackedDeck = StackedDeck<(typeof items)[number]>;
+    const wrapper = mount(LargeStackedDeck, {
+      props: { items, reducedMotionOverride: false },
+      slots: { card: ({ item }) => h("div", { class: "screen" }, item.title) },
     });
     await nextTick();
-
-    const surfaces = wrapper.findAll(".pile-surface");
-    expect(surfaces.map((surface) => surface.attributes("data-slot-id"))).toEqual([
-      "overview",
-      "outcome",
-    ]);
-    expect(surfaces.map((surface) => surface.attributes("data-slot-index"))).toEqual(["0", "2"]);
-    expect(surfaces.map((surface) => surface.attributes("data-slot-item"))).toEqual([
-      "Overview",
-      "Outcome",
-    ]);
-    expect(surfaces.map((surface) => surface.attributes("data-slot-side"))).toEqual(["-1", "1"]);
-    expect(surfaces.map((surface) => surface.attributes("data-slot-slot"))).toEqual(["-1", "1"]);
-    expect(
-      new Set(
-        surfaces.flatMap((surface) => (surface.attributes("data-slot-keys") ?? "").split(",")),
-      ),
-    ).toEqual(new Set(["id", "index", "item", "side", "slot"]));
-    expect(
-      surfaces.every(
-        (surface) => (surface.attributes("data-slot-keys") ?? "").split(",").length === 5,
-      ),
-    ).toBe(true);
-    expect(wrapper.findAll('[aria-roledescription="slide"]')).toHaveLength(screens.length);
-    expect(surfaces.every((surface) => surface.element.closest("[inert]") !== null)).toBe(true);
-
-    await wrapper.setProps({ items: [screens[2], screens[1], screens[0]] });
-    await nextTick();
-    expect(
+    const deck = wrapper.vm as unknown as { pitch: number };
+    const stage = wrapper.get(".snap-motion-stacked-deck").element as HTMLElement;
+    stage.setPointerCapture = () => {};
+    stage.releasePointerCapture = () => {};
+    const promotedCount = () =>
       wrapper
-        .findAll(".pile-surface")
-        .map((surface) => [
-          surface.attributes("data-slot-id"),
-          surface.attributes("data-slot-index"),
-          surface.attributes("data-slot-item"),
-        ]),
-    ).toEqual([
-      ["outcome", "0", "Outcome"],
-      ["overview", "2", "Overview"],
-    ]);
-    wrapper.unmount();
-  });
+        .findAll(".snap-motion-stacked-deck-card-motion")
+        .filter((card) => card.attributes("style")?.includes("will-change: transform")).length;
 
-  it("keeps pile slot item, id, and index coherent through collection reconfiguration", async () => {
-    interface ReconfigurableScreen {
-      readonly id: string;
-      readonly title: string;
-    }
-
-    const collections: readonly (readonly ReconfigurableScreen[])[] = [
-      [
-        { id: "alpha", title: "Alpha" },
-        { id: "beta", title: "Beta" },
-        { id: "gamma", title: "Gamma" },
-        { id: "delta", title: "Delta" },
-      ],
-      [
-        { id: "alpha", title: "Alpha" },
-        { id: "gamma", title: "Gamma" },
-        { id: "delta", title: "Delta" },
-      ],
-      [
-        { id: "alpha", title: "Alpha" },
-        { id: "gamma", title: "Gamma" },
-      ],
-      [
-        { id: "before", title: "Before" },
-        { id: "alpha", title: "Alpha" },
-        { id: "gamma", title: "Gamma" },
-        { id: "after", title: "After" },
-      ],
-      [
-        { id: "red", title: "Red" },
-        { id: "green", title: "Green" },
-        { id: "blue", title: "Blue" },
-      ],
-    ];
-    const ReconfigurableStackedDeck = StackedDeck<ReconfigurableScreen>;
-    const wrapper = mount(ReconfigurableStackedDeck, {
-      props: { items: collections[0]!, reducedMotionOverride: true },
-      slots: {
-        card: () => h("div"),
-        "pile-layer": (layer: StackedDeckPileLayerSlotState<ReconfigurableScreen>) =>
-          h("div", {
-            class: "pile-surface",
-            "data-slot-id": layer.id,
-            "data-slot-index": layer.index,
-            "data-slot-item-id": layer.item.id,
-          }),
-      },
-    });
-    expect(wrapper.find(".snap-motion-stacked-deck").exists()).toBe(true);
-
-    function expectCoherentPile(collection: readonly ReconfigurableScreen[]) {
-      const surfaces = wrapper.findAll(".pile-surface");
-      expect(surfaces).toHaveLength(Math.max(0, collection.length - 1));
-      for (const surface of surfaces) {
-        const id = surface.attributes("data-slot-id");
-        const itemId = surface.attributes("data-slot-item-id");
-        const index = Number(surface.attributes("data-slot-index"));
-        expect(id).toBe(itemId);
-        expect(collection[index]?.id).toBe(id);
-      }
-    }
-
+    expect(wrapper.findAll(".snap-motion-stacked-deck-card")).toHaveLength(items.length);
+    expect(wrapper.findAll(".screen")).toHaveLength(items.length);
+    expect(promotedCount()).toBe(0);
+    stage.dispatchEvent(pointerDrag("pointerdown", 0));
+    window.dispatchEvent(pointerDrag("pointermove", -deck.pitch * 0.25));
     await nextTick();
-    expectCoherentPile(collections[0]!);
-    for (const collection of collections.slice(1)) {
-      await wrapper.setProps({ items: collection });
-      expectCoherentPile(collection);
-    }
-    wrapper.unmount();
-  });
+    expect(promotedCount()).toBe(2);
 
-  it("updates pile identity after item reordering and controlled selection changes", async () => {
-    const wrapper = mountDeck();
+    window.dispatchEvent(pointerDrag("pointercancel", 0));
     await nextTick();
-    const pileIds = () =>
-      wrapper
-        .findAll(".snap-motion-stacked-deck-pile-layer")
-        .map((layer) => layer.attributes("data-pile-item-id"));
-
-    await wrapper.setProps({ items: [screens[2], screens[1], screens[0]] });
-    await nextTick();
-    expect(pileIds()).toEqual(["outcome", "overview"]);
-
-    await wrapper.setProps({ activeId: "overview" });
-    await nextTick();
-    expect(pileIds()).toEqual(["outcome", "system"]);
-
-    await wrapper.setProps({ activeId: "outcome" });
-    await nextTick();
-    expect(pileIds()).toEqual(["system", "overview"]);
-    wrapper.unmount();
-  });
-
-  it("keeps each visible pile node bound to its item while its physical slot changes", async () => {
-    const wrapper = mountDeck();
-    await nextTick();
-    const outcomeLayer = wrapper.get('[data-pile-item-id="outcome"]').element;
-
-    await wrapper.setProps({ activeId: "overview" });
-    await nextTick();
-    expect(wrapper.get('[data-pile-item-id="outcome"]').element).toBe(outcomeLayer);
-    expect(wrapper.get('[data-pile-item-id="system"]').element).not.toBe(outcomeLayer);
-    wrapper.unmount();
-  });
-
-  it("renders no pile identity for zero or one item and exactly one for two", async () => {
-    const wrapper = mount(TypedStackedDeck, {
-      props: { items: [screens[0]], reducedMotionOverride: true },
-      slots: { card: () => h("div") },
-    });
-    await nextTick();
-    expect(wrapper.findAll(".snap-motion-stacked-deck-pile-layer")).toHaveLength(0);
-
-    await wrapper.setProps({ items: [] });
-    await nextTick();
-    expect(wrapper.findAll(".snap-motion-stacked-deck-pile-layer")).toHaveLength(0);
-
-    await wrapper.setProps({ items: [screens[0], screens[1]] });
-    await nextTick();
-    const layers = wrapper.findAll(".snap-motion-stacked-deck-pile-layer");
-    expect(layers).toHaveLength(1);
-    expect(layers[0]!.attributes("data-pile-item-id")).toBe("system");
     wrapper.unmount();
   });
 

@@ -17,10 +17,10 @@ An anchor combines a stable ID, a physical scalar position, and logical order. P
 may repeat. Semantic identity is therefore never inferred from a deduplicated number array.
 
 Presentation projection is also framework-neutral. The per-card Coverflow rail resolver consumes a
-scalar position. The whole-frame deck compositor consumes that position as a continuous physical
+scalar position. The whole-frame deck projection consumes that position as a continuous physical
 index, advances visual ownership at each crossed anchor, and projects only the active adjacent
-segment. It mutates caller-owned traversal and frame storage and owns only physical pile geometry,
-paint layers, and the ordered source index for each decorative layer; it does not own motion,
+segment. It mutates caller-owned traversal and frame storage and owns only physical shell geometry,
+paint layers, and the ordered source index for each non-dominant pose; it does not own motion,
 targets, final selection, application material, or DOM state.
 
 Above those primitives, core owns two **surface models**. `StackedDeckModel` and `CoverflowModel`

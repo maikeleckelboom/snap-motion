@@ -149,7 +149,7 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
   readonly owned: ComputedRef<boolean>;
   readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
   readonly physicalIndex: ComputedRef<number>;
-  /** Compatibility projection of the non-dominant persistent card shells. */
+  /** Advanced read-only projection of the non-dominant persistent card shells. */
   readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer<Id>[]>;
   readonly pitch: ComputedRef<number>;
   /** Durable selection. It changes only at mechanical rest. */
@@ -302,9 +302,8 @@ export function useStackedDeckMotion<Id extends string>(
   const atRest = computed(() => !owned.value && motion.phase.value === "idle");
   const disabled = () => options.disabled?.() ?? false;
   /**
-   * Whether promoting cards to their own compositor layer is currently buying anything. Direct
-   * manipulation and autonomous animation do; an idle deck does not, and a permanent hint on every
-   * visible card is a permanent cost for a surface that is usually still.
+   * Whether promoting the exchanging pair to compositor layers is currently useful. Direct
+   * manipulation and autonomous animation qualify; an idle deck does not.
    */
   const compositing = computed(() => motion.isAnimating.value || owned.value);
 

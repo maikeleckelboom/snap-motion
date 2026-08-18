@@ -696,14 +696,6 @@ export const StackedDeck: <TItem extends {
     slots: {
         backdrop?: (props: {}) => any;
     } & {
-        'pile-layer'?: (props: {
-            item: TItem;
-            id: TItem["id"];
-            index: number;
-            side: 1 | -1;
-            slot: number;
-        }) => any;
-    } & {
         card?: (props: {
             item: TItem;
             id: TItem["id"];
@@ -780,20 +772,6 @@ export interface StackedDeckHandle<Id extends string> {
     // (undocumented)
     readonly tuningProfile: StackedDeckProfile;
     readonly visualId: Id | undefined;
-}
-
-// @public
-export interface StackedDeckPileLayerSlotState<TItem extends {
-    id: string;
-}> {
-    readonly id: TItem["id"];
-    readonly index: number;
-    // (undocumented)
-    readonly item: TItem;
-    // (undocumented)
-    readonly side: -1 | 1;
-    // (undocumented)
-    readonly slot: number;
 }
 
 // @public

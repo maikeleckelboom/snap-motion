@@ -12,7 +12,7 @@ import { computed, ref, watch } from "vue";
 
 import { preserveFocusBeforeSemanticChange } from "../../internal/accessibility/focus";
 import { createEnglishSnapMotionMessages } from "../../localization/messages";
-import type { StackedDeckCardState, StackedDeckPileLayer } from "../stacked-deck-contracts";
+import type { StackedDeckCardState } from "../stacked-deck-contracts";
 import { useStackedDeckMotion } from "../use-stacked-deck-motion";
 
 type TId = TItem["id"];
@@ -229,25 +229,6 @@ const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {
   });
 });
 
-const pileLayersById = computed(
-  () =>
-    new Map<TId, readonly StackedDeckPileLayer<TId>[]>(
-      deck.pileLayers.value.map((projection) => [projection.id, [projection]]),
-    ),
-);
-
-function cardPileLayers(id: TId): readonly StackedDeckPileLayer<TId>[] {
-  return pileLayersById.value.get(id) ?? [];
-}
-
-function pileItem(projection: StackedDeckPileLayer<TId>): TItem {
-  const item = props.items[projection.index];
-  if (item?.id !== projection.id) {
-    throw new Error("Stacked Deck pile projection does not match the current item collection");
-  }
-  return item;
-}
-
 watch(
   [() => deck.diagnostics.value.phase, () => deck.state.value.currentIndex] as const,
   ([phase, currentIndex], previous) => {
@@ -282,9 +263,12 @@ function cardMotionStyle(card: StackedDeckCardState<TItem, TId>) {
     pointerEvents: pose.interactive ? ("auto" as const) : ("none" as const),
     transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
     transformOrigin: "center center",
-    // A layer hint is only worth its memory while something is actually moving. An idle deck
-    // returns every card to `auto` rather than holding the compositor hostage.
-    willChange: deck.compositing.value && pose.visible ? ("transform" as const) : ("auto" as const),
+    // Bound explicit GPU promotion to the exchanging pair. Every persistent shell still follows its
+    // physical pose, but a larger deck must not allocate one promoted layer per item.
+    willChange:
+      deck.compositing.value && (pose.role === "top" || pose.role === "target")
+        ? ("transform" as const)
+        : ("auto" as const),
     "--snap-motion-deck-shadow-strength": pose.shadowStrength.toFixed(4),
   };
 }
@@ -363,27 +347,6 @@ defineExpose({
         :style="cardStyle(card)"
       >
         <div class="snap-motion-stacked-deck-card-motion" :style="cardMotionStyle(card)">
-          <template v-for="projection in cardPileLayers(card.id)" :key="projection.key">
-            <div
-              v-if="items[projection.index]?.id === projection.id"
-              aria-hidden="true"
-              class="snap-motion-stacked-deck-pile-layer"
-              :data-pile-item-id="projection.id"
-              :data-pile-item-index="projection.index"
-              :data-pile-side="projection.side"
-              :data-pile-slot="projection.slot"
-              inert
-            >
-              <slot
-                name="pile-layer"
-                :item="pileItem(projection)"
-                :id="projection.id"
-                :index="projection.index"
-                :side="projection.side"
-                :slot="projection.slot"
-              />
-            </div>
-          </template>
           <div class="snap-motion-stacked-deck-card-content">
             <slot name="card" v-bind="card" />
           </div>
