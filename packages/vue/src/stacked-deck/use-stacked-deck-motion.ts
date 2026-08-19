@@ -27,7 +27,7 @@ import {
 } from "@snap-motion/core";
 import type { CarouselMotion } from "@snap-motion/vue/carousel";
 import type { NavigationReason, SurfaceMotionDiagnostics } from "@snap-motion/vue/motion";
-import { useElementSize } from "@vueuse/core";
+import { useElementSize, useRafFn } from "@vueuse/core";
 import {
   computed,
   nextTick,
@@ -106,8 +106,9 @@ export interface UseStackedDeckMotionOptions<Id extends string> {
   readonly onActivate?: (id: Id, index: number) => void;
 }
 
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value));
+/** Hermite ease over the unit interval, flat at both ends. Inputs here are already bounded. */
+function smoothstep(value: number): number {
+  return value * value * (3 - 2 * value);
 }
 
 const STACKED_DECK_CONFIGURATION_DEFAULTS: ControllerConfiguration = {
@@ -210,7 +211,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
   const stageWidth = computed(() =>
     Math.max(320, measuredWidth.value || Math.min(toValue(options.stageWidth) ?? 1_120, 1_280)),
   );
-  const stageHeight = computed(() => clamp(stageWidth.value * 0.56, 320, 640));
+  const stageHeight = computed(() => Math.min(640, Math.max(320, stageWidth.value * 0.56)));
   const naturalTuning = computed(() =>
     resolveStackedDeckTuning({ stageWidth: stageWidth.value, stageHeight: stageHeight.value }),
   );
@@ -282,7 +283,13 @@ export function useStackedDeckComponentMotion<Id extends string>(
     driver,
     measure,
     ...currentConfiguration(),
-    resolveDragOrigin: () => ids.value[model.beginInteraction()],
+    resolveDragOrigin: () => {
+      // A hand opening an interaction supersedes an unfinished release rather than inheriting its
+      // release frame. The anchor that hand captured on the way in is kept: it is how the shell it
+      // interrupted stays continuous.
+      clearDirectPresentation(true);
+      return ids.value[model.beginInteraction()];
+    },
     track,
     viewport: options.viewport,
     onTargetSelected(id, reason) {
@@ -305,17 +312,6 @@ export function useStackedDeckComponentMotion<Id extends string>(
   /** Mechanical rest. It governs durable selection and announcements, never input admission. */
   const atRest = computed(() => !owned.value && motion.phase.value === "idle");
   const disabled = () => options.disabled?.() ?? false;
-  watch(
-    atRest,
-    (rested) => {
-      if (rested) {
-        model.endInteraction();
-        clearDirectPresentation();
-      }
-    },
-    { flush: "sync" },
-  );
-
   /**
    * Publishes one model state and speaks for it if it asked to be announced.
    *
@@ -364,29 +360,99 @@ export function useStackedDeckComponentMotion<Id extends string>(
 
   const directProjection: {
     -readonly [Key in keyof StackedDeckDirectProjection]: StackedDeckDirectProjection[Key];
-  } = { releaseDistance: 0, translateX: 0, translateY: 0 } as StackedDeckDirectProjection;
+  } = { settlement: 0, translateX: 0, translateY: 0 } as StackedDeckDirectProjection;
   const compositing = computed(() => motion.isAnimating.value || owned.value);
 
-  function clearDirectPresentation(): void {
+  /**
+   * The shell the presentation owns, which outlives the model's interaction.
+   *
+   * A phase means a physical owner exists: a hand holding a shell, or one it has already let go of
+   * and that is still travelling. The controller reaches mechanical rest — and the deck announces
+   * its selection — as soon as scalar travel is finished, which can be a whole settlement before a
+   * pointer-locked card hundreds of pixels away reaches the slot it is parking into. Semantics must
+   * not wait for that, and the physical shell must not be cut short for them.
+   */
+  function presentationOriginIndex(): number | null {
+    return directProjection.phase === undefined ? null : directProjection.originIndex;
+  }
+
+  /** Elapsed fraction of the release in flight, while `releaseSettlement` is running it. */
+  let releaseElapsed = 0;
+
+  /**
+   * The released shell's own settlement, on its own frame budget rather than competing for the one
+   * the controller settles the deck with.
+   *
+   * The whole path is expressed in this one bounded coordinate, so nothing here can divide by
+   * remaining logical travel: a commit at a fifth of a pitch and a commit past a whole one settle
+   * identically. It is a tween rather than a second mass, because both ends of the path are exact
+   * frames a spring never chose, and because the eye is following one card into a pile rather than
+   * watching a weight come to rest.
+   */
+  const releaseSettlement = useRafFn(
+    ({ delta }) => {
+      // 230ms is one natural period of the deck's own spring, 2π√(mass / stiffness), so the tuck
+      // reads as the same material the deck is made of. It is a presentation constant rather than
+      // a knob: a consumer retunes how the deck travels between screens, not how long one card
+      // takes to lie down.
+      releaseElapsed = Math.min(1, releaseElapsed + delta / 230);
+      directProjection.settlement = smoothstep(releaseElapsed);
+      triggerRef(state);
+      if (releaseElapsed < 1) return;
+      releaseSettlement.pause();
+      // The shell now stands exactly where the resting deck draws it, so the projection can be
+      // handed back — but only once the deck itself has nothing left to move.
+      if (atRest.value) clearDirectPresentation();
+    },
+    { immediate: false },
+  );
+
+  /**
+   * Ends an unfinished release. `keepAnchor` is what a hand taking the deck over needs: the anchor
+   * it captured on the way in is how the still-travelling shell stays continuous.
+   */
+  function clearDirectPresentation(keepAnchor = false): void {
+    releaseSettlement.pause();
+    directProjection.settlement = 0;
     directProjection.translateX = directProjection.translateY = 0;
     delete directProjection.phase;
-    delete directProjection.continuity;
+    if (!keepAnchor) delete directProjection.continuity;
   }
+
+  watch(
+    atRest,
+    (rested) => {
+      if (!rested) return;
+      model.endInteraction();
+      // Semantic rest is not physical rest, and this is the seam where the two are furthest apart:
+      // a commit that had no scalar travel left is at rest inside the same task the hand let go in,
+      // one microtask before the gesture reports what it resolved to. A shell still held, or still
+      // travelling, keeps its projection — the release records itself, and the settlement hands the
+      // projection back at the frame where its pose already equals resting geometry.
+      if (directProjection.phase !== "held" && !releaseSettlement.isActive.value) {
+        clearDirectPresentation();
+      }
+    },
+    { flush: "sync" },
+  );
 
   function onDirectPointerSample(deltaX?: number, deltaY?: number): void {
     if (!isDirect()) return;
     if (deltaX === undefined || deltaY === undefined) {
       directProjection.continuity = null;
-      const continuityIndex = model.state.interactionOriginIndex;
+      // A press during an unfinished release anchors on the shell that release owns, which the
+      // model may already have closed its interaction on.
+      const continuityIndex = model.state.interactionOriginIndex ?? presentationOriginIndex();
       if (continuityIndex === null) return;
-      const distance = Math.min(1, Math.abs(physicalIndex.value - state.value.currentIndex));
       directProjection.continuity = {
         itemIndex: continuityIndex,
-        progress: distance * distance * (3 - 2 * distance),
+        progress: smoothstep(Math.min(1, Math.abs(physicalIndex.value - state.value.currentIndex))),
         pose: { ...frame.value.poses[continuityIndex]! },
       };
       return;
     }
+    // Dragging means this hand already opened its interaction, which is where whatever was still
+    // parking stopped animating and became the anchor this sample continues from.
     if (directProjection.continuity === undefined || !motion.isDragging.value) return;
     directProjection.phase = "held";
     directProjection.translateX = deltaX;
@@ -406,7 +472,8 @@ export function useStackedDeckComponentMotion<Id extends string>(
     if (frameStorage.poses.length !== itemCount) {
       frameStorage = createStackedDeckFrame(itemCount);
     }
-    const originIndex = isDirect() ? model.state.interactionOriginIndex : null;
+    const originIndex =
+      (isDirect() ? model.state.interactionOriginIndex : null) ?? presentationOriginIndex();
     if (originIndex !== null) {
       directProjection.originIndex = originIndex;
     }
@@ -427,10 +494,9 @@ export function useStackedDeckComponentMotion<Id extends string>(
 
   const paginationVisualIndex = computed(() => {
     const traversal = state.value.traversal;
-    return clamp(
-      traversal.visualTopIndex + traversal.signedLocalDistance,
-      0,
+    return Math.min(
       Math.max(0, ids.value.length - 1),
+      Math.max(0, traversal.visualTopIndex + traversal.signedLocalDistance),
     );
   });
 
@@ -496,6 +562,8 @@ export function useStackedDeckComponentMotion<Id extends string>(
   }
 
   function traverse(originIndex: number, targetIndex: number): boolean {
+    // A command opens its own interaction, with no hand and no anchor of its own.
+    clearDirectPresentation();
     model.openInteraction(originIndex);
     motion.moveTo(model.idAt(targetIndex)!);
     return true;
@@ -626,11 +694,18 @@ export function useStackedDeckComponentMotion<Id extends string>(
     onPointerSample: onDirectPointerSample,
     onResolved(resolution, completed) {
       if (directProjection.phase === "held") {
-        const originIndex = model.state.interactionOriginIndex!;
+        // One immutable decision, taken from the frame the hand ended on: which shell was released
+        // — the presentation's own record of it, because the model may already have closed the
+        // interaction — where it was, since the raw vector is already on the projection and is not
+        // touched here, and whether the deck kept the destination or gave it back. The settlement
+        // opens in the same statement, so nothing can be projected between the two.
         directProjection.phase =
-          motion.targetId.value === model.idAt(originIndex) ? "returning" : "parking";
-        directProjection.releaseDistance = Math.min(1, Math.abs(physicalIndex.value - originIndex));
-        triggerRef(state);
+          motion.targetId.value === model.idAt(directProjection.originIndex)
+            ? "returning"
+            : "parking";
+        directProjection.settlement = 0;
+        releaseElapsed = 0;
+        releaseSettlement.resume();
       }
       if (completed.cancelled) {
         // A cancelled gesture undoes itself, which means returning to the card it began on. That is
@@ -744,10 +819,9 @@ export function useStackedDeckComponentMotion<Id extends string>(
 
   watch([pitch, () => toValue(options.stageWidth)], () => void nextTick(motion.remeasure));
 
-  onBeforeUnmount(() => {
-    if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
-    selectionFrame = undefined;
-  });
+  // Teardown is the same thing as a cancelled interaction: nothing pending may still speak for a
+  // surface that no longer exists.
+  onBeforeUnmount(cancelInteractionRecords);
 
   return {
     atRest,

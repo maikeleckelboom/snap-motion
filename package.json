@@ -20,6 +20,7 @@
     "visual:stacked-deck": "node scripts/runStackedDeckVisual.ts",
     "visual:stacked-deck:direct": "node scripts/runStackedDeckDirectVisual.ts",
     "visual:stacked-deck:compare": "node scripts/compareStackedDeckVisual.ts",
+    "visual:stacked-deck:strips": "node scripts/stackedDeckDirectStrips.ts",
     "test:preview": "pnpm build:preview && pnpm test:preview:prepared",
     "test:preview:prepared": "playwright test --config playwright.preview.config.ts",
     "test:fixtures": "pnpm build:fixtures && pnpm test:fixtures:prepared",

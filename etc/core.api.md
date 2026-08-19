@@ -1214,7 +1214,7 @@ export interface StackedDeckDirectProjection {
     };
     readonly originIndex: number;
     readonly phase?: "held" | "parking" | "returning";
-    readonly releaseDistance: number;
+    readonly settlement: number;
     readonly translateX: number;
     readonly translateY: number;
 }

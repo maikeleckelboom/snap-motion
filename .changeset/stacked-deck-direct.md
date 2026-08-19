@@ -10,9 +10,12 @@ and uses the same persistent shells, semantic model, pile geometry, release poli
 core frame as Shuffle.
 
 Every non-held shell interpolates between exact source-rest and destination-rest deck poses with
-stable hidden ordering. A committed far-away shell takes its destination hidden depth and travels
-continuously behind the new top into its exact pile slot without fading, rebasing, or duplication.
-Cancel, reversal, re-grab, controlled takeover, and collection changes remain immediately
-interruptible; boundary overdrag is explicitly reported as resisted rather than fabricated pointer
-lock. Autonomous and reduced-motion Direct navigation use the same endpoint model without inventing
-a cursor.
+stable hidden ordering. A released shell parks along its own bounded presentation settlement — never
+along remaining scalar travel, which can already be finished at the moment the hand lets go — from
+the exact frame it was released on into its exact pile slot, without fading, rebasing, or
+duplication. It keeps the paint order the hand released it with until the two card bodies are
+laterally clear of each other, and passes behind the new top there, so the depth change repaints
+nothing. Mechanical rest no longer takes that path away from it. Cancel, reversal, re-grab,
+controlled takeover, and collection changes remain immediately interruptible; boundary overdrag is
+explicitly reported as resisted rather than fabricated pointer lock. Autonomous and reduced-motion
+Direct navigation use the same endpoint model without inventing a cursor.

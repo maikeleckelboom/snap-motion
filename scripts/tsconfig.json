@@ -29,6 +29,7 @@
     "release-package-assembly.test.ts",
     "release-package-assembly.ts",
     "runStackedDeckVisual.ts",
+    "stackedDeckDirectStrips.ts",
     "stackedDeckVisualArtifacts.test.ts",
     "stackedDeckVisualArtifacts.ts",
     "stackedDeckVisualRevision.ts",

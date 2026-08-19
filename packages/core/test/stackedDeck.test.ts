@@ -18,6 +18,25 @@ import {
 
 const WIDE_TUNING = resolveStackedDeckTuning({ stageWidth: 1_120, stageHeight: 620 });
 const SEGMENT_SAMPLES = [0.1, 0.25, 0.5, 0.7, 0.85, 0.95] as const;
+const TARGET_LAYER_VALUE = 400;
+
+/** Half width of one transformed card body, bounded axis-aligned exactly as the projection bounds it. */
+function cardHalfWidth(pose: Pick<StackedDeckPose, "scale" | "rotate">): number {
+  const radians = Math.abs(pose.rotate) * (Math.PI / 180);
+  return (
+    (pose.scale *
+      (WIDE_TUNING.cardWidth * Math.cos(radians) + WIDE_TUNING.cardHeight * Math.sin(radians))) /
+    2
+  );
+}
+
+/** Lateral gap between two card bodies. Negative wherever they cover the same pixels. */
+function bodySeparation(
+  left: Pick<StackedDeckPose, "scale" | "rotate" | "translateX">,
+  right: Pick<StackedDeckPose, "scale" | "rotate" | "translateX">,
+): number {
+  return Math.abs(left.translateX - right.translateX) - cardHalfWidth(left) - cardHalfWidth(right);
+}
 
 function traversal(overrides: Partial<StackedDeckTraversal> = {}): StackedDeckTraversal {
   return {
@@ -59,28 +78,16 @@ function resolveFrame(
 
 function directProjection(
   originIndex: number,
-  scalarDistance: number,
-  overrides: Omit<Partial<StackedDeckDirectProjection>, "releaseDistance"> & {
-    settlementProgress?: number;
-  } = {},
+  _scalarDistance: number,
+  overrides: Partial<StackedDeckDirectProjection> & { settlementProgress?: number } = {},
 ): StackedDeckDirectProjection {
-  const { settlementProgress = 0, ...projection } = overrides;
-  const phase = projection.phase ?? "held";
-  const distance = Math.min(1, Math.abs(scalarDistance));
-  const releaseDistance =
-    phase === "returning"
-      ? settlementProgress < 1
-        ? distance / (1 - settlementProgress)
-        : 1
-      : phase === "parking" && settlementProgress < 1
-        ? (distance - settlementProgress) / (1 - settlementProgress)
-        : 0;
+  const { settlementProgress, ...projection } = overrides;
   return {
     originIndex,
     phase: "held",
     translateX: 0,
     translateY: 0,
-    releaseDistance,
+    settlement: settlementProgress ?? 0,
     ...projection,
   };
 }
@@ -1000,60 +1007,183 @@ describe("Direct stacked deck projection", () => {
     }
   });
 
-  it("parks the same released shell continuously behind the new top with no opacity choreography", () => {
+  it("parks the same released shell continuously and crosses depth only between clear bodies", () => {
+    // A release that still overlaps the new top, and one already clear of it. Both park from the
+    // exact release frame into the exact destination pile frame; only where they may pass behind
+    // the new top differs, and both pass behind it exactly once.
     for (const direction of [-1, 1] as const) {
-      const releaseX = direction * -540;
-      const releaseY = 180;
-      const releaseDistance = 0.62;
-      let previous: StackedDeckPose | undefined;
-      let firstOutgoing: StackedDeckPose | undefined;
-      let maximumStepDistance = 0;
-      for (let step = 0; step <= 1_000; step += 1) {
-        const progress = step / 1_000;
-        const scalarDistance = releaseDistance + (1 - releaseDistance) * progress;
-        const frame = resolveDirectFrame(
-          {
-            ...segment(2, direction, scalarDistance),
+      for (const releaseX of [direction * -540, direction * -900]) {
+        const releaseY = 180;
+        let previous: StackedDeckPose | undefined;
+        let firstOutgoing: StackedDeckPose | undefined;
+        let maximumStepDistance = 0;
+        let crossovers = 0;
+        let crossoverSeparation = Number.POSITIVE_INFINITY;
+        let overlappedWhileAbove = false;
+        let previousBehind = false;
+        for (let step = 0; step <= 1_000; step += 1) {
+          const settlement = step / 1_000;
+          const frame = resolveDirectFrame(
+            { ...segment(2, direction, 1), authoritativeIndex: 2 + direction },
+            directProjection(2, direction, {
+              phase: "parking",
+              translateX: releaseX,
+              translateY: releaseY,
+              settlementProgress: settlement,
+            }),
+          );
+          const outgoing = frame.poses[2]!;
+          const target = frame.poses[2 + direction]!;
+          expect(frame.poses.every((pose) => pose.opacity === 1)).toBe(true);
+          expect(outgoing).toMatchObject({ role: "hidden", visible: true });
+          expect(Number.isFinite(outgoing.translateX)).toBe(true);
+          expect(Number.isFinite(outgoing.translateY)).toBe(true);
+          const behind = outgoing.layer < target.layer;
+          const separation = bodySeparation(outgoing, target);
+          if (previous === undefined) firstOutgoing = outgoing;
+          // The hand released it in front of the new top, so the very first parking frame is
+          // already a depth change if it paints behind.
+          if (behind !== previousBehind) {
+            crossovers += 1;
+            crossoverSeparation = Math.min(crossoverSeparation, separation);
+          }
+          if (!behind && separation < 0) overlappedWhileAbove = true;
+          if (previous !== undefined) {
+            maximumStepDistance = Math.max(
+              maximumStepDistance,
+              Math.hypot(
+                outgoing.translateX - previous.translateX,
+                outgoing.translateY - previous.translateY,
+              ),
+            );
+          }
+          previous = { ...outgoing };
+          previousBehind = behind;
+        }
+
+        // Exactly one depth change, and the two card bodies are clear where it happens. A release
+        // that still overlapped stays above until it is clear; one already clear crosses at once.
+        expect(crossovers).toBe(1);
+        expect(crossoverSeparation).toBeGreaterThanOrEqual(0);
+        expect(overlappedWhileAbove).toBe(Math.abs(releaseX) < 682);
+        expect(previous!.layer).toBeLessThan(TARGET_LAYER_VALUE);
+
+        expect(firstOutgoing?.translateX).toBe(releaseX);
+        expect(firstOutgoing?.translateY).toBe(releaseY);
+        expect(firstOutgoing?.scale).toBe(1);
+        expect(maximumStepDistance).toBeLessThan(4);
+
+        const destination = resolveFrame(
+          traversal({
+            settledIndex: 2 + direction,
+            visualTopIndex: 2 + direction,
             authoritativeIndex: 2 + direction,
-          },
-          directProjection(2, direction * scalarDistance, {
-            phase: "parking",
-            translateX: releaseX,
-            translateY: releaseY,
-            settlementProgress: progress,
+            segmentOriginIndex: 2 + direction,
           }),
         );
-        const outgoing = frame.poses[2]!;
-        const target = frame.poses[2 + direction]!;
-        expect(frame.poses.every((pose) => pose.opacity === 1)).toBe(true);
-        expect(outgoing).toMatchObject({ role: "hidden", visible: true });
-        expect(outgoing.layer).toBeLessThan(target.layer);
-        if (step === 0) firstOutgoing = outgoing;
-        if (previous !== undefined) {
-          maximumStepDistance = Math.max(
-            maximumStepDistance,
-            Math.hypot(
-              outgoing.translateX - previous.translateX,
-              outgoing.translateY - previous.translateY,
-            ),
-          );
-        }
-        previous = { ...outgoing };
+        expect(physicalValues(previous!)).toEqual(physicalValues(destination.poses[2]!));
       }
+    }
+  });
 
-      expect(firstOutgoing?.translateX).toBe(releaseX);
-      expect(firstOutgoing?.translateY).toBe(releaseY);
-      expect(maximumStepDistance).toBeLessThan(2);
-
-      const destination = resolveFrame(
-        traversal({
-          settledIndex: 2 + direction,
-          visualTopIndex: 2 + direction,
-          authoritativeIndex: 2 + direction,
-          segmentOriginIndex: 2 + direction,
+  it("keeps the released shell above the new top for as long as their bodies overlap", () => {
+    // The one frame the flash lived in: identical geometry either side of a depth change. Depth
+    // may only change where the swap can repaint nothing, so a release that still overlaps must
+    // still be the card in front on the frame after the hand let go.
+    for (const direction of [-1, 1] as const) {
+      const releaseX = direction * -370;
+      const held = resolveDirectFrame(
+        { ...segment(2, direction, 0.62), authoritativeIndex: 2 + direction },
+        directProjection(2, direction * 0.62, {
+          phase: "held",
+          translateX: releaseX,
+          translateY: 120,
         }),
       );
-      expect(physicalValues(previous!)).toEqual(physicalValues(destination.poses[2]!));
+      const released = resolveDirectFrame(
+        { ...segment(2, direction, 0.62), authoritativeIndex: 2 + direction },
+        directProjection(2, direction * 0.62, {
+          phase: "parking",
+          translateX: releaseX,
+          translateY: 120,
+          settlementProgress: 0,
+        }),
+      );
+      expect(physicalValues(released.poses[2]!)).toEqual(physicalValues(held.poses[2]!));
+      expect(bodySeparation(released.poses[2]!, released.poses[2 + direction]!)).toBeLessThan(0);
+      expect(released.poses[2]!.layer).toBe(held.poses[2]!.layer);
+      expect(released.poses[2]!.layer).toBeGreaterThan(released.poses[2 + direction]!.layer);
+    }
+  });
+
+  it("parks a full-pitch and an overdragged commit with finite geometry and no stall", () => {
+    // The scalar controller has already crossed a whole pitch — or more — by the time the hand
+    // lets go, so remaining logical travel is zero and cannot drive anything. Presentation
+    // settlement still moves both releases, and both still finish exactly in the pile.
+    for (const direction of [-1, 1] as const) {
+      for (const releaseX of [direction * -598, direction * -1_400]) {
+        let previous: StackedDeckPose | undefined;
+        let travelled = 0;
+        for (let step = 0; step <= 200; step += 1) {
+          const frame = resolveDirectFrame(
+            { ...segment(2, direction, 1), authoritativeIndex: 2 + direction },
+            directProjection(2, direction, {
+              phase: "parking",
+              translateX: releaseX,
+              translateY: -240,
+              settlementProgress: step / 200,
+            }),
+          );
+          const outgoing = frame.poses[2]!;
+          for (const pose of frame.poses) {
+            expect(Number.isFinite(pose.translateX)).toBe(true);
+            expect(Number.isFinite(pose.translateY)).toBe(true);
+            expect(Number.isFinite(pose.scale)).toBe(true);
+            expect(Number.isFinite(pose.rotate)).toBe(true);
+            expect(Number.isFinite(pose.shadowStrength)).toBe(true);
+          }
+          if (previous !== undefined) {
+            travelled += Math.hypot(
+              outgoing.translateX - previous.translateX,
+              outgoing.translateY - previous.translateY,
+            );
+          }
+          previous = { ...outgoing };
+        }
+        expect(travelled).toBeGreaterThan(Math.abs(releaseX) / 4);
+        const destination = resolveFrame(
+          traversal({
+            settledIndex: 2 + direction,
+            visualTopIndex: 2 + direction,
+            authoritativeIndex: 2 + direction,
+            segmentOriginIndex: 2 + direction,
+          }),
+        );
+        expect(physicalValues(previous!)).toEqual(physicalValues(destination.poses[2]!));
+      }
+    }
+  });
+
+  it("never renders a settlement a transform could not express", () => {
+    // The old parking coordinate could divide zero by zero. An unusable settlement now resolves to
+    // the release frame, which is finite and continuous, rather than to a shell nothing can move.
+    for (const invalid of [Number.NaN, -1, 4]) {
+      const frame = resolveDirectFrame(
+        { ...segment(2, 1, 1), authoritativeIndex: 3 },
+        directProjection(2, 1, {
+          phase: "parking",
+          translateX: -480,
+          translateY: 90,
+          settlementProgress: invalid,
+        }),
+      );
+      for (const pose of frame.poses) {
+        expect(Number.isFinite(pose.translateX)).toBe(true);
+        expect(Number.isFinite(pose.translateY)).toBe(true);
+        expect(Number.isFinite(pose.scale)).toBe(true);
+        expect(Number.isFinite(pose.rotate)).toBe(true);
+        expect(Number.isFinite(pose.shadowStrength)).toBe(true);
+      }
     }
   });
 

@@ -20,8 +20,17 @@ export interface StackedDeckDirectProjection {
   readonly translateX: number;
   /** Raw hand-owned vertical translation; it never affects scalar target or pile geometry. */
   readonly translateY: number;
-  /** Scalar distance at pointer release; core derives continuous settlement from traversal. */
-  readonly releaseDistance: number;
+  /**
+   * Bounded presentation settlement of the released shell: `0` is the exact frame the hand let go
+   * of it and `1` is the exact frame it owns at the end of its release. It stays `0` for as long
+   * as a hand still holds the shell, which has not been released from anything yet.
+   *
+   * It is owned by the presentation and never derived from remaining logical travel. Logical
+   * navigation can complete a whole pitch while the pointer-locked shell is still hundreds of
+   * pixels from the slot it is parking into, so scalar completion cannot express — and must never
+   * divide — physical parking completion.
+   */
+  readonly settlement: number;
   /**
    * Optional interruption anchor. A new interaction resolves from the already-rendered physical
    * frame rather than first teleporting a still-parking shell to nominal rest geometry.
@@ -207,6 +216,11 @@ const PILE_ROTATE = 2;
 const TOP_ROTATE = 4;
 const TOP_SCALE_REDUCTION = 0.11;
 const TOP_LAYER = 500;
+/**
+ * Paint order of a shell physical ownership has not finished with: the one under the hand, and the
+ * one just released that has not yet passed behind the new top.
+ */
+const HAND_LAYER = TOP_LAYER + 1;
 const TARGET_LAYER = 400;
 const PILE_LAYER_STEP = 10;
 /**
@@ -221,6 +235,28 @@ const AUTHORITY_MIDPOINT = 0.5;
  */
 const AUTHORITY_HYSTERESIS = 0.04;
 const TRAVERSAL_EPSILON = 0.000_001;
+/**
+ * Settlement by which a released shell has passed behind the new top: the apex of its parking path,
+ * which is the point that path is built to stand clear of the card that replaced it at. It may
+ * cross earlier — on the first frame that is actually clear — and never later.
+ */
+const CROSSOVER_SETTLEMENT = 0.5;
+/**
+ * Lateral distance between two card centres at which their bodies share no pixel, as a margin on
+ * one whole card width.
+ *
+ * A width apart is exact for the two poses that matter — the released card as the hand left it and
+ * the new top at rest are both unrotated and unscaled — and conservative everywhere else on the
+ * path: a shell partway into the pile has given up more to scale recession than its two degrees of
+ * lean can add back, so its true bound is always inside this one. The margin itself is not tuning.
+ * Transforms are written rounded and edges are rasterised with antialiasing, so a swap decided at
+ * exact tangency would still be deciding the colour of a shared column of pixels.
+ *
+ * Depth is a lateral question alone. Raw vertical hand travel already never moves target or pile
+ * geometry, and letting it decide paint order would make the same gesture swap at a different
+ * moment for no reason the eye could read.
+ */
+const CROSSOVER_CLEARANCE = 2;
 const TUNING_NUMBER_KEYS = [
   "cardWidth",
   "cardHeight",
@@ -416,17 +452,9 @@ export function createStackedDeckTraversal(
   } else {
     assertIndex(initialIndex, itemCount, "initialIndex");
   }
-  return {
-    settledIndex: initialIndex,
-    visualTopIndex: initialIndex,
-    authoritativeIndex: initialIndex,
-    segmentOriginIndex: initialIndex,
-    segmentTargetIndex: null,
-    direction: 0,
-    signedLocalDistance: 0,
-    localProgress: 0,
-    phase: "idle",
-  };
+  // Fresh storage settled on one card is what `resetTraversal` already means, so it is the one
+  // definition of an idle traversal rather than a second copy of the same nine fields.
+  return resetTraversal({} as MutableStackedDeckTraversal, initialIndex);
 }
 
 function resetTraversal(
@@ -621,16 +649,18 @@ function validateTraversal(traversal: StackedDeckTraversal, itemCount: number): 
  * so both frame storage and every per-frame reset start from the same numbers.
  */
 function resetPose(pose: MutableStackedDeckPose): MutableStackedDeckPose {
-  pose.translateX = 0;
-  pose.translateY = 0;
+  // Every channel a card can be measured in is zero here; scale is the one that reads as identity
+  // at one rather than at nothing.
+  pose.translateX =
+    pose.translateY =
+    pose.rotate =
+    pose.opacity =
+    pose.layer =
+    pose.shadowStrength =
+      0;
   pose.scale = 1;
-  pose.rotate = 0;
-  pose.opacity = 0;
-  pose.layer = 0;
   pose.role = "hidden";
-  pose.shadowStrength = 0;
-  pose.visible = false;
-  pose.interactive = false;
+  pose.visible = pose.interactive = false;
   return pose;
 }
 
@@ -649,10 +679,9 @@ export function createStackedDeckFrame(itemCount: number): MutableStackedDeckFra
  * values already written, so a top card only has to state what makes it the top card.
  */
 function setTopPose(pose: MutableStackedDeckPose, interactive: boolean): void {
-  pose.opacity = 1;
+  pose.opacity = pose.shadowStrength = 1;
   pose.layer = TOP_LAYER;
   pose.role = "top";
-  pose.shadowStrength = 1;
   pose.visible = true;
   pose.interactive = interactive;
 }
@@ -660,6 +689,9 @@ function setTopPose(pose: MutableStackedDeckPose, interactive: boolean): void {
 /**
  * Places one persistent card in the compact pile at a possibly fractional slot. Identity, material,
  * transform, shadow, and depth all stay on this pose for its entire lifetime.
+ *
+ * Like {@link setTopPose} it completes a pose the frame has just reset, so what a hidden card is
+ * already — not the deck's top, and not something input can reach — is stated once, by the reset.
  */
 function setPilePose(pose: MutableStackedDeckPose, slot: number, tuning: StackedDeckTuning): void {
   const distance = Math.abs(slot);
@@ -678,10 +710,8 @@ function setPilePose(pose: MutableStackedDeckPose, slot: number, tuning: Stacked
   pose.rotate = side * tuning.pileRotate * rotationSpread;
   pose.opacity = 1;
   pose.layer = Math.round(TARGET_LAYER - distance * PILE_LAYER_STEP);
-  pose.role = "hidden";
   pose.shadowStrength = pileShadow(distance);
   pose.visible = true;
-  pose.interactive = false;
 }
 
 /**
@@ -770,6 +800,13 @@ function setDirectFrame(
   const reveal = smoothstep(distance);
   const outgoing = output.poses[projection.originIndex]!;
   const phase = projection.phase;
+  // Bounded, and bounded away from anything a transform cannot express. One invalid number in a
+  // transform does not degrade gracefully — the whole declaration is dropped, the shell keeps
+  // whatever it last painted, and the deck reads as frozen rather than as broken — so a settlement
+  // that is not a number is the release frame rather than a shell nothing can move again.
+  const settlement = clamp(projection.settlement, 0, 1) || 0;
+  /** Distance between this deck's card centres at which their bodies share no pixel. */
+  const clearSeparation = tuning.cardWidth + CROSSOVER_CLEARANCE;
   if (targetIndex !== null) {
     const continuity = projection.continuity;
     const continuityReveal = continuity?.progress ?? 0;
@@ -793,46 +830,61 @@ function setDirectFrame(
     const target = output.poses[targetIndex]!;
     target.layer = TOP_LAYER;
     if (reveal < 1 - TRAVERSAL_EPSILON) target.role = "target";
-  }
 
-  if ((phase === undefined || phase === "parking") && targetIndex !== null) {
-    output.poses[targetIndex]!.interactive = output.authoritativeIndex === targetIndex;
-    setPilePose(resetPose(directDestinationPose), projection.originIndex - targetIndex, tuning);
-    outgoing.translateX = projection.translateX;
-    outgoing.translateY = projection.translateY;
-    moveDirectPose(
-      outgoing,
-      directDestinationPose,
-      phase === undefined
-        ? reveal
-        : smoothstep(
-            clamp((distance - projection.releaseDistance) / (1 - projection.releaseDistance), 0, 1),
-          ),
-    );
-    return;
+    if (phase === undefined || phase === "parking") {
+      target.interactive = output.authoritativeIndex === targetIndex;
+      setPilePose(resetPose(directDestinationPose), projection.originIndex - targetIndex, tuning);
+      if (phase === undefined) {
+        // An omitted lifecycle is an autonomous exchange: nothing was held, so there is no release
+        // frame to park from, hand translation is not this shell's, and scalar travel is the whole
+        // physical story.
+        moveDirectPose(outgoing, directDestinationPose, reveal);
+        return;
+      }
+      // Parking. Geometry and depth are separate physical facts.
+      //
+      // Geometry is continuous in `settlement` alone — the exact release frame at zero, the exact
+      // destination pile frame at one — so a commit at a fifth of a pitch and a commit past a
+      // whole one travel the same curve. Depth is discrete, and a discrete change is only
+      // invisible between bodies that share no pixel, so the shell keeps the paint order the hand
+      // released it with until the curve has carried it clear of the new top. The apex of the
+      // curve adds exactly the separation the release was short of, along the direction it was
+      // already leaving in, and nothing more: a release already standing clear adds zero and goes
+      // straight in.
+      const apexX = mix(
+        projection.translateX,
+        directDestinationPose.translateX,
+        CROSSOVER_SETTLEMENT,
+      );
+      const clearance = Math.max(0, clearSeparation - Math.abs(apexX));
+      outgoing.translateX = projection.translateX;
+      outgoing.translateY = projection.translateY;
+      moveDirectPose(outgoing, directDestinationPose, settlement);
+      // Zero at both ends and unit at the apex, so both endpoints stay exact, not nearly exact.
+      outgoing.translateX +=
+        Math.sign(apexX || directDestinationPose.translateX) *
+        clearance *
+        4 *
+        settlement *
+        (1 - settlement);
+      // Depth changes on the first frame the two bodies are actually clear of each other, which
+      // is a frame this path is built to contain, and never changes back: past the apex the shell
+      // is already behind for the rest of its way in. Reading the separation the frame is about to
+      // render — rather than the settlement that produced it — is what keeps the swap invisible at
+      // any frame rate, since no frame lands exactly on the apex.
+      if (settlement < CROSSOVER_SETTLEMENT && Math.abs(outgoing.translateX) < clearSeparation) {
+        outgoing.layer = HAND_LAYER;
+      }
+      return;
+    }
   }
-  const retained =
-    phase === "returning"
-      ? 1 -
-        smoothstep(
-          clamp((distance - projection.releaseDistance) / -projection.releaseDistance, 0, 1),
-        )
-      : 1;
+  // Held and given back are the same expression, because a shell no hand has let go of has no
+  // settlement: it keeps the whole raw vector, and a cancelled one hands that vector back as its
+  // own settlement completes, ending on the exact source top.
+  const retained = 1 - settlement;
   outgoing.translateX = projection.translateX * retained;
   outgoing.translateY = projection.translateY * retained;
-  outgoing.layer = TOP_LAYER + 1;
-}
-
-function copyTraversal(output: MutableStackedDeckFrame, traversal: StackedDeckTraversal): void {
-  output.settledIndex = traversal.settledIndex;
-  output.visualTopIndex = traversal.visualTopIndex;
-  output.authoritativeIndex = traversal.authoritativeIndex;
-  output.segmentOriginIndex = traversal.segmentOriginIndex;
-  output.segmentTargetIndex = traversal.segmentTargetIndex;
-  output.direction = traversal.direction;
-  output.signedLocalDistance = traversal.signedLocalDistance;
-  output.localProgress = traversal.localProgress;
-  output.phase = traversal.phase;
+  outgoing.layer = HAND_LAYER;
 }
 
 /**
@@ -849,8 +901,9 @@ export function resolveStackedDeckFrame(
   if (output.poses.length !== options.itemCount) {
     throw new RangeError("frame");
   }
-  copyTraversal(output, options.traversal);
-  for (const pose of output.poses) resetPose(pose);
+  // A frame is exactly a traversal plus the poses it resolves, which is what the interface says,
+  // so the traversal half of it is copied as the whole readonly record rather than field by field.
+  Object.assign(output, options.traversal);
   if (options.itemCount === 0) return output;
 
   const traversal = options.traversal;
@@ -862,14 +915,16 @@ export function resolveStackedDeckFrame(
         ? traversal.visualTopIndex + traversal.signedLocalDistance
         : traversal.visualTopIndex;
   for (let index = 0; index < output.poses.length; index += 1) {
-    setPilePose(output.poses[index]!, index - centre, options.tuning);
+    setPilePose(resetPose(output.poses[index]!), index - centre, options.tuning);
   }
   if (direct !== undefined) {
     setDirectFrame(output, direct, traversal, options.tuning);
     return output;
   }
   const top = output.poses[traversal.visualTopIndex]!;
-  if (traversal.phase !== "traversing") setTopPose(top, traversal.phase === "idle");
+  // The pile pass already posed the deck's centre slot as the top card. The one thing it cannot
+  // know is whether the deck is holding still enough to be operated.
+  if (traversal.phase === "idle") top.interactive = true;
 
   if (traversal.phase === "elastic") {
     top.translateX = -traversal.signedLocalDistance * options.tuning.motionPitch;

@@ -126,14 +126,38 @@ async function moveAndSample(
 }
 
 test("records the Direct candidate exchange", async ({ context, page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await mkdir(artifactDirectory, { recursive: true });
   await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   const video = page.video();
   const samples: GrabSample[] = [];
   const phases: string[] = [];
+  const releases: string[] = [];
+  /**
+   * Marks a release in the recording itself rather than against a clock.
+   *
+   * A container timestamp cannot be trusted to name a frame: the video's own timeline starts at the
+   * page's first paint, seconds after the fixture opened it. A corner of the page flashing white on
+   * the frame the hand lets go is in the recording, so a strip can be cut around exactly that frame
+   * however the two clocks drifted — and the flash stays visible in the strip, naming it.
+   */
+  const markRelease = async (name: string) => {
+    releases.push(name);
+    await page.evaluate(() => {
+      const marker = document.querySelector<HTMLElement>("[data-release-marker]")!;
+      marker.style.background = "#ffffff";
+      setTimeout(() => (marker.style.background = "#000000"), 110);
+    });
+  };
 
   await openLabDemo(page, "stacked-deck", "no-preference");
+  await page.evaluate(() => {
+    const marker = document.createElement("div");
+    marker.dataset.releaseMarker = "true";
+    marker.style.cssText =
+      "position:fixed;left:0;top:0;width:28px;height:28px;background:#000;z-index:2147483647;pointer-events:none";
+    document.body.append(marker);
+  });
   const directControl = page.getByTestId("stacked-deck-exchange-direct");
   await directControl.click();
   const stage = viewport(page);
@@ -192,6 +216,39 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
   await finishPointerBy(page, origin, pitch * 0.22, 45, 120, "pointercancel");
   await expectCarouselAt(stage, "settings");
 
+  phases.push("release handoff, forward and reverse");
+  await select(page, 3);
+  card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='team']");
+  origin = await beginPointerAt(card, 0.35, 0.6);
+  await moveAndSample(page, origin, "team", -pitch * 0.3, 60, 60, samples);
+  await moveAndSample(page, origin, "team", -pitch * 0.72, 150, 130, samples);
+  await page.waitForTimeout(260);
+  await markRelease("release-handoff-forward");
+  await finishPointerBy(page, origin, -pitch * 0.72, 150, 200, "pointerup");
+  await expectCarouselAt(stage, "settings");
+  await page.waitForTimeout(700);
+
+  card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']");
+  origin = await beginPointerAt(card, 0.35, 0.6);
+  await moveAndSample(page, origin, "settings", pitch * 0.3, -60, 60, samples);
+  await moveAndSample(page, origin, "settings", pitch * 0.72, -150, 130, samples);
+  await page.waitForTimeout(260);
+  await markRelease("release-handoff-reverse");
+  await finishPointerBy(page, origin, pitch * 0.72, -150, 200, "pointerup");
+  await expectCarouselAt(stage, "team");
+  await page.waitForTimeout(700);
+
+  phases.push("full-pitch release");
+  card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='team']");
+  origin = await beginPointerAt(card, 0.35, 0.6);
+  await moveAndSample(page, origin, "team", -pitch * 0.4, 40, 60, samples);
+  await moveAndSample(page, origin, "team", -pitch, 90, 140, samples);
+  await page.waitForTimeout(260);
+  await markRelease("full-pitch-release");
+  await finishPointerBy(page, origin, -pitch, 90, 200, "pointerup");
+  await expectCarouselAt(stage, "settings");
+  await page.waitForTimeout(700);
+
   phases.push("high-contrast reverse commit");
   card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']");
   origin = await beginPointerAt(card, 0.5, 0.5);
@@ -242,6 +299,49 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
   await expectCarouselAt(stage, "team");
   await page.waitForTimeout(420);
 
+  phases.push("manual acceptance pass");
+  await select(page, 3);
+  card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='team']");
+  // A slow drag with vertical travel, reversed while still held, then committed from inside the
+  // overlap — the sequence the manual recording was judged on.
+  origin = await beginPointerAt(card, 0.3, 0.7);
+  for (const [progress, y] of [
+    [0.16, 30],
+    [0.36, 70],
+    [0.58, 110],
+    [0.34, 74],
+    [0.62, 120],
+  ] as const) {
+    await moveAndSample(
+      page,
+      origin,
+      "team",
+      -pitch * progress,
+      y,
+      samples.length * 45 + 45,
+      samples,
+    );
+  }
+  await page.waitForTimeout(200);
+  await finishPointerBy(page, origin, -pitch * 0.62, 120, 520, "pointerup");
+  await expectCarouselAt(stage, "settings");
+  await page.waitForTimeout(500);
+
+  // Immediately back the other way, then a full-pitch drag committed the same direction again.
+  card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']");
+  origin = await beginPointerAt(card, 0.6, 0.4);
+  await moveAndSample(page, origin, "settings", pitch * 0.55, -90, 90, samples);
+  await finishPointerBy(page, origin, pitch * 0.55, -90, 130, "pointerup");
+  await expectCarouselAt(stage, "team");
+  await page.waitForTimeout(500);
+
+  card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='team']");
+  origin = await beginPointerAt(card, 0.5, 0.5);
+  await moveAndSample(page, origin, "team", -pitch * 1.15, -60, 150, samples);
+  await finishPointerBy(page, origin, -pitch * 1.15, -60, 190, "pointerup");
+  await expectCarouselAt(stage, "settings");
+  await page.waitForTimeout(700);
+
   const ordinary = samples.filter((sample) => sample.kind === "ordinary");
   const boundary = samples.filter((sample) => sample.kind === "boundary-resisted");
   const catchUp = samples.filter((sample) => sample.kind === "catch-up");
@@ -269,7 +369,11 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
       sampleCount: boundary.length,
     },
     phases,
+    releases,
     samples,
+    // The recording letterboxes the page into its own frame, so a strip cannot find the release
+    // marker without knowing which page the frame is a picture of.
+    viewport: page.viewportSize(),
   };
   await writeFile(join(artifactDirectory, "metrics.json"), `${JSON.stringify(metrics, null, 2)}\n`);
   await writeFile(
