@@ -22,24 +22,25 @@ async function prepareDirect(
   reducedMotion: ReducedMotionMode = "no-preference",
 ) {
   await openLabDemo(page, "stacked-deck", reducedMotion);
-  await page.getByTestId("stacked-deck-exchange-direct").click();
+  const directControl = page.getByTestId("stacked-deck-exchange-direct");
+  await directControl.click();
   const stage = viewport(page);
-  await expect(stage).toHaveAttribute("data-exchange", "direct");
+  await expect(directControl).toHaveAttribute("aria-pressed", "true");
   await pagination(page).nth(index).click();
   await expectCarouselAt(stage, STACKED_DECK_IDS[index]!);
   return stage;
 }
 
 interface ShellSample {
+  readonly layer: number;
   readonly opacity: number;
-  readonly phase: string;
+  readonly role: string;
   readonly x: number;
   readonly y: number;
 }
 
 async function startShellRecorder(page: Page, id: string): Promise<void> {
   await page.evaluate((itemId) => {
-    const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
     const shell = document.querySelector<HTMLElement>(
       `[data-snap-motion-stacked-deck-card][data-item-id='${itemId}']`,
     )!;
@@ -50,8 +51,9 @@ async function startShellRecorder(page: Page, id: string): Promise<void> {
     const record = () => {
       const matrix = new DOMMatrixReadOnly(getComputedStyle(motion).transform);
       samples.push({
+        layer: Number(shell.dataset.deckLayer),
         opacity: Number(getComputedStyle(shell).opacity),
-        phase: root.dataset.directPhase ?? "none",
+        role: shell.dataset.deckRole ?? "unknown",
         x: matrix.m41,
         y: matrix.m42,
       });
@@ -72,46 +74,44 @@ async function shellSamples(page: Page): Promise<readonly ShellSample[]> {
   );
 }
 
-function expectZeroOpacityRebase(samples: readonly ShellSample[]): void {
-  // Once newer input owns the root, the retired shell's private phase is no longer the public
-  // primary telemetry. Its rendered opacity and geometry remain the authoritative evidence.
-  expect(samples.some((sample) => sample.phase === "fade-out")).toBe(true);
-  expect(samples.filter((sample) => sample.opacity <= 0.01).length).toBeGreaterThanOrEqual(2);
-  const jumps = samples.slice(1).flatMap((sample, index) => {
-    const previous = samples[index]!;
-    const distance = Math.hypot(sample.x - previous.x, sample.y - previous.y);
-    return distance > 40 ? [{ current: sample, distance, previous }] : [];
-  });
-  expect(jumps.length).toBeGreaterThan(0);
-  const zeroOpacityJumps = jumps.filter(
-    (jump) => jump.previous.opacity <= 0.01 && jump.current.opacity <= 0.01,
-  );
-  expect(zeroOpacityJumps.length).toBeGreaterThan(0);
+function expectContinuousOpaqueSettlement(samples: readonly ShellSample[]): void {
+  expect(samples.length).toBeGreaterThan(8);
+  expect(samples.every((sample) => sample.opacity === 1)).toBe(true);
+  expect(samples.some((sample) => sample.role === "hidden")).toBe(true);
 }
 
-async function grabPointError(page: Page, id: string) {
-  return page.evaluate((itemId) => {
-    const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
-    const card = document.querySelector<HTMLElement>(
-      `[data-snap-motion-stacked-deck-card][data-item-id='${itemId}']`,
-    )!;
-    const motion = card.querySelector<HTMLElement>(".snap-motion-stacked-deck-card-motion")!;
-    const box = motion.getBoundingClientRect();
-    const pointerX = Number(root.dataset.directPointerX);
-    const pointerY = Number(root.dataset.directPointerY);
-    const grabX = Number(root.dataset.directGrabX);
-    const grabY = Number(root.dataset.directGrabY);
-    const transformedX = box.left + box.width / 2 + grabX;
-    const transformedY = box.top + box.height / 2 + grabY;
-    const errorX = transformedX - pointerX;
-    const errorY = transformedY - pointerY;
-    return {
-      error: Math.hypot(errorX, errorY),
-      errorX,
-      errorY,
-      sampleKind: root.dataset.directSampleKind,
-    };
-  }, id);
+async function grabPointError(
+  page: Page,
+  id: string,
+  origin: { x: number; y: number },
+  deltaX: number,
+  deltaY: number,
+) {
+  return page.evaluate(
+    ({ deltaX: pointerDeltaX, deltaY: pointerDeltaY, itemId, origin: pointerOrigin }) => {
+      const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
+      const card = document.querySelector<HTMLElement>(
+        `[data-snap-motion-stacked-deck-card][data-item-id='${itemId}']`,
+      )!;
+      const motion = card.querySelector<HTMLElement>(".snap-motion-stacked-deck-card-motion")!;
+      const rootBox = root.getBoundingClientRect();
+      const box = motion.getBoundingClientRect();
+      const pointerX = pointerOrigin.x + pointerDeltaX;
+      const pointerY = pointerOrigin.y + pointerDeltaY;
+      const grabX = pointerOrigin.x - (rootBox.left + rootBox.width / 2);
+      const grabY = pointerOrigin.y - (rootBox.top + rootBox.height / 2);
+      const transformedX = box.left + box.width / 2 + grabX;
+      const transformedY = box.top + box.height / 2 + grabY;
+      const errorX = transformedX - pointerX;
+      const errorY = transformedY - pointerY;
+      return {
+        error: Math.hypot(errorX, errorY),
+        errorX,
+        errorY,
+      };
+    },
+    { deltaX, deltaY, itemId: id, origin },
+  );
 }
 
 test("Direct keeps three local grab points attached through diagonal owned movement", async ({
@@ -133,8 +133,7 @@ test("Direct keeps three local grab points attached through diagonal owned movem
     await nextFrame(page);
 
     await expect(stage).toHaveAttribute("data-owned", "true");
-    const error = await grabPointError(page, "team");
-    expect(error.sampleKind).toBe("ordinary");
+    const error = await grabPointError(page, "team", origin, -pitch * 0.42, 96);
     expect(error.error).toBeLessThanOrEqual(0.5);
 
     await finishPointerBy(page, origin, -pitch * 0.42, 96, 180, "pointercancel");
@@ -150,8 +149,7 @@ test("Direct reports touch catch-up and boundary resistance separately", async (
   await movePointerBy(page, origin, -pitch * 0.38, 72, 100);
   await nextFrame(page);
 
-  await expect(stage).toHaveAttribute("data-direct-sample-kind", "catch-up");
-  const catchUp = await grabPointError(page, "team");
+  const catchUp = await grabPointError(page, "team", origin, -pitch * 0.38, 72);
   expect(catchUp.error).toBeLessThanOrEqual(0.5);
   expect(Number(await stage.getAttribute("data-physical-index"))).toBeGreaterThan(3.2);
   await finishPointerBy(page, origin, -pitch * 0.38, 72, 140, "pointercancel");
@@ -163,8 +161,7 @@ test("Direct reports touch catch-up and boundary resistance separately", async (
   origin = await beginPointerAt(card, 0.5, 0.5);
   await movePointerBy(page, origin, pitch * 0.7, 90, 100);
   await nextFrame(page);
-  await expect(stage).toHaveAttribute("data-direct-sample-kind", "boundary-resisted");
-  await expect(stage).toHaveAttribute("data-direct-origin-id", "templates");
+  await expect(card).toHaveAttribute("data-deck-role", "top");
   await finishPointerBy(page, origin, pitch * 0.7, 90, 150, "pointercancel");
   await expectCarouselAt(stage, "templates");
 });
@@ -183,7 +180,7 @@ test("Direct overdrag and reversal keep one stable origin with only an adjacent 
   ] as const) {
     await movePointerBy(page, origin, deltaX, 60, deltaX < 0 ? 100 : 200);
     await nextFrame(page);
-    await expect(stage).toHaveAttribute("data-direct-origin-id", "team");
+    await expect(card).toHaveAttribute("data-deck-role", "top");
     const exchanging = await page
       .locator("[data-snap-motion-stacked-deck-card]")
       .evaluateAll((elements) =>
@@ -200,7 +197,7 @@ test("Direct overdrag and reversal keep one stable origin with only an adjacent 
   await expectCarouselAt(stage, "team");
 });
 
-test("Direct rebases at zero opacity and keeps a new grab immediate during reconciliation", async ({
+test("Direct parks opaquely behind the new top and keeps immediate reversal continuous", async ({
   page,
 }) => {
   const stage = await prepareDirect(page);
@@ -209,47 +206,69 @@ test("Direct rebases at zero opacity and keeps a new grab immediate during recon
   await startShellRecorder(page, "team");
   let origin = await beginPointerAt(outgoing, 0.2, 0.75);
   await movePointerBy(page, origin, -pitch * 0.76, 180, 140);
+  await nextFrame(page);
   await finishPointerBy(page, origin, -pitch * 0.76, 180, 180, "pointerup");
   await waitForAuthority(page, 4);
-  await expect(stage).toHaveAttribute("data-direct-phase", "fade-out");
+  await expect(outgoing).toHaveAttribute("data-deck-role", "hidden");
+  const outgoingLayer = Number(await outgoing.getAttribute("data-deck-layer"));
 
   const incoming = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']");
   await expect(incoming).toHaveAttribute("data-deck-interactive", "true");
+  expect(outgoingLayer).toBeLessThan(Number(await incoming.getAttribute("data-deck-layer")));
   origin = await beginPointerAt(incoming, 0.75, 0.25);
   await movePointerBy(page, origin, pitch * 0.22, -45, 80);
   await nextFrame(page);
-  await expect(stage).toHaveAttribute("data-direct-phase", "held");
-  expect((await grabPointError(page, "settings")).error).toBeLessThanOrEqual(0.5);
+  await expect(incoming).toHaveAttribute("data-deck-role", "top");
+  expect(
+    (await grabPointError(page, "settings", origin, pitch * 0.22, -45)).error,
+  ).toBeLessThanOrEqual(0.5);
   await finishPointerBy(page, origin, pitch * 0.22, -45, 120, "pointercancel");
   await expectCarouselAt(stage, "settings");
   await page.waitForTimeout(350);
 
-  expectZeroOpacityRebase(await shellSamples(page));
+  expectContinuousOpaqueSettlement(await shellSamples(page));
 
   await startShellRecorder(page, "settings");
   const reverse = await beginPointerAt(incoming, 0.8, 0.25);
   await movePointerBy(page, reverse, pitch * 0.76, -180, 140);
+  await nextFrame(page);
   await finishPointerBy(page, reverse, pitch * 0.76, -180, 180, "pointerup");
   await expectCarouselAt(stage, "team");
   await page.waitForTimeout(350);
-  expectZeroOpacityRebase(await shellSamples(page));
+  expectContinuousOpaqueSettlement(await shellSamples(page));
 
   await startShellRecorder(page, "team");
   const flick = await beginPointerAt(outgoing, 0.5, 0.5);
   await movePointerBy(page, flick, -pitch * 0.18, 35, 8);
   await movePointerBy(page, flick, -pitch * 0.48, 80, 16);
+  await nextFrame(page);
   await finishPointerBy(page, flick, -pitch * 0.48, 80, 24, "pointerup");
   await expectCarouselAt(stage, "settings");
   await page.waitForTimeout(350);
-  expectZeroOpacityRebase(await shellSamples(page));
+  expectContinuousOpaqueSettlement(await shellSamples(page));
 });
 
-test("Direct autonomous navigation works with normal and reduced motion", async ({ page }) => {
+test("Direct keyboard, controls, wheel, and programmatic navigation share the physical model", async ({
+  page,
+}) => {
   for (const reducedMotion of ["no-preference", "reduce"] as const) {
     const stage = await prepareDirect(page, 2, reducedMotion);
     await stage.press("ArrowRight");
     await expectCarouselAt(stage, "team");
-    await expect(stage).not.toHaveAttribute("data-direct-phase", "held");
+    await page.getByTestId("stacked-deck-previous").click();
+    await expectCarouselAt(stage, "map");
+    await pagination(page).nth(3).click();
+    await expectCarouselAt(stage, "team");
+    const pitch = await motionPitch(stage);
+    await stage.evaluate((element, deltaX) => {
+      element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX }));
+    }, pitch * 0.65);
+    await expectCarouselAt(stage, "settings");
+    expect(
+      await stage
+        .locator("[data-snap-motion-stacked-deck-card]")
+        .evaluateAll((cards) => cards.every((card) => getComputedStyle(card).opacity === "1")),
+    ).toBe(true);
   }
 });
 
@@ -259,7 +278,6 @@ test("Direct preserves nested controls on the new top and accepts controlled tak
   await openLabDemo(page, "defaults", "no-preference");
   await page.getByTestId("defaults-deck-direct").click();
   const stage = page.getByTestId("defaults-deck");
-  await expect(stage).toHaveAttribute("data-exchange", "direct");
   const initialId = await stage.getAttribute("data-active-id");
   expect(initialId).not.toBeNull();
   let card = stage.locator(`[data-snap-motion-stacked-deck-card][data-item-id='${initialId}']`);
@@ -275,7 +293,7 @@ test("Direct preserves nested controls on the new top and accepts controlled tak
     .evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.getByTestId("defaults-activations")).toHaveText("1");
 
-  // External authority can take over a committed reconciliation without waiting for its fade.
+  // External authority can take over committed parking without waiting for presentation settlement.
   await page
     .getByTestId("defaults-route-first")
     .evaluate((button: HTMLButtonElement) => button.click());
@@ -289,7 +307,7 @@ test("Direct preserves nested controls on the new top and accepts controlled tak
   origin = await beginPointerAt(card, 0.5, 0.5);
   await movePointerBy(page, origin, -180, 75, 90);
   await finishPointerBy(page, origin, -180, 75, 110, "pointercancel");
-  await expect(stage).toHaveAttribute("data-direct-phase", "returning");
+  await expect(card).toHaveAttribute("data-deck-role", "top");
   await page
     .getByTestId("defaults-route-last")
     .evaluate((button: HTMLButtonElement) => button.click());
@@ -301,7 +319,7 @@ test("Direct preserves nested controls on the new top and accepts controlled tak
   );
   origin = await beginPointerAt(card, 0.5, 0.5);
   await movePointerBy(page, origin, 180, -60, 90);
-  await expect(stage).toHaveAttribute("data-direct-phase", "held");
+  await expect(card).toHaveAttribute("data-deck-role", "top");
   await page
     .getByTestId("defaults-route-first")
     .evaluate((button: HTMLButtonElement) => button.click());

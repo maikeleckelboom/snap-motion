@@ -8,4 +8,4 @@ export type {
   SurfaceMotionDiagnostics,
 } from "../contracts/motion-contracts";
 export { useSnapMotion } from "./use-snap-motion";
-export type { PointerMovementSample, UseSnapMotionOptions } from "./use-snap-motion";
+export type { UseSnapMotionOptions } from "./use-snap-motion";

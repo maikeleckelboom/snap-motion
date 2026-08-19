@@ -19,7 +19,6 @@ import { ShallowUnwrapRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
 import type { SnapMotionMessages } from '@snap-motion/vue/localization';
 import { SpringConfiguration } from '@snap-motion/core';
-import { StackedDeckDirectProjection } from '@snap-motion/core';
 import { StackedDeckExchange } from '@snap-motion/core';
 import { StackedDeckFrame } from '@snap-motion/core';
 import { StackedDeckModel } from '@snap-motion/core';
@@ -130,20 +129,6 @@ export interface StackedDeckCardState<TItem, TId extends string> {
     readonly visual: boolean;
 }
 
-// @public
-export type StackedDeckDirectSampleKind = "catch-up" | "ordinary" | "boundary-resisted" | "reconciling";
-
-// @public
-export interface StackedDeckDirectState<Id extends string> extends StackedDeckDirectProjection {
-    readonly grabOffsetX: number;
-    readonly grabOffsetY: number;
-    readonly originId: Id;
-    readonly pointerX: number;
-    readonly pointerY: number;
-    readonly sampleIndex: number;
-    readonly sampleKind: StackedDeckDirectSampleKind;
-}
-
 export { StackedDeckExchange }
 
 // @public
@@ -251,7 +236,6 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
     readonly canPrevious: ComputedRef<boolean>;
     readonly compositing: ComputedRef<boolean>;
     readonly diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
-    readonly direct: ShallowRef<StackedDeckDirectState<Id> | null>;
     // (undocumented)
     readonly frame: ShallowRef<StackedDeckFrame>;
     // (undocumented)

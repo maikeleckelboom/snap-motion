@@ -27,7 +27,7 @@ export type {
 } from "./carousel";
 export { Coverflow } from "./coverflow";
 export type { CoverflowCardPresentation, CoverflowCardState, CoverflowHandle } from "./coverflow";
-export { StackedDeck } from "./stacked-deck";
+export { default as StackedDeck } from "./stacked-deck/components/StackedDeck.vue";
 export type { StackedDeckCardState, StackedDeckExchange, StackedDeckHandle } from "./stacked-deck";
 export { Sheet, SheetSnapPicker } from "./sheet";
 export type {

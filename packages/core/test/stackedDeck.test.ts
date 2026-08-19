@@ -60,16 +60,28 @@ function resolveFrame(
 function directProjection(
   originIndex: number,
   scalarDistance: number,
-  overrides: Partial<StackedDeckDirectProjection> = {},
+  overrides: Omit<Partial<StackedDeckDirectProjection>, "releaseDistance"> & {
+    settlementProgress?: number;
+  } = {},
 ): StackedDeckDirectProjection {
+  const { settlementProgress = 0, ...projection } = overrides;
+  const phase = projection.phase ?? "held";
+  const distance = Math.min(1, Math.abs(scalarDistance));
+  const releaseDistance =
+    phase === "returning"
+      ? settlementProgress < 1
+        ? distance / (1 - settlementProgress)
+        : 1
+      : phase === "parking" && settlementProgress < 1
+        ? (distance - settlementProgress) / (1 - settlementProgress)
+        : 0;
   return {
     originIndex,
-    scalarDistance,
-    phase: "autonomous",
+    phase: "held",
     translateX: 0,
     translateY: 0,
-    reconciliationProgress: 0,
-    ...overrides,
+    releaseDistance,
+    ...projection,
   };
 }
 
@@ -83,7 +95,6 @@ function resolveDirectFrame(
       itemCount,
       traversal: activeTraversal,
       tuning: WIDE_TUNING,
-      exchange: "direct",
       direct,
     },
     createStackedDeckFrame(itemCount),
@@ -824,23 +835,28 @@ describe("stacked deck persistent physical cards", () => {
 });
 
 describe("Direct stacked deck projection", () => {
-  it("keeps omitted exchange exactly equal to explicit Shuffle across a dense traversal", () => {
+  it("constructs exact source and destination rest decks from accepted Shuffle geometry", () => {
     for (const direction of [-1, 1] as const) {
-      for (let step = 0; step <= 1_000; step += 1) {
-        const progress = step / 1_000;
-        const active = progress === 0 ? traversal() : segment(2, direction, progress);
-        const omitted = resolveFrame(active);
-        const explicit = resolveStackedDeckFrame(
-          {
-            itemCount: 5,
-            traversal: active,
-            tuning: WIDE_TUNING,
-            exchange: "shuffle",
-          },
-          createStackedDeckFrame(5),
-        );
-        expect(explicit).toEqual(omitted);
-      }
+      const source = resolveFrame(traversal());
+      const directSource = resolveStackedDeckFrame(
+        { itemCount: 5, traversal: traversal(), tuning: WIDE_TUNING },
+        createStackedDeckFrame(5),
+      );
+      expect(directSource).toEqual(source);
+
+      const endpoint = resolveDirectFrame(
+        { ...segment(2, direction, 1), authoritativeIndex: 2 + direction },
+        directProjection(2, direction, { phase: "parking", settlementProgress: 1 }),
+      );
+      const destination = resolveFrame(
+        traversal({
+          settledIndex: 2 + direction,
+          visualTopIndex: 2 + direction,
+          authoritativeIndex: 2 + direction,
+          segmentOriginIndex: 2 + direction,
+        }),
+      );
+      expect(endpoint.poses).toEqual(destination.poses);
     }
   });
 
@@ -894,7 +910,7 @@ describe("Direct stacked deck projection", () => {
     }
   });
 
-  it("moves the target monotonically from accepted pile geometry to the exact resting top", () => {
+  it("moves every non-held item monotonically between the two exact rest decks", () => {
     for (const direction of [-1, 1] as const) {
       let previousDistance = Number.POSITIVE_INFINITY;
       for (let step = 0; step <= 1_000; step += 1) {
@@ -906,7 +922,14 @@ describe("Direct stacked deck projection", () => {
                 ...segment(2, direction, progress),
                 authoritativeIndex: progress >= 0.55 ? 2 + direction : 2,
               };
-        const frame = resolveDirectFrame(active, directProjection(2, direction * progress));
+        const frame = resolveDirectFrame(
+          active,
+          directProjection(2, direction * progress, {
+            phase: "held",
+            translateX: -direction * progress * 500,
+            translateY: progress * 160,
+          }),
+        );
         expect(frameIsFinite(frame)).toBe(true);
         const target = frame.poses[2 + direction]!;
         const distance = Math.hypot(
@@ -918,20 +941,36 @@ describe("Direct stacked deck projection", () => {
         expect(distance).toBeLessThanOrEqual(previousDistance + Number.EPSILON * 32);
         previousDistance = distance;
       }
+    }
+  });
 
-      const endpoint = resolveDirectFrame(
-        { ...segment(2, direction, 1), authoritativeIndex: 2 + direction },
-        directProjection(2, direction),
-      );
-      const settled = resolveFrame(
-        traversal({
-          settledIndex: 2 + direction,
-          visualTopIndex: 2 + direction,
-          authoritativeIndex: 2 + direction,
-          segmentOriginIndex: 2 + direction,
-        }),
-      );
-      expect(endpoint.poses).toEqual(settled.poses);
+  it("keeps hidden same-side paint order invariant through dense held reversals", () => {
+    for (const direction of [-1, 1] as const) {
+      const sameSidePair = direction === 1 ? ([0, 1] as const) : ([3, 4] as const);
+      let expectedSign: number | undefined;
+      for (const progress of [
+        ...Array.from({ length: 1_001 }, (_, index) => index / 1_000),
+        0.7,
+        0.35,
+        0.9,
+        0.15,
+        0.6,
+      ]) {
+        const frame = resolveDirectFrame(
+          progress === 0 ? traversal() : segment(2, direction, progress),
+          directProjection(2, direction * progress, {
+            phase: "held",
+            translateX: -direction * progress * 600,
+            translateY: 120,
+          }),
+        );
+        const [backIndex, frontIndex] = sameSidePair;
+        const sign = Math.sign(frame.poses[frontIndex]!.layer - frame.poses[backIndex]!.layer);
+        expectedSign ??= sign;
+        expect(sign).toBe(expectedSign);
+        expect(frame.poses[backIndex]!.role).toBe("hidden");
+        expect(frame.poses[frontIndex]!.role).toBe("hidden");
+      }
     }
   });
 
@@ -961,102 +1000,135 @@ describe("Direct stacked deck projection", () => {
     }
   });
 
-  it("rebases only between two exact zero-opacity states and fades into live pile geometry", () => {
+  it("parks the same released shell continuously behind the new top with no opacity choreography", () => {
     for (const direction of [-1, 1] as const) {
-      const active = {
-        ...segment(2, direction, 0.72),
-        authoritativeIndex: 2 + direction,
-      };
-      const before = resolveDirectFrame(
-        active,
-        directProjection(2, direction * 0.72, {
-          phase: "fade-out",
-          translateX: direction * -540,
-          translateY: 180,
-          reconciliationProgress: 1,
-        }),
-      );
-      const after = resolveDirectFrame(
-        active,
-        directProjection(2, direction * 0.72, {
-          phase: "fade-in",
-          translateX: direction * -540,
-          translateY: 180,
-          reconciliationProgress: 0,
-        }),
-      );
-      expect(before.poses[2]!.opacity).toBe(0);
-      expect(after.poses[2]!.opacity).toBe(0);
-      expect(before.poses[2]!.translateX).toBe(direction * -540);
-      expect(before.poses[2]!.translateY).toBe(180);
-      expect(after.poses[2]!.translateX).not.toBe(before.poses[2]!.translateX);
-      expect(after.poses[2]!.translateY).not.toBe(before.poses[2]!.translateY);
-
-      let priorFadeOut = 1;
-      let priorFadeIn = 0;
+      const releaseX = direction * -540;
+      const releaseY = 180;
+      const releaseDistance = 0.62;
+      let previous: StackedDeckPose | undefined;
+      let firstOutgoing: StackedDeckPose | undefined;
+      let maximumStepDistance = 0;
       for (let step = 0; step <= 1_000; step += 1) {
         const progress = step / 1_000;
-        const fadeOut = resolveDirectFrame(
-          active,
-          directProjection(2, direction * 0.72, {
-            phase: "fade-out",
-            translateX: direction * -540,
-            translateY: 180,
-            reconciliationProgress: progress,
+        const scalarDistance = releaseDistance + (1 - releaseDistance) * progress;
+        const frame = resolveDirectFrame(
+          {
+            ...segment(2, direction, scalarDistance),
+            authoritativeIndex: 2 + direction,
+          },
+          directProjection(2, direction * scalarDistance, {
+            phase: "parking",
+            translateX: releaseX,
+            translateY: releaseY,
+            settlementProgress: progress,
           }),
-        ).poses[2]!.opacity;
-        const fadeIn = resolveDirectFrame(
-          active,
-          directProjection(2, direction * 0.72, {
-            phase: "fade-in",
-            reconciliationProgress: progress,
-          }),
-        ).poses[2]!.opacity;
-        expect(fadeOut).toBeLessThanOrEqual(priorFadeOut);
-        expect(fadeIn).toBeGreaterThanOrEqual(priorFadeIn);
-        priorFadeOut = fadeOut;
-        priorFadeIn = fadeIn;
+        );
+        const outgoing = frame.poses[2]!;
+        const target = frame.poses[2 + direction]!;
+        expect(frame.poses.every((pose) => pose.opacity === 1)).toBe(true);
+        expect(outgoing).toMatchObject({ role: "hidden", visible: true });
+        expect(outgoing.layer).toBeLessThan(target.layer);
+        if (step === 0) firstOutgoing = outgoing;
+        if (previous !== undefined) {
+          maximumStepDistance = Math.max(
+            maximumStepDistance,
+            Math.hypot(
+              outgoing.translateX - previous.translateX,
+              outgoing.translateY - previous.translateY,
+            ),
+          );
+        }
+        previous = { ...outgoing };
       }
+
+      expect(firstOutgoing?.translateX).toBe(releaseX);
+      expect(firstOutgoing?.translateY).toBe(releaseY);
+      expect(maximumStepDistance).toBeLessThan(2);
+
+      const destination = resolveFrame(
+        traversal({
+          settledIndex: 2 + direction,
+          visualTopIndex: 2 + direction,
+          authoritativeIndex: 2 + direction,
+          segmentOriginIndex: 2 + direction,
+        }),
+      );
+      expect(physicalValues(previous!)).toEqual(physicalValues(destination.poses[2]!));
     }
   });
 
-  it("lets one retired shell rebase beside newer Direct ownership without changing that owner", () => {
-    const active = { ...segment(3, 1, 0.35), authoritativeIndex: 3 };
-    const primary = directProjection(3, 0.35, {
-      phase: "held",
-      translateX: -280,
-      translateY: -90,
-    });
-    const resolveInterrupted = (phase: "fade-out" | "fade-in", reconciliationProgress: number) =>
-      resolveStackedDeckFrame(
-        {
-          itemCount: 5,
-          traversal: active,
-          tuning: WIDE_TUNING,
-          exchange: "direct",
-          direct: primary,
-          directReconciliation: {
-            itemIndex: 2,
-            phase,
-            translateX: 510,
-            translateY: 175,
-            reconciliationProgress,
-          },
-        },
-        createStackedDeckFrame(5),
+  it("returns a cancelled shell continuously to the exact source top", () => {
+    for (const direction of [-1, 1] as const) {
+      const releaseX = direction * -430;
+      const releaseY = -170;
+      let previousDistance = Number.POSITIVE_INFINITY;
+      for (let step = 0; step <= 1_000; step += 1) {
+        const progress = step / 1_000;
+        const scalarDistance = direction * (1 - progress) * 0.42;
+        const frame = resolveDirectFrame(
+          scalarDistance === 0 ? traversal() : segment(2, direction, Math.abs(scalarDistance)),
+          directProjection(2, scalarDistance, {
+            phase: "returning",
+            translateX: releaseX,
+            translateY: releaseY,
+            settlementProgress: progress,
+          }),
+        );
+        const outgoing = frame.poses[2]!;
+        const distance = Math.hypot(outgoing.translateX, outgoing.translateY);
+        expect(distance).toBeLessThanOrEqual(previousDistance + Number.EPSILON * 32);
+        expect(outgoing).toMatchObject({ opacity: 1, role: "top", layer: 501 });
+        previousDistance = distance;
+      }
+      const returned = resolveDirectFrame(
+        traversal(),
+        directProjection(2, 0, {
+          phase: "returning",
+          translateX: releaseX,
+          translateY: releaseY,
+          settlementProgress: 1,
+        }),
       );
+      expect(physicalValues(returned.poses[2]!)).toEqual(
+        physicalValues(resolveFrame(traversal()).poses[2]!),
+      );
+    }
+  });
 
-    const handZero = resolveInterrupted("fade-out", 1);
-    const pileZero = resolveInterrupted("fade-in", 0);
-    const completed = resolveInterrupted("fade-in", 1);
-    const primaryValues = physicalValues(handZero.poses[3]!);
-    expect(handZero.poses[2]).toMatchObject({ opacity: 0, translateX: 510, translateY: 175 });
-    expect(pileZero.poses[2]!.opacity).toBe(0);
-    expect(pileZero.poses[2]!.translateX).not.toBe(510);
-    expect(pileZero.poses[2]!.translateY).not.toBe(175);
-    expect(completed.poses[2]!.opacity).toBe(1);
-    expect(physicalValues(pileZero.poses[3]!)).toEqual(primaryValues);
-    expect(physicalValues(completed.poses[3]!)).toEqual(primaryValues);
+  it("promotes a still-parking shell from its current resolved pose on immediate reversal", () => {
+    const parking = resolveDirectFrame(
+      { ...segment(2, 1, 0.7), authoritativeIndex: 3 },
+      directProjection(2, 0.7, {
+        phase: "parking",
+        translateX: -520,
+        translateY: 190,
+        settlementProgress: 0.24,
+      }),
+    );
+    const interrupted = resolveDirectFrame(
+      { ...segment(3, -1, 0.3), authoritativeIndex: 3 },
+      directProjection(3, -0.3, {
+        phase: "held",
+        translateX: 0,
+        translateY: 0,
+        continuity: {
+          itemIndex: 2,
+          progress: 0.216,
+          pose: { ...parking.poses[2]! },
+        },
+      }),
+    );
+
+    // Settings becomes the one hand-owned shell; every other transform begins exactly where the
+    // prior frame left it. Team changes paint role discretely from destination-hidden to target.
+    for (let index = 0; index < parking.poses.length; index += 1) {
+      if (index === 3) continue;
+      expect(physicalValues(interrupted.poses[index]!)).toEqual(
+        physicalValues(parking.poses[index]!),
+      );
+    }
+    expect(interrupted.poses[2]).toMatchObject({ role: "target", layer: 500, opacity: 1 });
+    expect(interrupted.poses).toHaveLength(parking.poses.length);
   });
 });
 

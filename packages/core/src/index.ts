@@ -114,7 +114,6 @@ export type {
   ResolveStackedDeckTuningOptions,
   StackedDeckFrame,
   StackedDeckDirectProjection,
-  StackedDeckDirectReconciliation,
   StackedDeckExchange,
   StackedDeckPilePose,
   StackedDeckPose,

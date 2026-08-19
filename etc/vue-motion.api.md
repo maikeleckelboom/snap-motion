@@ -34,17 +34,6 @@ export { NavigationReason }
 // @public
 export type PointerIntent = "horizontal" | "pending" | "vertical";
 
-// @public
-export interface PointerMovementSample {
-    readonly delta: number;
-    readonly deltaX: number;
-    readonly deltaY: number;
-    readonly position: number;
-    readonly time: number;
-    readonly x: number;
-    readonly y: number;
-}
-
 export { SettlementDetails }
 
 // @public
@@ -109,14 +98,12 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<SnapContro
     driver?: AnimationDriver;
     // (undocumented)
     onChange?: (snapshot: ControllerSnapshot<Id>) => void;
-    onPointerMovement?: (phase: "begin" | "move" | "end" | "cancel", sample: PointerMovementSample, event: PointerEvent) => void;
     // (undocumented)
     onReleaseTargetSelected?: (id: Id | undefined) => void;
     // (undocumented)
     pointerDeltaMultiplier?: () => number;
     // (undocumented)
     pointerIntent?: "horizontal" | "immediate";
-    pointerMovementEnabled?: () => boolean;
     // (undocumented)
     reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
     resolveDragOrigin?: () => Id | undefined;

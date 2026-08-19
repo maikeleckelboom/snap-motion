@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import { computed, defineComponent, h, nextTick, ref, type ComputedRef, type Ref } from "vue";
 
 import { useCoverflowMotion } from "../src/coverflow/use-coverflow-motion";
-import { useStackedDeckMotion } from "../src/stacked-deck/use-stacked-deck-motion";
+import { useStackedDeckMotion } from "../src/stacked-deck/use-stacked-deck-motion-public";
 
 interface SurfaceHarness {
   readonly controlledId: Ref<string | undefined>;

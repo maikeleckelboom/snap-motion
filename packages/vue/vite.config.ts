@@ -19,10 +19,9 @@ export default defineConfig({
   ],
   build: {
     emptyOutDir: false,
-    // Vite 8's Oxc minifier can emit bindings that collide when Nuxt rebundles capability
-    // entrypoints. Terser avoids that Oxc defect while keeping capability graphs within their
-    // existing ceilings; packed Nuxt and browser consumers verify the emitted ESM.
-    minify: "terser",
+    // Vite 8's Oxc minifier can emit single-letter bindings that collide when Nuxt rebundles
+    // capability entrypoints. Esbuild keeps the published ESM valid across that consumer boundary.
+    minify: "esbuild",
     lib: {
       cssFileName: "style",
       entry: {

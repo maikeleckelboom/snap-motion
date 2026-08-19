@@ -10,12 +10,8 @@ import {
 
 export interface PointerDragSample {
   delta: number;
-  deltaX: number;
-  deltaY: number;
   position: number;
   time: number;
-  x: number;
-  y: number;
 }
 
 export interface PointerDragOptions {
@@ -57,12 +53,8 @@ export function usePointerDrag(options: PointerDragOptions) {
     const position = eventPosition(event, activeAxis);
     return {
       delta: position - startPosition,
-      deltaX: event.clientX - startX,
-      deltaY: event.clientY - startY,
       position,
       time: event.timeStamp,
-      x: event.clientX,
-      y: event.clientY,
     };
   }
 

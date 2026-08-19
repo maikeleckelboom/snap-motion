@@ -139,11 +139,12 @@ is the explicit `boundary-resisted` exception rather than fabricated pointer loc
 Keyboard, wheel, and programmatic Direct navigation use the same scalar projection without a
 fictional cursor.
 
-On commit, the released shell fades only for physical reconciliation. A far-away shell reaches
-opacity `0`, rebases to its current accepted pile pose while remaining exactly `0`, then returns as
-that same persistent shell. Cancel returns X and Y continuously and needs no discontinuous rebase.
-New input and controlled or collection authority never wait for this cosmetic completion; a retired
-shell is non-interactive while the new semantic top follows the existing accessibility policy.
+On commit, the released shell immediately belongs to its destination hidden layer below the new top.
+Its transform continues from the actual release X/Y into the exact destination pile pose while
+opacity remains `1`; the opaque top supplies the natural occlusion. Cancel keeps the shell above the
+stack and returns X and Y continuously to the exact source top. New input and controlled or
+collection authority never wait for presentation settlement. Immediate reversal promotes a
+still-parking item from its current resolved pose rather than rebasing it first.
 
 Direct drag preserves one scalar physical position. Re-grab starts from the rendered state rather
 than a stale logical anchor. Rapid commands chain from the pending mechanical target without

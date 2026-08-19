@@ -21,13 +21,8 @@ export interface SurfaceGestureOptions {
   readonly disabled?: () => boolean;
   /** Forwards a pointer that has been accepted, so the controller can take ownership. */
   readonly forwardPointerDown: (event: PointerEvent) => void;
-  /** Optional non-reactive pointer-down preparation for a presentation that later wins ownership. */
-  readonly onPointerPrepared?: (
-    event: PointerEvent,
-    originElement: HTMLElement,
-    originIndex: number,
-  ) => void;
-  readonly pointerPreparationEnabled?: () => boolean;
+  /** Optional non-reactive preparation and raw movement for the tracked pointer. */
+  readonly onPointerSample?: (deltaX?: number, deltaY?: number) => void;
   readonly onResolved: (
     resolution: DirectManipulationResolution,
     gesture: CompletedSurfaceGesture,
@@ -64,15 +59,6 @@ function resolutionFor(tracked: TrackedGesture, onOrigin: boolean): DirectManipu
     openEligibleAtStart: tracked.openEligibleAtStart,
     releasedOnOrigin: onOrigin,
   });
-}
-
-function trackMovement(tracked: TrackedGesture, event: PointerEvent) {
-  tracked.deltaX = event.clientX - tracked.startX;
-  tracked.deltaY = event.clientY - tracked.startY;
-  tracked.maximumDisplacement = Math.max(
-    tracked.maximumDisplacement,
-    Math.hypot(tracked.deltaX, tracked.deltaY),
-  );
 }
 
 interface TrackedGesture {
@@ -114,6 +100,18 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
   let disposed = false;
   /** Evidence tying one compatibility click to the swipe that armed its suppression. */
   let clickSuppression: ArmedClickSuppression | undefined;
+
+  function trackMovement(tracked: TrackedGesture, event: PointerEvent) {
+    tracked.deltaX = event.clientX - tracked.startX;
+    tracked.deltaY = event.clientY - tracked.startY;
+    tracked.maximumDisplacement = Math.max(
+      tracked.maximumDisplacement,
+      Math.hypot(tracked.deltaX, tracked.deltaY),
+    );
+    if (tracked.originIndex !== undefined) {
+      queueMicrotask(() => options.onPointerSample?.(tracked.deltaX, tracked.deltaY));
+    }
+  }
 
   // Resolution is deferred by a microtask so a release and the controller's answer to it cannot
   // interleave. A scope torn down inside that window must not be spoken for afterwards.
@@ -251,12 +249,8 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
       maximumDisplacement: 0,
     };
     activePointers.add(event.pointerId);
-    if (
-      originElement !== undefined &&
-      originIndex >= 0 &&
-      (options.pointerPreparationEnabled?.() ?? false)
-    ) {
-      options.onPointerPrepared?.(event, originElement, originIndex);
+    if (originElement !== undefined && originIndex >= 0) {
+      options.onPointerSample?.();
     }
     options.forwardPointerDown(event);
   }
@@ -265,6 +259,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     const tracked = gesture;
     if (!tracked || event.pointerId !== tracked.pointerId) return;
     activePointers.delete(event.pointerId);
+    trackMovement(tracked, event);
     tracked.cancelled = true;
     gesture = undefined;
     // A gesture that undid itself consumed nothing, so it leaves no suppression behind.

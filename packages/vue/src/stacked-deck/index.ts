@@ -6,10 +6,8 @@ export type {
   StackedDeckPose,
   StackedDeckRole,
 } from "./stacked-deck-contracts";
-export { useStackedDeckMotion } from "./use-stacked-deck-motion";
+export { useStackedDeckMotion } from "./use-stacked-deck-motion-public";
 export type {
-  StackedDeckDirectSampleKind,
-  StackedDeckDirectState,
   StackedDeckHandle,
   UseStackedDeckMotionOptions,
   UseStackedDeckMotionReturn,

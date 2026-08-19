@@ -13,8 +13,8 @@ import { computed, ref, watch } from "vue";
 
 import { preserveFocusBeforeSemanticChange } from "../../internal/accessibility/focus";
 import { createEnglishSnapMotionMessages } from "../../localization/messages";
-import type { StackedDeckCardState } from "../stacked-deck-contracts";
-import { useStackedDeckMotion } from "../use-stacked-deck-motion";
+import { stackedDeckTransform, type StackedDeckCardState } from "../stacked-deck-contracts";
+import { useStackedDeckComponentMotion } from "../use-stacked-deck-motion";
 
 type TId = TItem["id"];
 
@@ -182,7 +182,7 @@ function publishSettlement(id: TId, index: number, reason: NavigationReason) {
   });
 }
 
-const deck = useStackedDeckMotion<TId>({
+const deck = useStackedDeckComponentMotion<TId>({
   ids,
   exchange: () => props.exchange,
   controlledId: () => props.activeId,
@@ -266,7 +266,7 @@ function cardMotionStyle(card: StackedDeckCardState<TItem, TId>) {
   const pose = card.pose;
   return {
     pointerEvents: pose.interactive ? ("auto" as const) : ("none" as const),
-    transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
+    transform: stackedDeckTransform(pose),
     transformOrigin: "center center",
     // Bound explicit GPU promotion to the exchanging pair. Every persistent shell still follows its
     // physical pose, but a larger deck must not allocate one promoted layer per item.
@@ -316,16 +316,6 @@ defineExpose({
     :data-active-id="semanticActiveId"
     :data-authority-stable="deck.state.value.authorityStable ? 'true' : 'false'"
     :data-owned="deck.owned.value ? 'true' : 'false'"
-    :data-exchange="props.exchange"
-    :data-direct-phase="deck.direct.value?.phase"
-    :data-direct-origin-id="deck.direct.value?.originId"
-    :data-direct-grab-x="deck.direct.value?.grabOffsetX"
-    :data-direct-grab-y="deck.direct.value?.grabOffsetY"
-    :data-direct-pointer-x="deck.direct.value?.pointerX"
-    :data-direct-pointer-y="deck.direct.value?.pointerY"
-    :data-direct-reconciliation-progress="deck.direct.value?.reconciliationProgress"
-    :data-direct-sample-index="deck.direct.value?.sampleIndex"
-    :data-direct-sample-kind="deck.direct.value?.sampleKind"
     :data-phase="deck.diagnostics.value.phase"
     :data-profile="deck.tuningProfile.value"
     :data-reduced-motion="deck.diagnostics.value.reducedMotion ? 'true' : 'false'"

@@ -53,19 +53,35 @@ async function nextFrame(page: Page): Promise<void> {
   );
 }
 
-async function readGrabSample(page: Page, id: string, index: number): Promise<GrabSample> {
+async function readGrabSample(
+  page: Page,
+  id: string,
+  index: number,
+  origin: PointerOrigin,
+  deltaX: number,
+  deltaY: number,
+  kind: string,
+): Promise<GrabSample> {
   return page.evaluate(
-    ({ id: itemId, index: sampleIndex }) => {
+    ({
+      deltaX: pointerDeltaX,
+      deltaY: pointerDeltaY,
+      id: itemId,
+      index: sampleIndex,
+      kind: sampleKind,
+      origin: pointerOrigin,
+    }) => {
       const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
       const card = document.querySelector<HTMLElement>(
         `[data-snap-motion-stacked-deck-card][data-item-id='${itemId}']`,
       )!;
       const motion = card.querySelector<HTMLElement>(".snap-motion-stacked-deck-card-motion")!;
+      const rootBox = root.getBoundingClientRect();
       const box = motion.getBoundingClientRect();
-      const pointerX = Number(root.dataset.directPointerX);
-      const pointerY = Number(root.dataset.directPointerY);
-      const grabX = Number(root.dataset.directGrabX);
-      const grabY = Number(root.dataset.directGrabY);
+      const pointerX = pointerOrigin.x + pointerDeltaX;
+      const pointerY = pointerOrigin.y + pointerDeltaY;
+      const grabX = pointerOrigin.x - (rootBox.left + rootBox.width / 2);
+      const grabY = pointerOrigin.y - (rootBox.top + rootBox.height / 2);
       const transformedX = box.left + box.width / 2 + grabX;
       const transformedY = box.top + box.height / 2 + grabY;
       const errorX = transformedX - pointerX;
@@ -75,14 +91,14 @@ async function readGrabSample(page: Page, id: string, index: number): Promise<Gr
         errorX,
         errorY,
         index: sampleIndex,
-        kind: root.dataset.directSampleKind ?? "unknown",
+        kind: sampleKind,
         pointerX,
         pointerY,
         transformedX,
         transformedY,
       };
     },
-    { id, index },
+    { deltaX, deltaY, id, index, kind, origin },
   );
 }
 
@@ -101,10 +117,11 @@ async function moveAndSample(
   deltaY: number,
   elapsedMs: number,
   samples: GrabSample[],
+  kind = "ordinary",
 ): Promise<void> {
   await movePointerBy(page, origin, deltaX, deltaY, elapsedMs);
   await nextFrame(page);
-  samples.push(await readGrabSample(page, id, samples.length));
+  samples.push(await readGrabSample(page, id, samples.length, origin, deltaX, deltaY, kind));
   await page.waitForTimeout(70);
 }
 
@@ -117,16 +134,17 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
   const phases: string[] = [];
 
   await openLabDemo(page, "stacked-deck", "no-preference");
-  await page.getByTestId("stacked-deck-exchange-direct").click();
+  const directControl = page.getByTestId("stacked-deck-exchange-direct");
+  await directControl.click();
   const stage = viewport(page);
-  await expect(stage).toHaveAttribute("data-exchange", "direct");
+  await expect(directControl).toHaveAttribute("aria-pressed", "true");
   const pitch = await motionPitch(stage);
 
   phases.push("touch ownership catch-up");
   await select(page, 2);
   let card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='map']");
   let origin = await beginPointerAt(card, 0.35, 0.65, "touch");
-  await moveAndSample(page, origin, "map", -pitch * 0.32, 65, 100, samples);
+  await moveAndSample(page, origin, "map", -pitch * 0.32, 65, 100, samples, "catch-up");
   await finishPointerBy(page, origin, -pitch * 0.32, 65, 140, "pointercancel");
   await expectCarouselAt(stage, "map");
 
@@ -191,13 +209,31 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
   await select(page, 0);
   card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='templates']");
   origin = await beginPointerAt(card, 0.5, 0.5);
-  await moveAndSample(page, origin, "templates", pitch * 0.65, 90, 150, samples);
+  await moveAndSample(
+    page,
+    origin,
+    "templates",
+    pitch * 0.65,
+    90,
+    150,
+    samples,
+    "boundary-resisted",
+  );
   await finishPointerBy(page, origin, pitch * 0.65, 90, 190, "pointercancel");
   await expectCarouselAt(stage, "templates");
   await select(page, 4);
   card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']");
   origin = await beginPointerAt(card, 0.5, 0.5);
-  await moveAndSample(page, origin, "settings", -pitch * 0.65, -90, 150, samples);
+  await moveAndSample(
+    page,
+    origin,
+    "settings",
+    -pitch * 0.65,
+    -90,
+    150,
+    samples,
+    "boundary-resisted",
+  );
   await finishPointerBy(page, origin, -pitch * 0.65, -90, 190, "pointercancel");
   await expectCarouselAt(stage, "settings");
 
@@ -242,8 +278,8 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
       {
         candidate,
         createdAt: new Date().toISOString(),
-        reconciliationFamily: "fade-to-rebase",
-        rebaseInvariant: "opacity is exactly zero immediately before and after pose rebase",
+        physicalModel: "source-rest to destination-rest with continuous opaque parking",
+        parkingInvariant: "the released shell remains opaque and below the destination top",
         revision,
         pointerLockToleranceCssPx: 0.5,
       },

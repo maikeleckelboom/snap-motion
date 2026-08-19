@@ -1,5 +1,11 @@
 import type { StackedDeckPose, StackedDeckRole } from "@snap-motion/core";
 
+export function stackedDeckTransform(
+  pose: Pick<StackedDeckPose, "translateX" | "translateY" | "scale" | "rotate">,
+): string {
+  return `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`;
+}
+
 /** Slot state for one deck card. */
 export interface StackedDeckCardState<TItem, TId extends string> {
   readonly item: TItem;

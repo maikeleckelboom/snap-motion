@@ -36,7 +36,7 @@ and mixed ownership rather than a source cycle.
   `MutableStackedDeckFrame`, `MutableStackedDeckPose`, `MutableStackedDeckTraversal`,
   `ResolveStackedDeckFrameOptions`, `ResolveStackedDeckTraversalOptions`,
   `ResolveStackedDeckTuningOptions`,
-  `StackedDeckDirectProjection`, `StackedDeckDirectReconciliation`, `StackedDeckExchange`,
+  `StackedDeckDirectProjection`, `StackedDeckExchange`,
   `StackedDeckFrame`, `StackedDeckPilePose`, `StackedDeckPose`, `StackedDeckProfile`,
   `StackedDeckRole`, `StackedDeckTraversal`, `StackedDeckTraversalPhase`, `StackedDeckTuning`,
   `FixedStageGeometry`, `MeasuredItemBox`, `PagedGridGeometry`, `PagedGridGeometryOptions`,
@@ -90,8 +90,8 @@ modules but are no longer package exports.
 
 - Component and composable: `StackedDeck`, `useStackedDeckMotion`.
 - Types: `StackedDeckCardState`, `StackedDeckHandle`, `StackedDeckPileLayer`,
-  `StackedDeckDirectSampleKind`, `StackedDeckDirectState`, `StackedDeckExchange`,
-  `StackedDeckPose`, `StackedDeckRole`, `UseStackedDeckMotionOptions`, `UseStackedDeckMotionReturn`.
+  `StackedDeckExchange`, `StackedDeckPose`, `StackedDeckRole`, `UseStackedDeckMotionOptions`,
+  `UseStackedDeckMotionReturn`.
 
 ### `@snap-motion/vue/sheet`
 

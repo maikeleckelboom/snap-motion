@@ -71,7 +71,6 @@ describe("StackedDeck", () => {
     expect(root.attributes("data-active-id")).toBe("system");
     expect(root.attributes("data-settled-id")).toBe("system");
     expect(root.attributes("data-phase")).toBe("idle");
-    expect(root.attributes("data-exchange")).toBe("shuffle");
     expect(cards[1]!.attributes("aria-current")).toBe("true");
     expect(cards[1]!.attributes("aria-label")).toBe("System, 2 of 3");
     expect(cards[0]!.attributes("aria-hidden")).toBe("true");
@@ -85,6 +84,33 @@ describe("StackedDeck", () => {
         .every((card) => card.find(".snap-motion-stacked-deck-card-motion").exists()),
     ).toBe(true);
     wrapper.unmount();
+  });
+
+  it("keeps omitted exchange byte-for-byte equivalent to explicit Shuffle", async () => {
+    async function sample(exchange?: "shuffle") {
+      const wrapper = mountDeck(exchange === undefined ? {} : { exchange });
+      await nextTick();
+      const deck = wrapper.vm as unknown as DeckInstance & {
+        frame: unknown;
+        pitch: number;
+      };
+      const stage = wrapper.get(".snap-motion-stacked-deck").element as HTMLElement;
+      stage.setPointerCapture = () => {};
+      stage.releasePointerCapture = () => {};
+      const frames = [JSON.stringify(deck.frame)];
+
+      stage.dispatchEvent(pointerDrag("pointerdown", 0));
+      window.dispatchEvent(pointerDrag("pointermove", -deck.pitch * 0.62));
+      await nextTick();
+      frames.push(JSON.stringify(deck.frame));
+      window.dispatchEvent(pointerDrag("pointerup", -deck.pitch * 0.62));
+      await nextTick();
+      frames.push(JSON.stringify(deck.frame));
+      wrapper.unmount();
+      return frames;
+    }
+
+    expect(await sample()).toEqual(await sample("shuffle"));
   });
 
   it("keeps one physical shell per item through direction changes", async () => {
@@ -255,8 +281,11 @@ describe("StackedDeck", () => {
 
     origin.dispatchEvent(pointerDrag("pointerdown", 0));
     window.dispatchEvent(pointerDrag("pointermove", -deck.pitch * 0.4));
+    // Raw Direct publication intentionally waits one microtask so touch ownership resolves first.
+    await Promise.resolve();
     await nextTick();
-    expect(wrapper.get(".snap-motion-stacked-deck").attributes("data-direct-phase")).toBe("held");
+    expect(wrapper.get(".snap-motion-stacked-deck").attributes("data-owned")).toBe("true");
+    expect(wrapper.get("[data-item-id='system']").attributes("data-deck-role")).toBe("top");
 
     await expect(wrapper.setProps({ items: [screens[0], screens[1]] })).resolves.toBeUndefined();
     await nextTick();
@@ -270,6 +299,7 @@ describe("StackedDeck", () => {
     const reorderedOrigin = wrapper.get("[data-item-id='system']").element as HTMLElement;
     reorderedOrigin.dispatchEvent(pointerDrag("pointerdown", 0));
     window.dispatchEvent(pointerDrag("pointermove", deck.pitch * 0.35));
+    await Promise.resolve();
     await nextTick();
     await expect(wrapper.setProps({ items: [screens[2], screens[0]] })).resolves.toBeUndefined();
     await nextTick();
@@ -280,8 +310,10 @@ describe("StackedDeck", () => {
     ).toEqual(["outcome", "overview"]);
     expect(["outcome", "overview"]).toContain(deck.visualId);
     expect(
-      wrapper.get(".snap-motion-stacked-deck").attributes("data-direct-phase"),
-    ).toBeUndefined();
+      wrapper
+        .findAll(".snap-motion-stacked-deck-card")
+        .every((card) => card.attributes("style")?.includes("opacity: 1")),
+    ).toBe(true);
     wrapper.unmount();
   });
 

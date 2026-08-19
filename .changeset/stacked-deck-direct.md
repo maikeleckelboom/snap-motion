@@ -9,8 +9,10 @@ horizontal gesture arbitration, separates raw two-axis hand motion from scalar o
 and uses the same persistent shells, semantic model, pile geometry, release policy, and authoritative
 core frame as Shuffle.
 
-Committed far-away shells use a single-shell fade-to-rebase reconciliation whose deliberate pose
-change is bracketed by exact zero-opacity frames. Cancel, reversal, re-grab, controlled takeover,
-and collection reconciliation remain immediately interruptible; boundary overdrag is explicitly
-reported as resisted rather than fabricated pointer lock. Autonomous and reduced-motion Direct
-navigation use the same scalar projection without inventing a cursor.
+Every non-held shell interpolates between exact source-rest and destination-rest deck poses with
+stable hidden ordering. A committed far-away shell takes its destination hidden depth and travels
+continuously behind the new top into its exact pile slot without fading, rebasing, or duplication.
+Cancel, reversal, re-grab, controlled takeover, and collection changes remain immediately
+interruptible; boundary overdrag is explicitly reported as resisted rather than fabricated pointer
+lock. Autonomous and reduced-motion Direct navigation use the same endpoint model without inventing
+a cursor.

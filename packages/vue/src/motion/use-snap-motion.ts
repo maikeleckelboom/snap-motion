@@ -12,24 +12,6 @@ import { usePointerDrag } from "../internal/input/pointer-drag";
 import { createMotionDriver } from "./motion-driver";
 import { useReducedMotionPreference } from "./reduced-motion";
 
-/** Optional two-axis sample from the existing accepted pointer-drag lifecycle. */
-export interface PointerMovementSample {
-  /** Active scalar-axis displacement since pointer-down. */
-  readonly delta: number;
-  /** Horizontal displacement since pointer-down. */
-  readonly deltaX: number;
-  /** Vertical displacement since pointer-down. */
-  readonly deltaY: number;
-  /** Current coordinate on the active scalar axis. */
-  readonly position: number;
-  /** Pointer event timestamp. */
-  readonly time: number;
-  /** Current client X coordinate. */
-  readonly x: number;
-  /** Current client Y coordinate. */
-  readonly y: number;
-}
-
 export interface UseSnapMotionOptions<Id extends string> extends Omit<
   SnapControllerOptions<Id>,
   "driver" | "onChange" | "reducedMotion"
@@ -39,14 +21,6 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<
   onChange?: (snapshot: ControllerSnapshot<Id>) => void;
   pointerIntent?: "horizontal" | "immediate";
   pointerDeltaMultiplier?: () => number;
-  /** Keeps optional two-axis sampling dormant for surfaces that do not request it. */
-  pointerMovementEnabled?: () => boolean;
-  /** Publishes accepted direct-manipulation samples without changing scalar controller ownership. */
-  onPointerMovement?: (
-    phase: "begin" | "move" | "end" | "cancel",
-    sample: PointerMovementSample,
-    event: PointerEvent,
-  ) => void;
   onReleaseTargetSelected?: (id: Id | undefined) => void;
   reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
   /**
@@ -69,8 +43,6 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     onChange,
     pointerIntent = "immediate",
     pointerDeltaMultiplier,
-    pointerMovementEnabled,
-    onPointerMovement,
     onReleaseTargetSelected,
     reducedMotionOverride,
     resolveDragOrigin,
@@ -107,21 +79,19 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
   const pointer = usePointerDrag({
     axis,
     intent: pointerIntent,
-    onBegin(sample, event) {
+    onBegin(sample) {
       const current = controller.getSnapshot();
       dragOriginId = resolveDragOrigin?.() ?? current.target?.id ?? current.active?.id;
       controller.beginDrag(dragOriginId === undefined ? {} : { originId: dragOriginId });
       dragOrigin = controller.getSnapshot().position;
       velocityTracker.reset();
       velocityTracker.add(sample.position, sample.time);
-      if (pointerMovementEnabled?.() ?? false) onPointerMovement?.("begin", sample, event);
     },
-    onMove(sample, event) {
+    onMove(sample) {
       velocityTracker.add(sample.position, sample.time);
       controller.dragTo(dragOrigin + sample.delta * (pointerDeltaMultiplier?.() ?? 1));
-      if (pointerMovementEnabled?.() ?? false) onPointerMovement?.("move", sample, event);
     },
-    onEnd(sample, event) {
+    onEnd(sample) {
       velocityTracker.add(sample.position, sample.time);
       const releaseVelocity = velocityTracker.getVelocity() * (pointerDeltaMultiplier?.() ?? 1);
       const targetId = resolveReleaseTarget?.({
@@ -138,15 +108,13 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
         dragOriginId = undefined;
         onReleaseTargetSelected?.(target?.id);
       }
-      if (pointerMovementEnabled?.() ?? false) onPointerMovement?.("end", sample, event);
     },
-    onCancel(sample, event) {
+    onCancel() {
       velocityTracker.reset();
       const originId = dragOriginId;
       dragOriginId = undefined;
       if (originId === undefined) controller.release(0);
       else controller.moveTo(originId, { initialVelocity: 0 });
-      if (pointerMovementEnabled?.() ?? false) onPointerMovement?.("cancel", sample, event);
     },
   });
 

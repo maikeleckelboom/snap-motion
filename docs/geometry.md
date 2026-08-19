@@ -315,18 +315,27 @@ interior raw overdrag remains literal. At an outer deck boundary there is no des
 existing nonlinear resisted frame is used, no target is invented, and telemetry classifies the
 sample separately as `boundary-resisted`.
 
-The target rises monotonically from its exact accepted pile pose to the exact resting top pose, and
-the remaining pile continuously approaches the same destination deck as Shuffle. A held outgoing
-shell paints above the stack without acquiring semantic authority from its layer.
+For each adjacent exchange, Direct constructs two complete endpoint frames with the accepted
+`setPilePose` and `setTopPose` geometry: the interaction origin at rest and the adjacent destination
+at rest. The held shell is excluded. Every other shell interpolates between its two endpoint poses
+with one smooth scalar reveal; raw Y cannot enter that interpolation. Moving frames use the
+destination deck's discrete hidden layers rather than interpolating z-index, so hidden same-side
+order remains invariant while the target rises monotonically to the exact top pose.
 
-A committed raw shell can be far from its compact destination. Direct therefore uses a single-shell
-fade-to-rebase reconciliation: it fades at its release pose, reaches exact opacity `0`, changes to
-the live pile pose while still exact `0`, and fades back as the same persistent shell. The two
-zero-opacity states are explicit frame phases, not inferred occlusion. A cancel instead interpolates
-X and Y back to the current live pose. One retired shell may finish beside newer ownership, remains
-non-interactive, and never delays the next interaction. Autonomous Direct uses the scalar target and
-pile path without inventing pointer coordinates; reduced motion keeps literal held movement while
-shortening reconciliation and retaining reduced pile tuning.
+A committed raw shell can be far from its compact destination. It immediately takes its destination
+hidden layer, below the opaque new top, while its transform remains continuous from the release
+frame. Core normalizes the controller's remaining travel from that captured release distance and
+moves the same shell directly from release X/Y, identity scale, and zero rotation into its exact
+destination pile pose. Opacity remains `1`; there is no duplicate shell, invisible rebase, material
+phase, or independent timer. A cancel keeps the shell above the stack and returns X and Y
+continuously to the exact source top.
+
+New ownership replaces the prior presentation rather than queueing it. When input interrupts
+parking, the adapter captures the resolved frame once and uses it as the new exchange's continuity
+anchor; a still-parking target is therefore promoted from its current pose. Autonomous Direct uses
+a restrained synthetic outgoing slide over the same endpoint decks without inventing pointer
+coordinates. Reduced motion keeps literal held movement, uses reduced pile tuning, and shortens only
+the presentation settlement.
 
 ### Segment handoff and reversal
 
