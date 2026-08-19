@@ -93,6 +93,11 @@ ambiguous card.
 
 Both components accept `items`, optional `activeId`, `label` / `labelledBy`, `itemLabel`,
 `focusScope`, `disabled`, `landmark`, `fallbackStageWidth`, reduced-motion and physics overrides.
+`StackedDeck` additionally accepts `exchange="shuffle" | "direct"`; omitted exchange is exactly
+`"shuffle"`. Shuffle is the opaque physical transfer between pile sides. Direct keeps the exact
+local point grabbed on the outgoing card attached to the pointer after horizontal intent is owned,
+including raw vertical movement, while the scalar controller still owns adjacent target, authority,
+release, and pile reflow. It does not change card content, dimensions, pile geometry, or semantics.
 `fallbackStageWidth` is only the pre-measurement fallback; the component measures the real stage.
 The measured public root may be narrower than the compact mechanics profile. At a 280 CSS-pixel
 allocation, the compact Deck keeps its 192 CSS-pixel card, slotted content, and settled pile inside
@@ -125,6 +130,20 @@ starts as recognition, becomes an owned horizontal drag only after intent is cle
 leaves vertical page scrolling alone. Descendant controls, right-click, and regions marked
 `data-snap-motion-ignore-drag` do not begin surface drag. Accepted navigation prevents its key or
 wheel default; refused navigation does not.
+
+Direct applies the full movement accumulated since pointer-down on the first owned touch frame. From
+the next frame through release, the grabbed local point follows the pointer literally. Interior
+overdrag keeps that hand-owned vector while the existing one-card envelope resists scalar progress.
+At the first or last card, outward movement has no adjacent target, so the existing bounded surface
+is the explicit `boundary-resisted` exception rather than fabricated pointer lock or wrapping.
+Keyboard, wheel, and programmatic Direct navigation use the same scalar projection without a
+fictional cursor.
+
+On commit, the released shell fades only for physical reconciliation. A far-away shell reaches
+opacity `0`, rebases to its current accepted pile pose while remaining exactly `0`, then returns as
+that same persistent shell. Cancel returns X and Y continuously and needs no discontinuous rebase.
+New input and controlled or collection authority never wait for this cosmetic completion; a retired
+shell is non-interactive while the new semantic top follows the existing accessibility policy.
 
 Direct drag preserves one scalar physical position. Re-grab starts from the rendered state rather
 than a stale logical anchor. Rapid commands chain from the pending mechanical target without

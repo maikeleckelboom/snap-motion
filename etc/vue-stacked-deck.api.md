@@ -19,6 +19,8 @@ import { ShallowUnwrapRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
 import type { SnapMotionMessages } from '@snap-motion/vue/localization';
 import { SpringConfiguration } from '@snap-motion/core';
+import { StackedDeckDirectProjection } from '@snap-motion/core';
+import { StackedDeckExchange } from '@snap-motion/core';
 import { StackedDeckFrame } from '@snap-motion/core';
 import { StackedDeckModel } from '@snap-motion/core';
 import { StackedDeckModelState } from '@snap-motion/core';
@@ -37,6 +39,7 @@ export const StackedDeck: <TItem extends {
 }>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
     props: PublicProps & __VLS_PrettifyLocal<{
         items: readonly TItem[];
+        exchange?: StackedDeckExchange;
         activeId?: TItem["id"];
         label?: string;
         labelledBy?: string;
@@ -128,6 +131,22 @@ export interface StackedDeckCardState<TItem, TId extends string> {
 }
 
 // @public
+export type StackedDeckDirectSampleKind = "catch-up" | "ordinary" | "boundary-resisted" | "reconciling";
+
+// @public
+export interface StackedDeckDirectState<Id extends string> extends StackedDeckDirectProjection {
+    readonly grabOffsetX: number;
+    readonly grabOffsetY: number;
+    readonly originId: Id;
+    readonly pointerX: number;
+    readonly pointerY: number;
+    readonly sampleIndex: number;
+    readonly sampleKind: StackedDeckDirectSampleKind;
+}
+
+export { StackedDeckExchange }
+
+// @public
 export interface StackedDeckHandle<Id extends string> {
     readonly activeId: Id | undefined;
     // (undocumented)
@@ -199,6 +218,7 @@ export interface UseStackedDeckMotionOptions<Id extends string> {
     readonly controlledId?: MaybeRefOrGetter<Id | undefined>;
     readonly disabled?: () => boolean;
     readonly elasticity?: MaybeRefOrGetter<ElasticityOptions | undefined>;
+    readonly exchange?: MaybeRefOrGetter<StackedDeckExchange | undefined>;
     // (undocumented)
     readonly ids: MaybeRefOrGetter<readonly Id[]>;
     // (undocumented)
@@ -231,6 +251,7 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
     readonly canPrevious: ComputedRef<boolean>;
     readonly compositing: ComputedRef<boolean>;
     readonly diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
+    readonly direct: ShallowRef<StackedDeckDirectState<Id> | null>;
     // (undocumented)
     readonly frame: ShallowRef<StackedDeckFrame>;
     // (undocumented)

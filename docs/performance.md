@@ -8,16 +8,16 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 
 | Entry             |   Bytes | Gzip bytes | Budget bytes / gzip |
 | ----------------- | ------: | ---------: | ------------------: |
-| Core              |  45,408 |     12,929 |     47,500 / 13,500 |
-| Vue root          | 131,012 |     33,324 |    132,000 / 33,500 |
-| Vue carousel      |  38,418 |     10,877 |     52,000 / 15,000 |
-| Vue Coverflow     |  48,722 |     14,290 |     49,750 / 14,600 |
-| Vue Stacked Deck  |  50,325 |     14,689 |     51,250 / 15,000 |
-| Vue sheet         |  50,035 |     14,143 |     51,000 / 14,500 |
-| Vue dialog        |  11,605 |      3,858 |      12,500 / 4,100 |
-| Vue media gallery |  51,838 |     13,846 |     60,000 / 16,000 |
-| Vue motion        |  10,771 |      3,551 |      16,000 / 5,500 |
-| Base CSS          |  26,991 |      4,689 |      27,000 / 5,000 |
+| Core              |  40,784 |     12,798 |     47,500 / 13,500 |
+| Vue root          | 102,527 |     30,110 |    132,000 / 33,500 |
+| Vue carousel      |  28,904 |      9,522 |     52,000 / 15,000 |
+| Vue Coverflow     |  37,241 |     12,617 |     49,750 / 14,600 |
+| Vue Stacked Deck  |  42,520 |     14,101 |     51,250 / 15,000 |
+| Vue sheet         |  37,951 |     12,440 |     51,000 / 14,500 |
+| Vue dialog        |   8,592 |      3,480 |      12,500 / 4,100 |
+| Vue media gallery |  38,303 |     12,557 |     60,000 / 16,000 |
+| Vue motion        |   8,163 |      3,145 |      16,000 / 5,500 |
+| Base CSS          |  26,802 |      4,624 |      27,000 / 5,000 |
 
 The performance-budget files run once through `pnpm test:unit`. They cover 60/120-sample drag
 streams, repeated interruption, 1/20/100/1,000 items, bounded render windows, simultaneous
@@ -39,13 +39,12 @@ markup or `fetchpriority` alone.
 The segment-local stacked-deck traversal and frame resolvers fit under the core ceiling. Both hot
 paths mutate caller-owned storage, perform no DOM measurement, and allocate no arrays or sort keys.
 
-The configured ceilings are regression boundaries, not targets. The beta.7 cross-realm repair adds
-one shared realm-checking chunk to the root and to entries that own focus, input, or measurement.
-Only the Vue root, Coverflow, Stacked Deck, Sheet, and dialog ceilings move. Their final limits leave
-988 / 176, 1,028 / 310, 925 / 311, 965 / 357, and 895 / 242 bytes of raw / gzip headroom
-respectively. Carousel, Gallery, and motion absorb the same shared chunk within their unchanged
-ceilings. The tight unchanged base-CSS margin remains a useful regression signal rather than a
-reason to widen unrelated budgets.
+The configured ceilings are regression boundaries, not targets, and Direct does not raise them.
+Core and Vue use Terser for published ESM so the additional public geometry and presentation state
+fit the existing ceilings without compressing source architecture into opaque helpers. Packed
+TypeScript, runtime, browser, Router, and Nuxt consumer gates verify those emitted bindings. The
+tight unchanged base-CSS margin remains a useful regression signal rather than a reason to widen an
+unrelated budget.
 
 `applyEnvelopeElasticity` takes its active sides as scalars rather than an options object, so the
 per-pointermove constraint path allocates nothing. Stacked Deck intentionally keeps one persistent
@@ -54,6 +53,11 @@ linear in item count. The high-level component does not observe the advanced `pi
 so it does not also allocate that array each frame; custom composable consumers pay that linear cost
 only when they observe it. Explicit `will-change: transform` promotion is bounded to the exchanging
 pair while moving and returns to zero cards at rest, avoiding one forced GPU layer per parked shell.
+An interrupted Direct reconciliation can temporarily add its one retired shell beside the new pair;
+it does not create an accumulating exchange queue. Direct mutates one shallow presentation object
+per interaction and reuses the authoritative frame. Its optional two-axis callback is disabled for
+Shuffle, so raw-vector samples do not add a second Shuffle frame invalidation beyond the shared
+scalar gesture update.
 
 This is a small-deck physical model, not virtualization. There is no arbitrary hard item cap, but
 large collections retain the full slotted content and update every shell pose. Consumers using more

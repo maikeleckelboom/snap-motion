@@ -294,28 +294,39 @@ contestable. That threshold is read off the rendered frame rather than re-derive
 it is reached the promotion curve has already parked the incoming card within a fraction of a pixel
 of rest, so synchronizing exactly cannot move anything the eye can follow.
 
-### Direct screen-space mapping
+### Exchange presentations
 
-Carousel anchors use `position = -index * pitch`, while an LTR pointer drag writes its screen-space
-delta directly into controller position. The deck therefore derives:
+`resolveStackedDeckFrame` owns both presentations over the same traversal, pile slots, and mutable
+frame storage. Omitted exchange and `exchange: "shuffle"` select the accepted opaque physical
+transfer described above. `exchange: "direct"` changes only the exchange projection.
+
+Direct separates the hand vector from logical traversal:
 
 ```text
-physicalIndex = -controllerPosition / pitch
-signedLocalDistance = physicalIndex - segmentOriginIndex
-topCardX = -signedLocalDistance * motionPitch
+raw hand vector = pointer screen position - original local grab point - stage centre
+scalar traversal = -controllerPosition / pitch - interactionOriginIndex
 ```
 
-For this deck `motionPitch` is the same pitch used by the controller, so away from elastic bounds
-`topCardX` equals pointer delta exactly. A left drag produces negative card X from the first
-meaningful movement; a right drag produces positive card X. At an outer bound, the controller's
-existing nonlinear elasticity reduces the physical delta and the same equation projects that
-reduced movement without inventing a target.
+Once horizontal intent is accepted, only the outgoing shell reads raw X and Y. It stays at identity
+scale and rotation so the exact local grab point remains under the pointer. The adjacent target and
+all pile shells read scalar traversal plus the accepted pile geometry; raw Y can neither navigate
+nor shift the stack. Scalar progress is limited to the interaction's one adjacent destination while
+interior raw overdrag remains literal. At an outer deck boundary there is no destination: the
+existing nonlinear resisted frame is used, no target is invented, and telemetry classifies the
+sample separately as `boundary-resisted`.
 
-The two directions share this equation and one restrained secondary arc. Rotation, vertical lift,
-scale recession, and shadow attenuation are deterministic functions of local progress. The top
-card remains opaque and above the target until the handoff, so visible metadata cannot lag behind a
-visually dominant target. Reduced motion preserves direct translation and removes the secondary
-arc.
+The target rises monotonically from its exact accepted pile pose to the exact resting top pose, and
+the remaining pile continuously approaches the same destination deck as Shuffle. A held outgoing
+shell paints above the stack without acquiring semantic authority from its layer.
+
+A committed raw shell can be far from its compact destination. Direct therefore uses a single-shell
+fade-to-rebase reconciliation: it fades at its release pose, reaches exact opacity `0`, changes to
+the live pile pose while still exact `0`, and fades back as the same persistent shell. The two
+zero-opacity states are explicit frame phases, not inferred occlusion. A cancel instead interpolates
+X and Y back to the current live pose. One retired shell may finish beside newer ownership, remains
+non-interactive, and never delays the next interaction. Autonomous Direct uses the scalar target and
+pile path without inventing pointer coordinates; reduced motion keeps literal held movement while
+shortening reconciliation and retaining reduced pile tuning.
 
 ### Segment handoff and reversal
 

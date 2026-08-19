@@ -21,6 +21,13 @@ export interface SurfaceGestureOptions {
   readonly disabled?: () => boolean;
   /** Forwards a pointer that has been accepted, so the controller can take ownership. */
   readonly forwardPointerDown: (event: PointerEvent) => void;
+  /** Optional non-reactive pointer-down preparation for a presentation that later wins ownership. */
+  readonly onPointerPrepared?: (
+    event: PointerEvent,
+    originElement: HTMLElement,
+    originIndex: number,
+  ) => void;
+  readonly pointerPreparationEnabled?: () => boolean;
   readonly onResolved: (
     resolution: DirectManipulationResolution,
     gesture: CompletedSurfaceGesture,
@@ -244,6 +251,13 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
       maximumDisplacement: 0,
     };
     activePointers.add(event.pointerId);
+    if (
+      originElement !== undefined &&
+      originIndex >= 0 &&
+      (options.pointerPreparationEnabled?.() ?? false)
+    ) {
+      options.onPointerPrepared?.(event, originElement, originIndex);
+    }
     options.forwardPointerDown(event);
   }
 

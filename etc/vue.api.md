@@ -31,6 +31,7 @@ import { ShallowUnwrapRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
 import type { SnapMotionMessages as SnapMotionMessages_2 } from '@snap-motion/vue/localization';
 import type { SpringConfiguration } from '@snap-motion/core';
+import { StackedDeckExchange } from '@snap-motion/core';
 import { StackedDeckFrame } from '@snap-motion/core';
 import { StackedDeckModelState } from '@snap-motion/core';
 import { StackedDeckPose } from '@snap-motion/core';
@@ -645,6 +646,7 @@ export const StackedDeck: <TItem extends {
 }>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal_5<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
     props: PublicProps & __VLS_PrettifyLocal_5<{
         items: readonly TItem[];
+        exchange?: StackedDeckExchange;
         activeId?: TItem["id"];
         label?: string;
         labelledBy?: string;
@@ -734,6 +736,8 @@ export interface StackedDeckCardState<TItem, TId extends string> {
     readonly settled: boolean;
     readonly visual: boolean;
 }
+
+export { StackedDeckExchange }
 
 // @public
 export interface StackedDeckHandle<Id extends string> {

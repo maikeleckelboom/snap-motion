@@ -28,7 +28,7 @@ export type {
 export { Coverflow } from "./coverflow";
 export type { CoverflowCardPresentation, CoverflowCardState, CoverflowHandle } from "./coverflow";
 export { StackedDeck } from "./stacked-deck";
-export type { StackedDeckCardState, StackedDeckHandle } from "./stacked-deck";
+export type { StackedDeckCardState, StackedDeckExchange, StackedDeckHandle } from "./stacked-deck";
 export { Sheet, SheetSnapPicker } from "./sheet";
 export type {
   SheetAxis,

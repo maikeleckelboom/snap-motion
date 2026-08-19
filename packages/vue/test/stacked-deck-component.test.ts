@@ -71,6 +71,7 @@ describe("StackedDeck", () => {
     expect(root.attributes("data-active-id")).toBe("system");
     expect(root.attributes("data-settled-id")).toBe("system");
     expect(root.attributes("data-phase")).toBe("idle");
+    expect(root.attributes("data-exchange")).toBe("shuffle");
     expect(cards[1]!.attributes("aria-current")).toBe("true");
     expect(cards[1]!.attributes("aria-label")).toBe("System, 2 of 3");
     expect(cards[0]!.attributes("aria-hidden")).toBe("true");
@@ -240,6 +241,77 @@ describe("StackedDeck", () => {
 
     window.dispatchEvent(pointerDrag("pointercancel", 0));
     await nextTick();
+    wrapper.unmount();
+  });
+
+  it("keeps Direct collection replacement valid during owned movement", async () => {
+    const wrapper = mountDeck({ exchange: "direct", reducedMotionOverride: false });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance & { pitch: number };
+    const stage = wrapper.get(".snap-motion-stacked-deck").element as HTMLElement;
+    stage.setPointerCapture = () => {};
+    stage.releasePointerCapture = () => {};
+    const origin = wrapper.get("[data-item-id='system']").element as HTMLElement;
+
+    origin.dispatchEvent(pointerDrag("pointerdown", 0));
+    window.dispatchEvent(pointerDrag("pointermove", -deck.pitch * 0.4));
+    await nextTick();
+    expect(wrapper.get(".snap-motion-stacked-deck").attributes("data-direct-phase")).toBe("held");
+
+    await expect(wrapper.setProps({ items: [screens[0], screens[1]] })).resolves.toBeUndefined();
+    await nextTick();
+    expect(
+      wrapper
+        .findAll(".snap-motion-stacked-deck-card")
+        .map((card) => card.attributes("data-item-id")),
+    ).toEqual(["overview", "system"]);
+    expect(["overview", "system"]).toContain(deck.visualId);
+
+    const reorderedOrigin = wrapper.get("[data-item-id='system']").element as HTMLElement;
+    reorderedOrigin.dispatchEvent(pointerDrag("pointerdown", 0));
+    window.dispatchEvent(pointerDrag("pointermove", deck.pitch * 0.35));
+    await nextTick();
+    await expect(wrapper.setProps({ items: [screens[2], screens[0]] })).resolves.toBeUndefined();
+    await nextTick();
+    expect(
+      wrapper
+        .findAll(".snap-motion-stacked-deck-card")
+        .map((card) => card.attributes("data-item-id")),
+    ).toEqual(["outcome", "overview"]);
+    expect(["outcome", "overview"]).toContain(deck.visualId);
+    expect(
+      wrapper.get(".snap-motion-stacked-deck").attributes("data-direct-phase"),
+    ).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("bounds Direct compositor hints in a 40-card deck", async () => {
+    const items = Array.from({ length: 40 }, (_unused, index) => ({
+      id: `screen-${index}`,
+      title: `Screen ${index}`,
+    }));
+    const LargeStackedDeck = StackedDeck<(typeof items)[number]>;
+    const wrapper = mount(LargeStackedDeck, {
+      props: { exchange: "direct", items, reducedMotionOverride: false },
+      slots: { card: ({ item }) => h("div", { class: "screen" }, item.title) },
+    });
+    await nextTick();
+    const deck = wrapper.vm as unknown as { pitch: number };
+    const stage = wrapper.get(".snap-motion-stacked-deck").element as HTMLElement;
+    stage.setPointerCapture = () => {};
+    stage.releasePointerCapture = () => {};
+    const origin = wrapper.get("[data-item-id='screen-20']").element as HTMLElement;
+
+    origin.dispatchEvent(pointerDrag("pointerdown", 0));
+    window.dispatchEvent(pointerDrag("pointermove", -deck.pitch * 0.35));
+    await nextTick();
+    const promoted = wrapper
+      .findAll(".snap-motion-stacked-deck-card-motion")
+      .filter((card) => card.attributes("style")?.includes("will-change: transform"));
+    expect(promoted.length).toBeLessThanOrEqual(2);
+    expect(wrapper.findAll(".snap-motion-stacked-deck-card")).toHaveLength(40);
+
+    window.dispatchEvent(pointerDrag("pointercancel", -deck.pitch * 0.35));
     wrapper.unmount();
   });
 

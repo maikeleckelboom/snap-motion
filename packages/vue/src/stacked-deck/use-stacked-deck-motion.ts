@@ -18,6 +18,9 @@ import {
   type SnapAnchor,
   type SpringConfiguration,
   type PaginationIndicatorState,
+  type StackedDeckDirectProjection,
+  type StackedDeckDirectReconciliation,
+  type StackedDeckExchange,
   type StackedDeckFrame,
   type StackedDeckModelState,
   type StackedDeckProfile,
@@ -25,8 +28,12 @@ import {
   type StackedDeckTuning,
 } from "@snap-motion/core";
 import type { CarouselMotion } from "@snap-motion/vue/carousel";
-import type { NavigationReason, SurfaceMotionDiagnostics } from "@snap-motion/vue/motion";
-import { useElementSize } from "@vueuse/core";
+import type {
+  NavigationReason,
+  PointerMovementSample,
+  SurfaceMotionDiagnostics,
+} from "@snap-motion/vue/motion";
+import { useElementSize, useRafFn } from "@vueuse/core";
 import {
   computed,
   nextTick,
@@ -57,6 +64,8 @@ import type { StackedDeckPileLayer } from "./stacked-deck-contracts";
 
 export interface UseStackedDeckMotionOptions<Id extends string> {
   readonly ids: MaybeRefOrGetter<readonly Id[]>;
+  /** Physical exchange presentation. Defaults to the accepted Shuffle behavior. */
+  readonly exchange?: MaybeRefOrGetter<StackedDeckExchange | undefined>;
   /** The element that owns the surface, for focus arbitration. Defaults to the viewport. */
   readonly root?: Ref<HTMLElement | undefined>;
   readonly viewport: Ref<HTMLElement | undefined>;
@@ -103,8 +112,39 @@ export interface UseStackedDeckMotionOptions<Id extends string> {
   readonly onActivate?: (id: Id, index: number) => void;
 }
 
+/** Direct telemetry category; only ordinary samples participate in the pointer-lock invariant. */
+export type StackedDeckDirectSampleKind =
+  | "catch-up"
+  | "ordinary"
+  | "boundary-resisted"
+  | "reconciling";
+
+/** Read-only Direct pointer/reconciliation telemetry; core frame poses remain geometry authority. */
+export interface StackedDeckDirectState<Id extends string> extends StackedDeckDirectProjection {
+  /** Stable identity of the hand-owned or reconciling shell. */
+  readonly originId: Id;
+  /** Grab point X relative to the untransformed card centre. */
+  readonly grabOffsetX: number;
+  /** Grab point Y relative to the untransformed card centre. */
+  readonly grabOffsetY: number;
+  /** Latest client X coordinate. */
+  readonly pointerX: number;
+  /** Latest client Y coordinate. */
+  readonly pointerY: number;
+  /** Interaction-local accepted sample ordinal. */
+  readonly sampleIndex: number;
+  /** Classification used to keep catch-up and boundary resistance out of ordinary error metrics. */
+  readonly sampleKind: StackedDeckDirectSampleKind;
+}
+
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+function isDirectReconciliationPhase(
+  phase: StackedDeckDirectProjection["phase"] | undefined,
+): boolean {
+  return phase === "returning" || phase === "fade-out" || phase === "fade-in";
 }
 
 const STACKED_DECK_CONFIGURATION_DEFAULTS: ControllerConfiguration = {
@@ -140,6 +180,8 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
   readonly visualId: ComputedRef<Id | undefined>;
   /** Read-only motion telemetry. Observation only: nothing here can move the deck. */
   readonly diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
+  /** Read-only Direct pointer and reconciliation telemetry, absent for Shuffle. */
+  readonly direct: ShallowRef<StackedDeckDirectState<Id> | null>;
   readonly frame: ShallowRef<StackedDeckFrame>;
   /** The deck's semantics, as the escape hatch for a renderer that needs to ask them directly. */
   readonly model: StackedDeckModel<Id>;
@@ -194,6 +236,7 @@ export function useStackedDeckMotion<Id extends string>(
   options: UseStackedDeckMotionOptions<Id>,
 ): UseStackedDeckMotionReturn<Id> {
   const ids = computed(() => toValue(options.ids));
+  const exchange = computed<StackedDeckExchange>(() => toValue(options.exchange) ?? "shuffle");
   const root = options.root ?? options.viewport;
   const track = options.track ?? ref<HTMLElement>();
   const { width: measuredWidth } = useElementSize(options.viewport);
@@ -273,6 +316,8 @@ export function useStackedDeckMotion<Id extends string>(
     measure,
     ...currentConfiguration(),
     resolveDragOrigin: () => ids.value[model.beginInteraction()],
+    pointerMovementEnabled: () => exchange.value === "direct",
+    onPointerMovement: onDirectPointerMovement,
     track,
     viewport: options.viewport,
     onTargetSelected(id, reason) {
@@ -301,12 +346,6 @@ export function useStackedDeckMotion<Id extends string>(
   /** Mechanical rest. It governs durable selection and announcements, never input admission. */
   const atRest = computed(() => !owned.value && motion.phase.value === "idle");
   const disabled = () => options.disabled?.() ?? false;
-  /**
-   * Whether promoting the exchanging pair to compositor layers is currently useful. Direct
-   * manipulation and autonomous animation qualify; an idle deck does not.
-   */
-  const compositing = computed(() => motion.isAnimating.value || owned.value);
-
   watch(
     atRest,
     (rested) => {
@@ -363,6 +402,220 @@ export function useStackedDeckMotion<Id extends string>(
   const visualId = computed(() => model.idAt(state.value.currentIndex));
   const settledId = computed(() => model.idAt(state.value.settledIndex));
 
+  interface PreparedDirectPointer {
+    readonly grabOffsetX: number;
+    readonly grabOffsetY: number;
+    readonly originId: Id;
+  }
+
+  type MutableDirectState = {
+    -readonly [Key in keyof StackedDeckDirectState<Id>]: StackedDeckDirectState<Id>[Key];
+  } & { itemIndex: number };
+
+  let preparedDirectPointer: PreparedDirectPointer | undefined;
+  let directCatchUpTime: number | undefined;
+  const direct = shallowRef<StackedDeckDirectState<Id> | null>(null);
+  const secondaryDirect = shallowRef<StackedDeckDirectState<Id> | null>(null);
+  /**
+   * Whether promoting the exchanging shells to compositor layers is currently useful. The Direct
+   * branch is deliberately short-circuited so Shuffle never subscribes to its raw-vector state.
+   */
+  const compositing = computed(
+    () =>
+      motion.isAnimating.value ||
+      owned.value ||
+      (exchange.value === "direct" && (direct.value !== null || secondaryDirect.value !== null)),
+  );
+
+  function heldTranslation(prepared: PreparedDirectPointer, sample: PointerMovementSample) {
+    const box = options.viewport.value?.getBoundingClientRect();
+    const centreX = box ? box.left + box.width / 2 : sample.x - sample.deltaX;
+    const centreY = box ? box.top + box.height / 2 : sample.y - sample.deltaY;
+    return {
+      x: sample.x - centreX - prepared.grabOffsetX,
+      y: sample.y - centreY - prepared.grabOffsetY,
+    };
+  }
+
+  function clearDirectPresentations(): void {
+    preparedDirectPointer = undefined;
+    directCatchUpTime = undefined;
+    direct.value = null;
+    secondaryDirect.value = null;
+    pauseDirectReconciliation();
+  }
+
+  function retireDirectPresentation(): void {
+    preparedDirectPointer = undefined;
+    directCatchUpTime = undefined;
+    const presentation = direct.value as MutableDirectState | null;
+    if (!presentation) return;
+
+    // New ownership never waits for cosmetic reconciliation. The old persistent shell is allowed
+    // one bounded zero-opacity rebase beside it; this is presentation state, not a queued exchange.
+    if (presentation.phase !== "fade-in") {
+      if (presentation.phase !== "fade-out") presentation.reconciliationProgress = 0;
+      presentation.phase = "fade-out";
+      presentation.sampleKind = "reconciling";
+    }
+    secondaryDirect.value = presentation;
+    direct.value = null;
+    resumeDirectReconciliation();
+  }
+
+  function advanceDirectPresentation(presentation: MutableDirectState, delta: number): boolean {
+    if (
+      presentation.phase !== "returning" &&
+      presentation.phase !== "fade-out" &&
+      presentation.phase !== "fade-in"
+    ) {
+      return false;
+    }
+    if (presentation.phase === "fade-out" && presentation.reconciliationProgress >= 1) {
+      // The preceding rendered frame is the zero-opacity hand pose. This next frame performs the
+      // deliberate rebase and remains exactly zero-opacity at the pile pose.
+      presentation.phase = "fade-in";
+      presentation.reconciliationProgress = 0;
+      presentation.sampleKind = "reconciling";
+      return false;
+    }
+    const duration = motion.reducedMotion.value
+      ? presentation.phase === "returning"
+        ? 70
+        : 45
+      : presentation.phase === "returning"
+        ? 240
+        : presentation.phase === "fade-out"
+          ? 110
+          : 150;
+    presentation.reconciliationProgress = Math.min(
+      1,
+      presentation.reconciliationProgress + delta / duration,
+    );
+    presentation.sampleKind = "reconciling";
+    return presentation.phase !== "fade-out" && presentation.reconciliationProgress >= 1;
+  }
+
+  const { pause: pauseDirectReconciliation, resume: resumeDirectReconciliation } = useRafFn(
+    ({ delta }) => {
+      const primary = direct.value as MutableDirectState | null;
+      const secondary = secondaryDirect.value as MutableDirectState | null;
+      if (primary && advanceDirectPresentation(primary, delta)) direct.value = null;
+      else if (primary) triggerRef(direct);
+      if (secondary && advanceDirectPresentation(secondary, delta)) secondaryDirect.value = null;
+      else if (secondary) triggerRef(secondaryDirect);
+      if (
+        !isDirectReconciliationPhase(direct.value?.phase) &&
+        !isDirectReconciliationPhase(secondaryDirect.value?.phase)
+      ) {
+        pauseDirectReconciliation();
+      }
+    },
+    { immediate: false },
+  );
+
+  function prepareDirectPointer(
+    event: PointerEvent,
+    _element: HTMLElement,
+    originIndex: number,
+  ): void {
+    const originId = model.idAt(originIndex);
+    const pose = frame.value.poses[originIndex];
+    const box = options.viewport.value?.getBoundingClientRect();
+    if (originId === undefined || pose === undefined || box === undefined || pose.scale === 0) {
+      preparedDirectPointer = undefined;
+      return;
+    }
+    const centreX = box.left + box.width / 2 + pose.translateX;
+    const centreY = box.top + box.height / 2 + pose.translateY;
+    const vectorX = event.clientX - centreX;
+    const vectorY = event.clientY - centreY;
+    const radians = (pose.rotate * Math.PI) / 180;
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
+    preparedDirectPointer = {
+      grabOffsetX: (cosine * vectorX + sine * vectorY) / pose.scale,
+      grabOffsetY: (-sine * vectorX + cosine * vectorY) / pose.scale,
+      originId,
+    };
+  }
+
+  function onDirectPointerMovement(
+    phase: "begin" | "move" | "end" | "cancel",
+    sample: PointerMovementSample,
+  ): void {
+    if (exchange.value !== "direct") return;
+    const prepared = preparedDirectPointer;
+    if (phase === "begin") {
+      if (!prepared) return;
+      retireDirectPresentation();
+      preparedDirectPointer = prepared;
+      const originIndex = model.indexOf(prepared.originId);
+      if (originIndex < 0) return;
+      const translation = heldTranslation(prepared, sample);
+      const presentation: MutableDirectState = {
+        originId: prepared.originId,
+        originIndex,
+        itemIndex: originIndex,
+        scalarDistance: physicalIndex.value - originIndex,
+        phase: "held",
+        translateX: translation.x,
+        translateY: translation.y,
+        reconciliationProgress: 0,
+        grabOffsetX: prepared.grabOffsetX,
+        grabOffsetY: prepared.grabOffsetY,
+        pointerX: sample.x,
+        pointerY: sample.y,
+        sampleIndex: 0,
+        sampleKind: "catch-up",
+      };
+      directCatchUpTime = sample.time;
+      direct.value = presentation;
+      return;
+    }
+    const presentation = direct.value as MutableDirectState | null;
+    if (!presentation) return;
+    const translation = prepared ? heldTranslation(prepared, sample) : undefined;
+    if (translation) {
+      presentation.translateX = translation.x;
+      presentation.translateY = translation.y;
+    }
+    presentation.pointerX = sample.x;
+    presentation.pointerY = sample.y;
+    presentation.sampleIndex += 1;
+    if (phase === "move") {
+      presentation.sampleKind = sample.time === directCatchUpTime ? "catch-up" : "ordinary";
+      triggerRef(direct);
+      return;
+    }
+    preparedDirectPointer = undefined;
+    directCatchUpTime = undefined;
+    presentation.phase =
+      motion.targetId.value !== undefined && motion.targetId.value !== presentation.originId
+        ? "fade-out"
+        : "returning";
+    presentation.reconciliationProgress = 0;
+    presentation.sampleKind = "reconciling";
+    triggerRef(direct);
+    resumeDirectReconciliation();
+  }
+
+  const autonomousDirectProjection: {
+    originIndex: number;
+    scalarDistance: number;
+    phase: "autonomous";
+    translateX: number;
+    translateY: number;
+    reconciliationProgress: number;
+  } = {
+    originIndex: 0,
+    scalarDistance: 0,
+    phase: "autonomous",
+    translateX: 0,
+    translateY: 0,
+    reconciliationProgress: 0,
+  };
+
   let frameStorage = createStackedDeckFrame(ids.value.length);
   const frame = shallowRef<StackedDeckFrame>(frameStorage);
 
@@ -375,7 +628,62 @@ export function useStackedDeckMotion<Id extends string>(
     if (frameStorage.poses.length !== itemCount) {
       frameStorage = createStackedDeckFrame(itemCount);
     }
-    resolveStackedDeckFrame({ itemCount, traversal, tuning: activeTuning.value }, frameStorage);
+    const presentation = exchange.value === "direct" ? direct.value : null;
+    const retiredPresentation = exchange.value === "direct" ? secondaryDirect.value : null;
+    let directProjection: StackedDeckDirectProjection | undefined;
+    let directReconciliation: StackedDeckDirectReconciliation | undefined;
+    if (presentation) {
+      const originIndex = model.indexOf(presentation.originId);
+      if (originIndex >= 0) {
+        const mutable = presentation as MutableDirectState;
+        mutable.originIndex = originIndex;
+        mutable.scalarDistance = physicalIndex.value - originIndex;
+        const direction = Math.sign(mutable.scalarDistance);
+        if (
+          mutable.phase === "held" &&
+          ((originIndex === 0 && direction < 0) || (originIndex === itemCount - 1 && direction > 0))
+        ) {
+          mutable.sampleKind = "boundary-resisted";
+        }
+        directProjection = mutable;
+      }
+    } else if (exchange.value === "direct" && state.value.interactionOriginIndex !== null) {
+      autonomousDirectProjection.originIndex = state.value.interactionOriginIndex;
+      autonomousDirectProjection.scalarDistance =
+        physicalIndex.value - state.value.interactionOriginIndex;
+      directProjection = autonomousDirectProjection;
+    }
+    if (retiredPresentation) {
+      const retiredIndex = model.indexOf(retiredPresentation.originId);
+      if (
+        retiredIndex < 0 ||
+        retiredIndex === state.value.currentIndex ||
+        (presentation !== null && retiredPresentation.originId === presentation.originId)
+      ) {
+        secondaryDirect.value = null;
+      } else {
+        const mutable = retiredPresentation as MutableDirectState;
+        mutable.itemIndex = retiredIndex;
+        if (
+          mutable.phase === "returning" ||
+          mutable.phase === "fade-out" ||
+          mutable.phase === "fade-in"
+        ) {
+          directReconciliation = mutable as StackedDeckDirectReconciliation;
+        }
+      }
+    }
+    resolveStackedDeckFrame(
+      {
+        itemCount,
+        traversal,
+        tuning: activeTuning.value,
+        exchange: exchange.value,
+        ...(directProjection === undefined ? {} : { direct: directProjection }),
+        ...(directReconciliation === undefined ? {} : { directReconciliation }),
+      },
+      frameStorage,
+    );
     frame.value = frameStorage;
     // Resolution writes through one reused frame, so the identity in the ref is unchanged and only
     // an explicit trigger can report it. This is the case manual triggering exists for.
@@ -612,6 +920,8 @@ export function useStackedDeckMotion<Id extends string>(
     isOpenEligible: isInspectEligible,
     disabled,
     forwardPointerDown: motion.onPointerDown,
+    pointerPreparationEnabled: () => exchange.value === "direct",
+    onPointerPrepared: prepareDirectPointer,
     onResolved(resolution, completed) {
       if (completed.cancelled) {
         // A cancelled gesture undoes itself, which means returning to the card it began on. That is
@@ -652,11 +962,21 @@ export function useStackedDeckMotion<Id extends string>(
   });
 
   function cancelInteractionRecords() {
+    retireDirectPresentation();
     gesture.cancel();
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
     selectionFrame = undefined;
     motion.interrupt();
   }
+
+  watch(exchange, (nextExchange, previousExchange) => {
+    if (nextExchange === previousExchange) return;
+    clearDirectPresentations();
+    gesture.cancel();
+    if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+    selectionFrame = undefined;
+    motion.interrupt();
+  });
 
   // The key has an explicit fixed field order. Equivalent configuration objects therefore do not
   // reconfigure the controller, while removing any override reinstalls the complete surface default.
@@ -725,6 +1045,7 @@ export function useStackedDeckMotion<Id extends string>(
   onBeforeUnmount(() => {
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
     selectionFrame = undefined;
+    clearDirectPresentations();
   });
 
   return {
@@ -735,6 +1056,7 @@ export function useStackedDeckMotion<Id extends string>(
     compositing,
     visualId,
     diagnostics,
+    direct,
     frame,
     isInspectEligible,
     model,

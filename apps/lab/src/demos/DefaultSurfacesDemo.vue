@@ -12,6 +12,7 @@
 import { Coverflow } from "@snap-motion/vue/coverflow";
 import type { ActiveIdRequestDetails, NavigationReason } from "@snap-motion/vue/motion";
 import { StackedDeck } from "@snap-motion/vue/stacked-deck";
+import type { StackedDeckExchange } from "@snap-motion/vue/stacked-deck";
 import { ref } from "vue";
 
 import { showcaseScreens, type ShowcaseScreenId } from "./showcaseScreens";
@@ -27,6 +28,7 @@ const deckReason = ref<NavigationReason | "none">("none");
 const railReason = ref<NavigationReason | "none">("none");
 const deckCovered = ref(false);
 const activations = ref(0);
+const deckExchange = ref<StackedDeckExchange>();
 
 function onDeckRequest(_id: ShowcaseScreenId | undefined, details: ActiveIdRequestDetails) {
   deckReason.value = details.reason;
@@ -72,6 +74,12 @@ function navigateAsRoute(id: ShowcaseScreenId) {
       >
         Route to last
       </button>
+      <button data-testid="defaults-deck-direct" type="button" @click="deckExchange = 'direct'">
+        Use Direct exchange
+      </button>
+      <button data-testid="defaults-deck-shuffle" type="button" @click="deckExchange = undefined">
+        Use Shuffle exchange
+      </button>
       <label class="defaults-cover">
         <input v-model="deckCovered" data-testid="defaults-cover" type="checkbox" />
         <span>Cover the deck (disabled)</span>
@@ -91,6 +99,7 @@ function navigateAsRoute(id: ShowcaseScreenId) {
       class="defaults-surface"
       data-testid="defaults-deck"
       :disabled="deckCovered"
+      v-bind="deckExchange === undefined ? {} : { exchange: deckExchange }"
       :items="screens"
       :item-label="(screen) => screen.title"
       label="Default stacked deck"

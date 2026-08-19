@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
 
 import { useCarouselMotion } from "../src/carousel/use-carousel-motion";
+import type { PointerMovementSample } from "../src/motion/use-snap-motion";
 import { ManualAnimationDriver } from "./manual-driver";
 
 type Id = "a" | "b" | "c";
@@ -12,6 +13,95 @@ afterEach(() => {
 });
 
 describe("useCarouselMotion", () => {
+  it("keeps two-axis pointer sampling dormant until a surface explicitly enables it", async () => {
+    const driver = new ManualAnimationDriver();
+    const viewport = ref<HTMLElement>();
+    const enabled = ref(false);
+    const samples =
+      vi.fn<
+        (
+          phase: "begin" | "move" | "end" | "cancel",
+          sample: PointerMovementSample,
+          event: PointerEvent,
+        ) => void
+      >();
+    let motion: ReturnType<typeof useCarouselMotion<Id>> | undefined;
+    const anchors = [
+      { id: "a" as const, order: 0, position: 0 },
+      { id: "b" as const, order: 1, position: -100 },
+      { id: "c" as const, order: 2, position: -200 },
+    ];
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          motion = useCarouselMotion<Id>({
+            anchors,
+            bounds: { min: -200, max: 0 },
+            driver,
+            initialTargetId: "b",
+            measure: () => ({ anchors, bounds: { min: -200, max: 0 } }),
+            onPointerMovement: samples,
+            pointerMovementEnabled: () => enabled.value,
+            viewport,
+          });
+          return () => h("div", { ref: viewport, onPointerdown: motion?.onPointerDown });
+        },
+      }),
+    );
+    await nextTick();
+
+    const dispatchInteraction = (pointerId: number) => {
+      wrapper.element.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          clientX: 40,
+          clientY: 70,
+          isPrimary: true,
+          pointerId,
+          pointerType: "mouse",
+        }),
+      );
+      window.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          buttons: 1,
+          clientX: 10,
+          clientY: 115,
+          isPrimary: true,
+          pointerId,
+          pointerType: "mouse",
+        }),
+      );
+      window.dispatchEvent(
+        new PointerEvent("pointercancel", {
+          bubbles: true,
+          clientX: 10,
+          clientY: 115,
+          isPrimary: true,
+          pointerId,
+          pointerType: "mouse",
+        }),
+      );
+    };
+
+    dispatchInteraction(701);
+    expect(samples).not.toHaveBeenCalled();
+
+    enabled.value = true;
+    dispatchInteraction(702);
+    expect(samples.mock.calls.map(([phase]) => phase)).toEqual(["begin", "move", "cancel"]);
+    expect(samples.mock.calls[1]?.[1]).toMatchObject({
+      delta: -30,
+      deltaX: -30,
+      deltaY: 45,
+      x: 10,
+      y: 115,
+    });
+    wrapper.unmount();
+  });
+
   it("preserves active semantic IDs across remeasurement", async () => {
     const driver = new ManualAnimationDriver();
     const viewport = ref<HTMLElement>();

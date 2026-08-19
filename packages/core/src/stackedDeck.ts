@@ -2,8 +2,43 @@ import { assertFiniteNumber, assertNonNegative, clamp, mix, smoothstep } from ".
 import type { ControllerPhase } from "./types";
 
 export type StackedDeckProfile = "compact" | "medium" | "wide";
+/** Physical exchange presentation. Omitted values resolve to the accepted Shuffle projection. */
+export type StackedDeckExchange = "shuffle" | "direct";
 export type StackedDeckRole = "top" | "target" | "hidden";
 export type StackedDeckTraversalPhase = "idle" | "neutral" | "traversing" | "elastic";
+
+/**
+ * Transient input for the Direct projection. The adapter keeps identity and pointer lifecycle;
+ * core remains the sole owner of the geometry rendered for that state.
+ */
+export interface StackedDeckDirectProjection {
+  /** Stable interaction origin, resolved against the adapter's current ordered collection. */
+  readonly originIndex: number;
+  /** Controller-owned scalar travel from the interaction origin, limited by the deck envelope. */
+  readonly scalarDistance: number;
+  /** Presentation lifecycle of the one persistent shell that began the interaction. */
+  readonly phase: "autonomous" | "held" | "returning" | "fade-out" | "fade-in";
+  /** Hand-owned shell translation in stage coordinates. Ignored for autonomous movement. */
+  readonly translateX: number;
+  /** Raw hand-owned vertical translation; it never affects scalar target or pile geometry. */
+  readonly translateY: number;
+  /** Reconciliation progress for return or fade. */
+  readonly reconciliationProgress: number;
+}
+
+/** One prior Direct shell finishing while newer input already owns the deck. */
+export interface StackedDeckDirectReconciliation {
+  /** Current stable-item ordinal of the retired persistent shell. */
+  readonly itemIndex: number;
+  /** Presentation-only reconciliation phase. */
+  readonly phase: "returning" | "fade-out" | "fade-in";
+  /** Last literal X translation before the shell rejoins its live pile pose. */
+  readonly translateX: number;
+  /** Last literal Y translation before the shell rejoins its live pile pose. */
+  readonly translateY: number;
+  /** Normalized progress through the current reconciliation phase. */
+  readonly reconciliationProgress: number;
+}
 
 /**
  * Presentation state for the one-anchor segment containing the controller's continuous position.
@@ -147,6 +182,12 @@ export interface ResolveStackedDeckFrameOptions {
   readonly itemCount: number;
   readonly traversal: StackedDeckTraversal;
   readonly tuning: StackedDeckTuning;
+  /** Defaults to the accepted Shuffle presentation. */
+  readonly exchange?: StackedDeckExchange;
+  /** Present only while Direct has an interaction-specific physical owner. */
+  readonly direct?: StackedDeckDirectProjection;
+  /** At most one prior shell may finish beside the newest Direct interaction. */
+  readonly directReconciliation?: StackedDeckDirectReconciliation;
 }
 
 interface ProfileValues {
@@ -174,6 +215,7 @@ const PILE_ROTATE = 2;
 const TOP_ROTATE = 4;
 const TOP_SCALE_REDUCTION = 0.11;
 const TOP_LAYER = 500;
+const HELD_LAYER = TOP_LAYER + 1;
 const TARGET_LAYER = 400;
 const PILE_LAYER_STEP = 10;
 /**
@@ -693,6 +735,160 @@ function setExchangePair(
   target.interactive = false;
 }
 
+function validateDirectProjection(
+  projection: StackedDeckDirectProjection,
+  itemCount: number,
+): void {
+  assertIndex(projection.originIndex, itemCount, "direct originIndex");
+  assertFiniteNumber(projection.scalarDistance, "direct scalarDistance");
+  assertFiniteNumber(projection.translateX, "direct translateX");
+  assertFiniteNumber(projection.translateY, "direct translateY");
+  assertFiniteNumber(projection.reconciliationProgress, "direct reconciliationProgress");
+  if (
+    projection.phase !== "autonomous" &&
+    projection.phase !== "held" &&
+    projection.phase !== "returning" &&
+    projection.phase !== "fade-out" &&
+    projection.phase !== "fade-in"
+  ) {
+    throw new RangeError("invalid direct phase");
+  }
+  if (projection.reconciliationProgress < 0 || projection.reconciliationProgress > 1) {
+    throw new RangeError("invalid direct reconciliation progress");
+  }
+}
+
+function validateDirectReconciliation(
+  reconciliation: StackedDeckDirectReconciliation,
+  itemCount: number,
+): void {
+  assertIndex(reconciliation.itemIndex, itemCount, "direct reconciliation itemIndex");
+  assertFiniteNumber(reconciliation.translateX, "direct reconciliation translateX");
+  assertFiniteNumber(reconciliation.translateY, "direct reconciliation translateY");
+  assertFiniteNumber(reconciliation.reconciliationProgress, "direct reconciliation progress");
+  if (
+    reconciliation.phase !== "returning" &&
+    reconciliation.phase !== "fade-out" &&
+    reconciliation.phase !== "fade-in"
+  ) {
+    throw new RangeError("invalid direct reconciliation phase");
+  }
+  if (reconciliation.reconciliationProgress < 0 || reconciliation.reconciliationProgress > 1) {
+    throw new RangeError("invalid direct reconciliation progress");
+  }
+}
+
+function applyDirectReconciliation(
+  output: MutableStackedDeckFrame,
+  reconciliation: StackedDeckDirectReconciliation,
+): void {
+  const pose = output.poses[reconciliation.itemIndex]!;
+  if (reconciliation.phase === "fade-in") {
+    pose.opacity = smoothstep(reconciliation.reconciliationProgress);
+    return;
+  }
+  if (reconciliation.phase === "returning") {
+    const progress = smoothstep(reconciliation.reconciliationProgress);
+    pose.translateX = mix(reconciliation.translateX, pose.translateX, progress);
+    pose.translateY = mix(reconciliation.translateY, pose.translateY, progress);
+    pose.scale = mix(1, pose.scale, progress);
+    pose.rotate = mix(0, pose.rotate, progress);
+    pose.shadowStrength = mix(1, pose.shadowStrength, progress);
+    pose.opacity = 1;
+  } else {
+    pose.translateX = reconciliation.translateX;
+    pose.translateY = reconciliation.translateY;
+    pose.scale = 1;
+    pose.rotate = 0;
+    pose.shadowStrength = 1;
+    pose.opacity = 1 - smoothstep(reconciliation.reconciliationProgress);
+  }
+  pose.layer = HELD_LAYER;
+  pose.role = "top";
+  pose.visible = true;
+  pose.interactive = false;
+}
+
+/**
+ * Projects Direct from one stable interaction origin. The target and remaining pile depend only on
+ * scalar traversal; the hand-owned shell alone may read the raw two-axis translation.
+ *
+ * Returns false at an outward deck boundary. That is the documented resisted exception, so the
+ * caller retains the existing elastic surface instead of inventing a target or exposing backdrop.
+ */
+function setDirectFrame(
+  output: MutableStackedDeckFrame,
+  projection: StackedDeckDirectProjection,
+  tuning: StackedDeckTuning,
+): boolean {
+  const scalarDistance = clamp(projection.scalarDistance, -1, 1);
+  const direction = Math.sign(scalarDistance) as -1 | 0 | 1;
+  const targetIndex = projection.originIndex + direction;
+  if (direction !== 0 && (targetIndex < 0 || targetIndex >= output.poses.length)) return false;
+
+  const centre = projection.originIndex + scalarDistance;
+  for (let index = 0; index < output.poses.length; index += 1) {
+    setPilePose(output.poses[index]!, index - centre, tuning);
+  }
+
+  const outgoing = output.poses[projection.originIndex]!;
+  const pileLayer = outgoing.layer;
+  const pileShadowStrength = outgoing.shadowStrength;
+  const progress = Math.abs(scalarDistance);
+  if (direction === 0) {
+    setTopPose(outgoing, false);
+  } else {
+    const target = output.poses[targetIndex]!;
+    if (progress < 1 - TRAVERSAL_EPSILON) {
+      const targetDominant = progress >= AUTHORITY_MIDPOINT;
+      const elevation = crossoverElevation(progress);
+      outgoing.layer = targetDominant ? TARGET_LAYER - 1 : TOP_LAYER;
+      outgoing.role = "top";
+      outgoing.shadowStrength = mix(1, pileShadow(1), smoothstep(progress)) * elevation;
+      outgoing.interactive = false;
+
+      target.layer = targetDominant ? TOP_LAYER : TARGET_LAYER;
+      target.role = "target";
+      target.shadowStrength = mix(pileShadow(1), 1, smoothstep(progress)) * elevation;
+    }
+    target.interactive = projection.phase !== "held" && output.authoritativeIndex === targetIndex;
+  }
+
+  if (projection.phase === "autonomous") return true;
+
+  if (projection.phase === "fade-in") {
+    outgoing.opacity = smoothstep(projection.reconciliationProgress);
+    outgoing.layer = pileLayer;
+    outgoing.role = "hidden";
+    outgoing.shadowStrength = pileShadowStrength;
+    outgoing.visible = true;
+    outgoing.interactive = false;
+    return true;
+  }
+
+  if (projection.phase === "returning") {
+    const returning = smoothstep(projection.reconciliationProgress);
+    outgoing.translateX = mix(projection.translateX, outgoing.translateX, returning);
+    outgoing.translateY = mix(projection.translateY, outgoing.translateY, returning);
+    outgoing.scale = mix(1, outgoing.scale, returning);
+    outgoing.rotate = mix(0, outgoing.rotate, returning);
+    outgoing.shadowStrength = mix(1, outgoing.shadowStrength, returning);
+  } else {
+    outgoing.translateX = projection.translateX;
+    outgoing.translateY = projection.translateY;
+    outgoing.scale = 1;
+    outgoing.rotate = 0;
+    outgoing.shadowStrength = 1;
+  }
+  outgoing.opacity =
+    projection.phase === "fade-out" ? 1 - smoothstep(projection.reconciliationProgress) : 1;
+  outgoing.layer = HELD_LAYER;
+  outgoing.role = "top";
+  outgoing.visible = true;
+  outgoing.interactive = false;
+  return true;
+}
+
 function copyTraversal(output: MutableStackedDeckFrame, traversal: StackedDeckTraversal): void {
   output.settledIndex = traversal.settledIndex;
   output.visualTopIndex = traversal.visualTopIndex;
@@ -719,28 +915,74 @@ export function resolveStackedDeckFrame(
   if (output.poses.length !== options.itemCount) {
     throw new RangeError("invalid deck output size");
   }
+  const exchange = options.exchange ?? "shuffle";
+  if (exchange !== "shuffle" && exchange !== "direct") {
+    throw new RangeError("invalid stacked deck exchange");
+  }
+  if (exchange === "direct" && options.direct !== undefined) {
+    validateDirectProjection(options.direct, options.itemCount);
+  }
+  if (
+    exchange === "direct" &&
+    options.itemCount > 0 &&
+    options.directReconciliation !== undefined
+  ) {
+    validateDirectReconciliation(options.directReconciliation, options.itemCount);
+  }
 
   copyTraversal(output, options.traversal);
   for (const pose of output.poses) resetPose(pose);
   if (options.itemCount === 0) return output;
 
-  const traversal = options.traversal;
-  const centre =
-    traversal.phase === "traversing"
-      ? traversal.visualTopIndex + traversal.signedLocalDistance
-      : traversal.visualTopIndex;
-  for (let index = 0; index < output.poses.length; index += 1) {
-    setPilePose(output.poses[index]!, index - centre, options.tuning);
+  let directResolved = false;
+  if (exchange === "direct") {
+    const projection = options.direct;
+    directResolved = projection !== undefined && setDirectFrame(output, projection, options.tuning);
+    if (
+      !directResolved &&
+      projection === undefined &&
+      options.traversal.phase === "traversing" &&
+      setDirectFrame(
+        output,
+        {
+          originIndex: options.traversal.segmentOriginIndex,
+          scalarDistance: options.traversal.signedLocalDistance,
+          phase: "autonomous",
+          translateX: 0,
+          translateY: 0,
+          reconciliationProgress: 0,
+        },
+        options.tuning,
+      )
+    ) {
+      directResolved = true;
+    }
   }
-  const top = output.poses[traversal.visualTopIndex]!;
-  if (traversal.phase !== "traversing") setTopPose(top, traversal.phase === "idle");
 
-  if (traversal.phase === "elastic") {
-    top.translateX = -traversal.signedLocalDistance * options.tuning.motionPitch;
-    return output;
+  if (!directResolved) {
+    const traversal = options.traversal;
+    const centre =
+      traversal.phase === "traversing"
+        ? traversal.visualTopIndex + traversal.signedLocalDistance
+        : traversal.visualTopIndex;
+    for (let index = 0; index < output.poses.length; index += 1) {
+      setPilePose(output.poses[index]!, index - centre, options.tuning);
+    }
+    const top = output.poses[traversal.visualTopIndex]!;
+    if (traversal.phase !== "traversing") setTopPose(top, traversal.phase === "idle");
+
+    if (traversal.phase === "elastic") {
+      top.translateX = -traversal.signedLocalDistance * options.tuning.motionPitch;
+    } else if (traversal.phase === "traversing" && traversal.segmentTargetIndex !== null) {
+      setExchangePair(top, output.poses[traversal.segmentTargetIndex]!, traversal, options.tuning);
+    }
   }
-  if (traversal.phase === "traversing" && traversal.segmentTargetIndex !== null) {
-    setExchangePair(top, output.poses[traversal.segmentTargetIndex]!, traversal, options.tuning);
+  if (
+    exchange === "direct" &&
+    options.directReconciliation !== undefined &&
+    options.directReconciliation.itemIndex !== options.direct?.originIndex
+  ) {
+    applyDirectReconciliation(output, options.directReconciliation);
   }
   return output;
 }

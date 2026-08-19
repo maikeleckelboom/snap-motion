@@ -45,6 +45,15 @@ export async function beginPointer(
   target: Locator,
   pointerType: PointerOrigin["pointerType"] = "mouse",
 ): Promise<PointerOrigin> {
+  return beginPointerAt(target, 0.5, 0.5, pointerType);
+}
+
+export async function beginPointerAt(
+  target: Locator,
+  relativeX: number,
+  relativeY: number,
+  pointerType: PointerOrigin["pointerType"] = "mouse",
+): Promise<PointerOrigin> {
   return target.evaluate(
     (element, input) => {
       const box = element.getBoundingClientRect();
@@ -52,8 +61,8 @@ export async function beginPointer(
         pointerId: input.pointerId,
         pointerType: input.pointerType,
         timestamp: performance.now(),
-        x: box.left + box.width / 2,
-        y: box.top + box.height / 2,
+        x: box.left + box.width * input.relativeX,
+        y: box.top + box.height * input.relativeY,
       };
       const event = new PointerEvent("pointerdown", {
         bubbles: true,
@@ -70,7 +79,7 @@ export async function beginPointer(
       element.dispatchEvent(event);
       return origin;
     },
-    { pointerId: nextPointerId(), pointerType },
+    { pointerId: nextPointerId(), pointerType, relativeX, relativeY },
   );
 }
 
@@ -80,15 +89,25 @@ export async function movePointer(
   deltaX: number,
   elapsedMs: number,
 ) {
+  return movePointerBy(page, origin, deltaX, 0, elapsedMs);
+}
+
+export async function movePointerBy(
+  page: Page,
+  origin: PointerOrigin,
+  deltaX: number,
+  deltaY: number,
+  elapsedMs: number,
+) {
   await page.evaluate(
-    ({ deltaX: moveX, elapsedMs: elapsed, origin: start }) => {
+    ({ deltaX: moveX, deltaY: moveY, elapsedMs: elapsed, origin: start }) => {
       const event = new PointerEvent("pointermove", {
         bubbles: true,
         button: 0,
         buttons: 1,
         cancelable: true,
         clientX: start.x + moveX,
-        clientY: start.y,
+        clientY: start.y + moveY,
         isPrimary: true,
         pointerId: start.pointerId,
         pointerType: start.pointerType,
@@ -96,7 +115,7 @@ export async function movePointer(
       Object.defineProperty(event, "timeStamp", { value: start.timestamp + elapsed });
       window.dispatchEvent(event);
     },
-    { deltaX, elapsedMs, origin },
+    { deltaX, deltaY, elapsedMs, origin },
   );
 }
 
@@ -107,15 +126,26 @@ export async function finishPointer(
   elapsedMs: number,
   type: "pointerup" | "pointercancel",
 ) {
+  return finishPointerBy(page, origin, deltaX, 0, elapsedMs, type);
+}
+
+export async function finishPointerBy(
+  page: Page,
+  origin: PointerOrigin,
+  deltaX: number,
+  deltaY: number,
+  elapsedMs: number,
+  type: "pointerup" | "pointercancel",
+) {
   await page.evaluate(
-    ({ deltaX: moveX, elapsedMs: elapsed, origin: start, type: eventType }) => {
+    ({ deltaX: moveX, deltaY: moveY, elapsedMs: elapsed, origin: start, type: eventType }) => {
       const event = new PointerEvent(eventType, {
         bubbles: true,
         button: 0,
         buttons: 0,
         cancelable: true,
         clientX: start.x + moveX,
-        clientY: start.y,
+        clientY: start.y + moveY,
         isPrimary: true,
         pointerId: start.pointerId,
         pointerType: start.pointerType,
@@ -123,7 +153,7 @@ export async function finishPointer(
       Object.defineProperty(event, "timeStamp", { value: start.timestamp + elapsed });
       window.dispatchEvent(event);
     },
-    { deltaX, elapsedMs, origin, type },
+    { deltaX, deltaY, elapsedMs, origin, type },
   );
 }
 

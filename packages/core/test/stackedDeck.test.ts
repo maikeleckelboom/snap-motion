@@ -10,6 +10,7 @@ import {
   resolveStackedDeckTuning,
   type MutableStackedDeckFrame,
   type MutableStackedDeckTraversal,
+  type StackedDeckDirectProjection,
   type StackedDeckPose,
   type StackedDeckTraversal,
   type StackedDeckTuning,
@@ -54,6 +55,39 @@ function resolveFrame(
   output: MutableStackedDeckFrame = createStackedDeckFrame(itemCount),
 ) {
   return resolveStackedDeckFrame({ itemCount, traversal: activeTraversal, tuning }, output);
+}
+
+function directProjection(
+  originIndex: number,
+  scalarDistance: number,
+  overrides: Partial<StackedDeckDirectProjection> = {},
+): StackedDeckDirectProjection {
+  return {
+    originIndex,
+    scalarDistance,
+    phase: "autonomous",
+    translateX: 0,
+    translateY: 0,
+    reconciliationProgress: 0,
+    ...overrides,
+  };
+}
+
+function resolveDirectFrame(
+  activeTraversal: StackedDeckTraversal,
+  direct: StackedDeckDirectProjection,
+  itemCount = 5,
+) {
+  return resolveStackedDeckFrame(
+    {
+      itemCount,
+      traversal: activeTraversal,
+      tuning: WIDE_TUNING,
+      exchange: "direct",
+      direct,
+    },
+    createStackedDeckFrame(itemCount),
+  );
 }
 
 function resolveTraversal(
@@ -786,6 +820,243 @@ describe("stacked deck persistent physical cards", () => {
       ),
     ).toBe(false);
     expect(isStackedDeckAuthorityStable(traversal())).toBe(true);
+  });
+});
+
+describe("Direct stacked deck projection", () => {
+  it("keeps omitted exchange exactly equal to explicit Shuffle across a dense traversal", () => {
+    for (const direction of [-1, 1] as const) {
+      for (let step = 0; step <= 1_000; step += 1) {
+        const progress = step / 1_000;
+        const active = progress === 0 ? traversal() : segment(2, direction, progress);
+        const omitted = resolveFrame(active);
+        const explicit = resolveStackedDeckFrame(
+          {
+            itemCount: 5,
+            traversal: active,
+            tuning: WIDE_TUNING,
+            exchange: "shuffle",
+          },
+          createStackedDeckFrame(5),
+        );
+        expect(explicit).toEqual(omitted);
+      }
+    }
+  });
+
+  it("keeps the held origin on the raw vector while Y cannot move target or pile geometry", () => {
+    for (const direction of [-1, 1] as const) {
+      for (let step = 0; step <= 1_000; step += 1) {
+        const progress = step / 1_000;
+        const active =
+          progress === 0
+            ? traversal()
+            : {
+                ...segment(2, direction, progress),
+                authoritativeIndex: progress >= 0.55 ? 2 + direction : 2,
+              };
+        const rawX = -direction * (80 + progress * 420);
+        const low = resolveDirectFrame(
+          active,
+          directProjection(2, direction * progress, {
+            phase: "held",
+            translateX: rawX,
+            translateY: -220,
+          }),
+        );
+        const high = resolveDirectFrame(
+          active,
+          directProjection(2, direction * progress, {
+            phase: "held",
+            translateX: rawX,
+            translateY: 260,
+          }),
+        );
+        expect(low.poses[2]).toMatchObject({
+          translateX: rawX,
+          translateY: -220,
+          scale: 1,
+          rotate: 0,
+          opacity: 1,
+        });
+        expect(high.poses[2]).toMatchObject({
+          translateX: rawX,
+          translateY: 260,
+          scale: 1,
+          rotate: 0,
+          opacity: 1,
+        });
+        for (let index = 0; index < low.poses.length; index += 1) {
+          if (index === 2) continue;
+          expect(physicalValues(low.poses[index]!)).toEqual(physicalValues(high.poses[index]!));
+        }
+      }
+    }
+  });
+
+  it("moves the target monotonically from accepted pile geometry to the exact resting top", () => {
+    for (const direction of [-1, 1] as const) {
+      let previousDistance = Number.POSITIVE_INFINITY;
+      for (let step = 0; step <= 1_000; step += 1) {
+        const progress = step / 1_000;
+        const active =
+          progress === 0
+            ? traversal()
+            : {
+                ...segment(2, direction, progress),
+                authoritativeIndex: progress >= 0.55 ? 2 + direction : 2,
+              };
+        const frame = resolveDirectFrame(active, directProjection(2, direction * progress));
+        expect(frameIsFinite(frame)).toBe(true);
+        const target = frame.poses[2 + direction]!;
+        const distance = Math.hypot(
+          target.translateX,
+          target.translateY,
+          target.rotate,
+          1 - target.scale,
+        );
+        expect(distance).toBeLessThanOrEqual(previousDistance + Number.EPSILON * 32);
+        previousDistance = distance;
+      }
+
+      const endpoint = resolveDirectFrame(
+        { ...segment(2, direction, 1), authoritativeIndex: 2 + direction },
+        directProjection(2, direction),
+      );
+      const settled = resolveFrame(
+        traversal({
+          settledIndex: 2 + direction,
+          visualTopIndex: 2 + direction,
+          authoritativeIndex: 2 + direction,
+          segmentOriginIndex: 2 + direction,
+        }),
+      );
+      expect(endpoint.poses).toEqual(settled.poses);
+    }
+  });
+
+  it("keeps interior overdrag attached to one origin and one adjacent destination", () => {
+    for (const direction of [-1, 1] as const) {
+      const frame = resolveDirectFrame(
+        { ...segment(2, direction, 1), authoritativeIndex: 2 + direction },
+        directProjection(2, direction * 4, {
+          phase: "held",
+          translateX: direction * -1_700,
+          translateY: 190,
+        }),
+      );
+      expect(frame.poses[2]).toMatchObject({
+        translateX: direction * -1_700,
+        translateY: 190,
+        layer: 501,
+      });
+      expect(frame.poses[2 + direction]).toMatchObject({
+        translateX: 0,
+        translateY: 0,
+        scale: 1,
+        rotate: 0,
+        layer: 500,
+      });
+      expect(frame.poses.filter((pose) => pose.role === "target")).toHaveLength(0);
+    }
+  });
+
+  it("rebases only between two exact zero-opacity states and fades into live pile geometry", () => {
+    for (const direction of [-1, 1] as const) {
+      const active = {
+        ...segment(2, direction, 0.72),
+        authoritativeIndex: 2 + direction,
+      };
+      const before = resolveDirectFrame(
+        active,
+        directProjection(2, direction * 0.72, {
+          phase: "fade-out",
+          translateX: direction * -540,
+          translateY: 180,
+          reconciliationProgress: 1,
+        }),
+      );
+      const after = resolveDirectFrame(
+        active,
+        directProjection(2, direction * 0.72, {
+          phase: "fade-in",
+          translateX: direction * -540,
+          translateY: 180,
+          reconciliationProgress: 0,
+        }),
+      );
+      expect(before.poses[2]!.opacity).toBe(0);
+      expect(after.poses[2]!.opacity).toBe(0);
+      expect(before.poses[2]!.translateX).toBe(direction * -540);
+      expect(before.poses[2]!.translateY).toBe(180);
+      expect(after.poses[2]!.translateX).not.toBe(before.poses[2]!.translateX);
+      expect(after.poses[2]!.translateY).not.toBe(before.poses[2]!.translateY);
+
+      let priorFadeOut = 1;
+      let priorFadeIn = 0;
+      for (let step = 0; step <= 1_000; step += 1) {
+        const progress = step / 1_000;
+        const fadeOut = resolveDirectFrame(
+          active,
+          directProjection(2, direction * 0.72, {
+            phase: "fade-out",
+            translateX: direction * -540,
+            translateY: 180,
+            reconciliationProgress: progress,
+          }),
+        ).poses[2]!.opacity;
+        const fadeIn = resolveDirectFrame(
+          active,
+          directProjection(2, direction * 0.72, {
+            phase: "fade-in",
+            reconciliationProgress: progress,
+          }),
+        ).poses[2]!.opacity;
+        expect(fadeOut).toBeLessThanOrEqual(priorFadeOut);
+        expect(fadeIn).toBeGreaterThanOrEqual(priorFadeIn);
+        priorFadeOut = fadeOut;
+        priorFadeIn = fadeIn;
+      }
+    }
+  });
+
+  it("lets one retired shell rebase beside newer Direct ownership without changing that owner", () => {
+    const active = { ...segment(3, 1, 0.35), authoritativeIndex: 3 };
+    const primary = directProjection(3, 0.35, {
+      phase: "held",
+      translateX: -280,
+      translateY: -90,
+    });
+    const resolveInterrupted = (phase: "fade-out" | "fade-in", reconciliationProgress: number) =>
+      resolveStackedDeckFrame(
+        {
+          itemCount: 5,
+          traversal: active,
+          tuning: WIDE_TUNING,
+          exchange: "direct",
+          direct: primary,
+          directReconciliation: {
+            itemIndex: 2,
+            phase,
+            translateX: 510,
+            translateY: 175,
+            reconciliationProgress,
+          },
+        },
+        createStackedDeckFrame(5),
+      );
+
+    const handZero = resolveInterrupted("fade-out", 1);
+    const pileZero = resolveInterrupted("fade-in", 0);
+    const completed = resolveInterrupted("fade-in", 1);
+    const primaryValues = physicalValues(handZero.poses[3]!);
+    expect(handZero.poses[2]).toMatchObject({ opacity: 0, translateX: 510, translateY: 175 });
+    expect(pileZero.poses[2]!.opacity).toBe(0);
+    expect(pileZero.poses[2]!.translateX).not.toBe(510);
+    expect(pileZero.poses[2]!.translateY).not.toBe(175);
+    expect(completed.poses[2]!.opacity).toBe(1);
+    expect(physicalValues(pileZero.poses[3]!)).toEqual(primaryValues);
+    expect(physicalValues(completed.poses[3]!)).toEqual(primaryValues);
   });
 });
 

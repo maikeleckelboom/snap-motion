@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { BOUNDED_SPRING_TUNING, STACKED_DECK_ANCHOR_SKIP } from "@snap-motion/core";
+import {
+  BOUNDED_SPRING_TUNING,
+  STACKED_DECK_ANCHOR_SKIP,
+  type StackedDeckExchange,
+} from "@snap-motion/core";
 import {
   MediaGalleryDialog,
   type FocusReturnOptions,
@@ -23,9 +27,13 @@ import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 import { showcaseScreens, type ShowcaseScreen, type ShowcaseScreenId } from "./showcaseScreens";
 
 const props = defineProps<{
+  exchange: StackedDeckExchange;
   reducedMotionOverride: boolean | undefined;
   settings: LabPhysicsSettings;
   stageWidth: number;
+}>();
+const emit = defineEmits<{
+  (event: "exchangeChange", exchange: StackedDeckExchange): void;
 }>();
 
 const screens = showcaseScreens;
@@ -204,6 +212,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       :disabled="galleryOpen"
       :focus-scope="demoRoot"
       :elasticity="elasticity"
+      :exchange="exchange"
       :items="screens"
       :item-label="(screen) => screen.title"
       label="Product screen stacked deck"
@@ -260,6 +269,25 @@ const diagnostics = computed<LabDiagnostics>(() => {
         </div>
       </template>
     </StackedDeck>
+
+    <div aria-label="Stacked Deck exchange" class="stacked-deck-exchange" role="group">
+      <button
+        :aria-pressed="exchange === 'shuffle'"
+        data-testid="stacked-deck-exchange-shuffle"
+        type="button"
+        @click="emit('exchangeChange', 'shuffle')"
+      >
+        Shuffle
+      </button>
+      <button
+        :aria-pressed="exchange === 'direct'"
+        data-testid="stacked-deck-exchange-direct"
+        type="button"
+        @click="emit('exchangeChange', 'direct')"
+      >
+        Direct
+      </button>
+    </div>
 
     <div class="stacked-deck-meta">
       <p>
@@ -383,6 +411,23 @@ const diagnostics = computed<LabDiagnostics>(() => {
 .stacked-deck-controls {
   display: inline-flex;
   gap: 0.5rem;
+}
+
+.stacked-deck-exchange {
+  display: inline-flex;
+  justify-self: start;
+  gap: 0.35rem;
+}
+
+.stacked-deck-exchange button {
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+}
+
+.stacked-deck-exchange button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--ink) 48%, transparent);
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
 }
 
 .stacked-deck-controls button,

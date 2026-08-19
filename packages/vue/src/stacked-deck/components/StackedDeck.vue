@@ -4,6 +4,7 @@ import type {
   ElasticityOptions,
   SettlementDetails,
   SpringConfiguration,
+  StackedDeckExchange,
   StackedDeckReleasePolicy,
 } from "@snap-motion/core";
 import type { SnapMotionMessages } from "@snap-motion/vue/localization";
@@ -20,6 +21,8 @@ type TId = TItem["id"];
 const props = withDefaults(
   defineProps<{
     items: readonly TItem[];
+    /** Physical exchange presentation. */
+    exchange?: StackedDeckExchange;
     /** Application-authoritative semantic selection. Controlled when supplied. */
     activeId?: TId;
     label?: string;
@@ -52,6 +55,7 @@ const props = withDefaults(
   }>(),
   {
     disabled: false,
+    exchange: "shuffle",
     landmark: false,
     fallbackStageWidth: 1_120,
   },
@@ -180,6 +184,7 @@ function publishSettlement(id: TId, index: number, reason: NavigationReason) {
 
 const deck = useStackedDeckMotion<TId>({
   ids,
+  exchange: () => props.exchange,
   controlledId: () => props.activeId,
   disabled: () => props.disabled,
   initialId: props.items[Math.floor(props.items.length / 2)]?.id,
@@ -311,6 +316,16 @@ defineExpose({
     :data-active-id="semanticActiveId"
     :data-authority-stable="deck.state.value.authorityStable ? 'true' : 'false'"
     :data-owned="deck.owned.value ? 'true' : 'false'"
+    :data-exchange="props.exchange"
+    :data-direct-phase="deck.direct.value?.phase"
+    :data-direct-origin-id="deck.direct.value?.originId"
+    :data-direct-grab-x="deck.direct.value?.grabOffsetX"
+    :data-direct-grab-y="deck.direct.value?.grabOffsetY"
+    :data-direct-pointer-x="deck.direct.value?.pointerX"
+    :data-direct-pointer-y="deck.direct.value?.pointerY"
+    :data-direct-reconciliation-progress="deck.direct.value?.reconciliationProgress"
+    :data-direct-sample-index="deck.direct.value?.sampleIndex"
+    :data-direct-sample-kind="deck.direct.value?.sampleKind"
     :data-phase="deck.diagnostics.value.phase"
     :data-profile="deck.tuningProfile.value"
     :data-reduced-motion="deck.diagnostics.value.reducedMotion ? 'true' : 'false'"

@@ -916,6 +916,9 @@ export function resolveStackedDeckFrame(options: ResolveStackedDeckFrameOptions,
 
 // @public (undocumented)
 export interface ResolveStackedDeckFrameOptions {
+    readonly direct?: StackedDeckDirectProjection;
+    readonly directReconciliation?: StackedDeckDirectReconciliation;
+    readonly exchange?: StackedDeckExchange;
     // (undocumented)
     readonly itemCount: number;
     // (undocumented)
@@ -1203,6 +1206,28 @@ export interface StackedDeckCommandContext {
     readonly atRest: boolean;
     readonly owned: boolean;
 }
+
+// @public
+export interface StackedDeckDirectProjection {
+    readonly originIndex: number;
+    readonly phase: "autonomous" | "held" | "returning" | "fade-out" | "fade-in";
+    readonly reconciliationProgress: number;
+    readonly scalarDistance: number;
+    readonly translateX: number;
+    readonly translateY: number;
+}
+
+// @public
+export interface StackedDeckDirectReconciliation {
+    readonly itemIndex: number;
+    readonly phase: "returning" | "fade-out" | "fade-in";
+    readonly reconciliationProgress: number;
+    readonly translateX: number;
+    readonly translateY: number;
+}
+
+// @public
+export type StackedDeckExchange = "shuffle" | "direct";
 
 // @public (undocumented)
 export interface StackedDeckFrame extends StackedDeckTraversal {
