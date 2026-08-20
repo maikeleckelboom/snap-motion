@@ -39,6 +39,119 @@ function bodySeparation(
   return Math.abs(left.translateX - right.translateX) - cardHalfWidth(left) - cardHalfWidth(right);
 }
 
+function cardBounds(pose: StackedDeckPose, tuning: StackedDeckTuning) {
+  const radians = (pose.rotate * Math.PI) / 180;
+  const cosine = Math.abs(Math.cos(radians));
+  const sine = Math.abs(Math.sin(radians));
+  const halfWidth = (pose.scale * (tuning.cardWidth * cosine + tuning.cardHeight * sine)) / 2;
+  const halfHeight = (pose.scale * (tuning.cardWidth * sine + tuning.cardHeight * cosine)) / 2;
+  return {
+    bottom: pose.translateY + halfHeight,
+    left: pose.translateX - halfWidth,
+    right: pose.translateX + halfWidth,
+    top: pose.translateY - halfHeight,
+  };
+}
+
+function containsCardPoint(pose: StackedDeckPose, x: number, y: number, tuning: StackedDeckTuning) {
+  if (!pose.visible || pose.opacity !== 1) return false;
+  const radians = (-pose.rotate * Math.PI) / 180;
+  const deltaX = x - pose.translateX;
+  const deltaY = y - pose.translateY;
+  const localX = (deltaX * Math.cos(radians) - deltaY * Math.sin(radians)) / pose.scale;
+  const localY = (deltaX * Math.sin(radians) + deltaY * Math.cos(radians)) / pose.scale;
+  return Math.abs(localX) <= tuning.cardWidth / 2 && Math.abs(localY) <= tuning.cardHeight / 2;
+}
+
+function paintedMaterialSamples(
+  poses: readonly StackedDeckPose[],
+  tuning: StackedDeckTuning,
+  step = 8,
+) {
+  const samples = poses.map(() => ({ center: 0, left: 0, right: 0, total: 0 }));
+  const horizontalExtent = tuning.cardWidth * 1.75;
+  const verticalExtent = tuning.cardHeight;
+  const centreHalfWidth = tuning.cardWidth * 0.04;
+  for (let y = -verticalExtent; y <= verticalExtent; y += step) {
+    for (let x = -horizontalExtent; x <= horizontalExtent; x += step) {
+      let owner = -1;
+      let ownerLayer = Number.NEGATIVE_INFINITY;
+      for (let index = 0; index < poses.length; index += 1) {
+        const pose = poses[index]!;
+        if (!containsCardPoint(pose, x, y, tuning)) continue;
+        if (pose.layer > ownerLayer || (pose.layer === ownerLayer && index > owner)) {
+          owner = index;
+          ownerLayer = pose.layer;
+        }
+      }
+      if (owner < 0) continue;
+      const sample = samples[owner]!;
+      sample.total += 1;
+      if (x < -centreHalfWidth) sample.left += 1;
+      else if (x > centreHalfWidth) sample.right += 1;
+      else sample.center += 1;
+    }
+  }
+  return samples;
+}
+
+function expectPairPaintSwapSafe(
+  poses: readonly StackedDeckPose[],
+  firstIndex: number,
+  secondIndex: number,
+  tuning = WIDE_TUNING,
+) {
+  const first = poses[firstIndex]!;
+  const second = poses[secondIndex]!;
+  const firstBounds = cardBounds(first, tuning);
+  const secondBounds = cardBounds(second, tuning);
+  const left = Math.max(firstBounds.left, secondBounds.left);
+  const right = Math.min(firstBounds.right, secondBounds.right);
+  const top = Math.max(firstBounds.top, secondBounds.top);
+  const bottom = Math.min(firstBounds.bottom, secondBounds.bottom);
+  if (left >= right || top >= bottom) return;
+
+  let overlappingSamples = 0;
+  let uncoveredSamples = 0;
+  for (let y = top; y <= bottom; y += 6) {
+    for (let x = left; x <= right; x += 6) {
+      if (!containsCardPoint(first, x, y, tuning) || !containsCardPoint(second, x, y, tuning)) {
+        continue;
+      }
+      overlappingSamples += 1;
+      const covered = poses.some(
+        (pose, index) =>
+          index !== firstIndex &&
+          index !== secondIndex &&
+          pose.layer > Math.max(first.layer, second.layer) &&
+          containsCardPoint(pose, x, y, tuning),
+      );
+      if (!covered) uncoveredSamples += 1;
+    }
+  }
+  expect({ overlappingSamples, uncoveredSamples }).toMatchObject({ uncoveredSamples: 0 });
+}
+
+function expectEveryPaintSwapSafe(
+  frames: readonly { poses: readonly StackedDeckPose[]; progress: number }[],
+  tuning = WIDE_TUNING,
+) {
+  for (let frameIndex = 1; frameIndex < frames.length; frameIndex += 1) {
+    const previous = frames[frameIndex - 1]!;
+    const current = frames[frameIndex]!;
+    for (let first = 0; first < current.poses.length; first += 1) {
+      for (let second = first + 1; second < current.poses.length; second += 1) {
+        const previousOrder = Math.sign(
+          previous.poses[first]!.layer - previous.poses[second]!.layer,
+        );
+        const currentOrder = Math.sign(current.poses[first]!.layer - current.poses[second]!.layer);
+        if (previousOrder === currentOrder) continue;
+        expectPairPaintSwapSafe(current.poses, first, second, tuning);
+      }
+    }
+  }
+}
+
 function traversal(overrides: Partial<StackedDeckTraversal> = {}): StackedDeckTraversal {
   return {
     settledIndex: 2,
@@ -56,11 +169,20 @@ function traversal(overrides: Partial<StackedDeckTraversal> = {}): StackedDeckTr
 }
 
 function segment(originIndex: number, direction: -1 | 1, progress: number): StackedDeckTraversal {
+  return segmentForCount(originIndex, direction, progress, 5);
+}
+
+function segmentForCount(
+  originIndex: number,
+  direction: -1 | 1,
+  progress: number,
+  itemCount: number,
+): StackedDeckTraversal {
   return traversal({
     settledIndex: originIndex,
     visualTopIndex: originIndex,
     segmentOriginIndex: originIndex,
-    segmentTargetIndex: resolveStackedDeckNeighbor(originIndex, direction, 5),
+    segmentTargetIndex: resolveStackedDeckNeighbor(originIndex, direction, itemCount),
     direction,
     signedLocalDistance: direction * progress,
     localProgress: progress,
@@ -81,6 +203,7 @@ function directProjection(
   originIndex: number,
   _scalarDistance: number,
   overrides: Partial<StackedDeckDirectProjection> & { settlementProgress?: number } = {},
+  itemCount = 5,
 ): StackedDeckDirectProjection {
   const { settlementProgress, ...projection } = overrides;
   return {
@@ -94,7 +217,7 @@ function directProjection(
     targetIndex:
       _scalarDistance === 0
         ? null
-        : resolveStackedDeckNeighbor(originIndex, Math.sign(_scalarDistance) as -1 | 1, 5),
+        : resolveStackedDeckNeighbor(originIndex, Math.sign(_scalarDistance) as -1 | 1, itemCount),
     ...projection,
   };
 }
@@ -743,6 +866,248 @@ describe("stacked deck persistent physical cards", () => {
     ).toBe(false);
     expect(isStackedDeckAuthorityStable(traversal())).toBe(true);
   });
+
+  it("moves a side-switching background shell through physical occlusion, never the deck face", () => {
+    const denseProgress = [
+      0,
+      0.0005,
+      0.001,
+      0.002,
+      0.003,
+      0.005,
+      0.0075,
+      ...Array.from({ length: 100 }, (_, index) => (index + 1) / 100),
+    ];
+    for (const exchange of ["shuffle", "direct"] as const) {
+      for (const direction of [-1, 1] as const) {
+        const frames = denseProgress.map((progress) => {
+          const active = progress === 0 ? traversal() : segment(2, direction, progress);
+          return exchange === "shuffle"
+            ? resolveFrame(active)
+            : resolveDirectFrame(
+                active,
+                directProjection(2, direction * progress, {
+                  phase: "held",
+                  translateX: -direction * progress * WIDE_TUNING.motionPitch,
+                  translateY: 0,
+                }),
+              );
+        });
+        if (exchange === "direct") {
+          frames.push(
+            ...denseProgress.slice(1).map((settlementProgress) =>
+              resolveDirectFrame(
+                { ...segment(2, direction, 1), authoritativeIndex: 2 + direction },
+                directProjection(2, direction, {
+                  phase: "parking",
+                  settlementProgress,
+                  translateX: -direction * WIDE_TUNING.motionPitch,
+                  translateY: 0,
+                }),
+              ),
+            ),
+          );
+        }
+        const targetIndex = resolveStackedDeckNeighbor(2, direction, 5);
+        const switchingIndex = [0, 1, 2, 3, 4].find((index) => {
+          if (index === 2 || index === targetIndex) return false;
+          const sourceDepth = (index - 2 + 5) % 5;
+          const destinationDepth = (index - targetIndex + 5) % 5;
+          const sourceSlot = sourceDepth <= 2 ? sourceDepth : sourceDepth - 5;
+          const destinationSlot = destinationDepth <= 2 ? destinationDepth : destinationDepth - 5;
+          return Math.sign(sourceSlot) !== Math.sign(destinationSlot);
+        });
+        expect(switchingIndex).toBeTypeOf("number");
+        const painted = frames.map((frame) => paintedMaterialSamples(frame.poses, WIDE_TUNING));
+        const samples = painted.map((frame) => frame[switchingIndex!]!);
+        const occluded = samples.map((sample) => sample.total === 0);
+        const firstOccluded = occluded.indexOf(true);
+        const lastOccluded = occluded.lastIndexOf(true);
+        expect(firstOccluded).toBeGreaterThan(0);
+        expect(lastOccluded).toBeLessThan(samples.length - 1);
+        expect(samples.every((sample) => sample.center === 0)).toBe(true);
+
+        const sourceDepth = (switchingIndex! - 2 + 5) % 5;
+        const sourceSlot = sourceDepth <= 2 ? sourceDepth : sourceDepth - 5;
+        for (const sample of samples.slice(0, firstOccluded)) {
+          expect(sourceSlot < 0 ? sample.right : sample.left).toBe(0);
+        }
+        for (const sample of samples.slice(lastOccluded + 1)) {
+          expect(sourceSlot < 0 ? sample.left : sample.right).toBe(0);
+        }
+
+        for (const cardIndex of [0, 1, 3, 4].filter(
+          (candidateIndex) => candidateIndex !== targetIndex,
+        )) {
+          const endpointEnvelope = Math.max(
+            painted[0]![cardIndex]!.total,
+            painted.at(-1)![cardIndex]!.total,
+          );
+          const peak = Math.max(...painted.map((frame) => frame[cardIndex]!.total));
+          expect(peak).toBeLessThanOrEqual(endpointEnvelope + 4);
+        }
+      }
+    }
+  });
+
+  it("keeps the folded pile physical for small, odd, even, large, and reduced-motion decks", () => {
+    const reduced = resolveStackedDeckTuning({
+      stageWidth: 1_120,
+      stageHeight: 620,
+      reducedMotion: true,
+    });
+    for (const tuning of [WIDE_TUNING, reduced]) {
+      for (const itemCount of [2, 3, 4, 5, 6, 7, 8]) {
+        const originIndex = Math.floor(itemCount / 2);
+        const source = resolveFrame(
+          traversal({
+            authoritativeIndex: originIndex,
+            segmentOriginIndex: originIndex,
+            settledIndex: originIndex,
+            visualTopIndex: originIndex,
+          }),
+          itemCount,
+          tuning,
+        );
+        for (const direction of [-1, 1] as const) {
+          const targetIndex = resolveStackedDeckNeighbor(originIndex, direction, itemCount);
+          const destination = resolveFrame(
+            traversal({
+              authoritativeIndex: targetIndex,
+              segmentOriginIndex: targetIndex,
+              settledIndex: targetIndex,
+              visualTopIndex: targetIndex,
+            }),
+            itemCount,
+            tuning,
+          );
+          const shuffleEndpoint = resolveFrame(
+            segmentForCount(originIndex, direction, 1, itemCount),
+            itemCount,
+            tuning,
+          );
+          expect(shuffleEndpoint.poses.map(physicalValues)).toEqual(
+            destination.poses.map(physicalValues),
+          );
+          const autonomousEndpoint = resolveStackedDeckFrame(
+            {
+              direct: {
+                direction,
+                originIndex,
+                settlement: 0,
+                signedTravel: direction,
+                targetIndex,
+                translateX: 0,
+                translateY: 0,
+              },
+              itemCount,
+              traversal: {
+                ...segmentForCount(originIndex, direction, 1, itemCount),
+                authoritativeIndex: targetIndex,
+              },
+              tuning,
+            },
+            createStackedDeckFrame(itemCount),
+          );
+          expect(autonomousEndpoint.poses).toEqual(destination.poses);
+
+          const inverseMatches = (itemCount > 2 ? [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1] : []).every(
+            (progress) => {
+              const resolveExchangeFrame = (
+                topIndex: number,
+                exchangeDirection: -1 | 1,
+                exchangeProgress: number,
+              ) =>
+                exchangeProgress === 0
+                  ? resolveFrame(
+                      traversal({
+                        authoritativeIndex: topIndex,
+                        segmentOriginIndex: topIndex,
+                        settledIndex: topIndex,
+                        visualTopIndex: topIndex,
+                      }),
+                      itemCount,
+                      tuning,
+                    )
+                  : resolveFrame(
+                      segmentForCount(topIndex, exchangeDirection, exchangeProgress, itemCount),
+                      itemCount,
+                      tuning,
+                    );
+              const forward = resolveExchangeFrame(originIndex, direction, progress);
+              const inverse = resolveExchangeFrame(targetIndex, -direction as -1 | 1, 1 - progress);
+              return (
+                JSON.stringify(forward.poses.map(physicalValues)) ===
+                JSON.stringify(inverse.poses.map(physicalValues))
+              );
+            },
+          );
+          expect(inverseMatches).toBe(true);
+          expect(source.poses.every((pose) => pose.opacity === 1 && pose.visible)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("changes every relative paint order only between clear or fully covered bodies", () => {
+    const progress = [
+      0,
+      0.00005,
+      0.0001,
+      0.0002,
+      0.0005,
+      ...Array.from({ length: 1_000 }, (_, index) => (index + 1) / 1_000),
+    ];
+    expect(progress.at(-1)).toBe(1);
+    for (const direction of [-1, 1] as const) {
+      const shuffle = progress.map((value) => ({
+        poses: resolveFrame(value === 0 ? traversal() : segment(2, direction, value)).poses,
+        progress: value,
+      }));
+      expectEveryPaintSwapSafe(shuffle);
+
+      const held = progress.map((value) => ({
+        poses: resolveDirectFrame(
+          value === 0 ? traversal() : segment(2, direction, value),
+          directProjection(2, direction * value, {
+            phase: "held",
+            translateX: -direction * value * WIDE_TUNING.motionPitch,
+            translateY: 0,
+          }),
+        ).poses,
+        progress: value,
+      }));
+      expectEveryPaintSwapSafe(held);
+
+      const autonomous = progress.map((value) => ({
+        poses: resolveDirectFrame(value === 0 ? traversal() : segment(2, direction, value), {
+          direction,
+          originIndex: 2,
+          settlement: 0,
+          signedTravel: direction * value,
+          targetIndex: 2 + direction,
+          translateX: 0,
+          translateY: 0,
+        }).poses,
+        progress: value,
+      }));
+      expectEveryPaintSwapSafe(autonomous);
+
+      const parking = progress.map((value) => ({
+        poses: resolveDirectFrame(
+          { ...segment(2, direction, 1), authoritativeIndex: 2 + direction },
+          directProjection(2, direction, {
+            phase: "parking",
+            settlementProgress: value,
+            translateX: -direction * WIDE_TUNING.motionPitch,
+            translateY: 120,
+          }),
+        ).poses,
+        progress: value,
+      }));
+      expectEveryPaintSwapSafe(parking);
+    }
+  });
 });
 
 describe("Direct stacked deck projection", () => {
@@ -832,15 +1197,23 @@ describe("Direct stacked deck projection", () => {
         });
         for (let index = 0; index < low.poses.length; index += 1) {
           if (index === 2) continue;
-          expect(physicalValues(low.poses[index]!)).toEqual(physicalValues(high.poses[index]!));
+          for (const key of [
+            "translateX",
+            "translateY",
+            "scale",
+            "rotate",
+            "opacity",
+            "shadowStrength",
+          ] as const) {
+            expect(low.poses[index]![key]).toBeCloseTo(high.poses[index]![key], 5);
+          }
         }
       }
     }
   });
 
-  it("moves every non-held item monotonically between the two exact rest decks", () => {
+  it("keeps every non-held item finite through its physically occluded route", () => {
     for (const direction of [-1, 1] as const) {
-      let previousDistance = Number.POSITIVE_INFINITY;
       for (let step = 0; step <= 1_000; step += 1) {
         const progress = step / 1_000;
         const active =
@@ -859,15 +1232,7 @@ describe("Direct stacked deck projection", () => {
           }),
         );
         expect(frameIsFinite(frame)).toBe(true);
-        const target = frame.poses[2 + direction]!;
-        const distance = Math.hypot(
-          target.translateX,
-          target.translateY,
-          target.rotate,
-          1 - target.scale,
-        );
-        expect(distance).toBeLessThanOrEqual(previousDistance + Number.EPSILON * 32);
-        previousDistance = distance;
+        expect(frame.poses.every((pose) => pose.opacity === 1 && pose.visible)).toBe(true);
       }
     }
   });
@@ -956,7 +1321,7 @@ describe("Direct stacked deck projection", () => {
           const outgoing = frame.poses[2]!;
           const target = frame.poses[2 + direction]!;
           expect(frame.poses.every((pose) => pose.opacity === 1)).toBe(true);
-          expect(outgoing).toMatchObject({ role: "hidden", visible: true });
+          expect(outgoing).toMatchObject({ role: step < 1_000 ? "top" : "hidden", visible: true });
           expect(Number.isFinite(outgoing.translateX)).toBe(true);
           expect(Number.isFinite(outgoing.translateY)).toBe(true);
           const behind = outgoing.layer < target.layer;
@@ -1163,22 +1528,27 @@ describe("Direct stacked deck projection", () => {
         translateX: 0,
         translateY: 0,
         continuity: {
-          itemIndex: 2,
           progress: 0.216,
-          pose: { ...parking.poses[2]! },
+          poses: parking.poses.map((pose) => ({ ...pose })),
         },
       }),
     );
 
-    // Settings becomes the one hand-owned shell; every other transform begins exactly where the
-    // prior frame left it. Team changes paint role discretely from destination-hidden to target.
+    // Settings becomes the one hand-owned shell; every other complete physical pose begins exactly
+    // where the prior frame left it. Paint role and layer are captured with geometry instead of
+    // being recomputed early from the destination ring.
     for (let index = 0; index < parking.poses.length; index += 1) {
       if (index === 3) continue;
       expect(physicalValues(interrupted.poses[index]!)).toEqual(
         physicalValues(parking.poses[index]!),
       );
+      expect(interrupted.poses[index]).toMatchObject({
+        interactive: parking.poses[index]!.interactive,
+        layer: parking.poses[index]!.layer,
+        role: parking.poses[index]!.role,
+        visible: parking.poses[index]!.visible,
+      });
     }
-    expect(interrupted.poses[2]).toMatchObject({ role: "target", layer: 500, opacity: 1 });
     expect(interrupted.poses).toHaveLength(parking.poses.length);
   });
 });

@@ -564,9 +564,8 @@ export function useStackedDeckComponentMotion<Id extends string>(
           ? state.value.interactionDirection
           : 0;
       directProjection.continuity = {
-        itemIndex: continuityIndex,
         progress: smoothstep(Math.min(1, Math.abs(physicalIndex.value - currentLocalPosition))),
-        pose: { ...frame.value.poses[continuityIndex]! },
+        poses: frame.value.poses.map((pose) => ({ ...pose })),
       };
       return;
     }

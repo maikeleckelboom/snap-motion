@@ -42,12 +42,10 @@ export interface StackedDeckDirectProjection {
    * frame rather than first teleporting a still-parking shell to nominal rest geometry.
    */
   readonly continuity?: null | {
-    /** Stable item whose current physical pose differs from the nominal endpoint interpolation. */
-    readonly itemIndex: number;
     /** Endpoint interpolation progress of the new interaction at the captured frame. */
     readonly progress: number;
-    /** Its resolved pose at interruption. */
-    readonly pose: StackedDeckPose;
+    /** Complete resolved pile at interruption; captured once when the new hand takes ownership. */
+    readonly poses: readonly StackedDeckPose[];
   };
 }
 
@@ -254,6 +252,18 @@ const CROSSOVER_SETTLEMENT = 0.5;
  * moment for no reason the eye could read.
  */
 const CROSSOVER_CLEARANCE = 2;
+/**
+ * Background shells first recede beneath the exchanging target, stay behind it while folded depth
+ * changes, and only then re-emerge. The shell remains opaque and rendered; the smaller body is
+ * physical backside recession, not a visibility effect.
+ */
+const PILE_OCCLUSION_ENTER = 0.25;
+const PILE_OCCLUSION_EXIT = 0.75;
+const PILE_OCCLUDED_SCALE = 0.72;
+// The rear target changes depth inside numerical rest, while the source still covers every pixel;
+// by the first perceptible hand movement it is ready to be revealed as the Direct destination.
+const DIRECT_TARGET_CONTAINED = TRAVERSAL_EPSILON ** 2;
+const DIRECT_TARGET_RETURNED = TRAVERSAL_EPSILON * 3;
 const TUNING_NUMBER_KEYS = [
   "cardWidth",
   "cardHeight",
@@ -755,9 +765,85 @@ function setRingPose(
   setPilePose(pose, signedRingSlot(depth, itemCount), tuning, depth);
 }
 
+function setFrameRing(
+  output: MutableStackedDeckFrame,
+  topIndex: number,
+  tuning: StackedDeckTuning,
+): void {
+  for (let index = 0; index < output.poses.length; index += 1) {
+    setRingPose(resetPose(output.poses[index]!), topIndex, index, output.poses.length, tuning);
+  }
+}
+
 const projectionDestinationPose = resetPose({} as MutableStackedDeckPose);
 const shufflePairPose = resetPose({} as MutableStackedDeckPose);
-const shuffleGeometryKeys = ["translateX", "translateY", "scale", "rotate"] as const;
+const occludedPilePose = resetPose({} as MutableStackedDeckPose);
+
+function movePoseGeometry(
+  pose: MutableStackedDeckPose,
+  destination: StackedDeckPose,
+  progress: number,
+): void {
+  pose.translateX = mix(pose.translateX, destination.translateX, progress);
+  pose.translateY = mix(pose.translateY, destination.translateY, progress);
+  pose.scale = mix(pose.scale, destination.scale, progress);
+  pose.rotate = mix(pose.rotate, destination.rotate, progress);
+  pose.shadowStrength = mix(pose.shadowStrength, destination.shadowStrength, progress);
+}
+
+/** A persistent opaque shell fully contained by the physical card above it. */
+function setOccludedPilePose(pose: MutableStackedDeckPose, cover: StackedDeckPose): void {
+  pose.translateX = cover.translateX;
+  pose.translateY = cover.translateY;
+  pose.scale = cover.scale * PILE_OCCLUDED_SCALE;
+  pose.rotate = cover.rotate;
+  pose.shadowStrength = 0;
+}
+
+/**
+ * Reorganizes one non-participating shell without independently interpolating two folded layouts.
+ * Every subordinate shell recedes beneath `cover`; any side or depth relationship changes only
+ * while that shell is physically contained.
+ */
+function movePileShell(
+  pose: MutableStackedDeckPose,
+  destination: StackedDeckPose,
+  cover: StackedDeckPose,
+  progress: number,
+): void {
+  const sourceLayer = pose.layer;
+  setOccludedPilePose(occludedPilePose, cover);
+  movePoseGeometry(
+    pose,
+    occludedPilePose,
+    smoothstep(Math.min(1, progress / PILE_OCCLUSION_ENTER)),
+  );
+  movePoseGeometry(
+    pose,
+    destination,
+    smoothstep(Math.max(0, (progress - PILE_OCCLUSION_EXIT) / (1 - PILE_OCCLUSION_EXIT))),
+  );
+  // All subordinate depths rotate by the same one-step delta. Switching their absolute layer band
+  // together preserves every relative order, and every subordinate shell is contained here.
+  pose.layer = progress < AUTHORITY_MIDPOINT ? sourceLayer : destination.layer;
+}
+
+/**
+ * The accepted Shuffle detour clears the exchanging pair. Its midpoint is extended only as far as
+ * necessary to clear the complete pile, so the old top can take rear depth without crossing any
+ * exposed background material.
+ */
+function clearShuffleFromPile(
+  moving: MutableStackedDeckPose,
+  itemCount: number,
+  progress: number,
+  tuning: StackedDeckTuning,
+): void {
+  const envelope = 1 - smoothstep(Math.abs(progress - AUTHORITY_MIDPOINT) / 0.12);
+  if (envelope <= 0) return;
+  const clearTranslateX = Math.min(moving.translateX, -wholePileClearSeparation(itemCount, tuning));
+  moving.translateX = mix(moving.translateX, clearTranslateX, envelope);
+}
 
 /**
  * Resolves the canonical forward top-to-rear Shuffle exchange. Backward traversal evaluates this
@@ -789,7 +875,29 @@ function setShuffleFrame(
     resolveStackedDeckDepth(forwardTargetIndex, forwardOriginIndex, output.poses.length) *
       PILE_LAYER_STEP;
 
+  const moving = output.poses[forwardOriginIndex]!;
+  const incoming = output.poses[forwardTargetIndex]!;
+  // The two exchange bodies retain the accepted pile-slot path. In particular, the exposed card's
+  // first derivative plus the calibrated detour is one motion pitch per physical pitch; the other
+  // shells interpolate between the two exact canonical ring rests behind them.
+  setPilePose(resetPose(shufflePairPose), -progress, tuning);
+  movePoseGeometry(moving, shufflePairPose, 1);
+  setPilePose(resetPose(shufflePairPose), 1 - progress, tuning);
+  movePoseGeometry(incoming, shufflePairPose, 1);
+  moving.translateX -= tuning.cardWidth * detour;
+  moving.translateY += tuning.topDropY * middle;
+  moving.scale -= tuning.topScaleReduction * middle;
+  moving.rotate -= tuning.topRotate * middle;
+  clearShuffleFromPile(moving, output.poses.length, progress, tuning);
+  moving.layer = targetDominant ? movingDestinationLayer : TOP_LAYER;
+  moving.shadowStrength =
+    mix(1, pileShadow(output.poses.length - 1), promotion) * exchangeElevation;
+
+  incoming.layer = targetDominant ? TOP_LAYER : TARGET_LAYER;
+  incoming.shadowStrength = mix(pileShadow(1), 1, promotion) * exchangeElevation;
+
   for (let index = 0; index < output.poses.length; index += 1) {
+    if (index === forwardOriginIndex || index === forwardTargetIndex) continue;
     const pose = output.poses[index]!;
     setRingPose(resetPose(pose), forwardOriginIndex, index, output.poses.length, tuning);
     setRingPose(
@@ -799,38 +907,15 @@ function setShuffleFrame(
       output.poses.length,
       tuning,
     );
-    for (const key of directGeometryKeys) {
-      pose[key] = mix(pose[key], projectionDestinationPose[key], promotion);
-    }
-    pose.layer = Math.round(mix(pose.layer, projectionDestinationPose.layer, promotion));
+    movePileShell(pose, projectionDestinationPose, incoming, progress);
   }
 
-  const moving = output.poses[forwardOriginIndex]!;
-  const incoming = output.poses[forwardTargetIndex]!;
-  // The two exchange bodies retain the accepted pile-slot path. In particular, the exposed card's
-  // first derivative plus the calibrated detour is one motion pitch per physical pitch; the other
-  // shells interpolate between the two exact canonical ring rests behind them.
-  setPilePose(resetPose(shufflePairPose), -progress, tuning);
-  for (const key of shuffleGeometryKeys) moving[key] = shufflePairPose[key];
-  setPilePose(resetPose(shufflePairPose), 1 - progress, tuning);
-  for (const key of shuffleGeometryKeys) incoming[key] = shufflePairPose[key];
-  moving.translateX -= tuning.cardWidth * detour;
-  moving.translateY += tuning.topDropY * middle;
-  moving.scale -= tuning.topScaleReduction * middle;
-  moving.rotate -= tuning.topRotate * middle;
-  moving.opacity = 1;
-  moving.layer = targetDominant
-    ? Math.round(mix(TARGET_LAYER - 1, movingDestinationLayer, smoothstep(progress * 2 - 1)))
-    : TOP_LAYER;
-  moving.shadowStrength *= exchangeElevation;
-  moving.visible = true;
-  moving.interactive = false;
-
-  incoming.opacity = 1;
-  incoming.layer = targetDominant ? TOP_LAYER : TARGET_LAYER;
-  incoming.shadowStrength *= exchangeElevation;
-  incoming.visible = true;
-  incoming.interactive = false;
+  // A completed transaction is the canonical destination ring, even where two items name the
+  // same neighbour in both explicit directions. Direction owns the route; it cannot make endpoint
+  // geometry depend on which side the hand used to reach that neighbour.
+  if (traversal.localProgress >= 1 - TRAVERSAL_EPSILON) {
+    setFrameRing(output, targetIndex, tuning);
+  }
 
   // Roles describe this interaction's semantic source and target even when backward traversal is
   // evaluating the canonical forward path in reverse.
@@ -838,25 +923,105 @@ function setShuffleFrame(
   output.poses[targetIndex]!.role = "target";
 }
 
-function moveDirectPose(
-  pose: MutableStackedDeckPose,
-  destination: StackedDeckPose,
-  progress: number,
-): void {
-  for (const key of directGeometryKeys) {
-    pose[key] = mix(pose[key], destination[key], progress);
-  }
-  pose.layer = destination.layer;
-  pose.role = destination.role;
+const directOutgoingDestinationPose = resetPose({} as MutableStackedDeckPose);
+const directTopPose = resetPose({} as MutableStackedDeckPose);
+const directCompactPose = resetPose({} as MutableStackedDeckPose);
+
+/** Conservative centre separation that clears the complete compact pile, not only its top body. */
+function wholePileClearSeparation(itemCount: number, tuning: StackedDeckTuning): number {
+  const maximumSlot = Math.max(1, Math.floor(itemCount / 2));
+  return tuning.cardWidth + tuning.pileOffsetX * pileSlotSpread(maximumSlot) + CROSSOVER_CLEARANCE;
 }
 
-const directGeometryKeys = [
-  "translateX",
-  "translateY",
-  "scale",
-  "rotate",
-  "shadowStrength",
-] as const;
+function directClearanceEnvelope(progress: number): number {
+  return 4 * progress * (1 - progress);
+}
+
+/**
+ * A backward Direct target begins at the rear of the ring. It first recedes beneath the nearly
+ * stationary hand-owned source, changes paint order while that source contains its complete body,
+ * then expands into the newly vacated top position. This keeps the target reveal subordinate to the
+ * source's direct translation; it does not borrow Shuffle's top-card detour.
+ */
+function moveDirectTarget(
+  target: MutableStackedDeckPose,
+  sourceSlot: number,
+  progress: number,
+  continuityPose?: StackedDeckPose,
+  continuityProgress = 0,
+): void {
+  setTopPose(resetPose(directTopPose), false);
+  let role: StackedDeckRole = progress < 1 - TRAVERSAL_EPSILON ? "target" : "top";
+  if (
+    continuityPose !== undefined &&
+    continuityProgress > TRAVERSAL_EPSILON &&
+    progress <= continuityProgress
+  ) {
+    const sourceLayer = target.layer;
+    movePoseGeometry(target, continuityPose, Math.min(1, progress / continuityProgress));
+    target.layer = progress < continuityProgress ? sourceLayer : continuityPose.layer;
+    role = progress < continuityProgress ? "hidden" : continuityPose.role;
+  } else if (continuityPose !== undefined && continuityProgress > TRAVERSAL_EPSILON) {
+    movePoseGeometry(target, continuityPose, 1);
+    const resumedProgress = (progress - continuityProgress) / (1 - continuityProgress);
+    movePoseGeometry(target, directTopPose, smoothstep(resumedProgress));
+    target.layer = resumedProgress <= TRAVERSAL_EPSILON ? continuityPose.layer : TOP_LAYER;
+  } else if (sourceSlot > 0) {
+    // The forward neighbour already owns the highest subordinate depth. Raising its numeric layer
+    // changes no relative paint order, so it can retain the compact Direct reveal without a detour.
+    movePoseGeometry(target, directTopPose, progress);
+    target.layer = TOP_LAYER;
+  } else {
+    const sourceLayer = target.layer;
+    setOccludedPilePose(occludedPilePose, directTopPose);
+    movePoseGeometry(
+      target,
+      occludedPilePose,
+      smoothstep(Math.min(1, progress / DIRECT_TARGET_CONTAINED)),
+    );
+    const returned =
+      (progress - DIRECT_TARGET_CONTAINED) / (DIRECT_TARGET_RETURNED - DIRECT_TARGET_CONTAINED);
+    movePoseGeometry(target, directTopPose, smoothstep(clamp(returned, 0, 1)));
+    target.layer = progress <= DIRECT_TARGET_CONTAINED ? sourceLayer : TOP_LAYER;
+  }
+  target.role = role;
+}
+
+function moveDirectBackground(
+  pose: MutableStackedDeckPose,
+  destination: StackedDeckPose,
+  cover: StackedDeckPose,
+  remainOccluded: boolean,
+  initialProgress: number,
+  continuityProgress: number,
+  continuityPose?: StackedDeckPose,
+): void {
+  let progress = initialProgress;
+  if (continuityPose !== undefined && continuityProgress > TRAVERSAL_EPSILON) {
+    if (progress > continuityProgress) {
+      movePoseGeometry(pose, continuityPose, 1);
+      pose.layer = continuityPose.layer;
+      progress = (progress - continuityProgress) / (1 - continuityProgress);
+    } else {
+      const sourceLayer = pose.layer;
+      movePoseGeometry(pose, continuityPose, Math.min(1, progress / continuityProgress));
+      pose.layer = progress < continuityProgress ? sourceLayer : continuityPose.layer;
+      return;
+    }
+  }
+  if (remainOccluded) {
+    const sourceLayer = pose.layer;
+    setOccludedPilePose(occludedPilePose, cover);
+    movePoseGeometry(
+      pose,
+      occludedPilePose,
+      smoothstep(Math.min(1, progress / PILE_OCCLUSION_ENTER)),
+    );
+    pose.layer = progress < AUTHORITY_MIDPOINT ? sourceLayer : destination.layer;
+  } else {
+    movePileShell(pose, destination, cover, progress);
+  }
+}
 
 /**
  * Projects Direct from one stable interaction origin. The target and remaining pile depend only on
@@ -885,14 +1050,75 @@ function setDirectFrame(
   // whatever it last painted, and the deck reads as frozen rather than as broken — so a settlement
   // that is not a number is the release frame rather than a shell nothing can move again.
   const settlement = clamp(projection.settlement, 0, 1) || 0;
-  /** Distance between this deck's card centres at which their bodies share no pixel. */
-  const clearSeparation = tuning.cardWidth + CROSSOVER_CLEARANCE;
   if (targetIndex !== null) {
     const continuity = projection.continuity;
-    const continuityReveal = continuity?.progress ?? 0;
+    setRingPose(
+      resetPose(directOutgoingDestinationPose),
+      targetIndex,
+      projection.originIndex,
+      output.poses.length,
+      tuning,
+    );
+    if (phase === undefined || phase === "parking") {
+      const progress = phase === "parking" ? settlement : reveal;
+      if (phase === "parking") {
+        outgoing.translateX = projection.translateX;
+        outgoing.translateY = projection.translateY;
+      }
+      movePoseGeometry(outgoing, directOutgoingDestinationPose, progress);
+      const clearance = Math.max(
+        0,
+        wholePileClearSeparation(output.poses.length, tuning) - Math.abs(outgoing.translateX),
+      );
+      outgoing.translateX +=
+        (phase === undefined
+          ? -projection.direction
+          : Math.sign(
+              projection.translateX ||
+                directOutgoingDestinationPose.translateX ||
+                -projection.direction,
+            )) *
+        clearance *
+        directClearanceEnvelope(progress);
+      outgoing.layer =
+        progress < CROSSOVER_SETTLEMENT ? HAND_LAYER : directOutgoingDestinationPose.layer;
+      outgoing.role = progress < 1 - TRAVERSAL_EPSILON ? "top" : "hidden";
+    } else {
+      // Held and given back are the same expression: no released shell can take rear depth.
+      const retained = 1 - settlement;
+      outgoing.translateX = projection.translateX * retained;
+      outgoing.translateY = projection.translateY * retained;
+      outgoing.layer = HAND_LAYER;
+      outgoing.role = "top";
+    }
+
+    const target = output.poses[targetIndex]!;
+    const targetSourceDepth = resolveStackedDeckDepth(
+      projection.originIndex,
+      targetIndex,
+      output.poses.length,
+    );
+    const targetSourceSlot = signedRingSlot(targetSourceDepth, output.poses.length);
+    moveDirectTarget(
+      target,
+      targetSourceSlot,
+      reveal,
+      continuity?.poses[targetIndex],
+      continuity?.progress,
+    );
+    target.interactive =
+      (phase === undefined || phase === "parking") && output.authoritativeIndex === targetIndex;
+
+    const outgoingDestinationDepth = resolveStackedDeckDepth(
+      targetIndex,
+      projection.originIndex,
+      output.poses.length,
+    );
+
     for (let index = 0; index < output.poses.length; index += 1) {
-      if (index === projection.originIndex) continue;
+      if (index === projection.originIndex || index === targetIndex) continue;
       const pose = output.poses[index]!;
+      const destinationDepth = resolveStackedDeckDepth(targetIndex, index, output.poses.length);
       setRingPose(
         resetPose(projectionDestinationPose),
         targetIndex,
@@ -900,83 +1126,44 @@ function setDirectFrame(
         output.poses.length,
         tuning,
       );
-      if (continuity?.itemIndex === index) {
-        moveDirectPose(pose, continuity.pose, Math.min(1, reveal / continuityReveal));
-        if (reveal > continuityReveal) {
-          moveDirectPose(
-            pose,
-            projectionDestinationPose,
-            (reveal - continuityReveal) / (1 - continuityReveal),
-          );
-        }
-      } else {
-        moveDirectPose(pose, projectionDestinationPose, reveal);
-      }
-    }
-    const target = output.poses[targetIndex]!;
-    target.layer = TOP_LAYER;
-    if (reveal < 1 - TRAVERSAL_EPSILON) target.role = "target";
-
-    if (phase === undefined || phase === "parking") {
-      target.interactive = output.authoritativeIndex === targetIndex;
-      setRingPose(
-        resetPose(projectionDestinationPose),
-        targetIndex,
-        projection.originIndex,
-        output.poses.length,
-        tuning,
-      );
       if (phase === undefined) {
-        // An omitted lifecycle is an autonomous exchange: nothing was held, so there is no release
-        // frame to park from, hand translation is not this shell's, and scalar travel is the whole
-        // physical story.
-        moveDirectPose(outgoing, projectionDestinationPose, reveal);
-        return;
+        movePileShell(pose, projectionDestinationPose, target, reveal);
+        continue;
       }
-      // Parking. Geometry and depth are separate physical facts.
-      //
-      // Geometry is continuous in `settlement` alone — the exact release frame at zero, the exact
-      // destination pile frame at one — so a commit at a fifth of a pitch and a commit past a
-      // whole one travel the same curve. Depth is discrete, and a discrete change is only
-      // invisible between bodies that share no pixel, so the shell keeps the paint order the hand
-      // released it with until the curve has carried it clear of the new top. The apex of the
-      // curve adds exactly the separation the release was short of, along the direction it was
-      // already leaving in, and nothing more: a release already standing clear adds zero and goes
-      // straight in.
-      const apexX = mix(
-        projection.translateX,
-        projectionDestinationPose.translateX,
-        CROSSOVER_SETTLEMENT,
+
+      const compactDepth =
+        destinationDepth > outgoingDestinationDepth ? destinationDepth - 1 : destinationDepth;
+      const compactSlot = signedRingSlot(compactDepth, output.poses.length - 1);
+      const destinationSlot = signedRingSlot(destinationDepth, output.poses.length);
+      setPilePose(resetPose(directCompactPose), compactSlot, tuning, compactDepth);
+      moveDirectBackground(
+        pose,
+        directCompactPose,
+        target,
+        Math.sign(compactSlot) !== Math.sign(destinationSlot),
+        reveal,
+        continuity?.progress ?? 0,
+        continuity?.poses[index],
       );
-      const clearance = Math.max(0, clearSeparation - Math.abs(apexX));
-      outgoing.translateX = projection.translateX;
-      outgoing.translateY = projection.translateY;
-      moveDirectPose(outgoing, projectionDestinationPose, settlement);
-      // Zero at both ends and unit at the apex, so both endpoints stay exact, not nearly exact.
-      outgoing.translateX +=
-        Math.sign(apexX || projectionDestinationPose.translateX || -projection.direction) *
-        clearance *
-        4 *
-        settlement *
-        (1 - settlement);
-      // Depth changes on the first frame the two bodies are actually clear of each other, which
-      // is a frame this path is built to contain, and never changes back: past the apex the shell
-      // is already behind for the rest of its way in. Reading the separation the frame is about to
-      // render — rather than the settlement that produced it — is what keeps the swap invisible at
-      // any frame rate, since no frame lands exactly on the apex.
-      if (settlement < CROSSOVER_SETTLEMENT && Math.abs(outgoing.translateX) < clearSeparation) {
-        outgoing.layer = HAND_LAYER;
+      if (phase === "parking") {
+        movePileShell(pose, projectionDestinationPose, target, settlement);
       }
-      return;
     }
+    if (
+      (phase === undefined && distance >= 1 - TRAVERSAL_EPSILON) ||
+      (phase === "parking" && settlement >= 1 - TRAVERSAL_EPSILON)
+    ) {
+      setFrameRing(output, targetIndex, tuning);
+      output.poses[targetIndex]!.interactive = output.authoritativeIndex === targetIndex;
+    }
+    return;
   }
-  // Held and given back are the same expression, because a shell no hand has let go of has no
-  // settlement: it keeps the whole raw vector, and a cancelled one hands that vector back as its
-  // own settlement completes, ending on the exact source top.
+  // No directed target: only the hand-owned source may move, and it cannot change depth.
   const retained = 1 - settlement;
   outgoing.translateX = projection.translateX * retained;
   outgoing.translateY = projection.translateY * retained;
   outgoing.layer = HAND_LAYER;
+  outgoing.role = "top";
 }
 
 /**
