@@ -912,6 +912,32 @@ test("both exchange variants complete repeated revolutions without drift or shel
   }
 });
 
+test("distinct pointer gestures complete repeated revolutions without drift or shell loss", async ({
+  page,
+}) => {
+  // This is another 28-settlement revolution stress and is selected by the WebKit cyclic matrix.
+  // The test-level budget covers that deliberate duration; each settlement keeps the ordinary
+  // readiness assertion and every exchange still checks local zero plus persistent shell identity.
+  test.setTimeout(180_000);
+  const stage = viewport(page);
+  const pitch = await motionPitch(stage);
+  for (const exchange of ["shuffle", "direct"] as const) {
+    await page.getByTestId(`stacked-deck-exchange-${exchange}`).click();
+    for (const direction of [1, -1] as const) {
+      await destinations(page).first().click();
+      await expectCarouselAt(stage, IDS[0]);
+      for (let step = 1; step <= 7; step += 1) {
+        await flick(page, direction, pitch);
+        const targetIndex = (direction * step + IDS.length * step) % IDS.length;
+        await expectCarouselAt(stage, IDS[targetIndex]!);
+        const frame = await readFrame(page);
+        expect(frame.physicalPosition).toBeCloseTo(0, 6);
+        expectPersistentShellInventory(frame);
+      }
+    }
+  }
+});
+
 test("a two-item deck preserves forward and backward physical direction", async ({ page }) => {
   const stage = viewport(page);
   await page.getByTestId("stacked-deck-two-items").click();
