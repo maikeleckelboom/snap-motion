@@ -21,6 +21,8 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<
   onChange?: (snapshot: ControllerSnapshot<Id>) => void;
   pointerIntent?: "horizontal" | "immediate";
   pointerDeltaMultiplier?: () => number;
+  /** Called before the first scalar write in either direction of one pointer interaction. */
+  onPointerTravelDirection?: (direction: -1 | 1) => void;
   onReleaseTargetSelected?: (id: Id | undefined) => void;
   reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
   /**
@@ -43,6 +45,7 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     onChange,
     pointerIntent = "immediate",
     pointerDeltaMultiplier,
+    onPointerTravelDirection,
     onReleaseTargetSelected,
     reducedMotionOverride,
     resolveDragOrigin,
@@ -75,6 +78,8 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
   const velocityTracker = new VelocityTracker();
   let dragOrigin = snapshot.value.position;
   let dragOriginId: Id | undefined;
+  let dragDelta = 0;
+  let pointerTravelDirection: -1 | 0 | 1 = 0;
 
   const pointer = usePointerDrag({
     axis,
@@ -84,12 +89,24 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
       dragOriginId = resolveDragOrigin?.() ?? current.target?.id ?? current.active?.id;
       controller.beginDrag(dragOriginId === undefined ? {} : { originId: dragOriginId });
       dragOrigin = controller.getSnapshot().position;
+      dragDelta = 0;
+      pointerTravelDirection = 0;
       velocityTracker.reset();
       velocityTracker.add(sample.position, sample.time);
     },
     onMove(sample) {
       velocityTracker.add(sample.position, sample.time);
-      controller.dragTo(dragOrigin + sample.delta * (pointerDeltaMultiplier?.() ?? 1));
+      const nextDelta = sample.delta * (pointerDeltaMultiplier?.() ?? 1);
+      const nextDirection = Math.sign(nextDelta) as -1 | 0 | 1;
+      if (nextDirection !== 0 && nextDirection !== pointerTravelDirection) {
+        onPointerTravelDirection?.(nextDirection);
+        // A consumer may have atomically rebased the controller's coordinate system. Preserve the
+        // hand's already-applied delta while moving the scalar origin into that new system.
+        dragOrigin = controller.getSnapshot().position - dragDelta;
+        pointerTravelDirection = nextDirection;
+      }
+      dragDelta = nextDelta;
+      controller.dragTo(dragOrigin + nextDelta);
     },
     onEnd(sample) {
       velocityTracker.add(sample.position, sample.time);

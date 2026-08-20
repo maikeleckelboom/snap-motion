@@ -7,6 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import {
   BOUNDED_SPRING_TUNING,
+  resolveStackedDeckNeighbor,
   resolveStackedDeckTuning,
   STACKED_DECK_ANCHOR_SKIP,
 } from "../../packages/core/src/index";
@@ -49,7 +50,7 @@ import {
   flick,
   holdPhysicalIndex,
   motionPitch,
-  pagination,
+  destinations,
   readFrame,
   viewport,
   waitForAuthority,
@@ -85,10 +86,14 @@ if (startIndex < 0 || targetIndex < 0) {
     `The requested pair ${scenario.config.cardPair.startId}:${scenario.config.cardPair.targetId} does not exist in the Lab Stacked Deck.`,
   );
 }
-if (Math.abs(targetIndex - startIndex) !== 1) {
-  throw new Error("Stacked Deck visual-review pairs must be adjacent cards.");
-}
-const pairDirection = Math.sign(targetIndex - startIndex) as -1 | 1;
+const pairDirection =
+  targetIndex === resolveStackedDeckNeighbor(startIndex, 1, STACKED_DECK_IDS.length)
+    ? 1
+    : targetIndex === resolveStackedDeckNeighbor(startIndex, -1, STACKED_DECK_IDS.length)
+      ? -1
+      : 0;
+if (pairDirection === 0)
+  throw new Error("Stacked Deck visual-review pairs must be ring neighbours.");
 
 type DeckFrame = Awaited<ReturnType<typeof readFrame>>;
 
@@ -197,7 +202,7 @@ async function prepareReviewPage(page: Page): Promise<string[]> {
 
   const stage = viewport(page);
   await expect.poll(() => motionPitch(stage)).toBeGreaterThan(0);
-  await pagination(page).nth(startIndex).click();
+  await destinations(page).nth(startIndex).click();
   await expectCarouselAt(stage, STACKED_DECK_IDS[startIndex]!);
   await expect(page.getByTestId("stacked-deck-caption")).toHaveText(
     STACKED_DECK_TITLES[startIndex]!,
@@ -371,7 +376,11 @@ async function startRenderedFrameTrace(page: Page): Promise<void> {
               translateY: Number(surface.dataset.translateY),
             };
           };
-          const physicalIndex = Number(stage.dataset.physicalIndex);
+          const interactionOriginIndex = Number(stage.dataset.interactionOriginIndex);
+          const settledIndex = Number(stage.dataset.settledIndex);
+          const physicalIndex =
+            (interactionOriginIndex >= 0 ? interactionOriginIndex : settledIndex) +
+            Number(stage.dataset.physicalIndex);
           const targetAttribute = stage.getAttribute("data-segment-target-index");
           trace.samples.push({
             actualLocalProgress: Number(stage.dataset.segmentProgress),
@@ -509,7 +518,11 @@ async function performNormalGesture(
   }
   const deltaX = -direction * held.pitch * normalGesture.progress;
   await finishPointer(page, held.origin, deltaX, held.elapsedMs + 40, "pointerup");
-  const destinationIndex = originIndex + direction;
+  const destinationIndex = resolveStackedDeckNeighbor(
+    originIndex,
+    direction,
+    STACKED_DECK_IDS.length,
+  );
   await expectCarouselAt(viewport(page), STACKED_DECK_IDS[destinationIndex]!);
   return readFrame(page);
 }
@@ -592,7 +605,7 @@ async function captureReviewCheckpoints(page: Page): Promise<{
   readonly files: readonly string[];
   readonly samples: readonly ExactCheckpointSample[];
 }> {
-  await pagination(page).nth(startIndex).click();
+  await destinations(page).nth(startIndex).click();
   await expectCarouselAt(viewport(page), STACKED_DECK_IDS[startIndex]!);
   const held = await beginHeldAtCurrent(page, startIndex);
   const files: string[] = [];
@@ -834,7 +847,11 @@ test("records the deterministic mouse review", async ({ page }) => {
         ["fast-flick-forward", startIndex, pairDirection],
         ["fast-flick-reverse", targetIndex, -pairDirection as -1 | 1],
       ] as const) {
-        const destinationIndex = originIndex + direction;
+        const destinationIndex = resolveStackedDeckNeighbor(
+          originIndex,
+          direction,
+          STACKED_DECK_IDS.length,
+        );
         await recordPhase(
           page,
           recording,
@@ -867,7 +884,11 @@ test("records the deterministic mouse review", async ({ page }) => {
         const forward = exchange % 2 === 0;
         const originIndex = forward ? startIndex : targetIndex;
         const direction = forward ? pairDirection : (-pairDirection as -1 | 1);
-        const destinationIndex = originIndex + direction;
+        const destinationIndex = resolveStackedDeckNeighbor(
+          originIndex,
+          direction,
+          STACKED_DECK_IDS.length,
+        );
         await recordPhase(
           page,
           recording,

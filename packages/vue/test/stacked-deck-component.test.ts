@@ -373,9 +373,13 @@ describe("StackedDeck", () => {
     expect(wrapper.get('[data-testid="snap-motion-stacked-deck-status"]').text()).toBe(
       "Outcome, 3 of 3",
     );
-    expect(deck.canNext).toBe(false);
+    expect(deck.canNext).toBe(true);
     expect(deck.canPrevious).toBe(true);
-    expect(deck.next()).toBe(false);
+    expect(deck.next()).toBe(true);
+    await nextTick();
+    await nextTick();
+    expect(deck.settledId).toBe("overview");
+    expect(wrapper.emitted("update:activeId")).toEqual([["outcome"], ["overview"]]);
     wrapper.unmount();
   });
 

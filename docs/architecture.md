@@ -17,11 +17,13 @@ An anchor combines a stable ID, a physical scalar position, and logical order. P
 may repeat. Semantic identity is therefore never inferred from a deduplicated number array.
 
 Presentation projection is also framework-neutral. The per-card Coverflow rail resolver consumes a
-scalar position. The whole-frame deck projection consumes that position as a continuous physical
-index, advances visual ownership at each crossed anchor, and projects only the active adjacent
-segment. It mutates caller-owned traversal and frame storage and owns only physical shell geometry,
-paint layers, and the ordered source index for each non-dominant pose; it does not own motion,
-targets, final selection, application material, or DOM state.
+scalar position. The whole-frame deck projection consumes an interaction-local physical position,
+an explicit direction, and a finite semantic origin. It rotates the canonical item ring around that
+origin, advances visual ownership across exactly one adjacent exchange, and treats all remaining
+travel as resisted overdrag. It mutates caller-owned traversal and frame storage and owns only
+physical shell geometry, paint layers, ring depth, and the ordered source index for each
+non-dominant pose; it does not own motion, targets, final selection, application material, or DOM
+state.
 
 Above those primitives, core owns two **surface models**. `StackedDeckModel` and `CoverflowModel`
 compose the generic controller's snapshots into a surface's semantics: durable versus visual
@@ -30,8 +32,8 @@ absolute command policy, direct synchronization, and announcement timing. They a
 is a deck. They issue no controller commands, touch no DOM, and never narrow the generic controller;
 `SnapController` and `resolveStackedDeckTraversal` both keep their full multi-anchor capability.
 
-Shared deterministic policy lives beside them: settled selection and visual hysteresis, pagination
-projection, bounded autonomous spring integration and release-velocity limiting, coverflow kinetics
+Shared deterministic policy lives beside them: settled selection and visual hysteresis, generic
+pagination projection, bounded autonomous spring integration and release-velocity limiting, coverflow kinetics
 and responsive tuning, direct-manipulation gesture arbitration, and the semantic key mapping. The
 lab owns none of it.
 
@@ -107,8 +109,8 @@ largest canonical position.
 
 For layered presentations, geometry and DOM paint order are intentionally separate outputs of the
 same frame resolver. The deck assigns layers from explicit exchange roles and never flips them at a
-progress threshold. The settled selection remains the sole authority for caption, pagination,
-focus, inspection, and announcement timing until controller settlement.
+progress threshold. The settled selection remains the sole authority for caption, focus,
+inspection, and announcement timing until controller settlement.
 
 ## Remeasurement
 

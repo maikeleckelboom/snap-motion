@@ -21,8 +21,16 @@ export function viewport(page: Page) {
   return page.getByTestId("stacked-deck-viewport");
 }
 
-export function pagination(page: Page) {
-  return page.getByRole("group", { name: "Stacked deck screens" }).getByRole("button");
+export function destinations(page: Page) {
+  const select = page.getByTestId("stacked-deck-destination");
+  const at = (index: number) => ({
+    click: () => select.selectOption(STACKED_DECK_IDS[index]!),
+  });
+  return {
+    first: () => at(0),
+    last: () => at(STACKED_DECK_IDS.length - 1),
+    nth: at,
+  };
 }
 
 export async function motionPitch(target: Locator) {
@@ -170,7 +178,7 @@ export async function beginHeldTraversal(
   pointerType: PointerOrigin["pointerType"] = "mouse",
 ): Promise<HeldTraversal> {
   const stage = viewport(page);
-  await pagination(page).nth(startIndex).click();
+  await destinations(page).nth(startIndex).click();
   await expectCarouselAt(stage, STACKED_DECK_IDS[startIndex]!);
   return {
     elapsedMs: 0,
@@ -232,6 +240,10 @@ export async function releaseHeldAtRest(page: Page, held: HeldTraversal, physica
 export async function readFrame(page: Page) {
   return viewport(page).evaluate((element) => {
     const stageBox = element.getBoundingClientRect();
+    const interactionOriginIndex = Number(element.dataset.interactionOriginIndex);
+    const settledIndex = Number(element.dataset.settledIndex);
+    const localPhysicalPosition = Number(element.dataset.physicalIndex);
+    const diagnosticOrigin = interactionOriginIndex >= 0 ? interactionOriginIndex : settledIndex;
     const poses = [...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-card")].map(
       (item, index) => {
         const motion = item.querySelector<HTMLElement>(".snap-motion-stacked-deck-card-motion")!;
@@ -281,22 +293,20 @@ export async function readFrame(page: Page) {
         "",
       cardWidth: Number(element.dataset.cardWidth),
       controllerPhase: element.dataset.phase ?? "",
-      counter:
-        document.querySelector<HTMLElement>('[data-testid="stacked-deck-counter"]')?.innerText ??
-        "",
       inspectEnabled: !document.querySelector<HTMLButtonElement>(
         '[data-testid="stacked-deck-inspect"]',
       )?.disabled,
       interactionOwned: element.dataset.interactionOwned === "true",
-      interactionOriginIndex: Number(element.dataset.interactionOriginIndex),
+      interactionOriginIndex,
       maxAnchorSkip: Number(element.dataset.maxAnchorSkip),
       direction: Number(element.dataset.segmentDirection),
-      physicalIndex: Number(element.dataset.physicalIndex),
+      physicalIndex: diagnosticOrigin + localPhysicalPosition,
+      physicalPosition: localPhysicalPosition,
       progress: Number(element.dataset.segmentProgress),
       segmentOriginIndex: Number(element.dataset.segmentOriginIndex),
       segmentPhase: element.dataset.segmentPhase ?? "",
       segmentTargetIndex: targetAttribute === null ? null : Number(targetAttribute),
-      settledIndex: Number(element.dataset.settledIndex),
+      settledIndex,
       signedLocalDistance: Number(element.dataset.signedLocalDistance),
       stageBottom: stageBox.bottom,
       stageLeft: stageBox.left,

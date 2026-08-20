@@ -99,7 +99,10 @@ export {
   createStackedDeckFrame,
   createStackedDeckTraversal,
   isStackedDeckAuthorityStable,
+  resolveStackedDeckDepth,
   resolveStackedDeckFrame,
+  resolveStackedDeckNeighbor,
+  resolveStackedDeckOrder,
   resolveStackedDeckPile,
   resolveStackedDeckTraversal,
   resolveStackedDeckTuning,
@@ -120,7 +123,6 @@ export type {
   StackedDeckProfile,
   StackedDeckRole,
   StackedDeckTraversal,
-  StackedDeckTraversalBounds,
   StackedDeckTraversalPhase,
   StackedDeckTuning,
 } from "./stackedDeck";

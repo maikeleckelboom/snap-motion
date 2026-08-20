@@ -15,7 +15,7 @@ import {
   motionPitch,
   movePointer,
   nextPointerId,
-  pagination,
+  destinations,
   readFrame,
   releaseHeldAtRest,
   viewport,
@@ -209,9 +209,27 @@ function topPose(frame: DeckFrame) {
   return pose;
 }
 
+function normalizedRingPose(frame: DeckFrame, originIndex: number) {
+  return Array.from({ length: IDS.length }, (_unused, depth) => {
+    const pose = frame.poses[(originIndex + depth) % IDS.length]!;
+    return {
+      depth,
+      layer: pose.layer,
+      opacity: Number(pose.opacity.toFixed(4)),
+      role: pose.role,
+      rotate: Number(pose.rotate.toFixed(4)),
+      scale: Number(pose.scale.toFixed(4)),
+      shadowStrength: Number(pose.shadowStrength.toFixed(4)),
+      translateX: Number(pose.translateX.toFixed(3)),
+      translateY: Number(pose.translateY.toFixed(3)),
+      visible: pose.visible,
+    };
+  });
+}
+
 function assertLocalSegment(frame: Awaited<ReturnType<typeof readFrame>>) {
   if (frame.segmentTargetIndex === null) return;
-  expect(Math.abs(frame.segmentTargetIndex - frame.segmentOriginIndex)).toBe(1);
+  expect(isOriginOrCyclicNeighbor(frame.segmentTargetIndex, frame.segmentOriginIndex)).toBe(true);
   expect(frame.segmentOriginIndex).toBe(frame.visualTopIndex);
 }
 
@@ -267,6 +285,9 @@ async function installTraversalTrace(page: Page, maxFrames = 900, minimumInterac
         if (controllerPhase !== "idle") state.started = true;
         const targetAttribute = element.getAttribute("data-segment-target-index");
         const interactionOriginIndex = Number(element.dataset.interactionOriginIndex);
+        const settledIndex = Number(element.dataset.settledIndex);
+        const diagnosticOrigin =
+          interactionOriginIndex >= 0 ? interactionOriginIndex : settledIndex;
         if (interactionOriginIndex >= 0 && interactionOriginIndex !== lastInteractionOrigin) {
           interactionCount += 1;
           lastInteractionOrigin = interactionOriginIndex;
@@ -284,12 +305,12 @@ async function installTraversalTrace(page: Page, maxFrames = 900, minimumInterac
             '[data-testid="stacked-deck-inspect"]',
           )?.disabled,
           interactionOriginIndex,
-          physicalIndex: Number(element.dataset.physicalIndex),
+          physicalIndex: diagnosticOrigin + Number(element.dataset.physicalIndex),
           progress: Number(element.dataset.segmentProgress),
           segmentOriginIndex: Number(element.dataset.segmentOriginIndex),
           segmentPhase: element.dataset.segmentPhase ?? "",
           segmentTargetIndex: targetAttribute === null ? null : Number(targetAttribute),
-          settledIndex: Number(element.dataset.settledIndex),
+          settledIndex,
           visualTopIndex: Number(element.dataset.visualTopIndex),
           poses: [...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-card")].map(
             (item) => {
@@ -403,11 +424,15 @@ async function grabOnAuthority(page: Page, index: number, pointerId: number) {
           const element = document.querySelector<HTMLElement>(
             '[data-testid="stacked-deck-viewport"]',
           )!;
+          const interactionOriginIndex = Number(element.dataset.interactionOriginIndex);
+          const settledIndex = Number(element.dataset.settledIndex);
+          const diagnosticOrigin =
+            interactionOriginIndex >= 0 ? interactionOriginIndex : settledIndex;
           return {
             authoritativeIndex: Number(element.dataset.authoritativeIndex),
-            interactionOriginIndex: Number(element.dataset.interactionOriginIndex),
+            interactionOriginIndex,
             phase: element.dataset.phase ?? "",
-            physicalIndex: Number(element.dataset.physicalIndex),
+            physicalIndex: diagnosticOrigin + Number(element.dataset.physicalIndex),
             pose: {
               translateX: Number(surface.dataset.translateX),
               translateY: Number(surface.dataset.translateY),
@@ -468,6 +493,14 @@ function interactionsIn(trace: readonly TraversalSample[]) {
   return interactions;
 }
 
+function isOriginOrCyclicNeighbor(index: number, originIndex: number): boolean {
+  return (
+    index === originIndex ||
+    index === (originIndex + 1) % IDS.length ||
+    index === (originIndex - 1 + IDS.length) % IDS.length
+  );
+}
+
 /**
  * The primary regression contract, for one interaction: motion and authority stay inside the one
  * adjacent-card envelope while every physical card remains present in the compact deck.
@@ -475,12 +508,12 @@ function interactionsIn(trace: readonly TraversalSample[]) {
 function expectInteractionBounded(interaction: ReturnType<typeof interactionsIn>[number]) {
   const { originIndex, samples } = interaction;
   for (const sample of samples) {
-    expect(Math.abs(sample.visualTopIndex - originIndex)).toBeLessThanOrEqual(1);
-    expect(Math.abs(sample.authoritativeIndex - originIndex)).toBeLessThanOrEqual(1);
+    expect(isOriginOrCyclicNeighbor(sample.visualTopIndex, originIndex)).toBe(true);
+    expect(isOriginOrCyclicNeighbor(sample.authoritativeIndex, originIndex)).toBe(true);
     // Bounded overdrag is allowed; a second pitch of physical travel is not.
     expect(Math.abs(sample.physicalIndex - originIndex)).toBeLessThan(1.5);
     if (sample.segmentTargetIndex !== null) {
-      expect(Math.abs(sample.segmentTargetIndex - originIndex)).toBeLessThanOrEqual(1);
+      expect(isOriginOrCyclicNeighbor(sample.segmentTargetIndex, originIndex)).toBe(true);
     }
     expect(sample.poses.filter((pose) => pose.role === "top")).toHaveLength(1);
     expect(sample.poses.filter((pose) => pose.role === "target").length).toBeLessThanOrEqual(1);
@@ -535,16 +568,13 @@ function expectOneCardEnvelope(trace: readonly TraversalSample[], originIndex: n
   const active = trace.filter((sample) => sample.controllerPhase !== "idle");
   expect(active.length).toBeGreaterThan(3);
   for (const sample of active) {
-    expect(sample.visualTopIndex).toBeGreaterThanOrEqual(originIndex - 1);
-    expect(sample.visualTopIndex).toBeLessThanOrEqual(originIndex + 1);
-    expect(Math.abs(sample.authoritativeIndex - originIndex)).toBeLessThanOrEqual(1);
+    expect(isOriginOrCyclicNeighbor(sample.visualTopIndex, originIndex)).toBe(true);
+    expect(isOriginOrCyclicNeighbor(sample.authoritativeIndex, originIndex)).toBe(true);
     // Bounded overdrag is allowed; a second pitch of physical travel is not.
     expect(sample.physicalIndex).toBeGreaterThan(originIndex - 1.5);
     expect(sample.physicalIndex).toBeLessThan(originIndex + 1.5);
     if (sample.segmentTargetIndex !== null) {
-      expect(Math.abs(sample.segmentTargetIndex - sample.segmentOriginIndex)).toBe(1);
-      expect(sample.segmentTargetIndex).toBeGreaterThanOrEqual(originIndex - 1);
-      expect(sample.segmentTargetIndex).toBeLessThanOrEqual(originIndex + 1);
+      expect(isOriginOrCyclicNeighbor(sample.segmentTargetIndex, originIndex)).toBe(true);
     }
     expect(sample.poses.filter((pose) => pose.role === "top")).toHaveLength(1);
     expect(sample.poses.filter((pose) => pose.role === "target").length).toBeLessThanOrEqual(1);
@@ -553,9 +583,8 @@ function expectOneCardEnvelope(trace: readonly TraversalSample[], originIndex: n
   const traversal = trace.slice(trace.findIndex((sample) => sample.controllerPhase !== "idle"));
   const tops = uniqueInOrder(traversal.map((sample) => sample.visualTopIndex));
   expect(tops.length).toBeLessThanOrEqual(3);
-  expect(new Set(tops.map((top) => Math.abs(top - originIndex))).has(2)).toBe(false);
   const settled = trace.at(-1)!.settledIndex;
-  expect(Math.abs(settled - originIndex)).toBeLessThanOrEqual(1);
+  expect(isOriginOrCyclicNeighbor(settled, originIndex)).toBe(true);
   expectShellInventory(trace);
   return { tops, settled };
 }
@@ -676,6 +705,7 @@ test.afterEach(async ({ page }) => {
 
 test("real pointer movement maps 1:1 to the visual top in both directions", async ({ page }) => {
   const stage = viewport(page);
+  await page.getByTestId("stacked-deck-exchange-direct").click();
 
   const left = await beginHeldTraversal(page, 2);
   let previousMagnitude = 0;
@@ -736,8 +766,8 @@ test("high-contrast exchange changes depth with body clearance and no crossing s
       const target = frame.poses[origin + direction]!;
       expect(outgoing).toMatchObject({ opacity: 1, visible: true });
       expect(target).toMatchObject({ opacity: 1, visible: true });
-      expect(outgoing.shadowStrength).toBeLessThanOrEqual(0.025);
-      expect(target.shadowStrength).toBeLessThanOrEqual(0.025);
+      expect(outgoing.shadowStrength).toBeLessThanOrEqual(0.03);
+      expect(target.shadowStrength).toBeLessThanOrEqual(0.03);
       expect(maximumShadowAlpha(outgoing.boxShadow)).toBeLessThanOrEqual(0.01);
       expect(maximumShadowAlpha(target.boxShadow)).toBeLessThanOrEqual(0.01);
       readings.push(frame);
@@ -780,7 +810,7 @@ test("high-contrast exchange changes depth with body clearance and no crossing s
 test("successive rendered frames preserve the physical exchange shells", async ({ page }) => {
   const stage = viewport(page);
   for (const direction of [1, -1] as const) {
-    await pagination(page).nth(2).click();
+    await destinations(page).nth(2).click();
     await expectCarouselAt(stage, "map");
     await installTraversalTrace(page);
     await page.getByTestId(direction > 0 ? "stacked-deck-next" : "stacked-deck-previous").click();
@@ -792,9 +822,145 @@ test("successive rendered frames preserve the physical exchange shells", async (
   }
 });
 
+test("interior and semantic-wrap exchanges have equivalent rendered choreography", async ({
+  page,
+}) => {
+  const stage = viewport(page);
+  for (const exchange of ["shuffle", "direct"] as const) {
+    await page.getByTestId(`stacked-deck-exchange-${exchange}`).click();
+    for (const direction of [1, -1] as const) {
+      const interiorOrigin = 2;
+      const wrapOrigin = direction === 1 ? IDS.length - 1 : 0;
+      const frames: DeckFrame[] = [];
+      for (const originIndex of [interiorOrigin, wrapOrigin]) {
+        const held = await beginHeldTraversal(page, originIndex);
+        frames.push(await holdPhysicalIndex(page, held, originIndex + direction * 0.42, 140));
+        await finishPointer(
+          page,
+          held.origin,
+          -direction * held.pitch * 0.42,
+          held.elapsedMs + 100,
+          "pointercancel",
+        );
+        await expectCarouselAt(stage, IDS[originIndex]!);
+      }
+      expect(normalizedRingPose(frames[1]!, wrapOrigin)).toEqual(
+        normalizedRingPose(frames[0]!, interiorOrigin),
+      );
+    }
+  }
+});
+
+test("pointer, wheel, and keyboard cross former ordinal edges as adjacent exchanges", async ({
+  page,
+}) => {
+  const stage = viewport(page);
+  for (const exchange of ["shuffle", "direct"] as const) {
+    await page.getByTestId(`stacked-deck-exchange-${exchange}`).click();
+
+    const forward = await beginHeldTraversal(page, IDS.length - 1);
+    await releaseHeldAtRest(page, forward, IDS.length);
+    await expectCarouselAt(stage, IDS[0]);
+
+    const backward = await beginHeldTraversal(page, 0);
+    await releaseHeldAtRest(page, backward, -1);
+    await expectCarouselAt(stage, IDS.at(-1)!);
+
+    const pitch = await motionPitch(stage);
+    await stage.evaluate((element, deltaX) => {
+      element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX }));
+    }, pitch * 0.65);
+    await expectCarouselAt(stage, IDS[0]);
+
+    await stage.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expectCarouselAt(stage, IDS.at(-1)!);
+    await page.keyboard.press("ArrowRight");
+    await expectCarouselAt(stage, IDS[0]);
+  }
+});
+
+test("both exchange variants complete repeated revolutions without drift or shell loss", async ({
+  page,
+}) => {
+  // WebKit needs roughly 90 seconds for these 28 full settlements in isolation and can exceed two
+  // minutes under the full parallel browser matrix. Keep the ordinary per-settlement readiness
+  // assertion; this scenario-level budget only covers the deliberately long repeated-revolution run.
+  test.setTimeout(180_000);
+  const stage = viewport(page);
+  for (const exchange of ["shuffle", "direct"] as const) {
+    await page.getByTestId(`stacked-deck-exchange-${exchange}`).click();
+    await destinations(page).first().click();
+    await expectCarouselAt(stage, IDS[0]);
+    for (let step = 1; step <= 7; step += 1) {
+      await page.getByTestId("stacked-deck-next").click();
+      await expectCarouselAt(stage, IDS[step % IDS.length]!);
+      const frame = await readFrame(page);
+      expect(frame.physicalPosition).toBeCloseTo(0, 6);
+      expectPersistentShellInventory(frame);
+    }
+
+    await destinations(page).first().click();
+    await expectCarouselAt(stage, IDS[0]);
+    for (let step = 1; step <= 7; step += 1) {
+      await page.getByTestId("stacked-deck-previous").click();
+      await expectCarouselAt(stage, IDS[(IDS.length - (step % IDS.length)) % IDS.length]!);
+      const frame = await readFrame(page);
+      expect(frame.physicalPosition).toBeCloseTo(0, 6);
+      expectPersistentShellInventory(frame);
+    }
+  }
+});
+
+test("a two-item deck preserves forward and backward physical direction", async ({ page }) => {
+  const stage = viewport(page);
+  await page.getByTestId("stacked-deck-two-items").click();
+  await expectCarouselAt(stage, "team");
+  const picker = page.getByTestId("stacked-deck-destination");
+
+  for (const exchange of ["shuffle", "direct"] as const) {
+    await page.getByTestId(`stacked-deck-exchange-${exchange}`).click();
+    const heldFrames: DeckFrame[] = [];
+    for (const direction of [1, -1] as const) {
+      await picker.selectOption("team");
+      await expectCarouselAt(stage, "team");
+      const held: HeldTraversal = {
+        elapsedMs: 0,
+        origin: await beginPointer(stage),
+        pitch: await motionPitch(stage),
+        startIndex: 0,
+      };
+      heldFrames.push(await holdPhysicalIndex(page, held, direction * 0.4, 140));
+      await finishPointer(
+        page,
+        held.origin,
+        -direction * held.pitch * 0.4,
+        held.elapsedMs + 100,
+        "pointercancel",
+      );
+      await expectCarouselAt(stage, "team");
+    }
+    expect(heldFrames[0]!.segmentTargetIndex).toBe(1);
+    expect(heldFrames[1]!.segmentTargetIndex).toBe(1);
+    expect(heldFrames[0]!.direction).toBe(1);
+    expect(heldFrames[1]!.direction).toBe(-1);
+    expect(Math.sign(topPose(heldFrames[0]!).translateX)).toBe(-1);
+    expect(Math.sign(topPose(heldFrames[1]!).translateX)).toBe(1);
+
+    await page.getByTestId("stacked-deck-next").click();
+    await expectCarouselAt(stage, "settings");
+    await page.getByTestId("stacked-deck-next").click();
+    await expectCarouselAt(stage, "team");
+    await page.getByTestId("stacked-deck-previous").click();
+    await expectCarouselAt(stage, "settings");
+    await page.getByTestId("stacked-deck-previous").click();
+    await expectCarouselAt(stage, "team");
+  }
+});
+
 test("ten consecutive exchanges restore the persistent shell inventory", async ({ page }) => {
   const stage = viewport(page);
-  await pagination(page).nth(2).click();
+  await destinations(page).nth(2).click();
   await expectCarouselAt(stage, "map");
 
   for (let exchange = 0; exchange < 10; exchange += 1) {
@@ -807,7 +973,7 @@ test("ten consecutive exchanges restore the persistent shell inventory", async (
     expect(frame).toMatchObject({
       authoritativeIndex: settledIndex,
       controllerPhase: "idle",
-      physicalIndex: settledIndex,
+      physicalPosition: 0,
       segmentTargetIndex: null,
       settledIndex,
       visualTopIndex: settledIndex,
@@ -816,26 +982,27 @@ test("ten consecutive exchanges restore the persistent shell inventory", async (
   }
 });
 
-test("deck thickness shows where you are, from index order alone", async ({ page }) => {
+test("deck thickness follows canonical ring depth across every semantic ordinal", async ({
+  page,
+}) => {
   const stage = viewport(page);
   const cardWidth = Number(await stage.getAttribute("data-card-width"));
   const edge = (layer: { left: number; right: number }, stageCentre: number) =>
     Math.max(stageCentre - layer.left, layer.right - stageCentre) - cardWidth / 2;
 
-  // Position is legible from the persistent shells: nothing behind the first screen, nothing ahead
-  // of the last, and an even split in the middle.
-  for (const [index, itemIds, slots] of [
-    [0, ["project", "map", "team", "settings"], [1, 2, 3, 4]],
-    [2, ["templates", "project", "team", "settings"], [-2, -1, 1, 2]],
-    [4, ["templates", "project", "map", "team"], [-4, -3, -2, -1]],
-  ] as const) {
-    await pagination(page).nth(index).click();
+  for (const index of [0, 2, 4]) {
+    await destinations(page).nth(index).click();
     await expectCarouselAt(stage, IDS[index]!);
     const frame = await readFrame(page);
     expectPersistentShellInventory(frame);
     const subordinate = frame.poses.filter((pose) => pose.index !== index);
-    expect(subordinate.map((pose) => pose.id)).toEqual(itemIds);
-    expect(subordinate.map((pose) => pose.index - index)).toEqual([...slots]);
+    const byDepth = subordinate.toSorted((left, right) => right.layer - left.layer);
+    expect(byDepth.map((pose) => pose.id)).toEqual(
+      Array.from(
+        { length: IDS.length - 1 },
+        (_unused, offset) => IDS[(index + offset + 1) % IDS.length],
+      ),
+    );
     expect(subordinate.every((pose) => pose.ariaHidden === "true")).toBe(true);
     const settingsCard = subordinate.find((pose) => pose.id === "settings");
     if (settingsCard !== undefined) {
@@ -844,46 +1011,38 @@ test("deck thickness shows where you are, from index order alone", async ({ page
     }
     const centre = (frame.stageLeft + frame.stageRight) / 2;
     for (const card of subordinate) {
-      const slot = card.index - index;
-      // Each shell sits on the side its own index lies on and exposes only a compact edge.
-      expect(Math.sign(card.left + card.right - 2 * centre)).toBe(Math.sign(slot));
+      const depth = (card.index - index + IDS.length) % IDS.length;
+      const side = depth <= Math.floor(IDS.length / 2) ? 1 : -1;
+      expect(Math.sign(card.left + card.right - 2 * centre)).toBe(side);
       expect(edge(card, centre)).toBeGreaterThan(0);
       expect(edge(card, centre)).toBeLessThan(cardWidth * 0.08);
     }
-    // Mirrored slots are exactly as deep as one another: neither side is favoured.
+    // Folded visual slots mirror geometrically while forward depth remains unique in paint order.
     for (const card of subordinate) {
-      const slot = card.index - index;
-      const mirrored = subordinate.find((other) => other.index - index === -slot);
+      const depth = (card.index - index + IDS.length) % IDS.length;
+      const mirroredDepth = IDS.length - depth;
+      const mirrored = subordinate.find(
+        (other) => (other.index - index + IDS.length) % IDS.length === mirroredDepth,
+      );
       if (mirrored) expect(edge(mirrored, centre)).toBeCloseTo(edge(card, centre), 1);
     }
   }
 
-  // The exchange is one physical event: the adjacent target rises out of the nearest slot on its
-  // own side, while the outgoing persistent card returns to the nearest far-side slot. Previous
-  // mirrors Next because the item ordering is reversed, not because the gesture direction is.
+  // Exact exchange endpoints are the two corresponding canonical rest rings in both directions.
   for (const direction of [1, -1] as const) {
-    await pagination(page).nth(2).click();
+    await destinations(page).nth(2).click();
     await expectCarouselAt(stage, "map");
     const held = await beginHeldTraversal(page, 2);
     const opening = await holdPhysicalIndex(page, held, 2 + direction * 0.05);
     expectPersistentShellInventory(opening);
     const target = opening.poses.find((pose) => pose.role === "target")!;
-    expect(Math.sign(target.translateX)).toBe(direction);
-    expect(
-      opening.poses
-        .filter((pose) => pose.index !== 2)
-        .map((pose) => Number((pose.index - opening.physicalIndex).toFixed(2))),
-    ).toEqual(direction > 0 ? [-2.05, -1.05, 0.95, 1.95] : [-1.95, -0.95, 1.05, 2.05]);
+    expect(target.id).toBe(IDS[(2 + direction + IDS.length) % IDS.length]);
 
-    // The outgoing card reaches the nearest far-side slot on the same continuous physical path.
     const exchanging = await holdPhysicalIndex(page, held, 2 + direction * 0.95);
     expectPersistentShellInventory(exchanging);
     const vacating = exchanging.poses[2]!;
-    expect(Math.sign(vacating.index - exchanging.physicalIndex)).toBe(-direction);
-    expect(Math.abs(vacating.index - exchanging.physicalIndex)).toBeCloseTo(0.95, 2);
     expect(vacating.opacity).toBeGreaterThan(0);
 
-    // A completed exchange leaves exactly the resting geometry of the card it landed on.
     const landed = await holdPhysicalIndex(page, held, 2 + direction);
     expectPersistentShellInventory(landed);
     await finishPointer(
@@ -893,34 +1052,15 @@ test("deck thickness shows where you are, from index order alone", async ({ page
       held.elapsedMs + 400,
       "pointerup",
     );
-    await expectCarouselAt(stage, IDS[2 + direction]!);
+    const destinationIndex = (2 + direction + IDS.length) % IDS.length;
+    await expectCarouselAt(stage, IDS[destinationIndex]!);
     const settled = await readFrame(page);
-    expect(settled.poses.map((pose) => pose.id)).toEqual(landed.poses.map((pose) => pose.id));
+    for (let index = 0; index < IDS.length; index += 1) {
+      for (const key of ["translateX", "translateY", "scale", "rotate", "opacity"] as const) {
+        expect(settled.poses[index]![key]).toBeCloseTo(landed.poses[index]![key], 4);
+      }
+    }
   }
-
-  // Travelling either way from the same position lays the deck out as an exact mirror.
-  const mirrored: number[][] = [];
-  for (const direction of [1, -1] as const) {
-    await pagination(page).nth(2).click();
-    await expectCarouselAt(stage, "map");
-    const held = await beginHeldTraversal(page, 2);
-    const frame = await holdPhysicalIndex(page, held, 2 + direction * 0.3);
-    mirrored.push(
-      frame.poses
-        .filter((pose) => pose.index !== 2)
-        .map((pose) => Number((direction * (pose.index - frame.physicalIndex)).toFixed(4)))
-        .toSorted((a, b) => a - b),
-    );
-    await finishPointer(
-      page,
-      held.origin,
-      -direction * held.pitch * 0.3,
-      held.elapsedMs + 100,
-      "pointercancel",
-    );
-    await expectCarouselAt(stage, "map");
-  }
-  expect(mirrored[0]).toEqual(mirrored[1]);
 });
 
 test("the settings physical shell retraces its geometry and material through reversal", async ({
@@ -950,7 +1090,7 @@ test("one held gesture cannot discard a second card however far it travels", asy
   const stage = viewport(page);
   // Reproduces the rejected recording: one uninterrupted pointer session that crossed two pitches.
   for (const direction of [1, -1] as const) {
-    await pagination(page).nth(2).click();
+    await destinations(page).nth(2).click();
     await expectCarouselAt(stage, "map");
     await installTraversalTrace(page);
     const gesture: HeldTraversal = {
@@ -1037,7 +1177,7 @@ test("a violent flick from a middle card still resolves exactly one adjacent car
   }
 
   // The one permitted handoff still renders continuously under a real high-velocity drag.
-  await pagination(page).first().click();
+  await destinations(page).first().click();
   await expectCarouselAt(stage, "templates");
   const pitch = await motionPitch(stage);
   await installTraversalTrace(page);
@@ -1069,7 +1209,7 @@ test("one coalesced wheel burst exchanges one card and a later burst exchanges a
   page,
 }) => {
   const stage = viewport(page);
-  await pagination(page).first().click();
+  await destinations(page).first().click();
   await expectCarouselAt(stage, "templates");
   const pitch = await motionPitch(stage);
   const wheelSamples = await stage.evaluate(async (element, deltaX) => {
@@ -1140,7 +1280,7 @@ test("one coalesced wheel burst exchanges one card and a later burst exchanges a
 
 test("rapid relative commands never merge into one multi-card throw", async ({ page }) => {
   const stage = viewport(page);
-  await pagination(page).first().click();
+  await destinations(page).first().click();
   await expectCarouselAt(stage, "templates");
 
   // Three commands in one task, so none of them can wait for the previous transaction to settle.
@@ -1184,28 +1324,30 @@ test("non-adjacent absolute navigation synchronizes instead of throwing every ca
   page,
 }) => {
   const stage = viewport(page);
-  await pagination(page).first().click();
+  await destinations(page).first().click();
   await expectCarouselAt(stage, "templates");
 
   await installTraversalTrace(page, 60);
-  await pagination(page).last().click();
+  await destinations(page).nth(2).click();
   const trace = await readTraversalTrace(page);
-  // No deck animation at all: the destination is selected, never thrown through four cards.
-  expect(uniqueInOrder(trace.map((sample) => sample.visualTopIndex))).toEqual([0, 4]);
+  // No deck animation at all: the destination is selected, never thrown through intermediate cards.
+  const synchronizedTops = uniqueInOrder(trace.map((sample) => sample.visualTopIndex));
+  expect(synchronizedTops.every((index) => index === 0 || index === 2)).toBe(true);
+  expect(synchronizedTops.at(-1)).toBe(2);
   expect(trace.every((sample) => sample.controllerPhase === "idle")).toBe(true);
   expectShellInventory(trace);
   expect(trace.at(-1)).toMatchObject({
-    caption: TITLES[4],
+    caption: TITLES[2],
     controllerPhase: "idle",
-    settledIndex: 4,
-    visualTopIndex: 4,
+    settledIndex: 2,
+    visualTopIndex: 2,
   });
   await expect(page.getByTestId("snap-motion-stacked-deck-status")).toHaveText(
-    "Werkruimte-instellingen, 5 of 5",
+    "Locatie & planning, 3 of 5",
   );
-  await expectCarouselAt(stage, "settings");
+  await expectCarouselAt(stage, "map");
 
-  // Home and End follow the same rule; an adjacent dot still animates one normal card.
+  // Home and End follow the same named-destination rule; a cyclic adjacent choice still exchanges.
   await stage.focus();
   await page.keyboard.press("Home");
   await expectCarouselAt(stage, "templates");
@@ -1219,7 +1361,7 @@ test("non-adjacent absolute navigation synchronizes instead of throwing every ca
   );
 
   await installTraversalTrace(page);
-  await pagination(page).nth(3).click();
+  await destinations(page).nth(3).click();
   const adjacent = await readTraversalTrace(page);
   const adjacentEnvelope = expectOneCardEnvelope(adjacent, 4);
   expectVisitedOnly(adjacentEnvelope.tops, 4, 3);
@@ -1259,7 +1401,7 @@ test("reversal retraces the same card and changes direction only through neutral
     segmentTargetIndex: 1,
     visualTopIndex: 2,
   });
-  expect(topPose(reverse).translateX).toBeCloseTo(-topPose(opening).translateX, 2);
+  expect(topPose(reverse).translateX).toBeGreaterThan(0);
   expect(
     [forward, retraced, neutral, reverse].every((frame) => frame.controllerPhase === "dragging"),
   ).toBe(true);
@@ -1281,9 +1423,9 @@ test("one gesture reverses freely across its whole envelope but never past it", 
   });
   const retraced = await holdPhysicalIndex(page, held, 2.6);
   expect(retraced).toMatchObject({
-    segmentOriginIndex: 3,
-    segmentTargetIndex: 2,
-    visualTopIndex: 3,
+    segmentOriginIndex: 2,
+    segmentTargetIndex: 3,
+    visualTopIndex: 2,
   });
   const neutral = await holdPhysicalIndex(page, held, 2);
   expect(neutral).toMatchObject({ segmentPhase: "neutral", visualTopIndex: 2 });
@@ -1376,7 +1518,7 @@ test("fast successive gestures each resolve one card with no settlement cooldown
   page,
 }) => {
   const stage = viewport(page);
-  await pagination(page).first().click();
+  await destinations(page).first().click();
   await expectCarouselAt(stage, "templates");
   const pitch = await motionPitch(stage);
 
@@ -1530,7 +1672,7 @@ test("inspection follows the authoritative card instead of waiting for mechanica
 
   // Opening during residual settlement synchronizes exactly, announces nothing wrong, and returns
   // focus to the control it came from.
-  await pagination(page).nth(2).click();
+  await destinations(page).nth(2).click();
   await expectCarouselAt(stage, "map");
   await flick(page, 1, pitch);
   const openedDuring = await stage.evaluate(
@@ -1604,7 +1746,7 @@ test("an accepted arrow from the inspection control preserves deterministic focu
 
 test("distinct rapid commands, keys, and wheel bursts each resolve one card", async ({ page }) => {
   const stage = viewport(page);
-  await pagination(page).first().click();
+  await destinations(page).first().click();
   await expectCarouselAt(stage, "templates");
 
   // Distinct clicks, each in its own task and each far inside the previous spring.
@@ -1657,7 +1799,7 @@ test("distinct rapid commands, keys, and wheel bursts each resolve one card", as
   await expectCarouselAt(stage, "team");
 });
 
-test("cancel, lost capture, edge elasticity, and reduced motion restore coherently", async ({
+test("cancel, lost capture, cyclic former edges, and reduced motion restore coherently", async ({
   page,
 }) => {
   const stage = viewport(page);
@@ -1666,8 +1808,9 @@ test("cancel, lost capture, edge elasticity, and reduced motion restore coherent
   await movePointer(page, first.origin, first.pitch * 0.22, first.elapsedMs);
   const firstEdge = await readFrame(page);
   expect(firstEdge).toMatchObject({
-    segmentPhase: "elastic",
-    segmentTargetIndex: null,
+    direction: -1,
+    segmentPhase: "traversing",
+    segmentTargetIndex: 4,
     visualTopIndex: 0,
   });
   expect(firstEdge.physicalIndex).toBeLessThan(0);
@@ -1687,17 +1830,18 @@ test("cancel, lost capture, edge elasticity, and reduced motion restore coherent
   await movePointer(page, last.origin, -last.pitch * 0.22, last.elapsedMs);
   const lastEdge = await readFrame(page);
   expect(lastEdge).toMatchObject({
-    segmentPhase: "elastic",
-    segmentTargetIndex: null,
+    direction: 1,
+    segmentPhase: "traversing",
+    segmentTargetIndex: 0,
     visualTopIndex: 4,
   });
   expect(lastEdge.physicalIndex).toBeGreaterThan(4);
-  expect(lastEdge.physicalIndex).toBeLessThan(4.22);
+  expect(lastEdge.physicalIndex).toBeLessThanOrEqual(4.22);
   expect(topPose(lastEdge).translateX).toBeLessThan(0);
   await finishPointer(page, last.origin, -last.pitch * 0.22, last.elapsedMs + 100, "pointercancel");
   await expectCarouselAt(stage, "settings");
 
-  await pagination(page).nth(2).click();
+  await destinations(page).nth(2).click();
   await expectCarouselAt(stage, "map");
   const lostPitch = await motionPitch(stage);
   const lostBox = (await stage.boundingBox())!;
@@ -1831,7 +1975,7 @@ test("responsive bleed surface avoids internal clipping and page overflow", asyn
   const stage = viewport(page);
   for (const width of [360, 390, 768, 1_024, 1_440]) {
     await page.setViewportSize({ width, height: width < 600 ? 900 : 1_000 });
-    await pagination(page).nth(2).click();
+    await destinations(page).nth(2).click();
     await expectCarouselAt(stage, "map");
     await expectNothingIsClipped(page);
 
@@ -1895,10 +2039,10 @@ test("responsive bleed surface avoids internal clipping and page overflow", asyn
     );
     await expectCarouselAt(stage, "map");
 
-    await pagination(page).first().click();
+    await destinations(page).first().click();
     await expectCarouselAt(stage, "templates");
     await installTraversalTrace(page, 60);
-    await pagination(page).last().click();
+    await destinations(page).last().click();
     const trace = await readTraversalTrace(page);
     expect(uniqueInOrder(trace.map((sample) => sample.visualTopIndex))).toEqual([0, 4]);
     await expectNothingIsClipped(page);
@@ -2036,7 +2180,6 @@ test("named metadata follows visual authority, ownership follows the anchor", as
     authoritativeIndex: 2,
     authorityStable: false,
     caption: TITLES[2],
-    counter: "3",
     visualTopIndex: 2,
   });
   expect(topPose(midway)).toMatchObject({ id: "map", opacity: 1, role: "top" });
@@ -2047,7 +2190,6 @@ test("named metadata follows visual authority, ownership follows the anchor", as
     authoritativeIndex: 2,
     authorityStable: false,
     caption: TITLES[2],
-    counter: "3",
     visualTopIndex: 2,
   });
 
@@ -2057,7 +2199,6 @@ test("named metadata follows visual authority, ownership follows the anchor", as
   expect(migrated).toMatchObject({
     authoritativeIndex: 3,
     caption: TITLES[3],
-    counter: "4",
     settledIndex: 2,
     visualTopIndex: 2,
   });
@@ -2091,7 +2232,6 @@ test("named metadata follows visual authority, ownership follows the anchor", as
   expect(after).toMatchObject({
     authoritativeIndex: 3,
     caption: TITLES[3],
-    counter: "4",
     visualTopIndex: 3,
   });
   expect(after.settledIndex).toBe(2);

@@ -134,8 +134,8 @@ wheel default; refused navigation does not.
 Direct applies the full movement accumulated since pointer-down on the first owned touch frame. From
 the next frame through release, the grabbed local point follows the pointer literally. Interior
 overdrag keeps that hand-owned vector while the existing one-card envelope resists scalar progress.
-At the first or last card, outward movement has no adjacent target, so the existing bounded surface
-is the explicit `boundary-resisted` exception rather than fabricated pointer lock or wrapping.
+Every semantic item has both cyclic neighbours, including across ordinal zero, so former outward
+edge gestures enter an ordinary adjacent exchange before that same one-card overdrag applies.
 Keyboard, wheel, and programmatic Direct navigation use the same scalar projection without a
 fictional cursor.
 

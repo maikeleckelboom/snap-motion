@@ -12,7 +12,7 @@ export interface StackedDeckCardState<TItem, TId extends string> {
   readonly id: TId;
   readonly index: number;
   /**
-   * True for the card the deck currently names — the one a caption, a counter, and a new gesture
+   * True for the card the deck currently names — the one a caption and a new gesture
    * all mean. Inside a handoff that is the incoming card, before ownership has formally moved.
    */
   readonly active: boolean;
@@ -38,6 +38,8 @@ export interface StackedDeckCardState<TItem, TId extends string> {
 export interface StackedDeckPileLayer<Id extends string = string> {
   readonly id: Id;
   readonly index: number;
+  /** Forward physical depth behind the current top. */
+  readonly depth: number;
   /** Stable physical-card key. Follows item identity while the resolved slot owns placement. */
   readonly key: string;
   readonly side: -1 | 1;

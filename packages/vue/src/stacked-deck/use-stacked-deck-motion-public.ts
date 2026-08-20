@@ -31,6 +31,7 @@ export function useStackedDeckMotion<Id extends string>(
         id,
         index: pose.itemIndex,
         key: id,
+        depth: pose.depth,
         side: pose.slot < 0 ? -1 : 1,
         slot: Number(pose.slot.toFixed(3)),
         layer: pose.layer,

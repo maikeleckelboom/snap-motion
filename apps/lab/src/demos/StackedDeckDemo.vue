@@ -36,13 +36,17 @@ const emit = defineEmits<{
   (event: "exchangeChange", exchange: StackedDeckExchange): void;
 }>();
 
-const screens = showcaseScreens;
+const twoItemMode = ref(false);
+const screens = computed<readonly ShowcaseScreen[]>(() =>
+  twoItemMode.value ? [showcaseScreens[3]!, showcaseScreens[4]!] : showcaseScreens,
+);
 const deck = ref<StackedDeckHandle<ShowcaseScreenId>>();
 const demoRoot = ref<HTMLElement>();
 const inspectControl = ref<HTMLButtonElement>();
 const galleryOpen = ref(false);
-const galleryActiveId = ref<ShowcaseScreenId>(screens[Math.floor(screens.length / 2)]!.id);
-const activeId = ref<ShowcaseScreenId>(screens[Math.floor(screens.length / 2)]!.id);
+const initialId = showcaseScreens[Math.floor(showcaseScreens.length / 2)]!.id;
+const galleryActiveId = ref<ShowcaseScreenId>(initialId);
+const activeId = ref<ShowcaseScreenId>(initialId);
 
 const spring = computed(() => springFromSettings(props.settings));
 const elasticity = computed(() => symmetricElasticityFromSettings(props.settings));
@@ -55,35 +59,9 @@ const galleryFocusReturn = computed<FocusReturnOptions>(() => ({
 
 const state = computed(() => deck.value?.state);
 const currentIndex = computed(() => state.value?.currentIndex ?? 0);
-const currentScreen = computed(() => screens[currentIndex.value] ?? screens[0]!);
+const currentScreen = computed(() => screens.value[currentIndex.value] ?? screens.value[0]!);
 const settledIndex = computed(() => state.value?.settledIndex ?? 0);
 const inspectEligible = computed(() => deck.value?.isInspectEligible(currentIndex.value) ?? false);
-
-const paginationDots = computed(() =>
-  screens.map((screen, index) => ({
-    id: screen.id,
-    title: screen.title,
-    current: index === currentIndex.value,
-  })),
-);
-
-const indicatorTrace = computed(() => {
-  const indicator = deck.value?.paginationIndicator;
-  return {
-    position: (indicator?.position ?? 0).toFixed(5),
-    scaleX: (indicator?.scaleX ?? 1).toFixed(5),
-    softDirection: (indicator?.softDirection ?? 0).toFixed(5),
-    stretchRatio: (indicator?.stretchRatio ?? 0).toFixed(5),
-  };
-});
-
-const paginationStyle = computed(() => {
-  const indicator = deck.value?.paginationIndicator;
-  return {
-    "--_pagination-indicator-x": `${(indicator?.x ?? 0).toFixed(4)}px`,
-    "--_pagination-indicator-scale-x": (indicator?.scaleX ?? 1).toFixed(5),
-  };
-});
 
 function screenPoseAttributes(card: StackedDeckCardState<ShowcaseScreen, ShowcaseScreenId>) {
   return {
@@ -97,10 +75,24 @@ function screenPoseAttributes(card: StackedDeckCardState<ShowcaseScreen, Showcas
 }
 
 function openGallery(index: number) {
-  const id = screens[index]?.id;
+  const id = screens.value[index]?.id;
   if (galleryOpen.value || id === undefined || !deck.value?.synchronizeTo(id)) return;
   galleryActiveId.value = id;
   galleryOpen.value = true;
+}
+
+async function setTwoItemMode(enabled: boolean) {
+  if (twoItemMode.value === enabled) return;
+  galleryOpen.value = false;
+  twoItemMode.value = enabled;
+  const nextScreens = screens.value;
+  const nextId = nextScreens.some((screen) => screen.id === activeId.value)
+    ? activeId.value
+    : nextScreens[0]!.id;
+  activeId.value = nextId;
+  galleryActiveId.value = nextId;
+  await nextTick();
+  deck.value?.synchronizeTo(nextId);
 }
 
 async function onGalleryOpenRequest(_open: false, details: MediaGalleryOpenRequestDetails) {
@@ -112,6 +104,11 @@ async function onGalleryOpenRequest(_open: false, details: MediaGalleryOpenReque
   }
 }
 
+function onDestinationChange(event: Event) {
+  const id = (event.currentTarget as HTMLSelectElement).value as ShowcaseScreenId;
+  deck.value?.navigateTo(id);
+}
+
 const diagnostics = computed<LabDiagnostics>(() => {
   const surface = deck.value;
   const traversal = state.value?.traversal;
@@ -120,7 +117,8 @@ const diagnostics = computed<LabDiagnostics>(() => {
   const motion = surface?.diagnostics;
   const viewportSize = Math.max(1, surface?.root?.clientWidth ?? props.stageWidth);
   const targetId = motion?.targetId;
-  const targetIndex = targetId === undefined ? -1 : screens.findIndex((s) => s.id === targetId);
+  const targetIndex =
+    targetId === undefined ? -1 : screens.value.findIndex((screen) => screen.id === targetId);
   return {
     ...(motion?.nearestId ? { nearestId: motion.nearestId } : {}),
     anchors: motion?.anchors ?? [],
@@ -144,8 +142,6 @@ const diagnostics = computed<LabDiagnostics>(() => {
     visualTopIndex: state.value?.visualTopIndex ?? 0,
     authoritativeIndex: currentIndex.value,
     authorityStable: state.value?.authorityStable ?? true,
-    indicatorX: surface?.paginationIndicator.x ?? 0,
-    indicatorScale: surface?.paginationIndicator.scaleX ?? 1,
     keyboardTargetIndex: state.value?.commandOriginIndex ?? 0,
     maxAnchorSkip: STACKED_DECK_ANCHOR_SKIP,
     maxAnchorSkipFixed: true,
@@ -172,11 +168,11 @@ const diagnostics = computed<LabDiagnostics>(() => {
   >
     <header class="stacked-deck-header">
       <div>
-        <h3 id="stacked-deck-title">One adjacent screen per exchange</h3>
+        <h3 id="stacked-deck-title">One adjacent screen per cyclic exchange</h3>
         <p class="lede">
           Drag the top screen to reveal one adjacent screen. Every gesture, flick, or wheel burst
-          resolves at most one screen away from where it began, no matter how far it travels — and
-          the next one starts on the card you can already see, without waiting for the spring.
+          resolves one physical card, no matter how far it travels. Forward and backward continue
+          around the ring without a first or last card.
         </p>
       </div>
       <div class="stacked-deck-controls">
@@ -289,11 +285,27 @@ const diagnostics = computed<LabDiagnostics>(() => {
       </button>
     </div>
 
+    <div aria-label="Stacked Deck item count" class="stacked-deck-exchange" role="group">
+      <button
+        :aria-pressed="!twoItemMode"
+        data-testid="stacked-deck-five-items"
+        type="button"
+        @click="setTwoItemMode(false)"
+      >
+        Five cards
+      </button>
+      <button
+        :aria-pressed="twoItemMode"
+        data-testid="stacked-deck-two-items"
+        type="button"
+        @click="setTwoItemMode(true)"
+      >
+        Two cards
+      </button>
+    </div>
+
     <div class="stacked-deck-meta">
       <p>
-        <span class="tabular" data-testid="stacked-deck-counter">{{ currentIndex + 1 }}</span>
-        /
-        <span class="tabular">{{ screens.length }}</span>
         <strong data-testid="stacked-deck-caption">{{ currentScreen.title }}</strong>
       </p>
       <button
@@ -316,29 +328,19 @@ const diagnostics = computed<LabDiagnostics>(() => {
         </svg>
         <span>Inspect screen</span>
       </button>
-      <div aria-label="Stacked deck screens" class="dots" role="group" :style="paginationStyle">
-        <span
-          aria-hidden="true"
-          class="stacked-deck-pagination-indicator"
-          :data-position="indicatorTrace.position"
-          :data-scale-x="indicatorTrace.scaleX"
-          :data-soft-direction="indicatorTrace.softDirection"
-          :data-stretch-ratio="indicatorTrace.stretchRatio"
-          data-testid="stacked-deck-pagination-indicator"
-        />
-        <button
-          v-for="(dot, index) in paginationDots"
-          :key="dot.id"
-          :aria-current="dot.current ? 'true' : undefined"
-          :aria-label="`${dot.title}, ${index + 1} of ${screens.length}`"
-          class="dot"
+      <label class="stacked-deck-destination">
+        <span>Current screen</span>
+        <select
+          data-testid="stacked-deck-destination"
           :disabled="galleryOpen"
-          type="button"
-          @click="deck?.navigateTo(dot.id)"
+          :value="currentScreen.id"
+          @change="onDestinationChange"
         >
-          <span aria-hidden="true" class="dot-indicator" />
-        </button>
-      </div>
+          <option v-for="screen in screens" :key="screen.id" :value="screen.id">
+            {{ screen.title }}
+          </option>
+        </select>
+      </label>
     </div>
 
     <DiagnosticsPanel :diagnostics="diagnostics" />
@@ -524,8 +526,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
   pointer-events: none;
 }
 
-.stacked-deck-meta,
-.dots {
+.stacked-deck-meta {
   display: flex;
 }
 
@@ -583,64 +584,23 @@ const diagnostics = computed<LabDiagnostics>(() => {
   font-size: 1rem;
 }
 
-.dots {
-  --_pagination-slot-size: 44px;
-  --_pagination-slot-gap: 2px;
-  --_pagination-indicator-width: 22.4px;
-  --_pagination-indicator-height: 8.8px;
-  --_pagination-indicator-x: 0px;
-  --_pagination-indicator-scale-x: 1;
-
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--_pagination-slot-gap);
-  isolation: isolate;
-}
-
-.dot {
-  position: relative;
+.stacked-deck-destination {
   display: grid;
-  inline-size: var(--_pagination-slot-size);
-  block-size: var(--_pagination-slot-size);
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 0.5rem;
-  background: transparent;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 
-.dot:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.stacked-deck-pagination-indicator {
-  position: absolute;
-  z-index: 1;
-  inset-block-start: 50%;
-  inset-inline-start: calc((var(--_pagination-slot-size) - var(--_pagination-indicator-width)) / 2);
-  inline-size: var(--_pagination-indicator-width);
-  block-size: var(--_pagination-indicator-height);
-  border-radius: 999px;
-  background: var(--ink);
-  pointer-events: none;
-  transform: translate3d(var(--_pagination-indicator-x), -50%, 0)
-    scaleX(var(--_pagination-indicator-scale-x));
-  transform-origin: center;
-  transition: none;
-  will-change: transform;
-}
-
-.dot-indicator {
-  inline-size: var(--_pagination-indicator-height);
-  min-inline-size: var(--_pagination-indicator-height);
-  block-size: var(--_pagination-indicator-height);
-  min-block-size: var(--_pagination-indicator-height);
-  border-radius: 999px;
-  background: #c9d2de;
-  pointer-events: none;
-  transition: none;
+.stacked-deck-destination select {
+  min-block-size: 2.75rem;
+  padding-inline: 0.75rem 2rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  border-radius: 0.65rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
 }
 
 @media (max-width: 48rem) {
@@ -654,7 +614,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
   }
 
   .stacked-deck-meta p {
-    flex-basis: calc(100% - 4.5rem);
+    flex-basis: 100%;
   }
 
   .stacked-deck-inspect span {

@@ -130,6 +130,7 @@ export interface ControllerMeasurement<Id extends SemanticId = SemanticId> {
     readonly anchors: readonly SnapAnchor<Id>[];
     // (undocumented)
     readonly bounds: ScalarBounds;
+    readonly rebaseFromId?: Id;
 }
 
 // @public (undocumented)
@@ -912,6 +913,9 @@ export function resolveSnapKeyboardAction(input: SnapKeyboardInput): SnapKeyboar
 export function resolveSpeedInCards(velocityPxPerSecond: number, cardPitchPx: number): number;
 
 // @public
+export function resolveStackedDeckDepth(topIndex: number, itemIndex: number, itemCount: number): number;
+
+// @public
 export function resolveStackedDeckFrame(options: ResolveStackedDeckFrameOptions, output: MutableStackedDeckFrame): StackedDeckFrame;
 
 // @public (undocumented)
@@ -924,6 +928,12 @@ export interface ResolveStackedDeckFrameOptions {
     // (undocumented)
     readonly tuning: StackedDeckTuning;
 }
+
+// @public
+export function resolveStackedDeckNeighbor(index: number, direction: -1 | 1, itemCount: number): number;
+
+// @public
+export function resolveStackedDeckOrder(topIndex: number, itemCount: number): readonly number[];
 
 // @public
 export function resolveStackedDeckPile(options: ResolveStackedDeckPileOptions): readonly StackedDeckPilePose[];
@@ -944,11 +954,10 @@ export interface ResolveStackedDeckTraversalOptions {
     readonly controllerPhase: ControllerPhase;
     // (undocumented)
     readonly itemCount: number;
-    // (undocumented)
-    readonly physicalIndex: number;
+    readonly originIndex: number;
+    readonly physicalPosition: number;
     // (undocumented)
     readonly settledIndex: number;
-    readonly traversalBounds?: StackedDeckTraversalBounds;
 }
 
 // @public
@@ -1186,6 +1195,7 @@ export type StackedDeckCommand = {
 /** One adjacent exchange, opened as its own interaction and measured from `originIndex`. */
 | {
     readonly kind: "traverse";
+    readonly direction: -1 | 1;
     readonly originIndex: number;
     readonly targetIndex: number;
 }
@@ -1212,9 +1222,12 @@ export interface StackedDeckDirectProjection {
         readonly progress: number;
         readonly pose: StackedDeckPose;
     };
+    readonly direction: -1 | 0 | 1;
     readonly originIndex: number;
     readonly phase?: "held" | "parking" | "returning";
     readonly settlement: number;
+    readonly signedTravel: number;
+    readonly targetIndex: number | null;
     readonly translateX: number;
     readonly translateY: number;
 }
@@ -1247,14 +1260,13 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
     isInspectEligible(context: StackedDeckInspectContext): boolean;
     // (undocumented)
     get itemCount(): number;
-    openInteraction(originIndex: number): void;
+    openInteraction(originIndex: number, direction: -1 | 1): void;
     reconfigure(nextIds: readonly Id[]): number;
     resolveAbsoluteCommand(index: number, context: StackedDeckCommandContext): StackedDeckCommand;
     resolveRelativeCommand(direction: -1 | 1, context: Pick<StackedDeckCommandContext, "owned">): StackedDeckCommand;
     // (undocumented)
     get state(): StackedDeckModelState;
     synchronize(index: number, options?: SettledSelectionAdoption): number;
-    get traversalBounds(): StackedDeckTraversalBounds | undefined;
     update(input: StackedDeckSnapshotInput): StackedDeckModelState;
 }
 
@@ -1276,6 +1288,7 @@ export interface StackedDeckModelState {
     readonly commandOriginIndex: number;
     // (undocumented)
     readonly currentIndex: number;
+    readonly interactionDirection: -1 | 0 | 1;
     // (undocumented)
     readonly interactionOriginIndex: number | null;
     // (undocumented)
@@ -1289,6 +1302,7 @@ export interface StackedDeckModelState {
 
 // @public
 export interface StackedDeckPilePose {
+    readonly depth: number;
     readonly itemIndex: number;
     // (undocumented)
     readonly layer: number;
@@ -1345,7 +1359,7 @@ export interface StackedDeckSnapshotInput {
     readonly nearestIndex: number;
     // (undocumented)
     readonly phase: SettledSelectionUpdate["phase"];
-    readonly physicalIndex: number;
+    readonly physicalPosition: number;
     readonly targetIndex: number | null;
 }
 
@@ -1369,14 +1383,6 @@ export interface StackedDeckTraversal {
     readonly signedLocalDistance: number;
     // (undocumented)
     readonly visualTopIndex: number;
-}
-
-// @public
-export interface StackedDeckTraversalBounds {
-    // (undocumented)
-    readonly maxIndex: number;
-    // (undocumented)
-    readonly minIndex: number;
 }
 
 // @public (undocumented)

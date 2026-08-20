@@ -11,7 +11,7 @@ import {
   finishPointerBy,
   motionPitch,
   movePointerBy,
-  pagination,
+  destinations,
   viewport,
   waitForAuthority,
 } from "./stackedDeckHarness";
@@ -30,7 +30,7 @@ async function prepareDirect(
   await directControl.click();
   const stage = viewport(page);
   await expect(directControl).toHaveAttribute("aria-pressed", "true");
-  await pagination(page).nth(index).click();
+  await destinations(page).nth(index).click();
   await expectCarouselAt(stage, STACKED_DECK_IDS[index]!);
   return stage;
 }
@@ -225,13 +225,16 @@ async function startReleaseTrace(
       }
       let remaining = frameBudget;
       const record = () => {
+        const originIndex = Number(root.dataset.interactionOriginIndex);
+        const settledIndex = Number(root.dataset.settledIndex);
+        const diagnosticOrigin = originIndex >= 0 ? originIndex : settledIndex;
         trace.frames.push({
           authoritativeIndex: Number(root.dataset.authoritativeIndex),
           incoming: readShell(incoming),
-          originIndex: Number(root.dataset.interactionOriginIndex),
+          originIndex,
           outgoing: readShell(outgoing),
           owned: root.dataset.interactionOwned === "true",
-          physicalIndex: Number(root.dataset.physicalIndex),
+          physicalIndex: diagnosticOrigin + Number(root.dataset.physicalIndex),
           t: performance.now(),
         });
         if ((remaining -= 1) > 0) requestAnimationFrame(record);
@@ -366,7 +369,7 @@ test("Direct keeps three local grab points attached through diagonal owned movem
     [0.2, 0.2],
     [0.8, 0.75],
   ] as const) {
-    await pagination(page).nth(3).click();
+    await destinations(page).nth(3).click();
     await expectCarouselAt(stage, "team");
     const card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='team']");
     const origin = await beginPointerAt(card, relativeX, relativeY);
@@ -382,7 +385,7 @@ test("Direct keeps three local grab points attached through diagonal owned movem
   }
 });
 
-test("Direct reports touch catch-up and boundary resistance separately", async ({ page }) => {
+test("Direct reports touch catch-up and owns a former-edge gesture normally", async ({ page }) => {
   const stage = await prepareDirect(page);
   const pitch = await motionPitch(stage);
   let card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='team']");
@@ -392,11 +395,11 @@ test("Direct reports touch catch-up and boundary resistance separately", async (
 
   const catchUp = await grabPointError(page, "team", origin, -pitch * 0.38, 72);
   expect(catchUp.error).toBeLessThanOrEqual(0.5);
-  expect(Number(await stage.getAttribute("data-physical-index"))).toBeGreaterThan(3.2);
+  expect(Number(await stage.getAttribute("data-physical-index"))).toBeGreaterThan(0.2);
   await finishPointerBy(page, origin, -pitch * 0.38, 72, 140, "pointercancel");
   await expectCarouselAt(stage, "team");
 
-  await pagination(page).first().click();
+  await destinations(page).first().click();
   await expectCarouselAt(stage, "templates");
   card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='templates']");
   origin = await beginPointerAt(card, 0.5, 0.5);
@@ -505,7 +508,7 @@ test("Direct keyboard, controls, wheel, and programmatic navigation share the ph
     await expectCarouselAt(stage, "team");
     await page.getByTestId("stacked-deck-previous").click();
     await expectCarouselAt(stage, "map");
-    await pagination(page).nth(3).click();
+    await destinations(page).nth(3).click();
     await expectCarouselAt(stage, "team");
     const pitch = await motionPitch(stage);
     await stage.evaluate((element, deltaX) => {
@@ -597,7 +600,7 @@ async function traceDirectRelease(
   readonly trace: ReleaseTrace;
 }> {
   const stage = viewport(page);
-  await pagination(page).nth(options.startIndex).click();
+  await destinations(page).nth(options.startIndex).click();
   await expectCarouselAt(stage, STACKED_DECK_IDS[options.startIndex]!);
   await page.waitForTimeout(220);
   const card = page.locator(
@@ -927,18 +930,21 @@ async function startAuthorityTrace(page: Page, frames = 700): Promise<void> {
         }
       }
       const targetAttribute = root.getAttribute("data-segment-target-index");
+      const interactionOriginIndex = Number(root.dataset.interactionOriginIndex);
+      const settledIndex = Number(root.dataset.settledIndex);
+      const diagnosticOrigin = interactionOriginIndex >= 0 ? interactionOriginIndex : settledIndex;
       trace.frames.push({
         authoritativeIndex: Number(root.dataset.authoritativeIndex),
         authority,
-        interactionOriginIndex: Number(root.dataset.interactionOriginIndex),
+        interactionOriginIndex,
         n: trace.frames.length,
         owned: root.dataset.interactionOwned === "true",
         phase: root.dataset.phase ?? "",
-        physicalIndex: Number(root.dataset.physicalIndex),
+        physicalIndex: diagnosticOrigin + Number(root.dataset.physicalIndex),
         segmentPhase: root.dataset.segmentPhase ?? "",
         segmentProgress: Number(root.dataset.segmentProgress),
         segmentTargetIndex: targetAttribute === null ? null : Number(targetAttribute),
-        settledIndex: Number(root.dataset.settledIndex),
+        settledIndex,
         shells: measured,
         t: performance.now(),
         visualId: root.dataset.visualId ?? "",
@@ -993,6 +999,7 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
   test.setTimeout(240_000);
   const stage = await prepareDirect(page);
   const pitch = await motionPitch(stage);
+  const templates = STACKED_DECK_IDS[0];
   const team = STACKED_DECK_IDS[3];
   const settings = STACKED_DECK_IDS[4];
   const scenarios = [
@@ -1020,6 +1027,24 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
         for (const direction of [-1, 1, -1, 1, -1, 1] as const) {
           await fastFlick(page, direction, pitch);
           await page.waitForTimeout(150);
+        }
+      },
+    },
+    {
+      itinerary: [settings, templates, settings, templates],
+      name: "fast-alternating-wrap",
+      startIndex: 4,
+      async run() {
+        for (const [direction, targetIndex] of [
+          [1, 0],
+          [-1, 4],
+          [1, 0],
+        ] as const) {
+          await fastFlick(page, direction, pitch);
+          await waitForAuthority(page, targetIndex);
+          // Authority crosses before the release tail ends. The following press therefore tests
+          // the atomic origin-plus-hand takeover at the semantic wrap, not a settled restart.
+          await expect(stage).toHaveAttribute("data-phase", "settling");
         }
       },
     },
@@ -1063,7 +1088,7 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
 
   const report: Record<string, unknown> = {};
   for (const scenario of scenarios) {
-    await pagination(page).nth(scenario.startIndex).click();
+    await destinations(page).nth(scenario.startIndex).click();
     await expectCarouselAt(stage, STACKED_DECK_IDS[scenario.startIndex]!);
     await page.waitForTimeout(320);
     await startAuthorityTrace(page);

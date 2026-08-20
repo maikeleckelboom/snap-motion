@@ -2,7 +2,6 @@ import { clamp } from "./bounds";
 import { OrderedIdCollection, resolvePreservedIndex } from "./item-collection";
 import { tightPreset } from "./presets";
 import {
-  resolveAdjacentIndex,
   resolveCommandOriginIndex,
   SettledSelection,
   type SettledSelectionAdoption,
@@ -11,10 +10,10 @@ import {
 import {
   createStackedDeckTraversal,
   isStackedDeckAuthorityStable,
+  resolveStackedDeckNeighbor,
   resolveStackedDeckTraversal,
   type MutableStackedDeckTraversal,
   type StackedDeckTraversal,
-  type StackedDeckTraversalBounds,
 } from "./stackedDeck";
 import type { ElasticityOptions, ReleaseTargetPolicy, SemanticId } from "./types";
 
@@ -43,23 +42,22 @@ export type StackedDeckReleasePolicy = Partial<Omit<ReleaseTargetPolicy, "maxAnc
  * resist and come back, or the surface reads as broken rather than as decided. Without an explicit
  * interior elasticity the generic controller paints that limit as a hard stop, so a zero-config
  * deck would not be the product this package documents. The numbers are the default preset's own
- * edge resistance, which is what makes interior resistance feel like the same material as the
- * deck's outer bounds instead of a second invented one.
+ * resistance, which keeps the one-card envelope materially consistent with other tight surfaces.
  */
 export const STACKED_DECK_INTERIOR_ELASTICITY: ElasticityOptions = tightPreset.elasticity;
 
 export interface StackedDeckModelOptions<Id extends SemanticId = SemanticId> {
   /** The ordered semantic items the deck is about. */
   readonly ids: readonly Id[];
-  /** Defaults to the middle of the deck, which is where a pile reads as a pile. */
+  /** Defaults deterministically to the middle semantic ordinal; every ordinal has the same ring shape. */
   readonly initialId?: Id;
 }
 
 /** One controller snapshot, reduced to the four numbers the deck's semantics depend on. */
 export interface StackedDeckSnapshotInput {
   readonly phase: SettledSelectionUpdate["phase"];
-  /** Continuous physical index, `-position / motionPitch`. */
-  readonly physicalIndex: number;
+  /** Interaction-local physical position in cards, with the transaction origin at zero. */
+  readonly physicalPosition: number;
   /** Index the controller is settling toward, or `null`. */
   readonly targetIndex: number | null;
   /** Index of the controller's nearest anchor. */
@@ -70,7 +68,7 @@ export interface StackedDeckSnapshotInput {
  * Everything a deck surface needs to name, enable, announce, and draw itself.
  *
  * `currentIndex` is the single answer to "which card is current". Every part of a surface that
- * names a card — caption, counter, pagination, `aria-current`, the re-grab origin, inspection —
+ * names a card — caption, `aria-current`, the re-grab origin, inspection —
  * reads it, so none of them can invent its own. It equals `visualTopIndex` except inside a handoff,
  * where it names the card the eye already reads as current while the outgoing one finishes
  * vacating. `settledIndex` is the slower mechanical-rest answer announcements and inspection use.
@@ -88,6 +86,8 @@ export interface StackedDeckModelState {
   readonly pendingTargetIndex: number | null;
   readonly commandOriginIndex: number;
   readonly interactionOriginIndex: number | null;
+  /** Physical transaction direction, independent from semantic ordinal delta. */
+  readonly interactionDirection: -1 | 0 | 1;
   /** True when exactly one content card is drawn, so nothing can contest its identity. */
   readonly authorityStable: boolean;
   /** Index to announce on this update, or `null`. Only mechanical rest ever produces one. */
@@ -100,7 +100,12 @@ export interface StackedDeckModelState {
 export type StackedDeckCommand =
   | { readonly kind: "none" }
   /** One adjacent exchange, opened as its own interaction and measured from `originIndex`. */
-  | { readonly kind: "traverse"; readonly originIndex: number; readonly targetIndex: number }
+  | {
+      readonly kind: "traverse";
+      readonly direction: -1 | 1;
+      readonly originIndex: number;
+      readonly targetIndex: number;
+    }
   /**
    * A named destination that is not one physical throw. It synchronizes directly rather than
    * animating through every intermediate card, and says so truthfully by announcing immediately.
@@ -156,6 +161,7 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
   #traversalStorage: MutableStackedDeckTraversal;
   #selection: SettledSelection;
   #interactionOriginIndex: number | null = null;
+  #interactionDirection: -1 | 0 | 1 = 0;
   #announcementIndex: number | null = null;
 
   constructor(options: StackedDeckModelOptions<Id>) {
@@ -201,22 +207,9 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
     // never speaks for a change the user did not make.
     this.#selection = new SettledSelection(nextIndex, this.#items.size);
     this.#interactionOriginIndex = null;
+    this.#interactionDirection = 0;
     this.#announcementIndex = null;
     return nextIndex;
-  }
-
-  /**
-   * The envelope one interaction may resolve inside, or `undefined` outside an interaction — where
-   * the projection stays free, so the underlying primitive keeps its generic capability.
-   */
-  get traversalBounds(): StackedDeckTraversalBounds | undefined {
-    const originIndex = this.#interactionOriginIndex;
-    if (originIndex === null || this.itemCount === 0) return undefined;
-    const lastIndex = this.itemCount - 1;
-    return {
-      minIndex: clamp(originIndex - STACKED_DECK_ANCHOR_SKIP, 0, lastIndex),
-      maxIndex: clamp(originIndex + STACKED_DECK_ANCHOR_SKIP, 0, lastIndex),
-    };
   }
 
   get state(): StackedDeckModelState {
@@ -232,10 +225,11 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
       pendingTargetIndex,
       commandOriginIndex,
       interactionOriginIndex: this.#interactionOriginIndex,
+      interactionDirection: this.#interactionDirection,
       authorityStable: isStackedDeckAuthorityStable(traversal),
       announcementIndex: this.#announcementIndex,
-      canPrevious: commandOriginIndex > 0,
-      canNext: commandOriginIndex >= 0 && commandOriginIndex < this.itemCount - 1,
+      canPrevious: this.itemCount > 1,
+      canNext: this.itemCount > 1,
     };
   }
 
@@ -250,38 +244,47 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
    */
   beginInteraction(): number {
     const originIndex = this.state.currentIndex;
-    this.#interactionOriginIndex = originIndex;
+    this.#interactionOriginIndex = originIndex < 0 ? null : originIndex;
+    this.#interactionDirection = 0;
     return originIndex;
   }
 
   /** Opens an interaction on an explicit origin, which is how a relative command claims one. */
-  openInteraction(originIndex: number): void {
+  openInteraction(originIndex: number, direction: -1 | 1): void {
     this.#interactionOriginIndex =
       this.itemCount === 0 ? null : clamp(originIndex, 0, this.itemCount - 1);
+    this.#interactionDirection = this.#interactionOriginIndex === null ? 0 : direction;
   }
 
   /** Closes the current interaction. Mechanical rest is the only thing that may do this. */
   endInteraction(): void {
     this.#interactionOriginIndex = null;
+    this.#interactionDirection = 0;
   }
 
   /** Consumes one controller snapshot and republishes the deck's whole semantic state. */
   update(input: StackedDeckSnapshotInput): StackedDeckModelState {
     if (this.itemCount === 0) return this.state;
+    if (this.#interactionOriginIndex !== null && this.itemCount > 1) {
+      const physicalDirection = Math.sign(input.physicalPosition) as -1 | 0 | 1;
+      // A direction-authoritative command may publish a zero-travel frame before its spring moves.
+      // Zero is geometrically neutral, not evidence that the transaction forgot its direction.
+      if (physicalDirection !== 0) this.#interactionDirection = physicalDirection;
+    }
     this.#announcementIndex = this.#selection.update({
       phase: input.phase,
       targetIndex: input.targetIndex,
       activeIndex: input.nearestIndex,
     });
 
-    const traversalBounds = this.traversalBounds;
+    const originIndex = this.#interactionOriginIndex ?? this.#selection.settledIndex;
     resolveStackedDeckTraversal(
       {
         controllerPhase: input.phase,
         itemCount: this.itemCount,
-        physicalIndex: input.physicalIndex,
+        originIndex,
+        physicalPosition: input.physicalPosition,
         settledIndex: this.#selection.settledIndex,
-        ...(traversalBounds === undefined ? {} : { traversalBounds }),
       },
       this.#traversalStorage,
     );
@@ -297,11 +300,10 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
     direction: -1 | 1,
     context: Pick<StackedDeckCommandContext, "owned">,
   ): StackedDeckCommand {
-    if (context.owned || this.itemCount === 0) return { kind: "none" };
+    if (context.owned || this.itemCount < 2) return { kind: "none" };
     const originIndex = this.state.commandOriginIndex;
-    const targetIndex = resolveAdjacentIndex(originIndex, direction, this.itemCount);
-    if (targetIndex === originIndex) return { kind: "none" };
-    return { kind: "traverse", originIndex, targetIndex };
+    const targetIndex = resolveStackedDeckNeighbor(originIndex, direction, this.itemCount);
+    return { kind: "traverse", direction, originIndex, targetIndex };
   }
 
   /**
@@ -314,10 +316,15 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
    */
   resolveAbsoluteCommand(index: number, context: StackedDeckCommandContext): StackedDeckCommand {
     if (!this.#items.contains(index)) return { kind: "none" };
-    const distance = index - this.state.commandOriginIndex;
-    if (distance === 0 && context.atRest) return { kind: "none" };
-    if (!context.owned && Math.abs(distance) === 1) {
-      return this.resolveRelativeCommand(distance as -1 | 1, context);
+    const originIndex = this.state.commandOriginIndex;
+    if (index === originIndex && context.atRest) return { kind: "none" };
+    if (!context.owned && this.itemCount > 2) {
+      if (index === resolveStackedDeckNeighbor(originIndex, 1, this.itemCount)) {
+        return this.resolveRelativeCommand(1, context);
+      }
+      if (index === resolveStackedDeckNeighbor(originIndex, -1, this.itemCount)) {
+        return this.resolveRelativeCommand(-1, context);
+      }
     }
     return { kind: "synchronize", targetIndex: index, announce: true };
   }
@@ -337,12 +344,14 @@ export class StackedDeckModel<Id extends SemanticId = SemanticId> {
   synchronize(index: number, options: SettledSelectionAdoption = {}): number {
     if (!this.#items.contains(index)) return -1;
     this.#interactionOriginIndex = null;
+    this.#interactionDirection = 0;
     this.#announcementIndex = this.#selection.adopt(index, options);
     resolveStackedDeckTraversal(
       {
         controllerPhase: "idle",
         itemCount: this.itemCount,
-        physicalIndex: index,
+        originIndex: index,
+        physicalPosition: 0,
         settledIndex: index,
       },
       this.#traversalStorage,

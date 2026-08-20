@@ -13,7 +13,7 @@ import {
   flick,
   motionPitch,
   movePointerBy,
-  pagination,
+  destinations,
   viewport,
   waitForAuthority,
   type PointerOrigin,
@@ -105,7 +105,7 @@ async function readGrabSample(
 
 async function select(page: Page, index: number): Promise<void> {
   const stage = viewport(page);
-  await pagination(page).nth(index).click();
+  await destinations(page).nth(index).click();
   await expectCarouselAt(stage, STACKED_DECK_IDS[index]!);
   await page.waitForTimeout(180);
 }
@@ -290,7 +290,7 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
   await expectCarouselAt(stage, "settings");
   await page.waitForTimeout(420);
 
-  phases.push("first and last boundary resistance");
+  phases.push("former semantic boundaries are ordinary wrapped neighbours");
   await select(page, 0);
   card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='templates']");
   origin = await beginPointerAt(card, 0.5, 0.5);
@@ -302,10 +302,10 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
     90,
     150,
     samples,
-    "boundary-resisted",
+    "wrapped-neighbour",
   );
-  await finishPointerBy(page, origin, pitch * 0.65, 90, 190, "pointercancel");
-  await expectCarouselAt(stage, "templates");
+  await finishPointerBy(page, origin, pitch * 0.65, 90, 190, "pointerup");
+  await expectCarouselAt(stage, "settings");
   await select(page, 4);
   card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']");
   origin = await beginPointerAt(card, 0.5, 0.5);
@@ -317,10 +317,10 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
     -90,
     150,
     samples,
-    "boundary-resisted",
+    "wrapped-neighbour",
   );
-  await finishPointerBy(page, origin, -pitch * 0.65, -90, 190, "pointercancel");
-  await expectCarouselAt(stage, "settings");
+  await finishPointerBy(page, origin, -pitch * 0.65, -90, 190, "pointerup");
+  await expectCarouselAt(stage, "templates");
 
   phases.push("autonomous keyboard Direct");
   await stage.press("ArrowLeft");
@@ -371,7 +371,7 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
   await page.waitForTimeout(700);
 
   const ordinary = samples.filter((sample) => sample.kind === "ordinary");
-  const boundary = samples.filter((sample) => sample.kind === "boundary-resisted");
+  const wrapped = samples.filter((sample) => sample.kind === "wrapped-neighbour");
   const catchUp = samples.filter((sample) => sample.kind === "catch-up");
   const maximum = ordinary.reduce<GrabSample | null>(
     (selected, sample) => (!selected || sample.error > selected.error ? sample : selected),
@@ -391,10 +391,10 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
       sampleCount: ordinary.length,
     },
     catchUp,
-    boundaryResisted: {
+    wrappedNeighbourPointerLock: {
       maximumSeparation:
-        boundary.length === 0 ? null : Math.max(...boundary.map((sample) => sample.error)),
-      sampleCount: boundary.length,
+        wrapped.length === 0 ? null : Math.max(...wrapped.map((sample) => sample.error)),
+      sampleCount: wrapped.length,
     },
     phases,
     releases,

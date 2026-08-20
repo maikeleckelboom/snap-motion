@@ -14,6 +14,12 @@ export type StackedDeckTraversalPhase = "idle" | "neutral" | "traversing" | "ela
 export interface StackedDeckDirectProjection {
   /** Stable interaction origin, resolved against the adapter's current ordered collection. */
   readonly originIndex: number;
+  /** Explicit ring direction. It remains authoritative when both directions name the same ID. */
+  readonly direction: -1 | 0 | 1;
+  /** Semantic neighbour selected by `direction`, or `null` when no exchange is available. */
+  readonly targetIndex: number | null;
+  /** Signed interaction-local travel from the origin, before presentation easing. */
+  readonly signedTravel: number;
   /** Pointer lifecycle; omitted autonomous exchanges park directly along scalar travel. */
   readonly phase?: "held" | "parking" | "returning";
   /** Hand-owned shell translation in stage coordinates. Ignored for autonomous movement. */
@@ -46,7 +52,7 @@ export interface StackedDeckDirectProjection {
 }
 
 /**
- * Presentation state for the one-anchor segment containing the controller's continuous position.
+ * Presentation state for one bounded interaction-local ring exchange.
  * Selection remains controller-owned; visualTopIndex advances only after a complete local pitch.
  *
  * `visualTopIndex` names the card at the segment origin, and `authoritativeIndex` names the card the
@@ -78,24 +84,14 @@ export interface MutableStackedDeckTraversal {
   phase: StackedDeckTraversalPhase;
 }
 
-/**
- * Inclusive index range visual authority may occupy. A presentation that limits one interaction to
- * a single adjacent exchange passes the envelope its interaction began with; the projection then
- * stops promoting at the limit and renders any remaining physical travel as elastic overdrag rather
- * than opening a second same-direction segment.
- */
-export interface StackedDeckTraversalBounds {
-  readonly minIndex: number;
-  readonly maxIndex: number;
-}
-
 export interface ResolveStackedDeckTraversalOptions {
   readonly controllerPhase: ControllerPhase;
   readonly itemCount: number;
-  readonly physicalIndex: number;
+  /** Semantic item at interaction-local position zero. */
+  readonly originIndex: number;
+  /** Signed physical travel in cards from `originIndex`; one interaction never changes its zero. */
+  readonly physicalPosition: number;
   readonly settledIndex: number;
-  /** Defaults to the whole deck, which keeps the projection free to complete every crossed anchor. */
-  readonly traversalBounds?: StackedDeckTraversalBounds;
 }
 
 export interface ResolveStackedDeckTuningOptions {
@@ -132,10 +128,11 @@ export interface StackedDeckTuning {
 export interface StackedDeckPilePose {
   /** Ordered collection index whose persistent physical card occupies this layer. */
   readonly itemIndex: number;
+  /** Forward ring distance behind the current physical top. */
+  readonly depth: number;
   /**
-   * Continuous slot distance from the card at the centre of the deck, signed by which side of it
-   * the screen sits on: negative before, positive after. It is `index - centre` and nothing else,
-   * so a reversal retraces the same slots rather than mirroring the deck.
+   * Compact visual slot derived from ring depth. Its sign chooses the pile side; it never owns
+   * physical depth or semantic identity.
    */
   readonly slot: number;
   readonly translateX: number;
@@ -360,6 +357,49 @@ function assertIndex(index: number, itemCount: number, name: string): void {
   }
 }
 
+/** One semantic neighbour in the consumer's canonical Stacked Deck ring. */
+export function resolveStackedDeckNeighbor(
+  index: number,
+  direction: -1 | 1,
+  itemCount: number,
+): number {
+  assertItemCount(itemCount);
+  if (itemCount === 0) return -1;
+  assertIndex(index, itemCount, "index");
+  if (itemCount === 1) return index;
+  return (index + direction + itemCount) % itemCount;
+}
+
+/** Forward physical depth of `itemIndex` behind `topIndex`. */
+export function resolveStackedDeckDepth(
+  topIndex: number,
+  itemIndex: number,
+  itemCount: number,
+): number {
+  assertItemCount(itemCount);
+  if (itemCount === 0) return -1;
+  assertIndex(topIndex, itemCount, "topIndex");
+  assertIndex(itemIndex, itemCount, "itemIndex");
+  return (itemIndex - topIndex + itemCount) % itemCount;
+}
+
+/** Canonical physical pile order, rotated so `topIndex` is first. */
+export function resolveStackedDeckOrder(topIndex: number, itemCount: number): readonly number[] {
+  assertItemCount(itemCount);
+  if (itemCount === 0) return [];
+  assertIndex(topIndex, itemCount, "topIndex");
+  return Array.from({ length: itemCount }, (_unused, depth) => (topIndex + depth) % itemCount);
+}
+
+/**
+ * Signed compact visual slot for a forward depth. The far half folds onto the opposite side of the
+ * pile while `depth` continues to own physical ordering.
+ */
+function signedRingSlot(depth: number, itemCount: number): number {
+  if (depth === 0) return 0;
+  return depth <= Math.floor(itemCount / 2) ? depth : depth - itemCount;
+}
+
 function profileForWidth(stageWidth: number): StackedDeckProfile {
   if (stageWidth >= 960) return "wide";
   if (stageWidth >= 600) return "medium";
@@ -414,7 +454,6 @@ export function resolveStackedDeckPile(
   options: ResolveStackedDeckPileOptions,
 ): readonly StackedDeckPilePose[] {
   const { frame } = options;
-  const centre = frame.visualTopIndex + frame.signedLocalDistance;
   const dominantIndex =
     frame.phase === "traversing" &&
     frame.segmentTargetIndex !== null &&
@@ -425,9 +464,11 @@ export function resolveStackedDeckPile(
   for (let index = 0; index < frame.poses.length; index += 1) {
     if (index === dominantIndex) continue;
     const pose = frame.poses[index]!;
-    const slot = index - centre;
+    const depth = resolveStackedDeckDepth(dominantIndex, index, frame.poses.length);
+    const slot = signedRingSlot(depth, frame.poses.length);
     poses.push({
       itemIndex: index,
+      depth,
       slot,
       translateX: pose.translateX,
       translateY: pose.translateY,
@@ -494,68 +535,50 @@ function resolveAuthority(
 }
 
 /**
- * Consumes continuous physical index without changing controller state. Each complete pitch inside
- * the traversal bounds moves visual ownership to the crossed anchor; residual travel immediately
- * becomes the next segment, or elastic overdrag once the bounds are reached.
+ * Consumes one interaction-local physical coordinate without changing controller state. The
+ * semantic origin is fixed for the transaction; crossing one pitch promotes exactly one cyclic
+ * neighbour and all remaining travel is elastic overdrag, never a second exchange.
  */
 export function resolveStackedDeckTraversal(
   options: ResolveStackedDeckTraversalOptions,
   output: MutableStackedDeckTraversal,
 ): StackedDeckTraversal {
   assertItemCount(options.itemCount);
-  assertFiniteNumber(options.physicalIndex, "physicalIndex");
+  assertFiniteNumber(options.physicalPosition, "physicalPosition");
   if (options.itemCount === 0) return resetTraversal(output, -1);
   assertIndex(options.settledIndex, options.itemCount, "settledIndex");
-  const envelope = options.traversalBounds;
-  let minIndex = 0;
-  let maxIndex = options.itemCount - 1;
-  if (envelope !== undefined) {
-    assertIndex(envelope.minIndex, options.itemCount, "minIndex");
-    assertIndex(envelope.maxIndex, options.itemCount, "maxIndex");
-    if (envelope.minIndex > envelope.maxIndex) throw new RangeError("invalid traversal bounds");
-    minIndex = envelope.minIndex;
-    maxIndex = envelope.maxIndex;
-  }
+  assertIndex(options.originIndex, options.itemCount, "originIndex");
   if (options.controllerPhase === "idle") {
     return resetTraversal(output, options.settledIndex);
   }
 
-  if (output.visualTopIndex < 0 || output.visualTopIndex >= options.itemCount) {
-    resetTraversal(output, options.settledIndex);
-  }
-
-  let visualTopIndex = clamp(output.visualTopIndex, minIndex, maxIndex);
-  while (
-    visualTopIndex < maxIndex &&
-    options.physicalIndex - visualTopIndex >= 1 - TRAVERSAL_EPSILON
-  ) {
-    visualTopIndex += 1;
-  }
-  while (
-    visualTopIndex > minIndex &&
-    options.physicalIndex - visualTopIndex <= -1 + TRAVERSAL_EPSILON
-  ) {
-    visualTopIndex -= 1;
-  }
-
-  const rawLocalDistance = options.physicalIndex - visualTopIndex;
+  const rawDirection = Math.sign(options.physicalPosition) as -1 | 0 | 1;
+  const targetIndex =
+    rawDirection === 0 || options.itemCount < 2
+      ? null
+      : resolveStackedDeckNeighbor(options.originIndex, rawDirection, options.itemCount);
+  const crossed =
+    targetIndex !== null && Math.abs(options.physicalPosition) >= 1 - TRAVERSAL_EPSILON;
+  const visualTopIndex = crossed ? targetIndex : options.originIndex;
+  const rawLocalDistance = crossed
+    ? options.physicalPosition - rawDirection
+    : options.physicalPosition;
   const signedLocalDistance =
     Math.abs(rawLocalDistance) <= TRAVERSAL_EPSILON ? 0 : rawLocalDistance;
   const direction = Math.sign(signedLocalDistance) as -1 | 0 | 1;
-  const candidate = visualTopIndex + direction;
-  const segmentTargetIndex =
-    direction !== 0 && candidate >= minIndex && candidate <= maxIndex ? candidate : null;
-
+  const segmentTargetIndex = crossed || direction === 0 ? null : targetIndex;
   const localProgress = clamp(Math.abs(signedLocalDistance), 0, 1);
 
   output.settledIndex = options.settledIndex;
   output.visualTopIndex = visualTopIndex;
-  output.authoritativeIndex = resolveAuthority(
-    output.authoritativeIndex,
-    visualTopIndex,
-    segmentTargetIndex,
-    localProgress,
-  );
+  output.authoritativeIndex = crossed
+    ? visualTopIndex
+    : resolveAuthority(
+        output.authoritativeIndex,
+        visualTopIndex,
+        segmentTargetIndex,
+        localProgress,
+      );
   output.segmentOriginIndex = visualTopIndex;
   output.segmentTargetIndex = segmentTargetIndex;
   output.direction = direction;
@@ -635,7 +658,8 @@ function validateTraversal(traversal: StackedDeckTraversal, itemCount: number): 
   if (traversal.phase === "traversing") {
     if (
       traversal.segmentTargetIndex === null ||
-      traversal.segmentTargetIndex - traversal.segmentOriginIndex !== traversal.direction
+      resolveStackedDeckNeighbor(traversal.segmentOriginIndex, traversal.direction, itemCount) !==
+        traversal.segmentTargetIndex
     ) {
       throw new RangeError("nonadjacent deck segment");
     }
@@ -693,7 +717,12 @@ function setTopPose(pose: MutableStackedDeckPose, interactive: boolean): void {
  * Like {@link setTopPose} it completes a pose the frame has just reset, so what a hidden card is
  * already — not the deck's top, and not something input can reach — is stated once, by the reset.
  */
-function setPilePose(pose: MutableStackedDeckPose, slot: number, tuning: StackedDeckTuning): void {
+function setPilePose(
+  pose: MutableStackedDeckPose,
+  slot: number,
+  tuning: StackedDeckTuning,
+  depth = Math.abs(slot),
+): void {
   const distance = Math.abs(slot);
   if (distance <= TRAVERSAL_EPSILON) {
     setTopPose(pose, false);
@@ -709,51 +738,104 @@ function setPilePose(pose: MutableStackedDeckPose, slot: number, tuning: Stacked
   // legible, but successive shells converge instead of accumulating fan-like rotation.
   pose.rotate = side * tuning.pileRotate * rotationSpread;
   pose.opacity = 1;
-  pose.layer = Math.round(TARGET_LAYER - distance * PILE_LAYER_STEP);
-  pose.shadowStrength = pileShadow(distance);
+  pose.layer = Math.round(TARGET_LAYER - depth * PILE_LAYER_STEP);
+  pose.shadowStrength = pileShadow(depth);
   pose.visible = true;
 }
 
+/** Exact resting pose for one persistent shell in the ring rotated to `topIndex`. */
+function setRingPose(
+  pose: MutableStackedDeckPose,
+  topIndex: number,
+  itemIndex: number,
+  itemCount: number,
+  tuning: StackedDeckTuning,
+): void {
+  const depth = resolveStackedDeckDepth(topIndex, itemIndex, itemCount);
+  setPilePose(pose, signedRingSlot(depth, itemCount), tuning, depth);
+}
+
+const projectionDestinationPose = resetPose({} as MutableStackedDeckPose);
+const shufflePairPose = resetPose({} as MutableStackedDeckPose);
+const shuffleGeometryKeys = ["translateX", "translateY", "scale", "rotate"] as const;
+
 /**
- * Exchanges two persistent cards. The target follows its fractional pile slot to the top. The
- * outgoing card follows the same pile endpoint through a lateral shuffle that clears the target at
- * the midpoint; only there does depth order change. Every term depends on progress alone, so a
- * reversal evaluates the identical poses in reverse and the exact anchor equals resting geometry.
+ * Resolves the canonical forward top-to-rear Shuffle exchange. Backward traversal evaluates this
+ * same function from the opposite endpoint with reversed progress, making the physical operations
+ * exact inverses without a second choreography.
  */
-function setExchangePair(
-  outgoing: MutableStackedDeckPose,
-  target: MutableStackedDeckPose,
+function setShuffleFrame(
+  output: MutableStackedDeckFrame,
   traversal: StackedDeckTraversal,
   tuning: StackedDeckTuning,
 ): void {
-  const progress = traversal.localProgress;
+  const originIndex = traversal.segmentOriginIndex;
+  const targetIndex = traversal.segmentTargetIndex!;
+  const forward = traversal.direction === 1;
+  const forwardOriginIndex = forward ? originIndex : targetIndex;
+  const forwardTargetIndex = resolveStackedDeckNeighbor(forwardOriginIndex, 1, output.poses.length);
+  const progress = forward ? traversal.localProgress : 1 - traversal.localProgress;
   const promotion = smoothstep(progress);
-  const direction = traversal.direction as -1 | 1;
   const middle = Math.sin(Math.PI * progress);
   const initialPileDerivative =
     tuning.pileOffsetX * (-Math.log(PILE_SLOT_DECAY) / (1 - PILE_SLOT_DECAY));
   const directRatio = (tuning.motionPitch - initialPileDerivative) / tuning.cardWidth;
   const detour = exchangeDetour(progress, directRatio);
-  const targetDominant = progress >= AUTHORITY_MIDPOINT;
+  const targetDominant =
+    progress > AUTHORITY_MIDPOINT || (forward && progress === AUTHORITY_MIDPOINT);
   const exchangeElevation = crossoverElevation(progress);
+  const movingDestinationLayer =
+    TARGET_LAYER -
+    resolveStackedDeckDepth(forwardTargetIndex, forwardOriginIndex, output.poses.length) *
+      PILE_LAYER_STEP;
 
-  outgoing.translateX -= direction * tuning.cardWidth * detour;
-  outgoing.translateY += tuning.topDropY * middle;
-  outgoing.scale -= tuning.topScaleReduction * middle;
-  outgoing.rotate -= direction * tuning.topRotate * middle;
-  outgoing.opacity = 1;
-  outgoing.layer = targetDominant ? TARGET_LAYER - 1 : TOP_LAYER;
-  outgoing.role = "top";
-  outgoing.shadowStrength = mix(1, pileShadow(1), promotion) * exchangeElevation;
-  outgoing.visible = true;
-  outgoing.interactive = false;
+  for (let index = 0; index < output.poses.length; index += 1) {
+    const pose = output.poses[index]!;
+    setRingPose(resetPose(pose), forwardOriginIndex, index, output.poses.length, tuning);
+    setRingPose(
+      resetPose(projectionDestinationPose),
+      forwardTargetIndex,
+      index,
+      output.poses.length,
+      tuning,
+    );
+    for (const key of directGeometryKeys) {
+      pose[key] = mix(pose[key], projectionDestinationPose[key], promotion);
+    }
+    pose.layer = Math.round(mix(pose.layer, projectionDestinationPose.layer, promotion));
+  }
 
-  target.opacity = 1;
-  target.layer = targetDominant ? TOP_LAYER : TARGET_LAYER;
-  target.role = "target";
-  target.shadowStrength = mix(pileShadow(1), 1, promotion) * exchangeElevation;
-  target.visible = true;
-  target.interactive = false;
+  const moving = output.poses[forwardOriginIndex]!;
+  const incoming = output.poses[forwardTargetIndex]!;
+  // The two exchange bodies retain the accepted pile-slot path. In particular, the exposed card's
+  // first derivative plus the calibrated detour is one motion pitch per physical pitch; the other
+  // shells interpolate between the two exact canonical ring rests behind them.
+  setPilePose(resetPose(shufflePairPose), -progress, tuning);
+  for (const key of shuffleGeometryKeys) moving[key] = shufflePairPose[key];
+  setPilePose(resetPose(shufflePairPose), 1 - progress, tuning);
+  for (const key of shuffleGeometryKeys) incoming[key] = shufflePairPose[key];
+  moving.translateX -= tuning.cardWidth * detour;
+  moving.translateY += tuning.topDropY * middle;
+  moving.scale -= tuning.topScaleReduction * middle;
+  moving.rotate -= tuning.topRotate * middle;
+  moving.opacity = 1;
+  moving.layer = targetDominant
+    ? Math.round(mix(TARGET_LAYER - 1, movingDestinationLayer, smoothstep(progress * 2 - 1)))
+    : TOP_LAYER;
+  moving.shadowStrength *= exchangeElevation;
+  moving.visible = true;
+  moving.interactive = false;
+
+  incoming.opacity = 1;
+  incoming.layer = targetDominant ? TOP_LAYER : TARGET_LAYER;
+  incoming.shadowStrength *= exchangeElevation;
+  incoming.visible = true;
+  incoming.interactive = false;
+
+  // Roles describe this interaction's semantic source and target even when backward traversal is
+  // evaluating the canonical forward path in reverse.
+  output.poses[originIndex]!.role = "top";
+  output.poses[targetIndex]!.role = "target";
 }
 
 function moveDirectPose(
@@ -775,7 +857,6 @@ const directGeometryKeys = [
   "rotate",
   "shadowStrength",
 ] as const;
-const directDestinationPose = resetPose({} as MutableStackedDeckPose);
 
 /**
  * Projects Direct from one stable interaction origin. The target and remaining pile depend only on
@@ -785,21 +866,20 @@ const directDestinationPose = resetPose({} as MutableStackedDeckPose);
 function setDirectFrame(
   output: MutableStackedDeckFrame,
   projection: StackedDeckDirectProjection,
-  traversal: StackedDeckTraversal,
   tuning: StackedDeckTuning,
 ): void {
-  const scalarDistance =
-    traversal.visualTopIndex + traversal.signedLocalDistance - projection.originIndex;
-  const candidate = clamp(
-    projection.originIndex + Math.sign(scalarDistance),
-    0,
-    output.poses.length - 1,
-  );
-  const targetIndex = candidate === projection.originIndex ? null : candidate;
-  const distance = clamp(Math.abs(scalarDistance), 0, 1);
+  const targetIndex =
+    projection.direction === 0 || projection.targetIndex === projection.originIndex
+      ? null
+      : projection.targetIndex;
+  const distance = clamp(Math.abs(projection.signedTravel), 0, 1);
   const reveal = smoothstep(distance);
   const outgoing = output.poses[projection.originIndex]!;
   const phase = projection.phase;
+  // A direction-authoritative command publishes before its spring has moved. That frame is the
+  // exact source rest: declaring the hidden neighbour top before any geometry changes would be a
+  // one-frame material handoff with no physical exchange to justify it.
+  if (phase === undefined && distance <= TRAVERSAL_EPSILON) return;
   // Bounded, and bounded away from anything a transform cannot express. One invalid number in a
   // transform does not degrade gracefully — the whole declaration is dropped, the shell keeps
   // whatever it last painted, and the deck reads as frozen rather than as broken — so a settlement
@@ -813,18 +893,24 @@ function setDirectFrame(
     for (let index = 0; index < output.poses.length; index += 1) {
       if (index === projection.originIndex) continue;
       const pose = output.poses[index]!;
-      setPilePose(resetPose(directDestinationPose), index - targetIndex, tuning);
+      setRingPose(
+        resetPose(projectionDestinationPose),
+        targetIndex,
+        index,
+        output.poses.length,
+        tuning,
+      );
       if (continuity?.itemIndex === index) {
         moveDirectPose(pose, continuity.pose, Math.min(1, reveal / continuityReveal));
         if (reveal > continuityReveal) {
           moveDirectPose(
             pose,
-            directDestinationPose,
+            projectionDestinationPose,
             (reveal - continuityReveal) / (1 - continuityReveal),
           );
         }
       } else {
-        moveDirectPose(pose, directDestinationPose, reveal);
+        moveDirectPose(pose, projectionDestinationPose, reveal);
       }
     }
     const target = output.poses[targetIndex]!;
@@ -833,12 +919,18 @@ function setDirectFrame(
 
     if (phase === undefined || phase === "parking") {
       target.interactive = output.authoritativeIndex === targetIndex;
-      setPilePose(resetPose(directDestinationPose), projection.originIndex - targetIndex, tuning);
+      setRingPose(
+        resetPose(projectionDestinationPose),
+        targetIndex,
+        projection.originIndex,
+        output.poses.length,
+        tuning,
+      );
       if (phase === undefined) {
         // An omitted lifecycle is an autonomous exchange: nothing was held, so there is no release
         // frame to park from, hand translation is not this shell's, and scalar travel is the whole
         // physical story.
-        moveDirectPose(outgoing, directDestinationPose, reveal);
+        moveDirectPose(outgoing, projectionDestinationPose, reveal);
         return;
       }
       // Parking. Geometry and depth are separate physical facts.
@@ -853,16 +945,16 @@ function setDirectFrame(
       // straight in.
       const apexX = mix(
         projection.translateX,
-        directDestinationPose.translateX,
+        projectionDestinationPose.translateX,
         CROSSOVER_SETTLEMENT,
       );
       const clearance = Math.max(0, clearSeparation - Math.abs(apexX));
       outgoing.translateX = projection.translateX;
       outgoing.translateY = projection.translateY;
-      moveDirectPose(outgoing, directDestinationPose, settlement);
+      moveDirectPose(outgoing, projectionDestinationPose, settlement);
       // Zero at both ends and unit at the apex, so both endpoints stay exact, not nearly exact.
       outgoing.translateX +=
-        Math.sign(apexX || directDestinationPose.translateX) *
+        Math.sign(apexX || projectionDestinationPose.translateX || -projection.direction) *
         clearance *
         4 *
         settlement *
@@ -908,17 +1000,41 @@ export function resolveStackedDeckFrame(
 
   const traversal = options.traversal;
   const direct = options.direct;
-  const centre =
-    direct !== undefined
-      ? direct.originIndex
-      : traversal.phase === "traversing"
-        ? traversal.visualTopIndex + traversal.signedLocalDistance
-        : traversal.visualTopIndex;
+  if (direct !== undefined) {
+    assertIndex(direct.originIndex, options.itemCount, "direct.originIndex");
+    if (direct.direction !== -1 && direct.direction !== 0 && direct.direction !== 1) {
+      throw new RangeError("direct.direction");
+    }
+    if (direct.targetIndex !== null) {
+      assertIndex(direct.targetIndex, options.itemCount, "direct.targetIndex");
+    }
+    const expectedDirectTarget =
+      direct.direction === 0 || options.itemCount < 2
+        ? null
+        : resolveStackedDeckNeighbor(direct.originIndex, direct.direction, options.itemCount);
+    if (direct.targetIndex !== expectedDirectTarget) {
+      throw new RangeError("direct.targetIndex is not the directed cyclic neighbour");
+    }
+    assertFiniteNumber(direct.signedTravel, "direct.signedTravel");
+  }
+  const sourceTopIndex =
+    direct?.originIndex ??
+    (traversal.phase === "traversing" ? traversal.segmentOriginIndex : traversal.visualTopIndex);
   for (let index = 0; index < output.poses.length; index += 1) {
-    setPilePose(resetPose(output.poses[index]!), index - centre, options.tuning);
+    setRingPose(
+      resetPose(output.poses[index]!),
+      sourceTopIndex,
+      index,
+      output.poses.length,
+      options.tuning,
+    );
+  }
+  if (options.itemCount === 1) {
+    output.poses[0]!.interactive = direct === undefined && traversal.phase === "idle";
+    return output;
   }
   if (direct !== undefined) {
-    setDirectFrame(output, direct, traversal, options.tuning);
+    setDirectFrame(output, direct, options.tuning);
     return output;
   }
   const top = output.poses[traversal.visualTopIndex]!;
@@ -929,7 +1045,7 @@ export function resolveStackedDeckFrame(
   if (traversal.phase === "elastic") {
     top.translateX = -traversal.signedLocalDistance * options.tuning.motionPitch;
   } else if (traversal.phase === "traversing" && traversal.segmentTargetIndex !== null) {
-    setExchangePair(top, output.poses[traversal.segmentTargetIndex]!, traversal, options.tuning);
+    setShuffleFrame(output, traversal, options.tuning);
   }
   return output;
 }

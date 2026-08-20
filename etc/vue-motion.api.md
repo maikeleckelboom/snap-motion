@@ -98,6 +98,7 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<SnapContro
     driver?: AnimationDriver;
     // (undocumented)
     onChange?: (snapshot: ControllerSnapshot<Id>) => void;
+    onPointerTravelDirection?: (direction: -1 | 1) => void;
     // (undocumented)
     onReleaseTargetSelected?: (id: Id | undefined) => void;
     // (undocumented)

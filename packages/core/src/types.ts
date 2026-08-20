@@ -71,6 +71,15 @@ export interface ControllerMeasurement<Id extends SemanticId = SemanticId> {
   readonly bounds: ScalarBounds;
   readonly anchors: readonly SnapAnchor<Id>[];
   readonly activeId?: Id;
+  /**
+   * Preserve the scalar offset from this anchor while replacing the coordinate system.
+   *
+   * Ordinary layout remeasurement leaves a settling mass at its rendered pixel position. A local
+   * physical topology may instead rotate its finite anchors around the same semantic item. In
+   * that case the item's anchor displacement is a coordinate-system change, not visible travel,
+   * and the mass must move by the same displacement atomically.
+   */
+  readonly rebaseFromId?: Id;
 }
 
 export interface ControllerDragOptions<Id extends SemanticId = SemanticId> {

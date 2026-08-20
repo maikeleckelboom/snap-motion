@@ -91,7 +91,7 @@ describe("right-to-left agreement", () => {
     const ltrDeck = ltr.vm as unknown as DeckInstance;
     pressAndMove(ltr.element as HTMLElement, -200);
     await nextTick();
-    expect(ltrDeck.physicalIndex).toBeGreaterThan(2);
+    expect(ltrDeck.physicalIndex).toBeGreaterThan(0);
     releaseAt(ltr.element as HTMLElement, -200);
     ltr.unmount();
 
@@ -102,7 +102,7 @@ describe("right-to-left agreement", () => {
     pressAndMove(rtl.element as HTMLElement, -200);
     await nextTick();
     // The same physical movement resolves toward the other neighbour under RTL.
-    expect(rtlDeck.physicalIndex).toBeLessThan(2);
+    expect(rtlDeck.physicalIndex).toBeLessThan(0);
     releaseAt(rtl.element as HTMLElement, -200);
     rtl.unmount();
   });

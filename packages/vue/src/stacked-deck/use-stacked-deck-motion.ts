@@ -1,10 +1,9 @@
 import {
   createCoverflowGeometry,
-  createPaginationIndicatorState,
   createStackedDeckFrame,
   isStackedDeckInspectEligible,
-  resolvePaginationIndicator,
   resolveSpeedInCards,
+  resolveStackedDeckNeighbor,
   resolveStackedDeckFrame,
   resolveStackedDeckTuning,
   STACKED_DECK_ANCHOR_SKIP,
@@ -16,7 +15,6 @@ import {
   type ElasticityOptions,
   type SnapAnchor,
   type SpringConfiguration,
-  type PaginationIndicatorState,
   type StackedDeckDirectProjection,
   type StackedDeckExchange,
   type StackedDeckFrame,
@@ -151,7 +149,7 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
   readonly motion: CarouselMotion<Id>;
   /** True only while an input device physically holds the deck. */
   readonly owned: ComputedRef<boolean>;
-  readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
+  /** Bounded interaction-local physical coordinate; rest and every new transaction rebase to 0. */
   readonly physicalIndex: ComputedRef<number>;
   /** Advanced read-only projection of the non-dominant persistent card shells. */
   readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer<Id>[]>;
@@ -189,6 +187,34 @@ type StackedDeckComponentMotionReturn<Id extends string> = Omit<
   UseStackedDeckMotionReturn<Id>,
   "anchorsById" | "pileLayers" | "statusIndex"
 >;
+
+interface StackedDeckPhysicalCoordinate<Id extends string> {
+  readonly ids: readonly Id[];
+  readonly originIndex: number;
+  readonly originOrder: number;
+}
+
+/** Finite controller anchors rotated around one semantic interaction origin. */
+function createStackedDeckPhysicalCoordinate<Id extends string>(
+  ids: readonly Id[],
+  originIndex: number,
+  direction: -1 | 0 | 1 = 0,
+): StackedDeckPhysicalCoordinate<Id> {
+  const itemCount = ids.length;
+  if (itemCount === 0) return { ids: [], originIndex: -1, originOrder: 0 };
+  const safeOrigin = Math.min(Math.max(originIndex, 0), itemCount - 1);
+  if (itemCount === 1) return { ids: [ids[safeOrigin]!], originIndex: safeOrigin, originOrder: 0 };
+  const originOrder =
+    itemCount === 2 ? (direction === -1 ? 1 : 0) : Math.floor((itemCount - 1) / 2);
+  return {
+    ids: Array.from({ length: itemCount }, (_unused, order) => {
+      const offset = order - originOrder;
+      return ids[(safeOrigin + offset + itemCount) % itemCount]!;
+    }),
+    originIndex: safeOrigin,
+    originOrder,
+  };
+}
 
 /**
  * The stacked deck as a Vue capability: one physical interaction exchanges exactly one adjacent
@@ -240,10 +266,11 @@ export function useStackedDeckComponentMotion<Id extends string>(
       : {}),
   });
   const state = shallowRef<StackedDeckModelState>(model.state);
+  let physicalCoordinate = createStackedDeckPhysicalCoordinate(model.ids, model.state.settledIndex);
 
   function measure() {
     return createCoverflowGeometry({
-      itemIds: ids.value,
+      itemIds: physicalCoordinate.ids,
       pitch: pitch.value,
       viewportSize: Math.max(1, options.viewport.value?.clientWidth ?? stageWidth.value),
     });
@@ -300,6 +327,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
       clearDirectPresentation(true);
       directProjection.originIndex = originIndex;
       if (handOwnsDirectShell()) directProjection.phase = "held";
+      rebasePhysicalCoordinate(originIndex);
       return ids.value[originIndex];
     },
     track,
@@ -307,11 +335,33 @@ export function useStackedDeckComponentMotion<Id extends string>(
     onTargetSelected(id, reason) {
       acceptDestination(id, reason);
     },
+    onInteractionDirection(direction) {
+      const originIndex = model.state.interactionOriginIndex;
+      if (originIndex !== null) rebasePhysicalCoordinate(originIndex, direction);
+    },
     ...(initialId === undefined ? {} : { initialTargetId: initialId }),
     ...(options.reducedMotionOverride === undefined
       ? {}
       : { reducedMotionOverride: options.reducedMotionOverride }),
   });
+
+  /**
+   * Rotates the controller's finite anchors while preserving the mass's physical offset from the
+   * semantic interaction origin. This is the only coordinate rebase seam; model ordinals and card
+   * shell identities never change with it.
+   */
+  function rebasePhysicalCoordinate(originIndex: number, direction: -1 | 0 | 1 = 0): void {
+    const originId = model.idAt(originIndex);
+    if (originId === undefined) return;
+    const nextCoordinate = createStackedDeckPhysicalCoordinate(model.ids, originIndex, direction);
+    const unchanged =
+      physicalCoordinate.originIndex === nextCoordinate.originIndex &&
+      physicalCoordinate.originOrder === nextCoordinate.originOrder &&
+      physicalCoordinate.ids.every((id, index) => id === nextCoordinate.ids[index]);
+    if (unchanged) return;
+    physicalCoordinate = nextCoordinate;
+    motion.controller.remeasure({ ...measure(), rebaseFromId: originId });
+  }
 
   /**
    * True only while an input device physically holds the deck. This is the sole reason to refuse a
@@ -338,30 +388,64 @@ export function useStackedDeckComponentMotion<Id extends string>(
     if (id !== undefined) options.onSettled?.(id, published.announcementIndex, pendingReason);
   }
 
+  const directProjection: {
+    -readonly [Key in keyof StackedDeckDirectProjection]: StackedDeckDirectProjection[Key];
+  } = {
+    direction: 0,
+    originIndex: model.state.settledIndex,
+    settlement: 0,
+    signedTravel: 0,
+    targetIndex: null,
+    translateX: 0,
+    translateY: 0,
+  };
+  let suppressSnapshotPublication = false;
   watch(
     motion.snapshot,
     (snapshot) => {
+      if (suppressSnapshotPublication) return;
       const currentPitch = Math.max(1, pitch.value);
       const targetIndex = snapshot.target === null ? null : model.indexOf(snapshot.target.id);
       const nearestIndex =
         snapshot.active === null ? model.state.settledIndex : model.indexOf(snapshot.active.id);
-      publish(
-        model.update({
-          phase: snapshot.phase,
-          physicalIndex: -snapshot.position / currentPitch,
-          // An anchor the model no longer contains says nothing about the deck's selection, so it
-          // is reported as no destination at all rather than as item zero.
-          targetIndex: targetIndex !== null && targetIndex >= 0 ? targetIndex : null,
-          nearestIndex: nearestIndex >= 0 ? nearestIndex : model.state.settledIndex,
-        }),
-      );
+      const published = model.update({
+        phase: snapshot.phase,
+        physicalPosition: -snapshot.position / currentPitch - physicalCoordinate.originOrder,
+        // An anchor the model no longer contains says nothing about the deck's selection, so it
+        // is reported as no destination at all rather than as item zero.
+        targetIndex: targetIndex !== null && targetIndex >= 0 ? targetIndex : null,
+        nearestIndex: nearestIndex >= 0 ? nearestIndex : model.state.settledIndex,
+      });
+      publish(published);
+      if (snapshot.phase !== "idle" || owned.value) return;
+      if (directProjection.phase === "parking" && published.interactionDirection !== 0) {
+        directProjection.direction = published.interactionDirection;
+        directProjection.signedTravel = published.interactionDirection;
+        directProjection.targetIndex = resolveStackedDeckNeighbor(
+          directProjection.originIndex,
+          published.interactionDirection,
+          model.itemCount,
+        );
+      } else if (directProjection.phase === "returning") {
+        directProjection.direction = 0;
+        directProjection.signedTravel = 0;
+        directProjection.targetIndex = null;
+      }
+      model.endInteraction();
+      suppressSnapshotPublication = true;
+      try {
+        rebasePhysicalCoordinate(model.state.settledIndex);
+      } finally {
+        suppressSnapshotPublication = false;
+      }
+      state.value = model.state;
     },
     { immediate: true },
   );
 
-  /** Continuous physical index. It projects motion but never controls the carousel mass. */
+  /** Bounded interaction-local physical coordinate. */
   const physicalIndex = computed(() =>
-    pitch.value <= 0 ? 0 : -motion.position.value / pitch.value,
+    pitch.value <= 0 ? 0 : -motion.position.value / pitch.value - physicalCoordinate.originOrder,
   );
   const speedInCards = computed(() => resolveSpeedInCards(motion.velocity.value, pitch.value));
   const activeTuning = computed<StackedDeckTuning>(() =>
@@ -370,9 +454,6 @@ export function useStackedDeckComponentMotion<Id extends string>(
   const visualId = computed(() => model.idAt(state.value.currentIndex));
   const settledId = computed(() => model.idAt(state.value.settledIndex));
 
-  const directProjection: {
-    -readonly [Key in keyof StackedDeckDirectProjection]: StackedDeckDirectProjection[Key];
-  } = { settlement: 0, translateX: 0, translateY: 0 } as StackedDeckDirectProjection;
   const compositing = computed(() => motion.isAnimating.value || owned.value);
 
   /**
@@ -427,6 +508,9 @@ export function useStackedDeckComponentMotion<Id extends string>(
     releaseSettlement.pause();
     directProjection.settlement = 0;
     directProjection.translateX = directProjection.translateY = 0;
+    directProjection.direction = 0;
+    directProjection.signedTravel = 0;
+    directProjection.targetIndex = null;
     delete directProjection.phase;
     if (!keepAnchor) delete directProjection.continuity;
   }
@@ -448,7 +532,6 @@ export function useStackedDeckComponentMotion<Id extends string>(
     atRest,
     (rested) => {
       if (!rested) return;
-      model.endInteraction();
       // Semantic rest is not physical rest, and this is the seam where the two are furthest apart:
       // a commit that had no scalar travel left is at rest inside the same task the hand let go in,
       // one microtask before the gesture reports what it resolved to. A shell still held, or still
@@ -469,9 +552,20 @@ export function useStackedDeckComponentMotion<Id extends string>(
       // model may already have closed its interaction on.
       const continuityIndex = model.state.interactionOriginIndex ?? presentationOriginIndex();
       if (continuityIndex === null) return;
+      const currentLocalPosition =
+        state.value.interactionOriginIndex !== null &&
+        state.value.interactionDirection !== 0 &&
+        state.value.currentIndex ===
+          resolveStackedDeckNeighbor(
+            state.value.interactionOriginIndex,
+            state.value.interactionDirection,
+            model.itemCount,
+          )
+          ? state.value.interactionDirection
+          : 0;
       directProjection.continuity = {
         itemIndex: continuityIndex,
-        progress: smoothstep(Math.min(1, Math.abs(physicalIndex.value - state.value.currentIndex))),
+        progress: smoothstep(Math.min(1, Math.abs(physicalIndex.value - currentLocalPosition))),
         pose: { ...frame.value.poses[continuityIndex]! },
       };
       return;
@@ -499,8 +593,17 @@ export function useStackedDeckComponentMotion<Id extends string>(
     }
     const originIndex =
       (isDirect() ? model.state.interactionOriginIndex : null) ?? presentationOriginIndex();
-    if (originIndex !== null) {
+    const releaseAtMechanicalRest =
+      atRest.value &&
+      (directProjection.phase === "parking" || directProjection.phase === "returning");
+    if (originIndex !== null && !releaseAtMechanicalRest) {
       directProjection.originIndex = originIndex;
+      directProjection.direction = state.value.interactionDirection;
+      directProjection.signedTravel = physicalIndex.value;
+      directProjection.targetIndex =
+        directProjection.direction === 0 || itemCount < 2
+          ? null
+          : resolveStackedDeckNeighbor(originIndex, directProjection.direction, itemCount);
     }
     resolveStackedDeckFrame(
       {
@@ -516,28 +619,6 @@ export function useStackedDeckComponentMotion<Id extends string>(
     // an explicit trigger can report it. This is the case manual triggering exists for.
     triggerRef(frame);
   });
-
-  const paginationVisualIndex = computed(() => {
-    const traversal = state.value.traversal;
-    return Math.min(
-      Math.max(0, ids.value.length - 1),
-      Math.max(0, traversal.visualTopIndex + traversal.signedLocalDistance),
-    );
-  });
-
-  /**
-   * The deck's pagination reports position only. A deck's velocity belongs to the card under the
-   * hand, so lending it to the rail would report motion the rail is not making.
-   */
-  const paginationIndicator = computed(() =>
-    resolvePaginationIndicator(
-      paginationVisualIndex.value,
-      0,
-      pitch.value,
-      ids.value.length,
-      createPaginationIndicatorState(),
-    ),
-  );
 
   const diagnostics = computed<SurfaceMotionDiagnostics<Id>>(() =>
     resolveSurfaceDiagnostics({
@@ -578,7 +659,13 @@ export function useStackedDeckComponentMotion<Id extends string>(
     cancelInteractionRecords();
     pendingReason = reason;
     if (model.synchronize(index, { announce }) < 0) return false;
-    motion.controller.remeasure({ ...measure(), activeId: id });
+    physicalCoordinate = createStackedDeckPhysicalCoordinate(model.ids, index);
+    suppressSnapshotPublication = true;
+    try {
+      motion.controller.remeasure({ ...measure(), activeId: id });
+    } finally {
+      suppressSnapshotPublication = false;
+    }
     // An announced adoption already carries its announcement, so publishing the state publishes it
     // too — there is no later idle snapshot this could be waiting for.
     publish(model.state);
@@ -586,10 +673,11 @@ export function useStackedDeckComponentMotion<Id extends string>(
     return true;
   }
 
-  function traverse(originIndex: number, targetIndex: number): boolean {
+  function traverse(originIndex: number, targetIndex: number, direction: -1 | 1): boolean {
     // A command opens its own interaction, with no hand and no anchor of its own.
     clearDirectPresentation();
-    model.openInteraction(originIndex);
+    model.openInteraction(originIndex, direction);
+    rebasePhysicalCoordinate(originIndex, direction);
     motion.moveTo(model.idAt(targetIndex)!);
     return true;
   }
@@ -601,7 +689,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
     const id = model.idAt(command.targetIndex);
     if (id === undefined) return false;
     acceptDestination(id, reason);
-    return traverse(command.originIndex, command.targetIndex);
+    return traverse(command.originIndex, command.targetIndex, command.direction);
   }
 
   function requestIndex(index: number, reason: ActiveIdRequestDetails["reason"]): boolean {
@@ -615,7 +703,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
     if (id === undefined) return false;
     acceptDestination(id, reason);
     if (command.kind === "traverse") {
-      return traverse(command.originIndex, command.targetIndex);
+      return traverse(command.originIndex, command.targetIndex, command.direction);
     }
     return synchronizeIndex(command.targetIndex, reason, command.announce);
   }
@@ -625,7 +713,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
    * than clamped, so a stale route can never silently become item zero.
    *
    * It reports `programmatic`: this is the general imperative entry point, and an application
-   * calling it is not the same event as a person tapping a card or a pagination dot.
+   * calling it is not the same event as a person tapping a card or choosing a named destination.
    */
   function navigateTo(id: Id): boolean {
     const index = model.indexOf(id);
@@ -645,7 +733,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
     const command = model.resolveAbsoluteCommand(index, { owned: false, atRest: atRest.value });
     if (command.kind === "traverse") {
       pendingReason = "external";
-      return traverse(command.originIndex, command.targetIndex);
+      return traverse(command.originIndex, command.targetIndex, command.direction);
     }
     if (command.kind === "synchronize")
       return synchronizeIndex(command.targetIndex, "external", false);
@@ -832,6 +920,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
         const finalIndex =
           controlledIndex >= 0 ? model.synchronize(controlledIndex) : preservedIndex;
         const finalId = model.idAt(finalIndex);
+        physicalCoordinate = createStackedDeckPhysicalCoordinate(model.ids, finalIndex);
         publish(model.state);
         motion.controller.remeasure({
           ...measure(),
@@ -858,8 +947,8 @@ export function useStackedDeckComponentMotion<Id extends string>(
 
   return {
     atRest,
-    canNext: computed(() => state.value.canNext),
-    canPrevious: computed(() => state.value.canPrevious),
+    canNext: computed(() => !disabled() && state.value.canNext),
+    canPrevious: computed(() => !disabled() && state.value.canPrevious),
     compositing,
     visualId,
     diagnostics,
@@ -876,7 +965,6 @@ export function useStackedDeckComponentMotion<Id extends string>(
     onPointerDown: gesture.onPointerDown,
     onWheel,
     owned,
-    paginationIndicator,
     physicalIndex,
     pitch,
     previous,
@@ -914,7 +1002,6 @@ export interface StackedDeckHandle<Id extends string> {
   readonly diagnostics: SurfaceMotionDiagnostics<Id>;
   readonly frame: StackedDeckFrame;
   readonly owned: boolean;
-  readonly paginationIndicator: PaginationIndicatorState;
   readonly physicalIndex: number;
   readonly pitch: number;
   readonly root: HTMLElement | undefined;

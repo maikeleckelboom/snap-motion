@@ -681,7 +681,6 @@ export const StackedDeck: <TItem extends {
     next: () => boolean;
     onKeyDown: (event: KeyboardEvent) => void;
     owned: ComputedRef<boolean>;
-    paginationIndicator: ComputedRef<PaginationIndicatorState>;
     physicalIndex: ComputedRef<number>;
     pitch: ComputedRef<number>;
     previous: () => boolean;
@@ -757,8 +756,6 @@ export interface StackedDeckHandle<Id extends string> {
     onKeyDown(event: KeyboardEvent): void;
     // (undocumented)
     readonly owned: boolean;
-    // (undocumented)
-    readonly paginationIndicator: PaginationIndicatorState;
     // (undocumented)
     readonly physicalIndex: number;
     // (undocumented)

@@ -1,349 +1,392 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  STACKED_DECK_ANCHOR_SKIP,
-  StackedDeckModel,
-  type StackedDeckSnapshotInput,
-} from "../src/stacked-deck-model";
-import {
   createStackedDeckFrame,
   createStackedDeckTraversal,
-  isStackedDeckAuthorityStable,
+  resolveStackedDeckDepth,
   resolveStackedDeckFrame,
+  resolveStackedDeckNeighbor,
+  resolveStackedDeckOrder,
   resolveStackedDeckTraversal,
   resolveStackedDeckTuning,
-} from "../src/stackedDeck";
+  type StackedDeckDirectProjection,
+  type StackedDeckSnapshotInput,
+  StackedDeckModel,
+} from "../src";
 
-const ITEM_COUNT = 5;
-const DECK_IDS = ["a", "b", "c", "d", "e"] as const;
-type DeckId = (typeof DECK_IDS)[number];
+const IDS = ["a", "b", "c", "d", "e"] as const;
+type Id = (typeof IDS)[number];
 const TUNING = resolveStackedDeckTuning({ stageWidth: 1_120, stageHeight: 620 });
+const SAMPLES = [0.05, 0.2, 0.49, 0.5, 0.73, 0.95] as const;
 
-function model(initialIndex = 2) {
-  return new StackedDeckModel<DeckId>({ ids: DECK_IDS, initialId: DECK_IDS[initialIndex]! });
+function model(initialIndex = 2, ids: readonly Id[] = IDS) {
+  const initialId = ids[initialIndex];
+  return new StackedDeckModel<Id>({
+    ids,
+    ...(initialId === undefined ? {} : { initialId }),
+  });
 }
 
-/** One controller snapshot. Anything not stated is what an unattended deck would report. */
 function snapshot(
-  physicalIndex: number,
+  physicalPosition: number,
   overrides: Partial<StackedDeckSnapshotInput> = {},
 ): StackedDeckSnapshotInput {
   return {
     phase: "dragging",
-    physicalIndex,
+    physicalPosition,
     targetIndex: null,
-    nearestIndex: Math.round(physicalIndex),
+    nearestIndex: 2,
     ...overrides,
   };
 }
 
-/** Rest exactly on one card, which is the only thing that publishes a durable selection. */
 function restAt(index: number): StackedDeckSnapshotInput {
-  return { phase: "idle", physicalIndex: index, targetIndex: index, nearestIndex: index };
+  return { phase: "idle", physicalPosition: 0, targetIndex: index, nearestIndex: index };
 }
 
-describe("stacked deck authority stability", () => {
-  it("treats identity as stable after authority crosses the physical depth boundary", () => {
-    const storage = createStackedDeckTraversal(2, ITEM_COUNT);
-    const frameStorage = createStackedDeckFrame(ITEM_COUNT);
-    const at = (physicalIndex: number, phase: "dragging" | "idle" | "settling" = "settling") => {
-      const traversal = resolveStackedDeckTraversal(
+function normalizedFrame(
+  originIndex: number,
+  direction: -1 | 1,
+  progress: number,
+  exchange: "shuffle" | "direct",
+): readonly Record<string, number | string | boolean>[] {
+  const targetIndex = resolveStackedDeckNeighbor(originIndex, direction, IDS.length);
+  const traversal = resolveStackedDeckTraversal(
+    {
+      controllerPhase: "dragging",
+      itemCount: IDS.length,
+      originIndex,
+      physicalPosition: direction * progress,
+      settledIndex: originIndex,
+    },
+    createStackedDeckTraversal(originIndex, IDS.length),
+  );
+  const direct: StackedDeckDirectProjection | undefined =
+    exchange === "direct"
+      ? {
+          direction,
+          originIndex,
+          phase: "held",
+          settlement: 0,
+          signedTravel: direction * progress,
+          targetIndex,
+          translateX: -direction * progress * TUNING.motionPitch,
+          translateY: progress * 70,
+        }
+      : undefined;
+  const frame = resolveStackedDeckFrame(
+    {
+      itemCount: IDS.length,
+      traversal,
+      tuning: TUNING,
+      ...(direct === undefined ? {} : { direct }),
+    },
+    createStackedDeckFrame(IDS.length),
+  );
+  return resolveStackedDeckOrder(originIndex, IDS.length).map((itemIndex) => {
+    const pose = frame.poses[itemIndex]!;
+    return {
+      depth: resolveStackedDeckDepth(originIndex, itemIndex, IDS.length),
+      interactive: pose.interactive,
+      layer: pose.layer,
+      opacity: Number(pose.opacity.toFixed(8)),
+      role: pose.role,
+      rotate: Number(pose.rotate.toFixed(8)),
+      scale: Number(pose.scale.toFixed(8)),
+      shadowStrength: Number(pose.shadowStrength.toFixed(8)),
+      translateX: Number(pose.translateX.toFixed(8)),
+      translateY: Number(pose.translateY.toFixed(8)),
+      visible: pose.visible,
+    };
+  });
+}
+
+function perform(deck: StackedDeckModel<Id>, direction: -1 | 1): Id {
+  const command = deck.resolveRelativeCommand(direction, { owned: false });
+  expect(command.kind).toBe("traverse");
+  if (command.kind !== "traverse") throw new Error("expected traversal");
+  deck.openInteraction(command.originIndex, command.direction);
+  deck.update(
+    snapshot(direction, {
+      phase: "settling",
+      targetIndex: command.targetIndex,
+      nearestIndex: command.targetIndex,
+    }),
+  );
+  deck.update(restAt(command.targetIndex));
+  deck.endInteraction();
+  return deck.idAt(command.targetIndex)!;
+}
+
+describe("Stacked Deck canonical ring", () => {
+  it("resolves cyclic neighbours and rotated physical order", () => {
+    expect(IDS.map((_id, index) => resolveStackedDeckNeighbor(index, 1, IDS.length))).toEqual([
+      1, 2, 3, 4, 0,
+    ]);
+    expect(IDS.map((_id, index) => resolveStackedDeckNeighbor(index, -1, IDS.length))).toEqual([
+      4, 0, 1, 2, 3,
+    ]);
+    expect(resolveStackedDeckOrder(2, IDS.length)).toEqual([2, 3, 4, 0, 1]);
+    expect(resolveStackedDeckOrder(4, IDS.length)).toEqual([4, 0, 1, 2, 3]);
+    expect(IDS.map((_id, index) => resolveStackedDeckDepth(2, index, IDS.length))).toEqual([
+      3, 4, 0, 1, 2,
+    ]);
+  });
+
+  it("makes forward and backward exact topology inverses from every ordinal", () => {
+    for (let start = 0; start < IDS.length; start += 1) {
+      const forward = resolveStackedDeckNeighbor(start, 1, IDS.length);
+      const restored = resolveStackedDeckNeighbor(forward, -1, IDS.length);
+      expect(restored).toBe(start);
+      expect(resolveStackedDeckOrder(restored, IDS.length)).toEqual(
+        resolveStackedDeckOrder(start, IDS.length),
+      );
+    }
+  });
+
+  it("keeps interior and ordinal-wrap geometry equivalent after identity remapping", () => {
+    for (const exchange of ["shuffle", "direct"] as const) {
+      for (const direction of [-1, 1] as const) {
+        const interiorOrigin = direction === 1 ? 2 : 3;
+        const wrapOrigin = direction === 1 ? 4 : 0;
+        for (const progress of SAMPLES) {
+          expect(normalizedFrame(wrapOrigin, direction, progress, exchange)).toEqual(
+            normalizedFrame(interiorOrigin, direction, progress, exchange),
+          );
+        }
+      }
+    }
+  });
+});
+
+describe("Stacked Deck local traversal", () => {
+  it("treats wrapped neighbours as one local pitch in both directions", () => {
+    for (const [originIndex, direction, targetIndex] of [
+      [4, 1, 0],
+      [0, -1, 4],
+    ] as const) {
+      const crossing = resolveStackedDeckTraversal(
         {
-          controllerPhase: phase,
-          itemCount: ITEM_COUNT,
-          physicalIndex,
-          settledIndex: 2,
-          traversalBounds: { minIndex: 1, maxIndex: 3 },
+          controllerPhase: "dragging",
+          itemCount: IDS.length,
+          originIndex,
+          physicalPosition: direction * 0.7,
+          settledIndex: originIndex,
+        },
+        createStackedDeckTraversal(originIndex, IDS.length),
+      );
+      expect(crossing).toMatchObject({
+        direction,
+        segmentOriginIndex: originIndex,
+        segmentTargetIndex: targetIndex,
+        visualTopIndex: originIndex,
+      });
+      expect(crossing.authoritativeIndex).toBe(targetIndex);
+    }
+  });
+
+  it("consumes one card and turns all remaining travel into finite overdrag", () => {
+    const overdrag = resolveStackedDeckTraversal(
+      {
+        controllerPhase: "dragging",
+        itemCount: IDS.length,
+        originIndex: 4,
+        physicalPosition: 8,
+        settledIndex: 4,
+      },
+      createStackedDeckTraversal(4, IDS.length),
+    );
+    expect(overdrag).toMatchObject({
+      authoritativeIndex: 0,
+      phase: "elastic",
+      segmentTargetIndex: null,
+      visualTopIndex: 0,
+    });
+    expect(overdrag.localProgress).toBe(1);
+    expect(Number.isFinite(overdrag.signedLocalDistance)).toBe(true);
+  });
+
+  it("reverses through the origin without opening a second card", () => {
+    const storage = createStackedDeckTraversal(4, IDS.length);
+    const at = (physicalPosition: number) =>
+      resolveStackedDeckTraversal(
+        {
+          controllerPhase: "dragging",
+          itemCount: IDS.length,
+          originIndex: 4,
+          physicalPosition,
+          settledIndex: 4,
         },
         storage,
       );
-      return resolveStackedDeckFrame(
-        { itemCount: ITEM_COUNT, traversal, tuning: TUNING },
-        frameStorage,
-      );
-    };
-
-    // Before the depth crossing the outgoing card remains physically dominant, but the active
-    // transaction is still contested for inspection.
-    const beforeCrossing = at(2.4);
-    expect(beforeCrossing.authoritativeIndex).toBe(2);
-    expect(isStackedDeckAuthorityStable(beforeCrossing)).toBe(false);
-
-    // Past the crossing the target owns both physical depth and semantics. Every persistent card
-    // remains present and opaque; stability is not inferred from hiding another representation.
-    const afterCrossing = at(2.7);
-    expect(afterCrossing.authoritativeIndex).toBe(3);
-    expect(afterCrossing.poses[2]).toMatchObject({ opacity: 1, visible: true });
-    expect(afterCrossing.poses[3]).toMatchObject({ opacity: 1, visible: true });
-    expect(afterCrossing.poses[3]!.layer).toBeGreaterThan(afterCrossing.poses[2]!.layer);
-    expect(isStackedDeckAuthorityStable(afterCrossing)).toBe(true);
-
-    // Rest is stable, and so is a segment resting exactly on its own anchor.
-    expect(isStackedDeckAuthorityStable(at(3, "idle"))).toBe(true);
-    // Overdrag holds its single card off the anchor, so it is deliberately not stable.
-    const stretched = at(3.4);
-    expect(stretched.phase).toBe("elastic");
-    expect(isStackedDeckAuthorityStable(stretched)).toBe(false);
-  });
-
-  it("makes inspection follow authority and ownership, never mechanical rest", () => {
-    const deck = model();
-    deck.beginInteraction();
-
-    // Before the physical depth crossing, neither card is eligible for inspection.
-    deck.update(snapshot(2.4, { phase: "settling", targetIndex: 3 }));
-    expect(deck.isInspectEligible({ index: 2, owned: false })).toBe(false);
-    expect(deck.isInspectEligible({ index: 3, owned: false })).toBe(false);
-
-    deck.update(snapshot(2.7, { phase: "settling", targetIndex: 3 }));
-
-    // Still settling, and eligible: semantics now agree with physical depth and nothing holds it.
-    expect(deck.state.currentIndex).toBe(3);
-    expect(deck.isInspectEligible({ index: 3, owned: false })).toBe(true);
-    // Only the authoritative card is ever inspectable.
-    expect(deck.isInspectEligible({ index: 2, owned: false })).toBe(false);
-    expect(deck.isInspectEligible({ index: 4, owned: false })).toBe(false);
-    // Physical ownership still disqualifies it, regardless of depth.
-    expect(deck.isInspectEligible({ index: 3, owned: true })).toBe(false);
+    expect(at(1.4).visualTopIndex).toBe(0);
+    expect(at(0)).toMatchObject({ direction: 0, visualTopIndex: 4 });
+    expect(at(-0.7)).toMatchObject({ direction: -1, segmentTargetIndex: 3 });
+    expect(at(-5)).toMatchObject({ phase: "elastic", visualTopIndex: 3 });
   });
 });
 
-describe("stacked deck interaction envelope", () => {
-  it("bounds one interaction to one adjacent card however far it travels", () => {
-    const deck = model();
-    expect(deck.traversalBounds).toBeUndefined();
-
-    expect(deck.beginInteraction()).toBe(2);
-    expect(deck.traversalBounds).toEqual({
-      minIndex: 2 - STACKED_DECK_ANCHOR_SKIP,
-      maxIndex: 2 + STACKED_DECK_ANCHOR_SKIP,
-    });
-
-    deck.update(snapshot(3));
-    expect(deck.state.visualTopIndex).toBe(3);
-
-    // Four cards of travel inside one interaction still exposes exactly one adjacent card.
-    const far = deck.update(snapshot(6));
-    expect(far.visualTopIndex).toBe(3);
-    expect(far.traversal.phase).toBe("elastic");
-    expect(far.traversal.segmentTargetIndex).toBeNull();
-    expect(far.currentIndex).toBe(3);
+describe("Stacked Deck command semantics", () => {
+  it("keeps next and previous available everywhere when more than one item exists", () => {
+    for (let start = 0; start < IDS.length; start += 1) {
+      const deck = model(start);
+      expect(deck.state.canNext).toBe(true);
+      expect(deck.state.canPrevious).toBe(true);
+      expect(deck.resolveRelativeCommand(1, { owned: false })).toMatchObject({
+        direction: 1,
+        originIndex: start,
+        targetIndex: (start + 1) % IDS.length,
+      });
+      expect(deck.resolveRelativeCommand(-1, { owned: false })).toMatchObject({
+        direction: -1,
+        originIndex: start,
+        targetIndex: (start - 1 + IDS.length) % IDS.length,
+      });
+    }
   });
 
-  it("reverses freely inside its own envelope but never past it", () => {
-    const deck = model();
-    deck.beginInteraction();
-    expect(deck.update(snapshot(3)).visualTopIndex).toBe(3);
-    expect(deck.update(snapshot(1)).visualTopIndex).toBe(1);
-    expect(deck.update(snapshot(-2)).traversal.phase).toBe("elastic");
-    expect(deck.state.visualTopIndex).toBe(1);
-  });
-
-  it("lets the next interaction start from the card already on top", () => {
-    const deck = model();
-    deck.beginInteraction();
-    deck.update(snapshot(2.95, { phase: "settling", targetIndex: 3 }));
-    // Re-grabbing mid-settlement measures from the card the eye already reads as current.
-    expect(deck.beginInteraction()).toBe(3);
-    expect(deck.traversalBounds).toEqual({ minIndex: 2, maxIndex: 4 });
-  });
-
-  it("frees the projection again once the interaction ends", () => {
-    const deck = model();
-    deck.beginInteraction();
-    deck.endInteraction();
-    expect(deck.traversalBounds).toBeUndefined();
-  });
-});
-
-describe("stacked deck command policy", () => {
-  it("steps one adjacent card from the destination already committed to", () => {
-    const deck = model();
+  it("keeps direction explicit for a two-item deck", () => {
+    const deck = model(0, ["a", "b"]);
     expect(deck.resolveRelativeCommand(1, { owned: false })).toEqual({
       kind: "traverse",
-      originIndex: 2,
-      targetIndex: 3,
-    });
-
-    // Committed to 3: the next distinct command chains from there rather than repeating.
-    deck.update(snapshot(2.2, { phase: "settling", targetIndex: 3, nearestIndex: 2 }));
-    expect(deck.state.pendingTargetIndex).toBe(3);
-    expect(deck.resolveRelativeCommand(1, { owned: false })).toEqual({
-      kind: "traverse",
-      originIndex: 3,
-      targetIndex: 4,
-    });
-  });
-
-  it("refuses relative travel at a boundary and while an input device holds the deck", () => {
-    const deck = model(0);
-    deck.update(restAt(0));
-    expect(deck.resolveRelativeCommand(-1, { owned: false })).toEqual({ kind: "none" });
-    expect(deck.resolveRelativeCommand(1, { owned: true })).toEqual({ kind: "none" });
-    expect(deck.state.canPrevious).toBe(false);
-    expect(deck.state.canNext).toBe(true);
-  });
-
-  it("treats an adjacent destination as one throw and anything further as a synchronization", () => {
-    const deck = model();
-    deck.update(restAt(2));
-    expect(deck.resolveAbsoluteCommand(3, { owned: false, atRest: true })).toEqual({
-      kind: "traverse",
-      originIndex: 2,
-      targetIndex: 3,
-    });
-    expect(deck.resolveAbsoluteCommand(0, { owned: false, atRest: true })).toEqual({
-      kind: "synchronize",
-      targetIndex: 0,
-      announce: true,
-    });
-    // The current card is a no-op only when there is nothing left to settle.
-    expect(deck.resolveAbsoluteCommand(2, { owned: false, atRest: true })).toEqual({
-      kind: "none",
-    });
-    expect(deck.resolveAbsoluteCommand(2, { owned: false, atRest: false })).toEqual({
-      kind: "synchronize",
-      targetIndex: 2,
-      announce: true,
-    });
-    // A held deck cannot be thrown by a command, but it can still be synchronized to a destination.
-    expect(deck.resolveAbsoluteCommand(3, { owned: true, atRest: false })).toEqual({
-      kind: "synchronize",
-      targetIndex: 3,
-      announce: true,
-    });
-  });
-});
-
-describe("stacked deck announcements", () => {
-  it("announces only durable settlement, never a transient visual top", () => {
-    const deck = model();
-    deck.beginInteraction();
-    expect(deck.update(snapshot(2.7)).announcementIndex).toBeNull();
-    expect(
-      deck.update(snapshot(2.95, { phase: "settling", targetIndex: 3 })).announcementIndex,
-    ).toBeNull();
-    expect(deck.update(restAt(3)).announcementIndex).toBe(3);
-    expect(deck.update(restAt(3)).announcementIndex).toBeNull();
-  });
-
-  it("keeps a silent synchronization silent and an asked-for one immediate", () => {
-    const deck = model();
-    expect(deck.synchronize(4)).toBe(4);
-    expect(deck.state.settledIndex).toBe(4);
-    expect(deck.state.currentIndex).toBe(4);
-    expect(deck.state.interactionOriginIndex).toBeNull();
-    expect(deck.state.announcementIndex).toBeNull();
-    expect(deck.update(restAt(4)).announcementIndex).toBeNull();
-
-    // An announced adoption is not a traversal, so it says so on the state it produced rather than
-    // waiting for an idle snapshot that may never be the next thing to arrive.
-    deck.synchronize(0, { announce: true });
-    expect(deck.state.announcementIndex).toBe(0);
-    // ...and having already spoken, it does not repeat itself when the deck reports rest.
-    expect(deck.update(restAt(0)).announcementIndex).toBeNull();
-  });
-
-  it("refuses a synchronization to an index that names no card", () => {
-    const deck = model();
-    expect(deck.synchronize(99)).toBe(-1);
-    expect(deck.synchronize(-4)).toBe(-1);
-    expect(deck.state.settledIndex).toBe(2);
-  });
-});
-
-describe("stacked deck synchronization is atomic", () => {
-  it("holds its adopted selection through an interaction opened on the next frame", () => {
-    const deck = model();
-    deck.synchronize(4);
-
-    // No remeasure, no repair snapshot: the very next thing that happens is a new interaction.
-    expect(deck.beginInteraction()).toBe(4);
-    const dragged = deck.update(snapshot(4.4, { phase: "dragging", nearestIndex: 4 }));
-    expect(dragged.settledIndex).toBe(4);
-    expect(dragged.currentIndex).toBe(4);
-    expect(dragged.pendingTargetIndex).toBeNull();
-    expect(dragged.announcementIndex).toBeNull();
-  });
-
-  it("holds it through a settling snapshot, and lets the next command step from the pending card", () => {
-    const deck = model();
-    deck.synchronize(4);
-
-    const settling = deck.update(snapshot(3.6, { phase: "settling", targetIndex: 3 }));
-    expect(settling.settledIndex).toBe(4);
-    expect(settling.pendingTargetIndex).toBe(3);
-    expect(settling.announcementIndex).toBeNull();
-
-    expect(deck.resolveRelativeCommand(-1, { owned: false })).toEqual({
-      kind: "traverse",
-      originIndex: 3,
-      targetIndex: 2,
-    });
-  });
-
-  it("does the same after an announced synchronization", () => {
-    const deck = model();
-    deck.synchronize(0, { announce: true });
-    expect(deck.state.announcementIndex).toBe(0);
-
-    const dragged = deck.update(snapshot(0.4, { phase: "dragging", nearestIndex: 0 }));
-    expect(dragged.settledIndex).toBe(0);
-    // The announcement belonged to the adoption, not to every state published afterwards.
-    expect(dragged.announcementIndex).toBeNull();
-
-    expect(deck.resolveRelativeCommand(1, { owned: false })).toEqual({
-      kind: "traverse",
+      direction: 1,
       originIndex: 0,
       targetIndex: 1,
     });
-    // Arriving where it already is stays silent; it is not a second change.
-    expect(deck.update(restAt(0)).announcementIndex).toBeNull();
+    expect(deck.resolveRelativeCommand(-1, { owned: false })).toEqual({
+      kind: "traverse",
+      direction: -1,
+      originIndex: 0,
+      targetIndex: 1,
+    });
+    expect(deck.resolveAbsoluteCommand(1, { owned: false, atRest: true })).toEqual({
+      kind: "synchronize",
+      targetIndex: 1,
+      announce: true,
+    });
+
+    for (const direction of [-1, 1] as const) {
+      const directed = model(0, ["a", "b"]);
+      directed.openInteraction(0, direction);
+      expect(
+        directed.update(snapshot(0, { phase: "settling", nearestIndex: 0, targetIndex: 1 }))
+          .interactionDirection,
+      ).toBe(direction);
+    }
+  });
+
+  it("animates only unambiguous cyclic adjacency and synchronizes other named destinations", () => {
+    const deck = model(4);
+    expect(deck.resolveAbsoluteCommand(0, { owned: false, atRest: true })).toMatchObject({
+      kind: "traverse",
+      direction: 1,
+      originIndex: 4,
+      targetIndex: 0,
+    });
+    expect(deck.resolveAbsoluteCommand(3, { owned: false, atRest: true })).toMatchObject({
+      kind: "traverse",
+      direction: -1,
+      originIndex: 4,
+      targetIndex: 3,
+    });
+    expect(deck.resolveAbsoluteCommand(1, { owned: false, atRest: true })).toEqual({
+      kind: "synchronize",
+      targetIndex: 1,
+      announce: true,
+    });
+  });
+
+  it("refuses relative commands while owned and for empty or one-item decks", () => {
+    expect(model().resolveRelativeCommand(1, { owned: true })).toEqual({ kind: "none" });
+    for (const ids of [[], ["a"]] as const) {
+      const deck = new StackedDeckModel<Id>({ ids });
+      expect(deck.state.canNext).toBe(false);
+      expect(deck.state.canPrevious).toBe(false);
+      expect(deck.resolveRelativeCommand(1, { owned: false })).toEqual({ kind: "none" });
+      expect(deck.resolveRelativeCommand(-1, { owned: false })).toEqual({ kind: "none" });
+    }
+  });
+
+  it("cycles for more than one revolution without ring or scalar state drift", () => {
+    const forward = model(0);
+    expect(Array.from({ length: 7 }, () => perform(forward, 1))).toEqual([
+      "b",
+      "c",
+      "d",
+      "e",
+      "a",
+      "b",
+      "c",
+    ]);
+    expect(forward.state.traversal.signedLocalDistance).toBe(0);
+    expect(forward.state.interactionOriginIndex).toBeNull();
+
+    const backward = model(0);
+    expect(Array.from({ length: 7 }, () => perform(backward, -1))).toEqual([
+      "e",
+      "d",
+      "c",
+      "b",
+      "a",
+      "e",
+      "d",
+    ]);
+    expect(backward.state.traversal.signedLocalDistance).toBe(0);
   });
 });
 
-describe("empty stacked deck", () => {
-  it("resolves nothing rather than inventing an item", () => {
-    const deck = new StackedDeckModel<DeckId>({ ids: [] });
-    expect(deck.traversalBounds).toBeUndefined();
-    expect(deck.resolveRelativeCommand(1, { owned: false })).toEqual({ kind: "none" });
-    expect(deck.resolveAbsoluteCommand(0, { owned: false, atRest: true })).toEqual({
-      kind: "none",
+describe("Stacked Deck selection, authority, and reconfiguration", () => {
+  it("publishes visual authority at crossover and durable selection only at rest", () => {
+    const deck = model(4);
+    deck.beginInteraction();
+    expect(deck.update(snapshot(0.4, { nearestIndex: 4 })).currentIndex).toBe(4);
+    const crossed = deck.update(
+      snapshot(0.7, { phase: "settling", targetIndex: 0, nearestIndex: 0 }),
+    );
+    expect(crossed.currentIndex).toBe(0);
+    expect(crossed.settledIndex).toBe(4);
+    expect(crossed.interactionDirection).toBe(1);
+    expect(deck.isInspectEligible({ index: 0, owned: false })).toBe(true);
+    expect(deck.update(restAt(0)).announcementIndex).toBe(0);
+  });
+
+  it("chains rapid commands from the pending cyclic target", () => {
+    const deck = model(4);
+    deck.update(snapshot(0.2, { phase: "settling", targetIndex: 0, nearestIndex: 4 }));
+    expect(deck.resolveRelativeCommand(1, { owned: false })).toMatchObject({
+      direction: 1,
+      originIndex: 0,
+      targetIndex: 1,
     });
-    expect(deck.isInspectEligible({ index: 0, owned: false })).toBe(false);
   });
 
-  it("names no item at all, on every index it publishes", () => {
-    const deck = new StackedDeckModel<DeckId>({ ids: [] });
-    const state = deck.state;
-    expect(state.settledIndex).toBe(-1);
-    expect(state.currentIndex).toBe(-1);
-    expect(state.visualTopIndex).toBe(-1);
-    expect(state.commandOriginIndex).toBe(-1);
-    expect(state.interactionOriginIndex).toBeNull();
-    expect(state.canPrevious).toBe(false);
-    expect(state.canNext).toBe(false);
-    expect(deck.idAt(0)).toBeUndefined();
-    expect(deck.synchronize(0)).toBe(-1);
-  });
-
-  it("survives being emptied and repopulated, and never announces the repopulation", () => {
-    const deck = model();
-    deck.update(restAt(2));
-
-    expect(deck.reconfigure([])).toBe(-1);
-    expect(deck.state.settledIndex).toBe(-1);
-    expect(deck.state.canNext).toBe(false);
-    // A command while empty is refused rather than resolved against an item that is not there.
-    expect(deck.resolveRelativeCommand(1, { owned: false })).toEqual({ kind: "none" });
-    expect(deck.beginInteraction()).toBe(-1);
-    expect(deck.traversalBounds).toBeUndefined();
-    expect(deck.update(restAt(0)).settledIndex).toBe(-1);
-
-    expect(deck.reconfigure(["a", "b"])).toBe(0);
-    expect(deck.state.settledIndex).toBe(0);
+  it("preserves semantic current ID and rebuilds canonical order after additions and reorder", () => {
+    const deck = model(2);
+    expect(deck.idAt(deck.state.currentIndex)).toBe("c");
+    expect(deck.reconfigure(["a", "b", "c", "d", "e"])).toBe(2);
+    expect(
+      resolveStackedDeckOrder(deck.state.currentIndex, deck.itemCount).map((i) => deck.idAt(i)),
+    ).toEqual(["c", "d", "e", "a", "b"]);
+    expect(deck.reconfigure(["e", "c", "a", "d", "b"])).toBe(1);
+    expect(
+      resolveStackedDeckOrder(deck.state.currentIndex, deck.itemCount).map((i) => deck.idAt(i)),
+    ).toEqual(["c", "a", "d", "b", "e"]);
     expect(deck.state.announcementIndex).toBeNull();
-    expect(deck.update(restAt(0)).announcementIndex).toBeNull();
-    expect(deck.state.canNext).toBe(true);
+  });
+
+  it("keeps empty synchronization and repopulation truthful", () => {
+    const deck = new StackedDeckModel<Id>({ ids: [] });
+    expect(deck.state).toMatchObject({
+      canNext: false,
+      canPrevious: false,
+      currentIndex: -1,
+      settledIndex: -1,
+      visualTopIndex: -1,
+    });
+    expect(deck.beginInteraction()).toBe(-1);
+    expect(deck.synchronize(0)).toBe(-1);
+    expect(deck.reconfigure(["a"])).toBe(0);
+    expect(deck.state.canNext).toBe(false);
+    expect(deck.state.announcementIndex).toBeNull();
   });
 });

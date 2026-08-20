@@ -290,7 +290,6 @@ defineExpose({
   next: deck.next,
   onKeyDown: deck.onKeyDown,
   owned: deck.owned,
-  paginationIndicator: deck.paginationIndicator,
   physicalIndex: deck.physicalIndex,
   pitch: deck.pitch,
   previous: deck.previous,

@@ -10,7 +10,6 @@ import { ComputedRef } from 'vue';
 import { ElasticityOptions } from '@snap-motion/core';
 import { MaybeRefOrGetter } from 'vue';
 import type { NavigationReason } from '@snap-motion/vue/motion';
-import { PaginationIndicatorState } from '@snap-motion/core';
 import { PublicProps } from 'vue';
 import { Ref } from 'vue';
 import type { SettlementDetails } from '@snap-motion/core';
@@ -73,7 +72,6 @@ export const StackedDeck: <TItem extends {
     next: () => boolean;
     onKeyDown: (event: KeyboardEvent) => void;
     owned: ComputedRef<boolean>;
-    paginationIndicator: ComputedRef<PaginationIndicatorState>;
     physicalIndex: ComputedRef<number>;
     pitch: ComputedRef<number>;
     previous: () => boolean;
@@ -150,8 +148,6 @@ export interface StackedDeckHandle<Id extends string> {
     // (undocumented)
     readonly owned: boolean;
     // (undocumented)
-    readonly paginationIndicator: PaginationIndicatorState;
-    // (undocumented)
     readonly physicalIndex: number;
     // (undocumented)
     readonly pitch: number;
@@ -172,6 +168,7 @@ export interface StackedDeckHandle<Id extends string> {
 
 // @public
 export interface StackedDeckPileLayer<Id extends string = string> {
+    readonly depth: number;
     // (undocumented)
     readonly id: Id;
     // (undocumented)
@@ -255,9 +252,6 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
     // (undocumented)
     onWheel(event: WheelEvent): void;
     readonly owned: ComputedRef<boolean>;
-    // (undocumented)
-    readonly paginationIndicator: ComputedRef<PaginationIndicatorState>;
-    // (undocumented)
     readonly physicalIndex: ComputedRef<number>;
     readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer<Id>[]>;
     // (undocumented)

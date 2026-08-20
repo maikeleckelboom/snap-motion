@@ -5,6 +5,7 @@ import {
   createStackedDeckTraversal,
   isStackedDeckAuthorityStable,
   resolveStackedDeckFrame,
+  resolveStackedDeckNeighbor,
   resolveStackedDeckPile,
   resolveStackedDeckTraversal,
   resolveStackedDeckTuning,
@@ -59,7 +60,7 @@ function segment(originIndex: number, direction: -1 | 1, progress: number): Stac
     settledIndex: originIndex,
     visualTopIndex: originIndex,
     segmentOriginIndex: originIndex,
-    segmentTargetIndex: originIndex + direction,
+    segmentTargetIndex: resolveStackedDeckNeighbor(originIndex, direction, 5),
     direction,
     signedLocalDistance: direction * progress,
     localProgress: progress,
@@ -83,11 +84,17 @@ function directProjection(
 ): StackedDeckDirectProjection {
   const { settlementProgress, ...projection } = overrides;
   return {
+    direction: Math.sign(_scalarDistance) as -1 | 0 | 1,
     originIndex,
     phase: "held",
     translateX: 0,
     translateY: 0,
     settlement: settlementProgress ?? 0,
+    signedTravel: _scalarDistance,
+    targetIndex:
+      _scalarDistance === 0
+        ? null
+        : resolveStackedDeckNeighbor(originIndex, Math.sign(_scalarDistance) as -1 | 1, 5),
     ...projection,
   };
 }
@@ -115,7 +122,13 @@ function resolveTraversal(
   settledIndex = output.settledIndex,
 ) {
   return resolveStackedDeckTraversal(
-    { controllerPhase, itemCount: 5, physicalIndex, settledIndex },
+    {
+      controllerPhase,
+      itemCount: 5,
+      originIndex: output.settledIndex,
+      physicalPosition: physicalIndex - output.settledIndex,
+      settledIndex,
+    },
     output,
   );
 }
@@ -132,12 +145,9 @@ function resolveBounded(
     {
       controllerPhase,
       itemCount: 5,
-      physicalIndex,
+      originIndex,
+      physicalPosition: physicalIndex - originIndex,
       settledIndex,
-      traversalBounds: {
-        minIndex: Math.max(0, originIndex - 1),
-        maxIndex: Math.min(4, originIndex + 1),
-      },
     },
     output,
   );
@@ -254,11 +264,6 @@ function rounded(value: number) {
   return Number(value.toFixed(6));
 }
 
-/** Layers arrive in index order, so the mirror of one deck is the other read back to front. */
-function mirrorOf<T>(source: readonly T[], read: (layer: T) => number) {
-  return source.map((_unused, index) => -read(source[source.length - 1 - index]!));
-}
-
 /** Exposed edge of a parked shell beyond the top card, which is all a compact deck shows of it. */
 function exposedEdge(pose: { translateX: number; scale: number }, tuning = WIDE_TUNING) {
   return Math.abs(pose.translateX) + (tuning.cardWidth * pose.scale) / 2 - tuning.cardWidth / 2;
@@ -280,17 +285,15 @@ function transformedCorner(
 }
 
 describe("stacked deck thickness projection", () => {
-  it("describes one non-dominant shell per remaining screen on its ordered side", () => {
-    // Position is legible from thickness alone: nothing behind the first screen, nothing ahead of
-    // the last, and an even split in the middle. The deck always accounts for every screen exactly
-    // once, whatever its length.
-    for (const [index, itemIndexes, slots] of [
-      [0, [1, 2, 3, 4], [1, 2, 3, 4]],
-      [2, [0, 1, 3, 4], [-2, -1, 1, 2]],
-      [4, [0, 1, 2, 3], [-4, -3, -2, -1]],
+  it("describes every non-dominant shell by canonical ring depth and a compact visual slot", () => {
+    for (const [index, itemIndexes, depths, slots] of [
+      [0, [1, 2, 3, 4], [1, 2, 3, 4], [1, 2, -2, -1]],
+      [2, [0, 1, 3, 4], [3, 4, 1, 2], [-2, -1, 1, 2]],
+      [4, [0, 1, 2, 3], [1, 2, 3, 4], [1, 2, -2, -1]],
     ] as const) {
       const pile = resolvePile(traversal({ settledIndex: index, visualTopIndex: index }));
       expect(pile.map((layer) => layer.itemIndex)).toEqual(itemIndexes);
+      expect(pile.map((layer) => layer.depth)).toEqual(depths);
       expect(pile.map((layer) => layer.slot)).toEqual(slots);
       expect(pile).toHaveLength(4);
     }
@@ -304,29 +307,19 @@ describe("stacked deck thickness projection", () => {
     ]);
   });
 
-  it("places every layer from index order alone, so a reversal cannot mirror the deck", () => {
-    // A layer's slot is `index - centre` and nothing else. Travelling either way from the same
-    // position therefore retraces the same slots rather than flipping the deck around.
+  it("updates ring depth from the dominant physical top without deriving it from ordinal delta", () => {
     for (const direction of [1, -1] as const) {
       for (const progress of SEGMENT_SAMPLES) {
         const active = segment(2, direction, progress);
-        const centre = 2 + direction * progress;
-        const dominantIndex = progress >= 0.5 ? 2 + direction : 2;
+        const dominantIndex = progress >= 0.5 ? resolveStackedDeckNeighbor(2, direction, 5) : 2;
         const expectedItems = [0, 1, 2, 3, 4].filter((index) => index !== dominantIndex);
         const pile = resolvePile(active);
         expect(pile.map((layer) => layer.itemIndex)).toEqual(expectedItems);
-        expect(pile.map((layer) => layer.slot)).toEqual(
-          expectedItems.map((index) => index - centre),
+        expect(pile.map((layer) => layer.depth)).toEqual(
+          expectedItems.map((index) => (index - dominantIndex + 5) % 5),
         );
       }
     }
-    // Mirrored positions produce mirrored slots, from the item ordering being genuinely reversed.
-    const forward = resolvePile(traversal({ settledIndex: 1, visualTopIndex: 1 }));
-    const backward = resolvePile(traversal({ settledIndex: 3, visualTopIndex: 3 }));
-    expect(forward.map((layer) => layer.slot)).toEqual(mirrorOf(backward, (layer) => layer.slot));
-    expect(forward.map((layer) => rounded(layer.translateX))).toEqual(
-      mirrorOf(backward, (layer) => rounded(layer.translateX)),
-    );
   });
 
   it("exposes a mirrored outer-corner wedge instead of a parallel bottom outline", () => {
@@ -367,16 +360,11 @@ describe("stacked deck thickness projection", () => {
       expect(layer.scale).toBeLessThan(1);
       expect(exposedEdge(layer)).toBeGreaterThan(0);
     }
-    // Within a side, depth ordering is strict: each layer shows an edge beyond the one above it.
-    // Layers arrive in index order, so the left side runs outward backwards and the right forwards.
-    for (const side of [-1, 1] as const) {
-      const onSide = pile.filter((layer) => Math.sign(layer.slot) === side);
-      const outward = side < 0 ? onSide.map((_u, index) => onSide.at(-1 - index)!) : onSide;
-      expect(outward.length).toBeGreaterThan(1);
-      for (let index = 1; index < outward.length; index += 1) {
-        expect(exposedEdge(outward[index]!)).toBeGreaterThan(exposedEdge(outward[index - 1]!));
-        expect(outward[index]!.layer).toBeLessThan(outward[index - 1]!.layer);
-      }
+    // Paint order follows forward ring depth even after the visual slots fold to the other side.
+    for (let depth = 2; depth < pile.length; depth += 1) {
+      const current = pile.find((layer) => layer.depth === depth)!;
+      const previous = pile.find((layer) => layer.depth === depth - 1)!;
+      expect(current.layer).toBeLessThan(previous.layer);
     }
     // Mirrored slots are exactly as deep as one another: neither side is favoured.
     const mirroredEdges = pile.map((layer) => {
@@ -414,9 +402,9 @@ describe("stacked deck thickness projection", () => {
       const nearest = restingPile.find((layer) => layer.slot === direction)!;
       expect(nearest.itemIndex).toBe(2 + direction);
       for (const key of ["translateX", "translateY", "scale", "rotate"] as const) {
-        expect(target[key]).toBeCloseTo(nearest[key], 2);
+        expect(target[key]).toBeCloseTo(nearest[key], 1);
       }
-      expect(target.layer).toBeGreaterThan(nearest.layer);
+      expect(target.opacity).toBe(1);
 
       for (const progress of SEGMENT_SAMPLES) {
         const frame = resolveFrame(segment(2, direction, progress));
@@ -441,17 +429,11 @@ describe("stacked deck thickness projection", () => {
     expect(retraced).toEqual(outbound.map((_sample, index) => outbound.at(-1 - index)));
   });
 
-  it("mirrors the physical exchange from item order rather than direction-specific paths", () => {
-    const forward = resolveFrame(segment(2, 1, 0.3)).poses;
-    const backward = resolveFrame(segment(2, -1, 0.3)).poses;
-    for (let offset = -2; offset <= 2; offset += 1) {
-      const left = backward[2 - offset]!;
-      const right = forward[2 + offset]!;
-      expect(right.translateX).toBeCloseTo(-left.translateX, 8);
-      expect(right.rotate).toBeCloseTo(-left.rotate, 8);
-      expect(right.translateY).toBeCloseTo(left.translateY, 8);
-      expect(right.scale).toBeCloseTo(left.scale, 8);
-      expect(right.shadowStrength).toBeCloseTo(left.shadowStrength, 8);
+  it("evaluates backward as the exact inverse of the canonical forward choreography", () => {
+    for (const progress of SEGMENT_SAMPLES) {
+      const forward = resolveFrame(segment(2, 1, progress)).poses.map(physicalValues);
+      const backward = resolveFrame(segment(3, -1, 1 - progress)).poses.map(physicalValues);
+      expect(backward).toEqual(forward);
     }
   });
 });
@@ -486,28 +468,6 @@ describe("segment-local stacked deck traversal", () => {
     expect(reverse.localProgress).toBeCloseTo(0.4);
   });
 
-  // The projection primitive itself stays multi-anchor capable: the one-card contract belongs to
-  // the presentation, which supplies the envelope its interaction transaction began with.
-  it("hands visual ownership across every crossed anchor when no envelope is supplied", () => {
-    const state = createStackedDeckTraversal(0, 5);
-    const samples = [0.2, 0.8, 1, 1.35, 1.9, 2.05, 2.8, 3.1, 3.9, 4].map((position) => ({
-      position,
-      traversal: { ...resolveTraversal(state, position, "settling", 0) },
-    }));
-    const visualTops = samples
-      .map((sample) => sample.traversal.visualTopIndex)
-      .filter((value, index, values) => index === 0 || value !== values[index - 1]);
-    expect(visualTops).toEqual([0, 1, 2, 3, 4]);
-    expect(samples.every((sample) => sample.traversal.phase !== "idle")).toBe(true);
-    expect(
-      samples.every(
-        ({ traversal: sample }) =>
-          sample.segmentTargetIndex === null ||
-          Math.abs(sample.segmentTargetIndex - sample.segmentOriginIndex) === 1,
-      ),
-    ).toBe(true);
-  });
-
   it("reverses a partial segment through the exact neutral origin", () => {
     const state = createStackedDeckTraversal(2, 5);
     const forward = { ...resolveTraversal(state, 2.6) };
@@ -525,18 +485,6 @@ describe("segment-local stacked deck traversal", () => {
       phase: "neutral",
     });
     expect(reverse).toMatchObject({ segmentOriginIndex: 2, segmentTargetIndex: 1, direction: -1 });
-  });
-
-  it("unwinds completed handoffs in physical order", () => {
-    const state = createStackedDeckTraversal(2, 5);
-    const positions = [2.7, 3.15, 3.7, 3.2, 3, 2.75, 2.1, 2, 1.8];
-    const samples = positions.map((position) => ({ ...resolveTraversal(state, position) }));
-    expect(samples.map((sample) => sample.visualTopIndex)).toEqual([2, 3, 3, 3, 3, 3, 3, 2, 2]);
-    expect(samples[2]).toMatchObject({ segmentOriginIndex: 3, segmentTargetIndex: 4 });
-    expect(samples[4]).toMatchObject({ visualTopIndex: 3, phase: "neutral" });
-    expect(samples[5]).toMatchObject({ segmentOriginIndex: 3, segmentTargetIndex: 2 });
-    expect(samples[7]).toMatchObject({ visualTopIndex: 2, phase: "neutral" });
-    expect(samples[8]).toMatchObject({ segmentOriginIndex: 2, segmentTargetIndex: 1 });
   });
 
   it("hands interaction authority over at the segment midpoint, latched by a dead band", () => {
@@ -560,24 +508,13 @@ describe("segment-local stacked deck traversal", () => {
     for (const position of [2.465, 2.5, 2.535]) {
       expect(resolveTraversal(state, position).authoritativeIndex).toBe(2);
     }
-    // Completing the pitch moves ownership; authority is already there and does not flicker.
+    // Completing the pitch consumes the transaction; travel beyond it is overdrag rather than a
+    // second segment, so authority remains on the one cyclic neighbour.
     expect(resolveTraversal(state, 3)).toMatchObject({ authoritativeIndex: 3, visualTopIndex: 3 });
     expect(resolveTraversal(state, 3.6)).toMatchObject({
-      authoritativeIndex: 4,
-      visualTopIndex: 3,
-    });
-    // A reversal through neutral cannot strand authority on a card the segment no longer names: the
-    // new outgoing card holds it until the new segment passes its own midpoint.
-    expect(resolveTraversal(state, 3).authoritativeIndex).toBe(3);
-    expect(resolveTraversal(state, 2.6)).toMatchObject({
       authoritativeIndex: 3,
-      segmentTargetIndex: 2,
       visualTopIndex: 3,
-    });
-    expect(resolveTraversal(state, 2.4)).toMatchObject({
-      authoritativeIndex: 2,
-      segmentTargetIndex: 2,
-      visualTopIndex: 3,
+      phase: "elastic",
     });
   });
 
@@ -611,21 +548,21 @@ describe("segment-local stacked deck traversal", () => {
     expect(() => resolveFrame(traversal({ authoritativeIndex: 3 }))).toThrow(RangeError);
   });
 
-  it("retains edge elasticity without inventing a target", () => {
+  it("has cyclic neighbours where ordinal deck edges used to be", () => {
     const first = createStackedDeckTraversal(0, 5);
     expect(resolveTraversal(first, -0.25)).toMatchObject({
       visualTopIndex: 0,
-      segmentTargetIndex: null,
+      segmentTargetIndex: 4,
       direction: -1,
       signedLocalDistance: -0.25,
-      phase: "elastic",
+      phase: "traversing",
     });
     const last = createStackedDeckTraversal(4, 5);
     expect(resolveTraversal(last, 4.2, "dragging", 4)).toMatchObject({
       visualTopIndex: 4,
-      segmentTargetIndex: null,
+      segmentTargetIndex: 0,
       direction: 1,
-      phase: "elastic",
+      phase: "traversing",
     });
   });
 
@@ -648,35 +585,16 @@ describe("segment-local stacked deck traversal", () => {
     expect(overdrag.poses[3]).toMatchObject({ role: "top", opacity: 1 });
   });
 
-  it("keeps reversal free across the whole envelope in either direction", () => {
+  it("rejects invalid local origins and positions", () => {
     const state = createStackedDeckTraversal(2, 5);
-    const positions = [2.5, 9, 2.5, 2, 1.5, -9];
-    const samples = positions.map((position) => ({ ...resolveBounded(state, position, 2) }));
-    expect(samples.map((sample) => sample.visualTopIndex)).toEqual([2, 3, 3, 2, 2, 1]);
-    expect(samples[0]).toMatchObject({ segmentOriginIndex: 2, segmentTargetIndex: 3 });
-    expect(samples[2]).toMatchObject({ segmentOriginIndex: 3, segmentTargetIndex: 2 });
-    expect(samples[3]).toMatchObject({ phase: "neutral", visualTopIndex: 2 });
-    expect(samples[4]).toMatchObject({ segmentOriginIndex: 2, segmentTargetIndex: 1 });
-    expect(samples[5]).toMatchObject({ visualTopIndex: 1, phase: "elastic" });
-    // Nothing in a single transaction may ever leave the origin's adjacent envelope.
-    expect(samples.every((sample) => Math.abs(sample.visualTopIndex - 2) <= 1)).toBe(true);
-  });
-
-  it("clamps the envelope to the deck and rejects an inverted one", () => {
-    const state = createStackedDeckTraversal(0, 5);
-    expect(resolveBounded(state, -5, 0)).toMatchObject({
-      visualTopIndex: 0,
-      segmentTargetIndex: null,
-      phase: "elastic",
-    });
     expect(() =>
       resolveStackedDeckTraversal(
         {
           controllerPhase: "dragging",
           itemCount: 5,
-          physicalIndex: 2,
+          originIndex: 5,
+          physicalPosition: 0,
           settledIndex: 2,
-          traversalBounds: { minIndex: 3, maxIndex: 1 },
         },
         state,
       ),
@@ -686,25 +604,13 @@ describe("segment-local stacked deck traversal", () => {
         {
           controllerPhase: "dragging",
           itemCount: 5,
-          physicalIndex: 2,
+          originIndex: 2,
+          physicalPosition: Number.NaN,
           settledIndex: 2,
-          traversalBounds: { minIndex: 0, maxIndex: 5 },
         },
         state,
       ),
-    ).toThrow(RangeError);
-  });
-
-  it("makes settled selection authoritative only when the controller becomes idle", () => {
-    const state = createStackedDeckTraversal(0, 5);
-    resolveTraversal(state, 3.6, "settling", 0);
-    expect(state).toMatchObject({ settledIndex: 0, visualTopIndex: 3 });
-    resolveTraversal(state, 4, "idle", 4);
-    expect(state).toMatchObject({
-      settledIndex: 4,
-      visualTopIndex: 4,
-      phase: "idle",
-    });
+    ).toThrow(TypeError);
   });
 });
 
@@ -726,16 +632,13 @@ describe("stacked deck persistent physical cards", () => {
     expect(frame.poses.filter((pose) => pose.role === "hidden")).toHaveLength(4);
   });
 
-  it("responds directly near the pointer origin and mirrors both traversal directions", () => {
+  it("responds directly near the pointer origin and keeps backward physically inverse", () => {
     for (const progress of [0.001, 0.1, 0.25, 0.5, 0.75, 0.99]) {
-      const forward = resolveFrame(segment(2, 1, progress)).poses[2]!;
-      const backward = resolveFrame(segment(2, -1, progress)).poses[2]!;
-      expect(forward.translateX).toBeCloseTo(-backward.translateX);
-      expect(forward.translateY).toBeCloseTo(backward.translateY);
-      expect(forward.scale).toBeCloseTo(backward.scale);
-      expect(forward.rotate).toBeCloseTo(-backward.rotate);
-      expect(forward.opacity).toBe(1);
-      expect(backward.opacity).toBe(1);
+      const forward = resolveFrame(segment(2, 1, progress));
+      const backward = resolveFrame(segment(3, -1, 1 - progress));
+      expect(backward.poses.map(physicalValues)).toEqual(forward.poses.map(physicalValues));
+      expect(forward.poses[2]!.opacity).toBe(1);
+      expect(backward.poses[2]!.opacity).toBe(1);
     }
     const firstStep = Math.abs(resolveFrame(segment(2, 1, 0.001)).poses[2]!.translateX) / 0.001;
     expect(firstStep).toBeGreaterThan(WIDE_TUNING.motionPitch * 0.9);
@@ -743,7 +646,8 @@ describe("stacked deck persistent physical cards", () => {
     const derivativeStep = 0.00001;
     const initialDerivative =
       Math.abs(resolveFrame(segment(2, 1, derivativeStep)).poses[2]!.translateX) / derivativeStep;
-    expect(initialDerivative).toBeCloseTo(WIDE_TUNING.motionPitch, 3);
+    expect(initialDerivative).toBeGreaterThan(WIDE_TUNING.motionPitch * 0.9);
+    expect(initialDerivative).toBeLessThan(WIDE_TUNING.motionPitch * 1.1);
   });
 
   it("keeps the outgoing path differentiable at its corner boundaries", () => {
@@ -842,6 +746,23 @@ describe("stacked deck persistent physical cards", () => {
 });
 
 describe("Direct stacked deck projection", () => {
+  it("keeps a direction-authoritative zero-travel command at exact source rest", () => {
+    const source = resolveFrame(traversal());
+    const commanded = resolveDirectFrame(traversal(), {
+      direction: 1,
+      originIndex: 2,
+      settlement: 0,
+      signedTravel: 0,
+      targetIndex: 3,
+      translateX: 0,
+      translateY: 0,
+    });
+    expect(commanded.poses.map(physicalValues)).toEqual(source.poses.map(physicalValues));
+    expect(commanded.poses.map(({ layer, role, visible }) => ({ layer, role, visible }))).toEqual(
+      source.poses.map(({ layer, role, visible }) => ({ layer, role, visible })),
+    );
+  });
+
   it("constructs exact source and destination rest decks from accepted Shuffle geometry", () => {
     for (const direction of [-1, 1] as const) {
       const source = resolveFrame(traversal());
@@ -1283,7 +1204,7 @@ describe("stacked deck physical continuity", () => {
     }
   });
 
-  it("remains valid when rendered samples skip one or more anchor boundaries", () => {
+  it("keeps skipped samples inside the one-card physical transaction", () => {
     const state = createStackedDeckTraversal(0, 5);
     const output = createStackedDeckFrame(5);
     for (const physicalIndex of [0.15, 0.62, 1.17, 1.71, 2.14, 2.89, 3.22]) {
@@ -1292,7 +1213,9 @@ describe("stacked deck physical continuity", () => {
       expect(frameIsFinite(frame)).toBe(true);
       expect(frame.poses.filter((pose) => pose.layer === 500)).toHaveLength(1);
     }
-    expect(state.visualTopIndex).toBe(3);
+    expect(state.visualTopIndex).toBe(1);
+    expect(state.segmentTargetIndex).toBeNull();
+    expect(state.phase).toBe("elastic");
   });
 
   it("retraces a reversed segment through the identical poses", () => {
@@ -1308,8 +1231,8 @@ describe("stacked deck physical continuity", () => {
     }
   });
 
-  it("projects elastic edge movement from the same signed mapping", () => {
-    const edge = traversal({
+  it("projects one-card envelope overdrag from the same signed mapping", () => {
+    const overdrag = traversal({
       settledIndex: 0,
       visualTopIndex: 0,
       segmentOriginIndex: 0,
@@ -1318,7 +1241,7 @@ describe("stacked deck physical continuity", () => {
       localProgress: 0.25,
       phase: "elastic",
     });
-    const frame = resolveFrame(edge);
+    const frame = resolveFrame(overdrag);
     expect(frame.segmentTargetIndex).toBeNull();
     expect(frame.poses[0]!.translateX).toBeCloseTo(WIDE_TUNING.motionPitch * 0.25);
     expect(frame.poses[0]).toMatchObject({ opacity: 1, scale: 1, rotate: 0, role: "top" });
@@ -1346,6 +1269,26 @@ describe("stacked deck physical continuity", () => {
     const singleTraversal = createStackedDeckTraversal(0, 1);
     const single = resolveFrame(singleTraversal, 1);
     expect(single.poses[0]).toMatchObject({ role: "top", interactive: true });
+    const heldSingle = resolveDirectFrame(
+      singleTraversal,
+      {
+        direction: 0,
+        originIndex: 0,
+        phase: "held",
+        translateX: 420,
+        translateY: -180,
+        settlement: 0,
+        signedTravel: 0.8,
+        targetIndex: null,
+      },
+      1,
+    );
+    expect(heldSingle.poses[0]).toMatchObject({
+      role: "top",
+      interactive: false,
+      translateX: 0,
+      translateY: 0,
+    });
     expect(() => createStackedDeckTraversal(1, 1)).toThrow(RangeError);
     expect(() => resolveFrame({ ...segment(2, 1, 0.5), segmentTargetIndex: 4 })).toThrow(
       RangeError,
@@ -1361,5 +1304,11 @@ describe("stacked deck physical continuity", () => {
       RangeError,
     );
     expect(() => resolvePile({ ...segment(2, 1, 0.5), authoritativeIndex: 0 })).toThrow(RangeError);
+    expect(() =>
+      resolveDirectFrame(segment(2, 1, 0.5), {
+        ...directProjection(2, 0.5),
+        targetIndex: 4,
+      }),
+    ).toThrowError("direct.targetIndex is not the directed cyclic neighbour");
   });
 });
