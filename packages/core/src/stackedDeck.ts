@@ -938,6 +938,20 @@ function directClearanceEnvelope(progress: number): number {
 }
 
 /**
+ * The paint layer a shell keeps when a new interaction resumes it from a continuity snapshot.
+ *
+ * A snapshot records where the pile *was*, and restoring it is what keeps an interrupted shell from
+ * teleporting. Physical ownership is not part of that record: {@link HAND_LAYER} means "the card
+ * someone is holding", and the hand that held this one has let go. Keeping its claim would put two
+ * shells in that layer at once, leaving document order — a fact about the item collection, not
+ * about the deck — to decide which of them is in front, and would invert their order again on the
+ * very next frame, when the resumed shell resolves as this interaction's target.
+ */
+function resumedLayer(layer: number): number {
+  return Math.min(layer, TOP_LAYER);
+}
+
+/**
  * A backward Direct target begins at the rear of the ring. It first recedes beneath the nearly
  * stationary hand-owned source, changes paint order while that source contains its complete body,
  * then expands into the newly vacated top position. This keeps the target reveal subordinate to the
@@ -959,13 +973,14 @@ function moveDirectTarget(
   ) {
     const sourceLayer = target.layer;
     movePoseGeometry(target, continuityPose, Math.min(1, progress / continuityProgress));
-    target.layer = progress < continuityProgress ? sourceLayer : continuityPose.layer;
+    target.layer = progress < continuityProgress ? sourceLayer : resumedLayer(continuityPose.layer);
     role = progress < continuityProgress ? "hidden" : continuityPose.role;
   } else if (continuityPose !== undefined && continuityProgress > TRAVERSAL_EPSILON) {
     movePoseGeometry(target, continuityPose, 1);
     const resumedProgress = (progress - continuityProgress) / (1 - continuityProgress);
     movePoseGeometry(target, directTopPose, smoothstep(resumedProgress));
-    target.layer = resumedProgress <= TRAVERSAL_EPSILON ? continuityPose.layer : TOP_LAYER;
+    target.layer =
+      resumedProgress <= TRAVERSAL_EPSILON ? resumedLayer(continuityPose.layer) : TOP_LAYER;
   } else if (sourceSlot > 0) {
     // The forward neighbour already owns the highest subordinate depth. Raising its numeric layer
     // changes no relative paint order, so it can retain the compact Direct reveal without a detour.
@@ -1000,12 +1015,12 @@ function moveDirectBackground(
   if (continuityPose !== undefined && continuityProgress > TRAVERSAL_EPSILON) {
     if (progress > continuityProgress) {
       movePoseGeometry(pose, continuityPose, 1);
-      pose.layer = continuityPose.layer;
+      pose.layer = resumedLayer(continuityPose.layer);
       progress = (progress - continuityProgress) / (1 - continuityProgress);
     } else {
       const sourceLayer = pose.layer;
       movePoseGeometry(pose, continuityPose, Math.min(1, progress / continuityProgress));
-      pose.layer = progress < continuityProgress ? sourceLayer : continuityPose.layer;
+      pose.layer = progress < continuityProgress ? sourceLayer : resumedLayer(continuityPose.layer);
       return;
     }
   }
