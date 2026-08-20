@@ -90,6 +90,15 @@ export interface ControllerDragOptions<Id extends SemanticId = SemanticId> {
    * one pass it explicitly so rendered and controller position cannot diverge.
    */
   readonly originId?: Id;
+  /**
+   * Establish the origin anchor itself as scalar displacement zero.
+   *
+   * The default preserves the mass's current scalar position, which is what ordinary interruption
+   * wants. A renderer that has independently captured the current physical frame may instead start
+   * a genuinely new transaction at its semantic anchor while using that capture for visual
+   * continuity. This resets position and velocity; it never preserves prior travel as new input.
+   */
+  readonly resetPositionToOrigin?: boolean;
 }
 
 export interface ControllerMoveOptions {

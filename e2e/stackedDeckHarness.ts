@@ -239,6 +239,23 @@ export async function releaseHeldAtRest(page: Page, held: HeldTraversal, physica
 
 export async function readFrame(page: Page) {
   return viewport(page).evaluate((element) => {
+    const diagnostics = new Map(
+      [...document.querySelectorAll("dt")].map((term) => [
+        term.textContent?.trim() ?? "",
+        term.nextElementSibling?.textContent?.trim() ?? "",
+      ]),
+    );
+    const anchors = [...document.querySelectorAll<HTMLElement>(".anchor-table li")].map((row) => {
+      const fields = [...row.children].map((field) => field.textContent?.trim() ?? "");
+      return {
+        id: fields[0] ?? "",
+        order: Number(fields[2]?.replace("#", "")),
+        position: Number(fields[1]),
+      };
+    });
+    const semanticIds = [
+      ...element.querySelectorAll<HTMLElement>("[data-snap-motion-stacked-deck-card]"),
+    ].map((card) => card.dataset.itemId ?? "");
     const stageBox = element.getBoundingClientRect();
     const interactionOriginIndex = Number(element.dataset.interactionOriginIndex);
     const settledIndex = Number(element.dataset.settledIndex);
@@ -286,19 +303,33 @@ export async function readFrame(page: Page) {
     );
     const targetAttribute = element.getAttribute("data-segment-target-index");
     return {
+      activeId: element.dataset.activeId ?? "",
       authoritativeIndex: Number(element.dataset.authoritativeIndex),
       authorityStable: element.dataset.authorityStable === "true",
       caption:
         document.querySelector<HTMLElement>('[data-testid="stacked-deck-caption"]')?.innerText ??
         "",
       cardWidth: Number(element.dataset.cardWidth),
+      commandOriginIndex: Number(element.dataset.keyboardTargetIndex),
+      controllerActiveId: diagnostics.get("Nearest anchor") ?? null,
+      controllerAnchors: anchors,
       controllerPhase: element.dataset.phase ?? "",
+      controllerPosition: Number(element.dataset.position),
+      controllerTargetId: element.dataset.targetId ?? "",
+      controllerVelocity: Number.parseFloat(diagnostics.get("Velocity") ?? "NaN"),
       inspectEnabled: !document.querySelector<HTMLButtonElement>(
         '[data-testid="stacked-deck-inspect"]',
       )?.disabled,
       interactionOwned: element.dataset.interactionOwned === "true",
       interactionOriginIndex,
       maxAnchorSkip: Number(element.dataset.maxAnchorSkip),
+      pendingTargetIndex: Number(element.dataset.pendingIndex),
+      physicalCoordinate: {
+        ids: anchors.toSorted((left, right) => left.order - right.order).map((anchor) => anchor.id),
+        originIndex: diagnosticOrigin,
+        originOrder:
+          anchors.find((anchor) => anchor.id === semanticIds[diagnosticOrigin])?.order ?? null,
+      },
       direction: Number(element.dataset.segmentDirection),
       physicalIndex: diagnosticOrigin + localPhysicalPosition,
       physicalPosition: localPhysicalPosition,
@@ -307,6 +338,7 @@ export async function readFrame(page: Page) {
       segmentPhase: element.dataset.segmentPhase ?? "",
       segmentTargetIndex: targetAttribute === null ? null : Number(targetAttribute),
       settledIndex,
+      settledId: element.dataset.settledId ?? "",
       signedLocalDistance: Number(element.dataset.signedLocalDistance),
       stageBottom: stageBox.bottom,
       stageLeft: stageBox.left,
@@ -314,6 +346,7 @@ export async function readFrame(page: Page) {
       stageTop: stageBox.top,
       stageWidth: stageBox.width,
       visualTopIndex: Number(element.dataset.visualTopIndex),
+      visualId: element.dataset.visualId ?? "",
       poses,
     };
   });

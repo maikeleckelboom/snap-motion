@@ -240,14 +240,16 @@ export class SnapController<Id extends SemanticId = SemanticId> {
   beginDrag(options: ControllerDragOptions<Id> = {}): void {
     this.#assertUsable();
     this.#stopPlayback();
+    const requestedOrigin = findAnchorById(this.#anchors, options.originId);
+    const dragAnchor = requestedOrigin ?? this.#active ?? this.#target;
+    if (options.resetPositionToOrigin === true && requestedOrigin !== null) {
+      this.#position = requestedOrigin.position;
+      this.#active = requestedOrigin;
+    }
     this.#phase = "dragging";
     this.#velocity = 0;
     this.#dragStartPosition = this.#position;
-    this.#dragAnchorId =
-      findAnchorById(this.#anchors, options.originId)?.id ??
-      this.#active?.id ??
-      this.#target?.id ??
-      null;
+    this.#dragAnchorId = dragAnchor?.id ?? null;
     this.#target = null;
     this.#emit();
   }

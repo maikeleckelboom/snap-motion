@@ -118,6 +118,31 @@ describe("SnapController", () => {
     expect(unknownOrigin.position).toBe(-200);
   });
 
+  it("can establish a fresh scalar zero at an explicit semantic origin", () => {
+    const { controller, driver } = createController({
+      initialTargetId: "c",
+      initialPosition: -146,
+      releasePolicy: { maxAnchorSkip: 1 },
+    });
+    controller.moveTo("b");
+    driver.update(-132, 480);
+
+    // The renderer may independently preserve the interrupted frame. The new transaction itself
+    // begins on B, with none of the previous spring's position or velocity becoming hand travel.
+    controller.beginDrag({ originId: "b", resetPositionToOrigin: true });
+    expect(driver.latest.stopped).toBe(true);
+    expect(controller.snapshot).toMatchObject({
+      active: { id: "b" },
+      phase: "dragging",
+      position: -100,
+      target: null,
+      velocity: 0,
+    });
+    controller.dragBy(-80);
+    expect(controller.position).toBe(-180);
+    expect(controller.release(0)?.id).toBe("c");
+  });
+
   it("resists rather than clamps interior envelope limits when configured", () => {
     const { controller } = createController({
       initialTargetId: "b",

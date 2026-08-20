@@ -19,6 +19,7 @@
     "test:e2e": "playwright test",
     "visual:stacked-deck": "node scripts/runStackedDeckVisual.ts",
     "visual:stacked-deck:direct": "node scripts/runStackedDeckDirectVisual.ts",
+    "visual:stacked-deck:takeover": "node scripts/runStackedDeckTakeoverVisual.ts",
     "visual:stacked-deck:compare": "node scripts/compareStackedDeckVisual.ts",
     "visual:stacked-deck:reversal": "node scripts/runStackedDeckReversalVisual.ts",
     "visual:stacked-deck:strips": "node scripts/stackedDeckDirectStrips.ts",

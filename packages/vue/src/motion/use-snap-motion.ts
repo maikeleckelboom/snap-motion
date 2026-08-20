@@ -24,6 +24,8 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<
   /** Called before the first scalar write in either direction of one pointer interaction. */
   onPointerTravelDirection?: (direction: -1 | 1) => void;
   onReleaseTargetSelected?: (id: Id | undefined) => void;
+  /** Whether a new pointer transaction resets the scalar mass to its resolved origin anchor. */
+  resetDragPositionToOrigin?: () => boolean;
   reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
   /**
    * Resolves the anchor a new drag is measured from. It is called once when the controller takes
@@ -47,6 +49,7 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     pointerDeltaMultiplier,
     onPointerTravelDirection,
     onReleaseTargetSelected,
+    resetDragPositionToOrigin,
     reducedMotionOverride,
     resolveDragOrigin,
     resolveReleaseTarget,
@@ -85,7 +88,10 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     onBegin(sample) {
       const current = controller.getSnapshot();
       dragOriginId = resolveDragOrigin?.() ?? current.target?.id ?? current.active?.id;
-      controller.beginDrag(dragOriginId === undefined ? {} : { originId: dragOriginId });
+      controller.beginDrag({
+        ...(dragOriginId === undefined ? {} : { originId: dragOriginId }),
+        ...(resetDragPositionToOrigin?.() === true ? { resetPositionToOrigin: true } : {}),
+      });
       pointerTravelDirection = 0;
       velocityTracker.reset();
       velocityTracker.add(sample.position, sample.time);

@@ -42,9 +42,10 @@ export interface StackedDeckDirectProjection {
    * frame rather than first teleporting a still-parking shell to nominal rest geometry.
    */
   readonly continuity?: null | {
-    /** Endpoint interpolation progress of the new interaction at the captured frame. */
-    readonly progress: number;
-    /** Complete resolved pile at interruption; captured once when the new hand takes ownership. */
+    /**
+     * Complete resolved pile at interruption; captured once when the new hand takes ownership.
+     * It is the rendered frame at new travel zero, never scalar progress inherited from history.
+     */
     readonly poses: readonly StackedDeckPose[];
   };
 }
@@ -938,17 +939,17 @@ function directClearanceEnvelope(progress: number): number {
 }
 
 /**
- * The paint layer a shell keeps when a new interaction resumes it from a continuity snapshot.
- *
- * A snapshot records where the pile *was*, and restoring it is what keeps an interrupted shell from
- * teleporting. Physical ownership is not part of that record: {@link HAND_LAYER} means "the card
- * someone is holding", and the hand that held this one has let go. Keeping its claim would put two
- * shells in that layer at once, leaving document order — a fact about the item collection, not
- * about the deck — to decide which of them is in front, and would invert their order again on the
- * very next frame, when the resumed shell resolves as this interaction's target.
+ * Restores captured physical state while assigning ownership in the new transaction's layer band.
+ * A captured pose keeps geometry, material, and relative history, but never a previous hand's
+ * {@link HAND_LAYER}; background continuity is additionally kept below this interaction's target.
  */
-function resumedLayer(layer: number): number {
-  return Math.min(layer, TOP_LAYER);
+function restoreContinuityPose(
+  target: MutableStackedDeckPose,
+  captured: StackedDeckPose,
+  maximumLayer: number,
+): void {
+  Object.assign(target, captured);
+  target.layer = Math.min(captured.layer, maximumLayer);
 }
 
 /**
@@ -962,25 +963,14 @@ function moveDirectTarget(
   sourceSlot: number,
   progress: number,
   continuityPose?: StackedDeckPose,
-  continuityProgress = 0,
 ): void {
   setTopPose(resetPose(directTopPose), false);
   let role: StackedDeckRole = progress < 1 - TRAVERSAL_EPSILON ? "target" : "top";
-  if (
-    continuityPose !== undefined &&
-    continuityProgress > TRAVERSAL_EPSILON &&
-    progress <= continuityProgress
-  ) {
-    const sourceLayer = target.layer;
-    movePoseGeometry(target, continuityPose, Math.min(1, progress / continuityProgress));
-    target.layer = progress < continuityProgress ? sourceLayer : resumedLayer(continuityPose.layer);
-    role = progress < continuityProgress ? "hidden" : continuityPose.role;
-  } else if (continuityPose !== undefined && continuityProgress > TRAVERSAL_EPSILON) {
-    movePoseGeometry(target, continuityPose, 1);
-    const resumedProgress = (progress - continuityProgress) / (1 - continuityProgress);
-    movePoseGeometry(target, directTopPose, smoothstep(resumedProgress));
-    target.layer =
-      resumedProgress <= TRAVERSAL_EPSILON ? resumedLayer(continuityPose.layer) : TOP_LAYER;
+  if (continuityPose !== undefined) {
+    restoreContinuityPose(target, continuityPose, TOP_LAYER);
+    if (progress <= TRAVERSAL_EPSILON) return;
+    movePoseGeometry(target, directTopPose, smoothstep(progress));
+    target.layer = TOP_LAYER;
   } else if (sourceSlot > 0) {
     // The forward neighbour already owns the highest subordinate depth. Raising its numeric layer
     // changes no relative paint order, so it can retain the compact Direct reveal without a detour.
@@ -1007,22 +997,12 @@ function moveDirectBackground(
   destination: StackedDeckPose,
   cover: StackedDeckPose,
   remainOccluded: boolean,
-  initialProgress: number,
-  continuityProgress: number,
+  progress: number,
   continuityPose?: StackedDeckPose,
 ): void {
-  let progress = initialProgress;
-  if (continuityPose !== undefined && continuityProgress > TRAVERSAL_EPSILON) {
-    if (progress > continuityProgress) {
-      movePoseGeometry(pose, continuityPose, 1);
-      pose.layer = resumedLayer(continuityPose.layer);
-      progress = (progress - continuityProgress) / (1 - continuityProgress);
-    } else {
-      const sourceLayer = pose.layer;
-      movePoseGeometry(pose, continuityPose, Math.min(1, progress / continuityProgress));
-      pose.layer = progress < continuityProgress ? sourceLayer : resumedLayer(continuityPose.layer);
-      return;
-    }
+  if (continuityPose !== undefined) {
+    restoreContinuityPose(pose, continuityPose, TARGET_LAYER);
+    if (progress <= TRAVERSAL_EPSILON) return;
   }
   if (remainOccluded) {
     const sourceLayer = pose.layer;
@@ -1065,8 +1045,13 @@ function setDirectFrame(
   // whatever it last painted, and the deck reads as frozen rather than as broken — so a settlement
   // that is not a number is the release frame rather than a shell nothing can move again.
   const settlement = clamp(projection.settlement, 0, 1) || 0;
+  const continuity = projection.continuity;
+  const outgoingContinuity = continuity?.poses[projection.originIndex];
+  if (outgoingContinuity !== undefined && phase !== undefined) {
+    const releaseRetention = phase === "returning" ? 1 - settlement : 1;
+    movePoseGeometry(outgoing, outgoingContinuity, (1 - reveal) * releaseRetention);
+  }
   if (targetIndex !== null) {
-    const continuity = projection.continuity;
     setRingPose(
       resetPose(directOutgoingDestinationPose),
       targetIndex,
@@ -1077,8 +1062,8 @@ function setDirectFrame(
     if (phase === undefined || phase === "parking") {
       const progress = phase === "parking" ? settlement : reveal;
       if (phase === "parking") {
-        outgoing.translateX = projection.translateX;
-        outgoing.translateY = projection.translateY;
+        outgoing.translateX += projection.translateX;
+        outgoing.translateY += projection.translateY;
       }
       movePoseGeometry(outgoing, directOutgoingDestinationPose, progress);
       const clearance = Math.max(
@@ -1101,8 +1086,8 @@ function setDirectFrame(
     } else {
       // Held and given back are the same expression: no released shell can take rear depth.
       const retained = 1 - settlement;
-      outgoing.translateX = projection.translateX * retained;
-      outgoing.translateY = projection.translateY * retained;
+      outgoing.translateX += projection.translateX * retained;
+      outgoing.translateY += projection.translateY * retained;
       outgoing.layer = HAND_LAYER;
       outgoing.role = "top";
     }
@@ -1114,13 +1099,7 @@ function setDirectFrame(
       output.poses.length,
     );
     const targetSourceSlot = signedRingSlot(targetSourceDepth, output.poses.length);
-    moveDirectTarget(
-      target,
-      targetSourceSlot,
-      reveal,
-      continuity?.poses[targetIndex],
-      continuity?.progress,
-    );
+    moveDirectTarget(target, targetSourceSlot, reveal, continuity?.poses[targetIndex]);
     target.interactive =
       (phase === undefined || phase === "parking") && output.authoritativeIndex === targetIndex;
 
@@ -1157,9 +1136,9 @@ function setDirectFrame(
         target,
         Math.sign(compactSlot) !== Math.sign(destinationSlot),
         reveal,
-        continuity?.progress ?? 0,
         continuity?.poses[index],
       );
+      pose.interactive = false;
       if (phase === "parking") {
         movePileShell(pose, projectionDestinationPose, target, settlement);
       }
@@ -1174,9 +1153,16 @@ function setDirectFrame(
     return;
   }
   // No directed target: only the hand-owned source may move, and it cannot change depth.
+  if (continuity !== undefined && continuity !== null) {
+    for (let index = 0; index < output.poses.length; index += 1) {
+      if (index === projection.originIndex) continue;
+      restoreContinuityPose(output.poses[index]!, continuity.poses[index]!, TARGET_LAYER);
+      output.poses[index]!.interactive = false;
+    }
+  }
   const retained = 1 - settlement;
-  outgoing.translateX = projection.translateX * retained;
-  outgoing.translateY = projection.translateY * retained;
+  outgoing.translateX += projection.translateX * retained;
+  outgoing.translateY += projection.translateY * retained;
   outgoing.layer = HAND_LAYER;
   outgoing.role = "top";
 }

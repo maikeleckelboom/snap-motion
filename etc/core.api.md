@@ -117,6 +117,7 @@ export interface ControllerConfigurationUpdate {
 // @public (undocumented)
 export interface ControllerDragOptions<Id extends SemanticId = SemanticId> {
     readonly originId?: Id;
+    readonly resetPositionToOrigin?: boolean;
 }
 
 // @public (undocumented)
@@ -1218,7 +1219,6 @@ export interface StackedDeckCommandContext {
 // @public
 export interface StackedDeckDirectProjection {
     readonly continuity?: null | {
-        readonly progress: number;
         readonly poses: readonly StackedDeckPose[];
     };
     readonly direction: -1 | 0 | 1;

@@ -171,6 +171,20 @@ describe("useSnapMotion", () => {
     expect(onChange).toHaveBeenCalledTimes(callsAfterUnmount);
   });
 
+  it("can start a new pointer transaction at its semantic anchor", () => {
+    const resetDragPositionToOrigin = vi.fn<() => boolean>(() => true);
+    const drag = heldDrag(new ManualAnimationDriver(), {
+      initialPosition: -55,
+      resetDragPositionToOrigin,
+      resolveDragOrigin: () => "b",
+    });
+
+    expect(resetDragPositionToOrigin).toHaveBeenCalledOnce();
+    expect(drag.motion.position.value).toBe(-100);
+    expect(drag.to(-80)).toBe(-180);
+    drag.unmount();
+  });
+
   describe("pointer travel direction", () => {
     it("leaves the drag origin alone when the direction callback rebases nothing", () => {
       const driver = new ManualAnimationDriver();

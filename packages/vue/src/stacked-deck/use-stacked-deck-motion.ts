@@ -330,6 +330,10 @@ export function useStackedDeckComponentMotion<Id extends string>(
       rebasePhysicalCoordinate(originIndex);
       return ids.value[originIndex];
     },
+    // Direct has already captured the rendered pile before this runs. Its next hand owns a new
+    // transaction, so the generic scalar mass may discard prior travel while the capture preserves
+    // the exact frame the eye saw. Shuffle keeps ordinary interruption semantics unchanged.
+    resetDragPositionToOrigin: isDirect,
     track,
     viewport: options.viewport,
     onTargetSelected(id, reason) {
@@ -548,23 +552,12 @@ export function useStackedDeckComponentMotion<Id extends string>(
     if (!isDirect()) return;
     if (deltaX === undefined || deltaY === undefined) {
       directProjection.continuity = null;
-      // A press during an unfinished release anchors on the shell that release owns, which the
-      // model may already have closed its interaction on.
+      // A press during an unfinished release anchors on the complete frame that release owns. The
+      // capture is old physical history only: new transaction travel is established independently
+      // when the controller takes ownership.
       const continuityIndex = model.state.interactionOriginIndex ?? presentationOriginIndex();
       if (continuityIndex === null) return;
-      const currentLocalPosition =
-        state.value.interactionOriginIndex !== null &&
-        state.value.interactionDirection !== 0 &&
-        state.value.currentIndex ===
-          resolveStackedDeckNeighbor(
-            state.value.interactionOriginIndex,
-            state.value.interactionDirection,
-            model.itemCount,
-          )
-          ? state.value.interactionDirection
-          : 0;
       directProjection.continuity = {
-        progress: smoothstep(Math.min(1, Math.abs(physicalIndex.value - currentLocalPosition))),
         poses: frame.value.poses.map((pose) => ({ ...pose })),
       };
       return;

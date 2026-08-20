@@ -6,12 +6,16 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectCarouselAt, openLabDemo, type ReducedMotionMode } from "./helpers";
 import {
   STACKED_DECK_IDS,
+  beginPointer,
   beginPointerAt,
   fastFlick,
   finishPointerBy,
   motionPitch,
+  movePointer,
   movePointerBy,
+  finishPointer,
   destinations,
+  readFrame,
   viewport,
   waitForAuthority,
 } from "./stackedDeckHarness";
@@ -52,6 +56,460 @@ async function prepareDirect(
   await expectCarouselAt(stage, STACKED_DECK_IDS[index]!);
   return stage;
 }
+
+type DirectFrame = Awaited<ReturnType<typeof readFrame>>;
+
+const takeoverFractions = [0, 0.1, 0.2, 0.4, 0.6, 0.8, 0.95] as const;
+
+async function selectStable(page: Page, index: number): Promise<void> {
+  const stage = viewport(page);
+  await destinations(page).nth(index).click();
+  await expectCarouselAt(stage, STACKED_DECK_IDS[index]!);
+  await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+}
+
+function adjacentIndex(index: number, direction: -1 | 1, itemCount = STACKED_DECK_IDS.length) {
+  return (index + direction + itemCount) % itemCount;
+}
+
+function paintedAuthority(frame: DirectFrame): string {
+  return (
+    frame.poses
+      .filter(
+        (pose) =>
+          pose.visible &&
+          pose.opacity > 0 &&
+          pose.left <= frame.stageLeft + frame.stageWidth / 2 &&
+          pose.right >= frame.stageLeft + frame.stageWidth / 2 &&
+          pose.top <= (frame.stageTop + frame.stageBottom) / 2 &&
+          pose.bottom >= (frame.stageTop + frame.stageBottom) / 2,
+      )
+      .reduce<(typeof frame.poses)[number] | null>(
+        // Later DOM order wins equal-layer ties, exactly as CSS stacking paints these siblings.
+        (front, pose) => (front === null || pose.layer >= front.layer ? pose : front),
+        null,
+      )?.id ?? ""
+  );
+}
+
+async function beginFreshHand(page: Page, index: number) {
+  await selectStable(page, index);
+  const stage = viewport(page);
+  const before = await readFrame(page);
+  const origin = await beginPointer(
+    stage.locator(
+      `[data-snap-motion-stacked-deck-card][data-item-id='${STACKED_DECK_IDS[index]}']`,
+    ),
+  );
+  const owned = await readFrame(page);
+  expect(owned.physicalPosition).toBeCloseTo(0, 6);
+  expect(owned.interactionOriginIndex).toBe(index);
+  return { before, origin, owned, pitch: await motionPitch(stage) };
+}
+
+async function commitAndTakeOver(page: Page, startIndex: number, direction: -1 | 1) {
+  await selectStable(page, startIndex);
+  const stage = viewport(page);
+  const pitch = await motionPitch(stage);
+  const first = await beginPointer(
+    stage.locator(
+      `[data-snap-motion-stacked-deck-card][data-item-id='${STACKED_DECK_IDS[startIndex]}']`,
+    ),
+  );
+  const deltaX = -direction * pitch * 0.501;
+  await movePointer(page, first, deltaX, 600);
+  await nextFrame(page);
+  await finishPointer(page, first, deltaX, 1_100, "pointerup");
+
+  const destinationIndex = adjacentIndex(startIndex, direction);
+  await waitForAuthority(page, destinationIndex);
+  const card = stage.locator(
+    `[data-snap-motion-stacked-deck-card][data-item-id='${STACKED_DECK_IDS[destinationIndex]}']`,
+  );
+  await expect(card).toHaveAttribute("data-deck-interactive", "true");
+  const before = await readFrame(page);
+  expect(before.visualId).toBe(STACKED_DECK_IDS[destinationIndex]);
+  expect(before.authoritativeIndex).toBe(destinationIndex);
+  expect(before.settledId).toBe(STACKED_DECK_IDS[startIndex]);
+  expect(before.controllerPhase).toBe("settling");
+
+  const origin = await beginPointer(card);
+  const owned = await readFrame(page);
+  expect(owned.interactionOriginIndex).toBe(destinationIndex);
+  expect(owned.physicalPosition).toBeCloseTo(0, 6);
+  expect(owned.controllerPosition).toBeCloseTo(
+    owned.controllerAnchors.find((anchor) => anchor.id === STACKED_DECK_IDS[destinationIndex])!
+      .position,
+    6,
+  );
+  return { before, destinationIndex, origin, owned, pitch };
+}
+
+async function driveDenseRelease(
+  page: Page,
+  origin: Awaited<ReturnType<typeof beginPointer>>,
+  pitch: number,
+  direction: -1 | 1,
+) {
+  const samples: Array<{ fraction: number; frame: DirectFrame; painted: string }> = [];
+  let elapsed = 0;
+  for (const fraction of takeoverFractions) {
+    if (fraction > 0) {
+      elapsed += 120;
+      await movePointer(page, origin, -direction * pitch * fraction, elapsed);
+      await nextFrame(page);
+    }
+    const frame = await readFrame(page);
+    expect(frame.physicalPosition, `new hand at ${fraction} pitch`).toBeCloseTo(
+      direction * fraction,
+      3,
+    );
+    samples.push({ fraction, frame, painted: paintedAuthority(frame) });
+  }
+  elapsed += 120;
+  await movePointer(page, origin, -direction * pitch * 0.8, elapsed);
+  await nextFrame(page);
+  const beforeRelease = await readFrame(page);
+  expect(beforeRelease.physicalPosition).toBeCloseTo(direction * 0.8, 3);
+  elapsed += 500;
+  await finishPointer(page, origin, -direction * pitch * 0.8, elapsed, "pointerup");
+  const release = await readFrame(page);
+  return { beforeRelease, release, samples };
+}
+
+async function installHighContrastCards(page: Page): Promise<void> {
+  await page.addStyleTag({
+    content: `
+      .stacked-deck-demo .snap-motion-stacked-deck-card-motion,
+      .stacked-deck-demo .screen-chrome { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+      .stacked-deck-demo .screen-chrome { display: grid !important; place-items: center !important; }
+      .stacked-deck-demo .screen-chrome::after,
+      .stacked-deck-demo .stacked-screen-image { display: none !important; }
+      .stacked-deck-demo .screen-chrome::before { position: relative; z-index: 1; padding: .65rem .85rem; border: 2px solid currentColor; background: rgb(0 0 0 / .3); color: white; font: 800 1.4rem/1 system-ui,sans-serif; }
+      .snap-motion-stacked-deck-card[data-item-id="templates"] .screen-chrome { background: rgb(220 38 38) !important; }
+      .snap-motion-stacked-deck-card[data-item-id="templates"] .screen-chrome::before { content: "A / TEMPLATES"; }
+      .snap-motion-stacked-deck-card[data-item-id="project"] .screen-chrome { background: rgb(37 99 235) !important; }
+      .snap-motion-stacked-deck-card[data-item-id="project"] .screen-chrome::before { content: "B / PROJECT"; }
+      .snap-motion-stacked-deck-card[data-item-id="map"] .screen-chrome { background: rgb(22 163 74) !important; }
+      .snap-motion-stacked-deck-card[data-item-id="map"] .screen-chrome::before { content: "C / MAP"; }
+      .snap-motion-stacked-deck-card[data-item-id="team"] .screen-chrome { background: rgb(234 88 12) !important; }
+      .snap-motion-stacked-deck-card[data-item-id="team"] .screen-chrome::before { content: "D / TEAM"; }
+      .snap-motion-stacked-deck-card[data-item-id="settings"] .screen-chrome { background: rgb(88 28 135) !important; }
+      .snap-motion-stacked-deck-card[data-item-id="settings"] .screen-chrome::before { content: "E / SETTINGS"; }
+    `,
+  });
+}
+
+test("Direct gives identical fresh and chained hands the same transaction zero", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const stage = await prepareDirect(page);
+  const report: Record<string, unknown> = {};
+
+  for (const fixture of ["realistic", "high-contrast"] as const) {
+    if (fixture === "high-contrast") await installHighContrastCards(page);
+
+    const fresh = await beginFreshHand(page, 4);
+    const freshGesture = await driveDenseRelease(page, fresh.origin, fresh.pitch, 1);
+    expect(freshGesture.beforeRelease.visualId).toBe("templates");
+    expect(paintedAuthority(freshGesture.beforeRelease)).toBe("templates");
+    await expectCarouselAt(stage, "templates");
+    await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+
+    await selectStable(page, 3);
+    await startAuthorityTrace(page);
+    const chained = await commitAndTakeOver(page, 3, 1);
+    expect(chained.destinationIndex).toBe(4);
+    const chainedGesture = await driveDenseRelease(page, chained.origin, chained.pitch, 1);
+    expect(chainedGesture.beforeRelease.visualId).toBe("templates");
+    expect(paintedAuthority(chainedGesture.beforeRelease)).toBe("templates");
+    await expectCarouselAt(stage, "templates");
+    await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+
+    const authorityTrace = await readAuthorityTrace(page);
+    const painted = runsOf(authorityTrace, (frame) => frame.authority);
+    const firstTemplates = painted.indexOf("templates");
+    expect(firstTemplates).toBeGreaterThanOrEqual(0);
+    expect(painted.slice(firstTemplates)).not.toContain("settings");
+    expect(chainedGesture.release.controllerTargetId).toBe("templates");
+    expect(freshGesture.release.controllerTargetId).toBe("templates");
+
+    report[fixture] = {
+      authorityRuns: painted,
+      chained,
+      chainedGesture,
+      fresh,
+      freshGesture,
+    };
+  }
+
+  const directory = resolvePath(
+    import.meta.dirname,
+    "..",
+    ".artifacts",
+    "stacked-deck-chained-takeover",
+  );
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    join(directory, `post-fix-${testInfo.project.name}.json`),
+    `${JSON.stringify(report, null, 2)}\n`,
+  );
+});
+
+interface OwnedCard {
+  readonly index: number;
+  readonly origin: Awaited<ReturnType<typeof beginPointer>>;
+  readonly pitch: number;
+}
+
+function expectCompletePhysicalFrame(frame: DirectFrame, itemIds = STACKED_DECK_IDS): void {
+  expect(frame.poses.map((pose) => pose.id)).toEqual(itemIds);
+  expect(frame.poses.every((pose) => pose.opacity === 1 && Number.isFinite(pose.translateX))).toBe(
+    true,
+  );
+  const coveringLayers = frame.poses
+    .filter(
+      (pose) =>
+        pose.visible &&
+        pose.left <= frame.stageLeft + frame.stageWidth / 2 &&
+        pose.right >= frame.stageLeft + frame.stageWidth / 2,
+    )
+    .map((pose) => pose.layer);
+  expect(new Set(coveringLayers).size).toBe(coveringLayers.length);
+}
+
+async function releaseAndTakeOver(
+  page: Page,
+  held: OwnedCard,
+  direction: -1 | 1,
+): Promise<{ owned: OwnedCard; release: DirectFrame; takeover: DirectFrame }> {
+  const deltaX = -direction * held.pitch * 0.8;
+  await movePointer(page, held.origin, deltaX, 600);
+  await nextFrame(page);
+  const heldFrame = await readFrame(page);
+  expect(heldFrame.physicalPosition).toBeCloseTo(direction * 0.8, 3);
+  expectCompletePhysicalFrame(heldFrame);
+  await finishPointer(page, held.origin, deltaX, 1_100, "pointerup");
+
+  const targetIndex = adjacentIndex(held.index, direction);
+  await waitForAuthority(page, targetIndex);
+  const release = await readFrame(page);
+  expect(release.visualId).toBe(STACKED_DECK_IDS[targetIndex]);
+  expect(release.activeId).toBe(STACKED_DECK_IDS[targetIndex]);
+  expect(release.authoritativeIndex).toBe(targetIndex);
+  expectCompletePhysicalFrame(release);
+
+  const card = viewport(page).locator(
+    `[data-snap-motion-stacked-deck-card][data-item-id='${STACKED_DECK_IDS[targetIndex]}']`,
+  );
+  await expect(card).toHaveAttribute("data-deck-interactive", "true");
+  const origin = await beginPointer(card);
+  const takeover = await readFrame(page);
+  expect(takeover.interactionOriginIndex).toBe(targetIndex);
+  expect(takeover.physicalPosition).toBeCloseTo(0, 6);
+  expect(takeover.controllerPosition).toBeCloseTo(
+    takeover.controllerAnchors.find((anchor) => anchor.id === STACKED_DECK_IDS[targetIndex])!
+      .position,
+    6,
+  );
+  expectCompletePhysicalFrame(takeover);
+  return { owned: { index: targetIndex, origin, pitch: held.pitch }, release, takeover };
+}
+
+test("Direct chains interior and wrap exchanges for two revolutions without scalar debt", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const stage = await prepareDirect(page, 0);
+  const initial = await beginFreshHand(page, 0);
+  let held: OwnedCard = { index: 0, origin: initial.origin, pitch: initial.pitch };
+  const itinerary = [STACKED_DECK_IDS[0]];
+
+  for (let exchange = 0; exchange < STACKED_DECK_IDS.length * 2; exchange += 1) {
+    const result = await releaseAndTakeOver(page, held, 1);
+    held = result.owned;
+    itinerary.push(STACKED_DECK_IDS[held.index]!);
+  }
+  expect(itinerary).toEqual([
+    "templates",
+    "project",
+    "map",
+    "team",
+    "settings",
+    "templates",
+    "project",
+    "map",
+    "team",
+    "settings",
+    "templates",
+  ]);
+
+  for (let exchange = 0; exchange < STACKED_DECK_IDS.length * 2; exchange += 1) {
+    const result = await releaseAndTakeOver(page, held, -1);
+    held = result.owned;
+    itinerary.push(STACKED_DECK_IDS[held.index]!);
+  }
+  expect(itinerary.slice(-11)).toEqual([
+    "templates",
+    "settings",
+    "team",
+    "map",
+    "project",
+    "templates",
+    "settings",
+    "team",
+    "map",
+    "project",
+    "templates",
+  ]);
+  await finishPointer(page, held.origin, 0, 100, "pointercancel");
+  await expectCarouselAt(stage, "templates");
+});
+
+test("Direct takeover preserves same-hand reversal and the two-item physical direction", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const stage = await prepareDirect(page, 0);
+  const initial = await beginFreshHand(page, 0);
+  let held = (
+    await releaseAndTakeOver(page, { index: 0, origin: initial.origin, pitch: initial.pitch }, 1)
+  ).owned;
+
+  // B starts at its own zero, travels toward C, reverses through B, and commits toward A.
+  await movePointer(page, held.origin, -held.pitch * 0.6, 180);
+  await nextFrame(page);
+  expect((await readFrame(page)).physicalPosition).toBeCloseTo(0.6, 3);
+  await movePointer(page, held.origin, 0, 360);
+  await nextFrame(page);
+  expect((await readFrame(page)).physicalPosition).toBeCloseTo(0, 3);
+  await movePointer(page, held.origin, held.pitch * 0.8, 540);
+  await nextFrame(page);
+  const reversed = await readFrame(page);
+  expect(reversed.physicalPosition).toBeCloseTo(-0.8, 3);
+  expect(reversed.direction).toBe(-1);
+  await finishPointer(page, held.origin, held.pitch * 0.8, 1_040, "pointerup");
+  await expectCarouselAt(stage, "templates");
+
+  await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+  await page.getByTestId("stacked-deck-two-items").click();
+  await page.getByTestId("stacked-deck-destination").selectOption("team");
+  await expectCarouselAt(stage, "team");
+  await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+  const pitch = await motionPitch(stage);
+  let origin = await beginPointer(
+    stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='team']"),
+  );
+  expect((await readFrame(page)).physicalPosition).toBeCloseTo(0, 6);
+  await movePointer(page, origin, -pitch * 0.8, 600);
+  await finishPointer(page, origin, -pitch * 0.8, 1_100, "pointerup");
+  await waitForAuthority(page, 1);
+  await expect(stage).toHaveAttribute("data-phase", "settling");
+  origin = await beginPointer(
+    stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']"),
+  );
+  expect((await readFrame(page)).physicalPosition).toBeCloseTo(0, 6);
+  await movePointer(page, origin, pitch * 0.8, 600);
+  await nextFrame(page);
+  const twoItemReverse = await readFrame(page);
+  expect(twoItemReverse.physicalPosition).toBeCloseTo(-0.8, 3);
+  expect(twoItemReverse.direction).toBe(-1);
+  expect(twoItemReverse.segmentTargetIndex).toBe(0);
+  await finishPointer(page, origin, pitch * 0.8, 1_100, "pointerup");
+  await expectCarouselAt(stage, "team");
+});
+
+async function surfaceTranslateX(page: Page, id: string): Promise<number> {
+  return Number(
+    await page
+      .locator(`[data-snap-motion-stacked-deck-card][data-item-id='${id}'] .screen-chrome`)
+      .getAttribute("data-translate-x"),
+  );
+}
+
+async function waitForRenderedSettlement(
+  page: Page,
+  id: string,
+  startX: number,
+  finalX: number,
+  wanted: number,
+): Promise<number> {
+  return page
+    .locator(`[data-snap-motion-stacked-deck-card][data-item-id='${id}'] .screen-chrome`)
+    .evaluate(
+      (surface, input) =>
+        new Promise<number>((resolve, reject) => {
+          let remaining = 300;
+          const tick = () => {
+            const current = Number((surface as HTMLElement).dataset.translateX);
+            const progress = (current - input.startX) / (input.finalX - input.startX);
+            if (progress >= input.wanted) resolve(progress);
+            else if ((remaining -= 1) <= 0) reject(new Error("parking never reached sample"));
+            else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+      { finalX, startX, wanted },
+    );
+}
+
+test("Direct establishes a new zero throughout parking and after parking outruns the spring", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stage = await prepareDirect(page, 4);
+  await selectStable(page, 4);
+  const parkedTeamX = await surfaceTranslateX(page, "team");
+
+  for (const wanted of [0.1, 0.3, 0.5, 0.8]) {
+    await selectStable(page, 3);
+    const pitch = await motionPitch(stage);
+    const team = stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='team']");
+    const first = await beginPointer(team);
+    await movePointer(page, first, -pitch, 600);
+    await nextFrame(page);
+    const releaseX = await surfaceTranslateX(page, "team");
+    await finishPointer(page, first, -pitch, 1_100, "pointerup");
+    await waitForAuthority(page, 4);
+    const actualSettlement = await waitForRenderedSettlement(
+      page,
+      "team",
+      releaseX,
+      parkedTeamX,
+      wanted,
+    );
+    expect(actualSettlement).toBeGreaterThanOrEqual(wanted);
+    // A full-pitch release leaves the controller idle while Direct presentation is still parking.
+    expect((await readFrame(page)).controllerPhase).toBe("idle");
+    const takeover = await beginPointer(
+      stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']"),
+    );
+    expect((await readFrame(page)).physicalPosition).toBeCloseTo(0, 6);
+    await finishPointer(page, takeover, 0, 100, "pointercancel");
+  }
+
+  // A threshold commit leaves more scalar spring travel than the 230ms parking presentation.
+  await selectStable(page, 3);
+  const pitch = await motionPitch(stage);
+  const first = await beginPointer(
+    stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='team']"),
+  );
+  await movePointer(page, first, -pitch * 0.501, 600);
+  await nextFrame(page);
+  const releaseX = await surfaceTranslateX(page, "team");
+  await finishPointer(page, first, -pitch * 0.501, 1_100, "pointerup");
+  await waitForAuthority(page, 4);
+  await waitForRenderedSettlement(page, "team", releaseX, parkedTeamX, 0.999);
+  const presentationComplete = await readFrame(page);
+  expect(presentationComplete.controllerPhase).toBe("settling");
+  expect(await surfaceTranslateX(page, "team")).toBeCloseTo(parkedTeamX, 1);
+  const takeover = await beginPointer(
+    stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']"),
+  );
+  expect((await readFrame(page)).physicalPosition).toBeCloseTo(0, 6);
+  await finishPointer(page, takeover, 0, 100, "pointercancel");
+});
 
 interface ShellSample {
   readonly layer: number;
@@ -942,7 +1400,8 @@ async function startAuthorityTrace(page: Page, frames = 700): Promise<void> {
       let authority = "";
       let front = Number.NEGATIVE_INFINITY;
       for (const shell of measured) {
-        if (shell.covers && shell.layer > front) {
+        // Equal z-index siblings paint in DOM order, so the later shell owns an exact tie.
+        if (shell.covers && shell.layer >= front) {
           front = shell.layer;
           authority = shell.id;
         }
@@ -1126,6 +1585,13 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
     // these gestures. A handoff hidden behind a fade, or performed by a shell nothing can
     // transform, is not a handoff this test would be able to say anything about.
     for (const frame of trace.frames) {
+      const coveringLayers = frame.shells
+        .filter((shell) => shell.covers)
+        .map((shell) => shell.layer);
+      expect(
+        new Set(coveringLayers).size,
+        `${scenario.name} frame ${frame.n} depended on equal-layer DOM paint order`,
+      ).toBe(coveringLayers.length);
       for (const shell of frame.shells) {
         expect(shell.opacity, `${scenario.name} frame ${frame.n} ${shell.id}`).toBe(1);
         expect(

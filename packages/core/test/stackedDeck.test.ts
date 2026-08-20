@@ -165,11 +165,6 @@ function carriedLayers(poses: readonly StackedDeckPose[], owned: readonly number
   return poses.map((pose, index) => (owned.includes(index) ? "owned" : pose.layer));
 }
 
-/** The projection's own easing, so a test can name the progress a snapshot was captured at. */
-function smooth(progress: number) {
-  return progress * progress * (3 - 2 * progress);
-}
-
 /** Comparison is exact apart from the sign of zero, which no transform can express. */
 function exact(value: number) {
   return value === 0 ? 0 : value;
@@ -1565,7 +1560,7 @@ describe("Direct stacked deck projection", () => {
           phase: "held",
           translateX: direction * 140,
           translateY: 40,
-          continuity: { poses: captured, progress: smooth(Math.abs(travel)) },
+          continuity: { poses: captured },
         }),
       );
       // Every shell that can cover the deck's centre has a rank of its own, so which one is in
@@ -1699,21 +1694,24 @@ describe("Direct stacked deck projection", () => {
       }),
     );
     const interrupted = resolveDirectFrame(
-      { ...segment(3, -1, 0.3), authoritativeIndex: 3 },
-      directProjection(3, -0.3, {
+      traversal({
+        authoritativeIndex: 3,
+        phase: "neutral",
+        segmentOriginIndex: 3,
+        settledIndex: 2,
+        visualTopIndex: 3,
+      }),
+      directProjection(3, 0, {
         phase: "held",
         translateX: 0,
         translateY: 0,
-        continuity: {
-          progress: 0.216,
-          poses: parking.poses.map((pose) => ({ ...pose })),
-        },
+        continuity: { poses: parking.poses.map((pose) => ({ ...pose })) },
       }),
     );
 
-    // Settings becomes the one hand-owned shell; every other complete physical pose begins exactly
-    // where the prior frame left it. Paint role and layer are captured with geometry instead of
-    // being recomputed early from the destination ring.
+    // Settings becomes the one hand-owned shell at new transaction travel zero. Every other
+    // complete physical pose begins exactly where the prior frame left it; no old scalar progress
+    // has to be replayed to recover the capture.
     for (let index = 0; index < parking.poses.length; index += 1) {
       if (index === 3) continue;
       expect(physicalValues(interrupted.poses[index]!)).toEqual(
