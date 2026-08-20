@@ -771,9 +771,9 @@ function setFrameRing(
   topIndex: number,
   tuning: StackedDeckTuning,
 ): void {
-  for (let index = 0; index < output.poses.length; index += 1) {
-    setRingPose(resetPose(output.poses[index]!), topIndex, index, output.poses.length, tuning);
-  }
+  output.poses.forEach((pose, index) =>
+    setRingPose(resetPose(pose), topIndex, index, output.poses.length, tuning),
+  );
 }
 
 const projectionDestinationPose = resetPose({} as MutableStackedDeckPose);
@@ -930,8 +930,11 @@ const directCompactPose = resetPose({} as MutableStackedDeckPose);
 
 /** Conservative centre separation that clears the complete compact pile, not only its top body. */
 function wholePileClearSeparation(itemCount: number, tuning: StackedDeckTuning): number {
-  const maximumSlot = Math.max(1, Math.floor(itemCount / 2));
-  return tuning.cardWidth + tuning.pileOffsetX * pileSlotSpread(maximumSlot) + CROSSOVER_CLEARANCE;
+  return (
+    tuning.cardWidth +
+    tuning.pileOffsetX * pileSlotSpread(Math.max(1, Math.floor(itemCount / 2))) +
+    CROSSOVER_CLEARANCE
+  );
 }
 
 function directClearanceEnvelope(progress: number): number {
@@ -1028,10 +1031,7 @@ function setDirectFrame(
   projection: StackedDeckDirectProjection,
   tuning: StackedDeckTuning,
 ): void {
-  const targetIndex =
-    projection.direction === 0 || projection.targetIndex === projection.originIndex
-      ? null
-      : projection.targetIndex;
+  const targetIndex = projection.targetIndex;
   const distance = clamp(Math.abs(projection.signedTravel), 0, 1);
   const reveal = smoothstep(distance);
   const outgoing = output.poses[projection.originIndex]!;
@@ -1045,8 +1045,12 @@ function setDirectFrame(
   // whatever it last painted, and the deck reads as frozen rather than as broken — so a settlement
   // that is not a number is the release frame rather than a shell nothing can move again.
   const settlement = clamp(projection.settlement, 0, 1) || 0;
-  const continuity = projection.continuity;
-  const outgoingContinuity = continuity?.poses[projection.originIndex];
+  const continuityPoses = projection.continuity?.poses;
+  const outgoingContinuity = continuityPoses?.[projection.originIndex];
+  const resumedForegroundIndex = continuityPoses?.findIndex((pose) => pose.layer > TOP_LAYER) ?? -1;
+  const preservesCapturedPaint =
+    resumedForegroundIndex >= 0 &&
+    (resumedForegroundIndex === targetIndex || reveal < AUTHORITY_MIDPOINT);
   if (outgoingContinuity !== undefined && phase !== undefined) {
     const releaseRetention = phase === "returning" ? 1 - settlement : 1;
     movePoseGeometry(outgoing, outgoingContinuity, (1 - reveal) * releaseRetention);
@@ -1099,7 +1103,10 @@ function setDirectFrame(
       output.poses.length,
     );
     const targetSourceSlot = signedRingSlot(targetSourceDepth, output.poses.length);
-    moveDirectTarget(target, targetSourceSlot, reveal, continuity?.poses[targetIndex]);
+    moveDirectTarget(target, targetSourceSlot, reveal, continuityPoses?.[targetIndex]);
+    if (preservesCapturedPaint) {
+      target.layer = continuityPoses![targetIndex]!.layer;
+    }
     target.interactive =
       (phase === undefined || phase === "parking") && output.authoritativeIndex === targetIndex;
 
@@ -1136,12 +1143,25 @@ function setDirectFrame(
         target,
         Math.sign(compactSlot) !== Math.sign(destinationSlot),
         reveal,
-        continuity?.poses[index],
+        continuityPoses?.[index],
       );
-      pose.interactive = false;
       if (phase === "parking") {
         movePileShell(pose, projectionDestinationPose, target, settlement);
       }
+      if (index === resumedForegroundIndex) {
+        // By the layer handoff at eased midpoint, three half-pitches have carried this opaque body
+        // beyond a complete card. Reversing instead makes it the target, so it never enters here.
+        pose.translateX += 3 * projection.translateX;
+      }
+      // The former foreground is fully clear when it changes bands. Other captured ranks
+      // remain untouched until the same boundary, so a new hand never repaints overlapping material.
+      if (index === resumedForegroundIndex && preservesCapturedPaint) {
+        pose.layer = continuityPoses![index]!.layer;
+      }
+      pose.interactive = false;
+    }
+    if (preservesCapturedPaint && outgoingContinuity !== undefined) {
+      outgoing.layer = outgoingContinuity.layer;
     }
     if (
       (phase === undefined && distance >= 1 - TRAVERSAL_EPSILON) ||
@@ -1153,12 +1173,11 @@ function setDirectFrame(
     return;
   }
   // No directed target: only the hand-owned source may move, and it cannot change depth.
-  if (continuity !== undefined && continuity !== null) {
-    for (let index = 0; index < output.poses.length; index += 1) {
-      if (index === projection.originIndex) continue;
-      restoreContinuityPose(output.poses[index]!, continuity.poses[index]!, TARGET_LAYER);
-      output.poses[index]!.interactive = false;
-    }
+  if (continuityPoses !== undefined) {
+    // This is the exact zero frame of a takeover (or a return to that zero), so the capture already
+    // is the complete physical answer. Reinterpreting even its layers would repaint stationary pixels.
+    output.poses.forEach((pose, index) => Object.assign(pose, continuityPoses[index]));
+    return;
   }
   const retained = 1 - settlement;
   outgoing.translateX += projection.translateX * retained;
@@ -1208,15 +1227,7 @@ export function resolveStackedDeckFrame(
   const sourceTopIndex =
     direct?.originIndex ??
     (traversal.phase === "traversing" ? traversal.segmentOriginIndex : traversal.visualTopIndex);
-  for (let index = 0; index < output.poses.length; index += 1) {
-    setRingPose(
-      resetPose(output.poses[index]!),
-      sourceTopIndex,
-      index,
-      output.poses.length,
-      options.tuning,
-    );
-  }
+  setFrameRing(output, sourceTopIndex, options.tuning);
   if (options.itemCount === 1) {
     output.poses[0]!.interactive = direct === undefined && traversal.phase === "idle";
     return output;

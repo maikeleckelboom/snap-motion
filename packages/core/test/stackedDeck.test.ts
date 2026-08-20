@@ -108,6 +108,7 @@ function expectPairPaintSwapSafe(
   firstIndex: number,
   secondIndex: number,
   tuning = WIDE_TUNING,
+  context = "",
 ) {
   const first = poses[firstIndex]!;
   const second = poses[secondIndex]!;
@@ -137,7 +138,10 @@ function expectPairPaintSwapSafe(
       if (!covered) uncoveredSamples += 1;
     }
   }
-  expect({ overlappingSamples, uncoveredSamples }).toMatchObject({ uncoveredSamples: 0 });
+  expect(
+    { overlappingSamples, uncoveredSamples },
+    `unsafe paint swap for shell ${firstIndex} and ${secondIndex} ${context}`,
+  ).toMatchObject({ uncoveredSamples: 0 });
 }
 
 function expectEveryPaintSwapSafe(
@@ -154,15 +158,16 @@ function expectEveryPaintSwapSafe(
         );
         const currentOrder = Math.sign(current.poses[first]!.layer - current.poses[second]!.layer);
         if (previousOrder === currentOrder) continue;
-        expectPairPaintSwapSafe(current.poses, first, second, tuning);
+        expectPairPaintSwapSafe(
+          current.poses,
+          first,
+          second,
+          tuning,
+          `at progress ${current.progress}`,
+        );
       }
     }
   }
-}
-
-/** Every shell's rank except the ones an interaction owns, which it is entitled to decide. */
-function carriedLayers(poses: readonly StackedDeckPose[], owned: readonly number[]) {
-  return poses.map((pose, index) => (owned.includes(index) ? "owned" : pose.layer));
 }
 
 /** Comparison is exact apart from the sign of zero, which no transform can express. */
@@ -1530,12 +1535,11 @@ describe("Direct stacked deck projection", () => {
     }
   });
 
-  it("keeps the hand's own paint layer to the one shell the hand is holding", () => {
+  it("keeps a resumed foreground target above the shell moving away from it", () => {
     // A press that lands while the previous release is still parking captures that shell exactly as
-    // rendered — including the paint layer physical ownership had given it. Restoring its geometry
-    // is what keeps it continuous; restoring its ownership puts two shells in the layer that means
-    // "the card in the hand", and which of them the browser paints in front is then a question
-    // about document order rather than about the deck.
+    // rendered — including the unique paint layer physical ownership had given it. When the next
+    // gesture reverses, that same shell is its destination, so it can keep the captured foreground
+    // rank while the newly grabbed card moves away beneath it.
     for (const direction of [-1, 1] as const) {
       const interrupted = resolveDirectFrame(
         { ...segment(2, direction, 0.62), authoritativeIndex: 2 + direction },
@@ -1551,7 +1555,8 @@ describe("Direct stacked deck projection", () => {
       const captured = interrupted.poses.map((pose) => ({ ...pose }));
 
       // The next interaction opens on the card that release was travelling to and goes back the way
-      // it came, which makes its own target the very shell the previous one still owns.
+      // it came, which makes its own target the very shell the previous one still owns. Immediately
+      // before the clearance boundary, their captured order remains intact.
       const origin = 2 + direction;
       const travel = -direction * 0.24;
       const frame = resolveDirectFrame(
@@ -1567,10 +1572,65 @@ describe("Direct stacked deck projection", () => {
       // front is a fact about the deck rather than about document order.
       const contested = frame.poses.filter((pose) => pose.layer >= TOP_LAYER_VALUE);
       expect(new Set(contested.map((pose) => pose.layer)).size).toBe(contested.length);
-      // The card the new hand has taken is the one in front, on this frame and on every frame
-      // after it, rather than for one frame being outranked by a hand that has let go.
-      expect(frame.poses[origin]!.layer).toBe(handLayer);
-      expect(frame.poses[2]!.layer).toBeLessThan(handLayer);
+      expect(frame.poses[2]!.layer).toBe(handLayer);
+      expect(frame.poses[origin]!.layer).toBeLessThan(handLayer);
+
+      const continued = resolveDirectFrame(
+        segment(origin, -direction as -1 | 1, 0.26),
+        directProjection(origin, -direction * 0.26, {
+          phase: "held",
+          translateX: direction * 152,
+          translateY: 40,
+          continuity: { poses: captured },
+        }),
+      );
+      // This shell is also the new transaction's destination, so it never needs to pass behind the
+      // card moving away from it. Keeping their order avoids both a repaint and a third-card gap.
+      expect(continued.poses[2]!.layer).toBe(handLayer);
+      expect(continued.poses[origin]!.layer).toBeLessThan(handLayer);
+    }
+  });
+
+  it("keeps every chained takeover paint swap outside overlapping bodies", () => {
+    const parking = resolveDirectFrame(
+      { ...segment(2, 1, 0.8), authoritativeIndex: 3 },
+      directProjection(2, 0.8, {
+        phase: "parking",
+        translateX: -WIDE_TUNING.motionPitch * 0.8,
+        translateY: 0,
+        settlementProgress: 0.08,
+      }),
+    );
+    const captured = parking.poses.map((pose) => ({ ...pose }));
+
+    for (const direction of [-1, 1] as const) {
+      const frames = Array.from({ length: 101 }, (_, step) => {
+        const progress = step / 100;
+        const activeTraversal =
+          progress === 0
+            ? traversal({
+                authoritativeIndex: 3,
+                phase: "neutral",
+                segmentOriginIndex: 3,
+                settledIndex: 2,
+                visualTopIndex: 3,
+              })
+            : segment(3, direction, progress);
+        return {
+          poses: resolveDirectFrame(
+            activeTraversal,
+            directProjection(3, direction * progress, {
+              phase: "held",
+              translateX: -direction * WIDE_TUNING.motionPitch * progress,
+              translateY: 0,
+              continuity: { poses: captured },
+            }),
+          ).poses.map((pose) => ({ ...pose })),
+          progress,
+        };
+      });
+      expectEveryPaintSwapSafe(frames);
+      expect(frames).toHaveLength(101);
     }
   });
 
@@ -1724,15 +1784,12 @@ describe("Direct stacked deck projection", () => {
       });
     }
     expect(interrupted.poses).toHaveLength(parking.poses.length);
-    // Captured paint order is kept relative to the rest of the pile it was captured with, rather
-    // than being recomputed early from the destination ring. The shell the previous hand had hold
-    // of is the one exception: it no longer outranks the card this hand has taken.
-    // Index three is the card this hand has taken and index two is the one the last hand let go
-    // of, so those two are the ranks this frame is entitled to decide; the rest are carried over.
-    expect(carriedLayers(interrupted.poses, [2, 3])).toEqual(carriedLayers(parking.poses, [2, 3]));
-    // Exactly one shell is the card in the hand, and it is the one the hand is on.
-    expect(interrupted.poses.filter((pose) => pose.layer > TOP_LAYER_VALUE)).toHaveLength(1);
-    expect(interrupted.poses[3]!.layer).toBeGreaterThan(interrupted.poses[2]!.layer);
+    // A zero-displacement press keeps the complete painted frame. The prior outgoing body still
+    // overlaps the new hand's card at this parking sample, so changing only their z-order would
+    // replace real pixels while neither physical body moved.
+    expect(interrupted.poses.map((pose) => pose.layer)).toEqual(
+      parking.poses.map((pose) => pose.layer),
+    );
   });
 });
 

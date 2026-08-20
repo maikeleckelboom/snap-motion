@@ -511,6 +511,52 @@ test("Direct establishes a new zero throughout parking and after parking outruns
   await finishPointer(page, takeover, 0, 100, "pointercancel");
 });
 
+test("Direct dark-to-light takeover preserves overlapping paint order at new-hand zero", async ({
+  page,
+}) => {
+  const stage = await prepareDirect(page, 4);
+  const pitch = await motionPitch(stage);
+  const settings = stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']");
+  const origin = await beginPointer(settings);
+  await movePointer(page, origin, -pitch, 600);
+  await nextFrame(page);
+  await finishPointer(page, origin, -pitch, 1_100, "pointerup");
+  const templates = stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='templates']");
+  await expect(templates).toHaveAttribute("data-deck-interactive", "true");
+
+  const before = await readFrame(page);
+  const darkBefore = before.poses.find((pose) => pose.id === "settings")!;
+  const lightBefore = before.poses.find((pose) => pose.id === "templates")!;
+  expect(
+    Math.min(darkBefore.right, lightBefore.right) - Math.max(darkBefore.left, lightBefore.left),
+  ).toBeGreaterThan(0);
+  expect(darkBefore.layer).toBeGreaterThan(lightBefore.layer);
+
+  const takeover = await beginPointer(templates);
+  const owned = await readFrame(page);
+  const darkOwned = owned.poses.find((pose) => pose.id === "settings")!;
+  const lightOwned = owned.poses.find((pose) => pose.id === "templates")!;
+  expect(owned.physicalPosition).toBeCloseTo(0, 6);
+  expect(
+    Math.sign(darkOwned.layer - lightOwned.layer),
+    "pointerdown repainted overlapping Settings and Templates pixels",
+  ).toBe(Math.sign(darkBefore.layer - lightBefore.layer));
+  await movePointer(page, takeover, -1, 16);
+  await nextFrame(page);
+  const firstMovement = await readFrame(page);
+  const darkMoved = firstMovement.poses.find((pose) => pose.id === "settings")!;
+  const lightMoved = firstMovement.poses.find((pose) => pose.id === "templates")!;
+  const firstMovementOverlap =
+    Math.min(darkMoved.right, lightMoved.right) - Math.max(darkMoved.left, lightMoved.left);
+  if (firstMovementOverlap > 0) {
+    expect(
+      Math.sign(darkMoved.layer - lightMoved.layer),
+      "the first new-hand pixel repainted overlapping Settings and Templates",
+    ).toBe(Math.sign(darkBefore.layer - lightBefore.layer));
+  }
+  await finishPointer(page, takeover, -1, 100, "pointercancel");
+});
+
 interface ShellSample {
   readonly layer: number;
   readonly opacity: number;

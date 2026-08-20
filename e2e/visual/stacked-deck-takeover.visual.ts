@@ -153,6 +153,54 @@ test("records repeated Settings and Templates wrap takeover", async ({ page }) =
   });
 });
 
+test("records isolated dark Settings to light Templates release", async ({ page }) => {
+  test.setTimeout(90_000);
+  await saveRecording(page, "direct-dark-settings-to-light-templates.webm", async () => {
+    const prepared = await prepare(page, 4);
+    const deltaX = -prepared.held.pitch * 0.8;
+    for (const [sample, fraction] of [0.25, 0.55, 0.8].entries()) {
+      await movePointer(
+        page,
+        prepared.held.origin,
+        -prepared.held.pitch * fraction,
+        80 + sample * 90,
+      );
+      await nextFrame(page);
+      await page.waitForTimeout(120);
+    }
+    await finishPointer(page, prepared.held.origin, deltaX, 700, "pointerup");
+    await expectCarouselAt(prepared.stage, "templates");
+    await page.waitForTimeout(1_000);
+  });
+});
+
+test("records the exact Direct showcase route from dark Settings to light Templates", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await saveRecording(page, "direct-showcase-dark-settings-to-light-templates.webm", async () => {
+    await page.goto("./?demo=stacked-deck&exchange=direct");
+    const stage = viewport(page);
+    await expect(stage).toBeVisible();
+    await page.getByTestId("stacked-deck-five-items").click();
+    await destinations(page).nth(4).click();
+    await expectCarouselAt(stage, "settings");
+    const card = stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']");
+    const box = await card.boundingBox();
+    expect(box).not.toBeNull();
+    const startX = box!.x + box!.width * 0.55;
+    const startY = box!.y + box!.height * 0.55;
+    const pitch = await motionPitch(stage);
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX - pitch * 0.8, startY, { steps: 18 });
+    await page.waitForTimeout(120);
+    await page.mouse.up();
+    await expectCarouselAt(stage, "templates");
+    await page.waitForTimeout(1_000);
+  });
+});
+
 test("records two reverse chained revolutions", async ({ page }) => {
   test.setTimeout(120_000);
   await saveRecording(page, "direct-chained-reverse-revolution.webm", async () => {
