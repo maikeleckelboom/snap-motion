@@ -7,6 +7,7 @@ import { expectCarouselAt, openLabDemo, type ReducedMotionMode } from "./helpers
 import {
   STACKED_DECK_IDS,
   beginPointerAt,
+  fastFlick,
   finishPointerBy,
   motionPitch,
   movePointerBy,
@@ -797,4 +798,336 @@ test("Direct grab takes ownership without a frame drawn from the wrong presentat
   expect(maximumStep).toBeLessThanOrEqual(pitch * 0.31 + 1);
   await finishPointerBy(page, origin, -pitch * 0.3, 40, 140, "pointercancel");
   await expectCarouselAt(stage, "team");
+});
+
+/**
+ * One shell as a rendered frame holds it: the transform the browser was handed, its paint order,
+ * and whether its painted body covers the deck's centre.
+ */
+interface AuthorityShell {
+  readonly covers: boolean;
+  readonly id: string;
+  readonly layer: number;
+  readonly opacity: number;
+  readonly role: string;
+  readonly rotate: number;
+  readonly scale: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+interface AuthorityFrame {
+  readonly authoritativeIndex: number;
+  /** The card a user reads as the deck's current one. See {@link startAuthorityTrace}. */
+  readonly authority: string;
+  readonly interactionOriginIndex: number;
+  readonly n: number;
+  readonly owned: boolean;
+  readonly phase: string;
+  readonly physicalIndex: number;
+  readonly segmentPhase: string;
+  readonly segmentProgress: number;
+  readonly segmentTargetIndex: number | null;
+  readonly settledIndex: number;
+  readonly shells: readonly AuthorityShell[];
+  readonly t: number;
+  readonly visualId: string;
+  readonly visualTopIndex: number;
+}
+
+interface AuthorityTrace {
+  readonly events: readonly ReleaseEvent[];
+  readonly frames: readonly AuthorityFrame[];
+}
+
+declare global {
+  interface Window {
+    snapMotionAuthorityTrace?: AuthorityTrace;
+  }
+}
+
+/**
+ * Records which card is visually authoritative on every rendered frame.
+ *
+ * Authority is read the way an eye reads it and nothing else: of the shells whose painted body
+ * covers the deck's centre — which is where a resting top card's own centre is — the one painted
+ * in front. Nothing here consults what the deck believes about itself. The pose is parsed from the
+ * transform declaration the browser was handed, so each frame's answer is that frame's own.
+ */
+async function startAuthorityTrace(page: Page, frames = 700): Promise<void> {
+  await page.evaluate((frameBudget) => {
+    const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
+    const shells = [
+      ...root.querySelectorAll<HTMLElement>("[data-snap-motion-stacked-deck-card]"),
+    ].map((shell) => ({
+      shell,
+      motion: shell.querySelector<HTMLElement>(".snap-motion-stacked-deck-card-motion")!,
+    }));
+    // One card's untransformed size is layout, and layout does not change across a gesture.
+    // Reading it once keeps the recorder from flushing style every frame, which would starve the
+    // very frames it exists to observe.
+    const cardWidth = shells[0]!.motion.offsetWidth;
+    const cardHeight = shells[0]!.motion.offsetHeight;
+    // A shell's transform centres it on the deck in percentages first; this matches what follows,
+    // which is the pose itself.
+    const pose =
+      /translate3d\((?<x>-?[\d.]+)px,\s*(?<y>-?[\d.]+)px[^)]*\)\s*scale\((?<scale>[\d.]+)\)\s*rotate\((?<rotate>-?[\d.]+)deg\)/u;
+    const trace = { events: [] as unknown[], frames: [] as unknown[] };
+    window.snapMotionAuthorityTrace = trace as never;
+    let sequence = 0;
+    for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) {
+      window.addEventListener(
+        type,
+        () => {
+          trace.events.push({
+            frame: trace.frames.length,
+            sequence: (sequence += 1),
+            t: performance.now(),
+            type,
+          });
+        },
+        { capture: true },
+      );
+    }
+    let remaining = frameBudget;
+    const record = () => {
+      const measured = shells.map(({ motion, shell }) => {
+        const groups = pose.exec(motion.style.transform)?.groups;
+        const x = Number(groups?.["x"] ?? Number.NaN);
+        const y = Number(groups?.["y"] ?? Number.NaN);
+        const scale = Number(groups?.["scale"] ?? Number.NaN);
+        const rotate = Number(groups?.["rotate"] ?? Number.NaN);
+        const opacity = Number(shell.style.opacity);
+        // The deck's centre, expressed in this shell's own unrotated, unscaled frame.
+        const radians = (-rotate * Math.PI) / 180;
+        const localX = -x * Math.cos(radians) + y * Math.sin(radians);
+        const localY = -x * Math.sin(radians) - y * Math.cos(radians);
+        return {
+          covers:
+            shell.dataset.deckVisible === "true" &&
+            opacity > 0 &&
+            Math.abs(localX) <= (cardWidth * scale) / 2 &&
+            Math.abs(localY) <= (cardHeight * scale) / 2,
+          id: shell.dataset.itemId ?? "",
+          layer: Number(shell.dataset.deckLayer),
+          opacity,
+          role: shell.dataset.deckRole ?? "",
+          rotate,
+          scale,
+          x,
+          y,
+        };
+      });
+      let authority = "";
+      let front = Number.NEGATIVE_INFINITY;
+      for (const shell of measured) {
+        if (shell.covers && shell.layer > front) {
+          front = shell.layer;
+          authority = shell.id;
+        }
+      }
+      const targetAttribute = root.getAttribute("data-segment-target-index");
+      trace.frames.push({
+        authoritativeIndex: Number(root.dataset.authoritativeIndex),
+        authority,
+        interactionOriginIndex: Number(root.dataset.interactionOriginIndex),
+        n: trace.frames.length,
+        owned: root.dataset.interactionOwned === "true",
+        phase: root.dataset.phase ?? "",
+        physicalIndex: Number(root.dataset.physicalIndex),
+        segmentPhase: root.dataset.segmentPhase ?? "",
+        segmentProgress: Number(root.dataset.segmentProgress),
+        segmentTargetIndex: targetAttribute === null ? null : Number(targetAttribute),
+        settledIndex: Number(root.dataset.settledIndex),
+        shells: measured,
+        t: performance.now(),
+        visualId: root.dataset.visualId ?? "",
+        visualTopIndex: Number(root.dataset.visualTopIndex),
+      });
+      if ((remaining -= 1) > 0) requestAnimationFrame(record);
+    };
+    requestAnimationFrame(record);
+  }, frames);
+}
+
+async function readAuthorityTrace(page: Page): Promise<AuthorityTrace> {
+  return page.evaluate(() => window.snapMotionAuthorityTrace ?? { events: [], frames: [] });
+}
+
+/** Successive distinct values of one per-frame reading, which is the sequence it actually forms. */
+function runsOf(trace: AuthorityTrace, read: (frame: AuthorityFrame) => string): readonly string[] {
+  const runs: string[] = [];
+  for (const frame of trace.frames) {
+    const value = read(frame);
+    if (value !== runs.at(-1)) runs.push(value);
+  }
+  return runs;
+}
+
+/**
+ * The painted authorities inside each gesture, a gesture being everything from one press up to the
+ * next one — the frames before the first press included, because a deck nobody has touched yet is
+ * a gesture that has not happened.
+ *
+ * One Direct interaction exchanges exactly one adjacent card however far it travels, so the card a
+ * user reads as the deck's current one may change at most once inside each of these. That is the
+ * whole claim, and it is frame-rate independent in the direction that matters: a browser that
+ * skipped the offending frame reports fewer changes, never more.
+ */
+function authorityRunsPerGesture(trace: AuthorityTrace): readonly (readonly string[])[] {
+  const presses = new Set(
+    trace.events.filter((event) => event.type === "pointerdown").map((event) => event.frame),
+  );
+  const gestures: string[][] = [[]];
+  for (const frame of trace.frames) {
+    if (presses.has(frame.n)) gestures.push([]);
+    const runs = gestures.at(-1)!;
+    if (frame.authority !== runs.at(-1)) runs.push(frame.authority);
+  }
+  return gestures.filter((runs) => runs.length > 0);
+}
+
+test("Direct visual authority only ever advances, however fast the hand is", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(240_000);
+  const stage = await prepareDirect(page);
+  const pitch = await motionPitch(stage);
+  const team = STACKED_DECK_IDS[3];
+  const settings = STACKED_DECK_IDS[4];
+  const scenarios = [
+    // Both fast scenarios are alternating bursts at a hundred and fifty milliseconds, which is
+    // inside the travel a committed release still has left. Every press after the first therefore
+    // opens while the deck is moving, which is the state only a hand this fast reaches. What each
+    // flick resolves to is deliberately not asserted: a browser that resolves this burst some
+    // other way is still a browser the claim below is about.
+    {
+      itinerary: null,
+      name: "fast-flick-forward",
+      startIndex: 2,
+      async run() {
+        for (const direction of [1, -1, 1, -1, 1, -1] as const) {
+          await fastFlick(page, direction, pitch);
+          await page.waitForTimeout(150);
+        }
+      },
+    },
+    {
+      itinerary: null,
+      name: "fast-flick-reverse",
+      startIndex: 3,
+      async run() {
+        for (const direction of [-1, 1, -1, 1, -1, 1] as const) {
+          await fastFlick(page, direction, pitch);
+          await page.waitForTimeout(150);
+        }
+      },
+    },
+    {
+      itinerary: [team, settings],
+      name: "normal-release",
+      startIndex: 3,
+      async run() {
+        const origin = await beginPointerAt(stage, 0.35, 0.6);
+        await movePointerBy(page, origin, -pitch * 0.3, 60, 60);
+        await movePointerBy(page, origin, -pitch * 0.72, 150, 130);
+        await page.waitForTimeout(140);
+        await finishPointerBy(page, origin, -pitch * 0.72, 150, 200, "pointerup");
+      },
+    },
+    {
+      itinerary: [team, settings],
+      name: "full-pitch-release",
+      startIndex: 3,
+      async run() {
+        const origin = await beginPointerAt(stage, 0.35, 0.6);
+        await movePointerBy(page, origin, -pitch * 0.4, 40, 60);
+        await movePointerBy(page, origin, -pitch, 90, 140);
+        await page.waitForTimeout(140);
+        await finishPointerBy(page, origin, -pitch, 90, 200, "pointerup");
+      },
+    },
+    {
+      itinerary: [team, settings],
+      name: "overdrag-release",
+      startIndex: 3,
+      async run() {
+        const origin = await beginPointerAt(stage, 0.35, 0.6);
+        await movePointerBy(page, origin, -pitch * 0.8, -50, 60);
+        await movePointerBy(page, origin, -pitch * 1.9, -120, 140);
+        await page.waitForTimeout(140);
+        await finishPointerBy(page, origin, -pitch * 1.9, -120, 200, "pointerup");
+      },
+    },
+  ] as const;
+
+  const report: Record<string, unknown> = {};
+  for (const scenario of scenarios) {
+    await pagination(page).nth(scenario.startIndex).click();
+    await expectCarouselAt(stage, STACKED_DECK_IDS[scenario.startIndex]!);
+    await page.waitForTimeout(320);
+    await startAuthorityTrace(page);
+    await page.waitForTimeout(120);
+    await scenario.run();
+    await page.waitForTimeout(900);
+    await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+    const trace = await readAuthorityTrace(page);
+    // What the eye read, and what the deck said it was reading. The itinerary is the deck's own
+    // account of the exchange, so the claim below is about the picture agreeing with it rather
+    // than about either of them separately — which is also why a browser that resolves these
+    // gestures differently still tests the same thing.
+    const painted = runsOf(trace, (frame) => frame.authority);
+    const gestures = authorityRunsPerGesture(trace);
+
+    // Every card the deck rendered is opaque and finitely placed on every frame of every one of
+    // these gestures. A handoff hidden behind a fade, or performed by a shell nothing can
+    // transform, is not a handoff this test would be able to say anything about.
+    for (const frame of trace.frames) {
+      for (const shell of frame.shells) {
+        expect(shell.opacity, `${scenario.name} frame ${frame.n} ${shell.id}`).toBe(1);
+        expect(
+          Number.isFinite(shell.x) && Number.isFinite(shell.y) && shell.scale > 0,
+          `${scenario.name} frame ${frame.n} ${shell.id}`,
+        ).toBe(true);
+      }
+    }
+    // The deck exchanged something, and at both ends of it — where it is at rest — the card the
+    // eye reads is the card the deck names.
+    expect(painted.length, scenario.name).toBeGreaterThan(1);
+    expect(painted[0], scenario.name).toBe(trace.frames[0]!.visualId);
+    expect(painted.at(-1), scenario.name).toBe(trace.frames.at(-1)!.visualId);
+    if (scenario.itinerary !== null) expect(painted, scenario.name).toEqual(scenario.itinerary);
+    // The claim itself. Obsolete visual authority never comes back: one rendered frame of it is
+    // one change too many inside the gesture that owns it, whether it lasted a frame or a second.
+    for (const [index, runs] of gestures.entries()) {
+      expect(
+        runs.length,
+        `${scenario.name}: gesture ${index} read ${runs.join(" -> ")}, whole exchange ${painted.join(" -> ")}`,
+      ).toBeLessThanOrEqual(2);
+    }
+
+    report[scenario.name] = {
+      events: trace.events,
+      frameCount: trace.frames.length,
+      frameIntervalMs:
+        (trace.frames.at(-1)!.t - trace.frames[0]!.t) / Math.max(1, trace.frames.length - 1),
+      frames: trace.frames,
+      gestures,
+      painted,
+    };
+  }
+
+  const directory = resolvePath(
+    import.meta.dirname,
+    "..",
+    ".artifacts",
+    "stacked-deck-direct-review",
+    "authority-trace",
+  );
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    join(directory, `${testInfo.project.name}.json`),
+    `${JSON.stringify(report, null, 2)}
+`,
+  );
 });

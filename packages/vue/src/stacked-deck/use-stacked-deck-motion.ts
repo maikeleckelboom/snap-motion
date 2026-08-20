@@ -287,8 +287,20 @@ export function useStackedDeckComponentMotion<Id extends string>(
       // A hand opening an interaction supersedes an unfinished release rather than inheriting its
       // release frame. The anchor that hand captured on the way in is kept: it is how the shell it
       // interrupted stays continuous.
+      //
+      // Origin and lifecycle are bound in one statement, because a frame is rendered between any
+      // two that are not. A presentation carrying a new origin with no owner is not an unowned
+      // presentation but a half-built one, and the projection reads an absent lifecycle as an
+      // autonomous exchange: nothing is being held, so the incoming card takes the top of the deck
+      // immediately. At the frame a hand presses, the two bodies still overlap almost exactly, so
+      // every shared pixel would change material for that one frame — which is the card the deck
+      // names appearing to be swapped for another one. An interaction with no hand, which is a
+      // wheel burst, genuinely has no held shell and keeps travelling autonomously.
+      const originIndex = model.beginInteraction();
       clearDirectPresentation(true);
-      return ids.value[model.beginInteraction()];
+      directProjection.originIndex = originIndex;
+      if (handOwnsDirectShell()) directProjection.phase = "held";
+      return ids.value[originIndex];
     },
     track,
     viewport: options.viewport,
@@ -419,6 +431,19 @@ export function useStackedDeckComponentMotion<Id extends string>(
     if (!keepAnchor) delete directProjection.continuity;
   }
 
+  /**
+   * Whether a hand owns the Direct shell: a pointer the controller has taken, on a press this
+   * surface accepted on one of its cards.
+   *
+   * Deliberately one fact, asked in one place. A presentation that declared itself held by a hand
+   * whose movement it would then refuse would pin a shell at the frame it was pressed on for the
+   * whole gesture, and one that refused to declare it would hand a shell the hand is holding to
+   * the projection's autonomous depth rule.
+   */
+  function handOwnsDirectShell(): boolean {
+    return isDirect() && motion.isDragging.value && directProjection.continuity !== undefined;
+  }
+
   watch(
     atRest,
     (rested) => {
@@ -451,9 +476,9 @@ export function useStackedDeckComponentMotion<Id extends string>(
       };
       return;
     }
-    // Dragging means this hand already opened its interaction, which is where whatever was still
-    // parking stopped animating and became the anchor this sample continues from.
-    if (directProjection.continuity === undefined || !motion.isDragging.value) return;
+    // The hand that owns this shell already opened its interaction, which is where whatever was
+    // still parking stopped animating and became the anchor this sample continues from.
+    if (!handOwnsDirectShell()) return;
     directProjection.phase = "held";
     directProjection.translateX = deltaX;
     directProjection.translateY = deltaY;
@@ -694,18 +719,26 @@ export function useStackedDeckComponentMotion<Id extends string>(
     onPointerSample: onDirectPointerSample,
     onResolved(resolution, completed) {
       if (directProjection.phase === "held") {
-        // One immutable decision, taken from the frame the hand ended on: which shell was released
-        // — the presentation's own record of it, because the model may already have closed the
-        // interaction — where it was, since the raw vector is already on the projection and is not
-        // touched here, and whether the deck kept the destination or gave it back. The settlement
-        // opens in the same statement, so nothing can be projected between the two.
-        directProjection.phase =
-          motion.targetId.value === model.idAt(directProjection.originIndex)
-            ? "returning"
-            : "parking";
-        directProjection.settlement = 0;
-        releaseElapsed = 0;
-        releaseSettlement.resume();
+        if (directProjection.translateX === 0 && directProjection.translateY === 0) {
+          // A shell the hand never moved has no release. Both giving a zero vector back and
+          // carrying it into the pile end at the pose it is already drawn at, so the press ends
+          // the presentation rather than holding the deck through a settlement with nothing in it.
+          clearDirectPresentation();
+        } else {
+          // One immutable decision, taken from the frame the hand ended on: which shell was
+          // released — the presentation's own record of it, because the model may already have
+          // closed the interaction — where it was, since the raw vector is already on the
+          // projection and is not touched here, and whether the deck kept the destination or gave
+          // it back. The settlement opens in the same statement, so nothing can be projected
+          // between the two.
+          directProjection.phase =
+            motion.targetId.value === model.idAt(directProjection.originIndex)
+              ? "returning"
+              : "parking";
+          directProjection.settlement = 0;
+          releaseElapsed = 0;
+          releaseSettlement.resume();
+        }
       }
       if (completed.cancelled) {
         // A cancelled gesture undoes itself, which means returning to the card it began on. That is

@@ -8,6 +8,7 @@ import { expectCarouselAt, openLabDemo } from "../helpers";
 import {
   STACKED_DECK_IDS,
   beginPointerAt,
+  fastFlick,
   finishPointerBy,
   flick,
   motionPitch,
@@ -249,7 +250,34 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
   await expectCarouselAt(stage, "settings");
   await page.waitForTimeout(700);
 
+  phases.push("fast alternating flick, forward and reverse");
+  // The primed flick leaves the deck travelling; the marked one presses into that travel, which is
+  // how a hand reaches a frame where the presentation is being handed to a new interaction. Each
+  // strip is cut around the marked flick.
+  //
+  // Which screen a burst this fast lands on is deliberately not pinned here. A recording is a
+  // picture of the physical exchange, and the destination two interrupted springs resolve to
+  // belongs to the assertions in `stacked-deck-direct.spec.ts`.
+  const settleAfterBurst = async () => {
+    await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+    await page.waitForTimeout(700);
+  };
+  await select(page, 2);
+  await fastFlick(page, 1, pitch);
+  await page.waitForTimeout(200);
+  await markRelease("fast-flick-forward");
+  await fastFlick(page, 1, pitch);
+  await settleAfterBurst();
+
+  await select(page, 3);
+  await fastFlick(page, -1, pitch);
+  await page.waitForTimeout(200);
+  await markRelease("fast-flick-reverse");
+  await fastFlick(page, -1, pitch);
+  await settleAfterBurst();
+
   phases.push("high-contrast reverse commit");
+  await select(page, 4);
   card = page.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']");
   origin = await beginPointerAt(card, 0.5, 0.5);
   await moveAndSample(page, origin, "settings", pitch * 0.72, 130, 150, samples);

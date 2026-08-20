@@ -338,3 +338,19 @@ export async function flick(page: Page, direction: -1 | 1, pitch: number) {
   await movePointer(page, origin, travel, 16);
   await finishPointer(page, origin, travel, 24, "pointerup");
 }
+
+/**
+ * A hand fast enough that the deck is still travelling when the next press lands.
+ *
+ * Two samples inside ten milliseconds, against the hundred and forty of an ordinary release. It is
+ * pressed at the deck's centre rather than on a named card, so the surface hit-tests the press
+ * exactly as it would a real one — including deciding, as it would, that a deck still in flight has
+ * no card to press on.
+ */
+export async function fastFlick(page: Page, direction: -1 | 1, pitch: number) {
+  const origin = await beginPointer(viewport(page));
+  const travel = -direction * pitch * 0.4;
+  await movePointerBy(page, origin, travel * 0.4, 8, 4);
+  await movePointerBy(page, origin, travel, 16, 8);
+  await finishPointerBy(page, origin, travel, 16, 11, "pointerup");
+}
