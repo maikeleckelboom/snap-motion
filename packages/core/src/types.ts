@@ -94,9 +94,11 @@ export interface ControllerDragOptions<Id extends SemanticId = SemanticId> {
    * Establish the origin anchor itself as scalar displacement zero.
    *
    * The default preserves the mass's current scalar position, which is what ordinary interruption
-   * wants. A renderer that has independently captured the current physical frame may instead start
-   * a genuinely new transaction at its semantic anchor while using that capture for visual
-   * continuity. This resets position and velocity; it never preserves prior travel as new input.
+   * wants. A press, though, is not a physical event: a hand that takes hold of the card a surface
+   * is already presenting should not inherit whatever an unfinished release still owed, and pay it
+   * off before its own travel counts. A renderer that keeps the interrupted frame visually
+   * continuous by its own means can start a genuinely new transaction here. This resets position
+   * and velocity; it never preserves prior travel as new input.
    */
   readonly resetPositionToOrigin?: boolean;
 }

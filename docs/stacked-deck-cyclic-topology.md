@@ -25,8 +25,16 @@ therefore different choreography.
 
 For `N > 0`, the forward neighbour of ordinal `i` is `(i + 1) mod N`; the backward neighbour is
 `(i - 1 + N) mod N`. Forward depth from a resting top is the non-negative cyclic distance in that
-canonical order. A separate signed slot places the compact pile on either side without changing
-depth or identity. Layering follows depth, never ordinal subtraction.
+canonical order, and it decides identity: which item occupies which place in the pile.
+
+It does not decide what that place costs physically. The pile folds forward depth into a signed
+slot around the deck's centre, and physical depth is that slot's own distance from the centre. A
+pile is a neighbourhood, so the nearest neighbour on either side is the nearest to the eye on that
+side, and mirrored slots are equally deep because neither side of a pile is favoured. The ring
+answers which card; the slot answers what it looks like. Reading forward ring depth as physical
+depth instead inverts one side of the fold — the immediately previous card is painted behind the
+whole pile while sitting closest to it — and the exchange choreography then has to work around a
+pile that no longer reads as one object.
 
 At rest the physical pile is the canonical ring rotated to the current item. Reconfiguration
 preserves the current semantic ID where possible, then rebuilds this order from the new collection.

@@ -109,6 +109,18 @@ function smoothstep(value: number): number {
   return value * value * (3 - 2 * value);
 }
 
+/**
+ * Which side of `fromIndex` the ring reaches `toIndex` on, across the one-step offsets a single
+ * exchange can produce. A ring gives both directions a neighbour, so this cannot be an ordinal
+ * difference; anything further apart than one exchange is not a resumable offset at all.
+ */
+function signedNeighbourOffset(fromIndex: number, toIndex: number, itemCount: number): -1 | 0 | 1 {
+  if (fromIndex === toIndex || itemCount < 2) return 0;
+  if (resolveStackedDeckNeighbor(fromIndex, 1, itemCount) === toIndex) return 1;
+  if (resolveStackedDeckNeighbor(fromIndex, -1, itemCount) === toIndex) return -1;
+  return 0;
+}
+
 const STACKED_DECK_CONFIGURATION_DEFAULTS: ControllerConfiguration = {
   spring: tightPreset.spring,
   releasePolicy: { ...tightPreset.release, maxAnchorSkip: STACKED_DECK_ANCHOR_SKIP },
@@ -330,9 +342,9 @@ export function useStackedDeckComponentMotion<Id extends string>(
       rebasePhysicalCoordinate(originIndex);
       return ids.value[originIndex];
     },
-    // Direct has already captured the rendered pile before this runs. Its next hand owns a new
-    // transaction, so the generic scalar mass may discard prior travel while the capture preserves
-    // the exact frame the eye saw. Shuffle keeps ordinary interruption semantics unchanged.
+    // Direct has already captured the shell an unfinished release is still carrying, so its next
+    // hand can own a genuinely new transaction while that capture keeps the frame continuous.
+    // Shuffle keeps ordinary interruption semantics unchanged.
     resetDragPositionToOrigin: isDirect,
     track,
     viewport: options.viewport,
@@ -552,13 +564,24 @@ export function useStackedDeckComponentMotion<Id extends string>(
     if (!isDirect()) return;
     if (deltaX === undefined || deltaY === undefined) {
       directProjection.continuity = null;
-      // A press during an unfinished release anchors on the complete frame that release owns. The
-      // capture is old physical history only: new transaction travel is established independently
-      // when the controller takes ownership.
+      // A press during an unfinished release anchors on the shell that release owns, which the
+      // model may already have closed its interaction on.
       const continuityIndex = model.state.interactionOriginIndex ?? presentationOriginIndex();
       if (continuityIndex === null) return;
+      // How far the new interaction has already travelled at the frame it is taking over on. The
+      // scalar mass keeps the position the unfinished release left it at, so that travel is real
+      // and the capture is the pose belonging to it. It is measured from the card this hand will
+      // be measured from, expressed in the coordinate the mass currently stands in — those two
+      // differ by one exchange for as long as an interrupted release has not rebased yet.
+      const resumedOffset = signedNeighbourOffset(
+        physicalCoordinate.originIndex,
+        state.value.currentIndex,
+        model.itemCount,
+      );
       directProjection.continuity = {
-        poses: frame.value.poses.map((pose) => ({ ...pose })),
+        itemIndex: continuityIndex,
+        progress: smoothstep(Math.min(1, Math.abs(physicalIndex.value - resumedOffset))),
+        pose: { ...frame.value.poses[continuityIndex]! },
       };
       return;
     }

@@ -1022,13 +1022,21 @@ test("deck thickness follows canonical ring depth across every semantic ordinal"
     const frame = await readFrame(page);
     expectPersistentShellInventory(frame);
     const subordinate = frame.poses.filter((pose) => pose.index !== index);
-    const byDepth = subordinate.toSorted((left, right) => right.layer - left.layer);
-    expect(byDepth.map((pose) => pose.id)).toEqual(
-      Array.from(
-        { length: IDS.length - 1 },
-        (_unused, offset) => IDS[(index + offset + 1) % IDS.length],
-      ),
-    );
+    const slotOf = (pose: { index: number }) => {
+      const depth = (pose.index - index + IDS.length) % IDS.length;
+      return depth <= Math.floor(IDS.length / 2) ? depth : depth - IDS.length;
+    };
+    // Paint rank follows the folded slot's own distance from the centre of the deck: the nearest
+    // neighbour on a side is the nearest to the eye on that side, and mirrored slots are equally
+    // deep because neither side of a pile is favoured over the other.
+    for (const nearer of subordinate) {
+      for (const further of subordinate) {
+        expect(
+          Math.sign(further.layer - nearer.layer),
+          `${IDS[index]}: ${further.id} against ${nearer.id}`,
+        ).toBe(Math.sign(Math.abs(slotOf(nearer)) - Math.abs(slotOf(further))));
+      }
+    }
     expect(subordinate.every((pose) => pose.ariaHidden === "true")).toBe(true);
     const settingsCard = subordinate.find((pose) => pose.id === "settings");
     if (settingsCard !== undefined) {
@@ -1043,7 +1051,7 @@ test("deck thickness follows canonical ring depth across every semantic ordinal"
       expect(edge(card, centre)).toBeGreaterThan(0);
       expect(edge(card, centre)).toBeLessThan(cardWidth * 0.08);
     }
-    // Folded visual slots mirror geometrically while forward depth remains unique in paint order.
+    // Folded visual slots mirror geometrically, which is the same fact their equal depth states.
     for (const card of subordinate) {
       const depth = (card.index - index + IDS.length) % IDS.length;
       const mirroredDepth = IDS.length - depth;

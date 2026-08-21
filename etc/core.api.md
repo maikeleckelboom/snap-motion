@@ -1219,7 +1219,9 @@ export interface StackedDeckCommandContext {
 // @public
 export interface StackedDeckDirectProjection {
     readonly continuity?: null | {
-        readonly poses: readonly StackedDeckPose[];
+        readonly itemIndex: number;
+        readonly progress: number;
+        readonly pose: StackedDeckPose;
     };
     readonly direction: -1 | 0 | 1;
     readonly originIndex: number;
