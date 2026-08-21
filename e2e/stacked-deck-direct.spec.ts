@@ -24,6 +24,502 @@ async function nextFrame(page: Page): Promise<void> {
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 }
 
+interface DirectRafTraceShell {
+  readonly bottom: number;
+  readonly elapsed: number;
+  readonly id: string;
+  readonly index: number;
+  readonly interactive: boolean;
+  readonly landingOrder: number;
+  readonly layer: number;
+  readonly left: number;
+  readonly opacity: number;
+  readonly releaseX: number;
+  readonly releaseY: number;
+  readonly right: number;
+  readonly role: string;
+  readonly rotate: number;
+  readonly scale: number;
+  readonly settlement: number;
+  readonly top: number;
+  readonly translateX: number;
+  readonly translateY: number;
+  readonly visible: boolean;
+}
+
+interface DirectRafTraceFrame {
+  readonly authoritativeIndex: number;
+  readonly directOriginIndex: number;
+  readonly directPhase: string;
+  readonly directSettlement: number;
+  readonly directSignedTravel: number;
+  readonly directTargetIndex: number;
+  readonly frame: number;
+  readonly landingCount: number;
+  readonly painted: { readonly center: string; readonly left: string; readonly right: string };
+  readonly paintedX: { readonly center: number; readonly left: number; readonly right: number };
+  readonly paintedY: number;
+  readonly shells: readonly DirectRafTraceShell[];
+  readonly timestamp: number;
+}
+
+interface RapidDirectChainSnapshot {
+  readonly authoritativeIndex: number;
+  readonly captureDistance: number;
+  readonly captureRotateDelta: number;
+  readonly captureScaleDelta: number;
+  readonly capturedLanding: boolean;
+  readonly capturedLandingOrder: number;
+  readonly direction: -1 | 1;
+  readonly landingCount: number;
+  readonly landingIds: readonly string[];
+  readonly shells: Readonly<
+    Record<
+      string,
+      {
+        readonly landingOrder: number;
+        readonly landingElapsed: number;
+        readonly landingSettlement: number;
+        readonly layer: number;
+        readonly x: number;
+        readonly y: number;
+      }
+    >
+  >;
+  readonly timestamp: number;
+}
+
+interface RapidDirectChainResult {
+  readonly hand: Awaited<ReturnType<typeof beginPointer>>;
+  readonly snapshots: readonly RapidDirectChainSnapshot[];
+}
+
+/**
+ * Runs a release/re-grab chain inside one browser task.
+ *
+ * Protocol round-trips are deliberately absent between gestures: on a slower engine they can cost
+ * more than the real 230 ms release and accidentally turn an overlap proof into a serial sequence.
+ * Each next press is instead tied to the first RAF where the destination is authoritative and
+ * interactive, then Vue's DOM publication is allowed to flush before the next release.
+ */
+async function runRapidDirectChain(
+  page: Page,
+  itemIds: readonly string[],
+  startIndex: number,
+  steps: readonly {
+    readonly diagonalY?: number;
+    readonly direction: -1 | 1;
+    readonly fraction?: number;
+  }[],
+): Promise<RapidDirectChainResult> {
+  return page.evaluate(
+    async ({ ids, initialIndex, rapidSteps }) => {
+      const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
+      const directDebug = (
+        root as HTMLElement & {
+          snapMotionDirectDebug?: {
+            landings?: readonly {
+              elapsed: number;
+              itemIndex: number;
+              releaseOrder: number;
+              settlement: number;
+              translateX: number;
+              translateY: number;
+            }[];
+            projection?: {
+              originIndex: number;
+              phase?: string;
+              settlement: number;
+              signedTravel: number;
+              targetIndex: number | null;
+            };
+          };
+        }
+      ).snapMotionDirectDebug;
+      const landings = directDebug?.landings ?? [];
+      const pitch = Number(root.dataset.motionPitch);
+      let pointerId = 30_000;
+      const card = (id: string) =>
+        root.querySelector<HTMLElement>(
+          `[data-snap-motion-stacked-deck-card][data-item-id='${id}']`,
+        )!;
+      const readPose = (id: string) => {
+        const item = card(id);
+        const landing = landings.find((candidate) => candidate.itemIndex === ids.indexOf(id));
+        const surface = item.querySelector<HTMLElement>(".screen-chrome")!;
+        return {
+          landingElapsed: landing?.elapsed ?? Number.NaN,
+          landingOrder: landing?.releaseOrder ?? Number.NaN,
+          landingSettlement: landing?.settlement ?? Number.NaN,
+          layer: Number(item.dataset.deckLayer),
+          rotate: Number(surface.dataset.rotate),
+          scale: Number(surface.dataset.scale),
+          x: Number(surface.dataset.translateX),
+          y: Number(surface.dataset.translateY),
+        };
+      };
+      const begin = (index: number) => {
+        const element = card(ids[index]!);
+        const box = element.getBoundingClientRect();
+        const origin = {
+          pointerId: (pointerId += 1),
+          pointerType: "mouse" as const,
+          timestamp: performance.now(),
+          x: box.left + box.width / 2,
+          y: box.top + box.height / 2,
+        };
+        const event = new PointerEvent("pointerdown", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          cancelable: true,
+          clientX: origin.x,
+          clientY: origin.y,
+          isPrimary: true,
+          pointerId: origin.pointerId,
+          pointerType: origin.pointerType,
+        });
+        Object.defineProperty(event, "timeStamp", { value: origin.timestamp });
+        element.dispatchEvent(event);
+        return origin;
+      };
+      // oxlint-disable-next-line unicorn/consistent-function-scoping -- this executes in the browser-evaluated closure.
+      const dispatch = (
+        type: "pointermove" | "pointerup",
+        origin: ReturnType<typeof begin>,
+        deltaX: number,
+        deltaY: number,
+        elapsed: number,
+      ) => {
+        const event = new PointerEvent(type, {
+          bubbles: true,
+          button: 0,
+          buttons: type === "pointermove" ? 1 : 0,
+          cancelable: true,
+          clientX: origin.x + deltaX,
+          clientY: origin.y + deltaY,
+          isPrimary: true,
+          pointerId: origin.pointerId,
+          pointerType: origin.pointerType,
+        });
+        Object.defineProperty(event, "timeStamp", { value: origin.timestamp + elapsed });
+        window.dispatchEvent(event);
+      };
+      const firstInteractiveFrame = async (index: number) => {
+        let renderedFrames = 0;
+        for (let remaining = 60; remaining > 0; remaining -= 1) {
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          renderedFrames += 1;
+          if (
+            renderedFrames >= 2 &&
+            Number(root.dataset.authoritativeIndex) === index &&
+            card(ids[index]!).dataset.deckInteractive === "true"
+          ) {
+            return;
+          }
+        }
+        throw new Error(`the rapid chain never offered ${ids[index]}`);
+      };
+      const snapshots: RapidDirectChainSnapshot[] = [];
+      let currentIndex = initialIndex;
+      let hand = begin(currentIndex);
+      await Promise.resolve();
+
+      for (const step of rapidSteps) {
+        const deltaX = -step.direction * pitch * (step.fraction ?? 0.8);
+        const deltaY = step.diagonalY ?? 0;
+        dispatch("pointermove", hand, deltaX, deltaY, 16);
+        // The release must own a real rendered held pose. A synthetic move and up in one task can
+        // legitimately skip that presentation altogether, which is not the physical sequence this
+        // regression exercises.
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        const heldDirection = Number(root.dataset.segmentDirection) as -1 | 1;
+        dispatch("pointerup", hand, deltaX, deltaY, 32);
+        currentIndex = (currentIndex + step.direction + ids.length) % ids.length;
+        await firstInteractiveFrame(currentIndex);
+        const beforeCapture = readPose(ids[currentIndex]!);
+        const capturedLanding = Number.isFinite(beforeCapture.landingSettlement);
+        hand = begin(currentIndex);
+        await Promise.resolve();
+        await Promise.resolve();
+        const afterCapture = readPose(ids[currentIndex]!);
+        const landingIds = ids.filter((id) => Number.isFinite(readPose(id).landingSettlement));
+        snapshots.push({
+          authoritativeIndex: Number(root.dataset.authoritativeIndex),
+          captureDistance: Math.hypot(
+            afterCapture.x - beforeCapture.x,
+            afterCapture.y - beforeCapture.y,
+          ),
+          captureRotateDelta: afterCapture.rotate - beforeCapture.rotate,
+          captureScaleDelta: afterCapture.scale - beforeCapture.scale,
+          capturedLanding,
+          capturedLandingOrder: beforeCapture.landingOrder,
+          direction: heldDirection,
+          landingCount: landings.length,
+          landingIds,
+          shells: Object.fromEntries(
+            ids.map((id) => {
+              const pose = readPose(id);
+              return [
+                id,
+                {
+                  landingElapsed: pose.landingElapsed,
+                  landingOrder: pose.landingOrder,
+                  landingSettlement: pose.landingSettlement,
+                  layer: pose.layer,
+                  x: pose.x,
+                  y: pose.y,
+                },
+              ];
+            }),
+          ),
+          timestamp: performance.now(),
+        });
+      }
+      return { hand, snapshots };
+    },
+    { ids: itemIds, initialIndex: startIndex, rapidSteps: steps },
+  );
+}
+
+function expectRapidChainLandingContinuity(snapshots: readonly RapidDirectChainSnapshot[]): number {
+  let maximumLandingCount = 0;
+  for (let index = 0; index < snapshots.length; index += 1) {
+    const current = snapshots[index]!;
+    const currentLandings = Object.values(current.shells).filter((shell) =>
+      Number.isFinite(shell.landingSettlement),
+    );
+    maximumLandingCount = Math.max(maximumLandingCount, currentLandings.length);
+    expect(new Set(currentLandings.map((landing) => landing.landingOrder)).size).toBe(
+      currentLandings.length,
+    );
+    if (index === 0) continue;
+    const previous = snapshots[index - 1]!;
+    const elapsedMs = current.timestamp - previous.timestamp;
+    for (const prior of Object.values(previous.shells).filter((shell) =>
+      Number.isFinite(shell.landingSettlement),
+    )) {
+      const stillLanding = currentLandings.find(
+        (landing) => landing.landingOrder === prior.landingOrder,
+      );
+      if (stillLanding !== undefined) {
+        expect(stillLanding.landingSettlement).toBeGreaterThanOrEqual(prior.landingSettlement);
+        continue;
+      }
+      const physicallyCompleted = prior.landingElapsed + elapsedMs / 230 >= 1;
+      const absorbedByHand = current.capturedLandingOrder === prior.landingOrder;
+      expect(
+        physicallyCompleted || absorbedByHand,
+        `landing ${prior.landingOrder} disappeared at ${prior.landingSettlement}`,
+      ).toBe(true);
+    }
+  }
+  return maximumLandingCount;
+}
+
+async function startDirectRafTrace(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const tracedWindow = window as typeof window & {
+      snapMotionDirectRafTrace?: DirectRafTraceFrame[];
+      snapMotionDirectRafTraceActive?: boolean;
+    };
+    const frames: DirectRafTraceFrame[] = [];
+    tracedWindow.snapMotionDirectRafTrace = frames;
+    tracedWindow.snapMotionDirectRafTraceActive = true;
+    const record = (timestamp: number) => {
+      const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
+      const directDebug = (
+        root as HTMLElement & {
+          snapMotionDirectDebug?: {
+            landings?: readonly {
+              elapsed: number;
+              itemIndex: number;
+              releaseOrder: number;
+              settlement: number;
+              translateX: number;
+              translateY: number;
+            }[];
+            projection?: {
+              originIndex: number;
+              phase?: string;
+              settlement: number;
+              signedTravel: number;
+              targetIndex: number | null;
+            };
+          };
+        }
+      ).snapMotionDirectDebug;
+      const landings = directDebug?.landings ?? [];
+      const projection = directDebug?.projection;
+      const rootBox = root.getBoundingClientRect();
+      const cards = [...root.querySelectorAll<HTMLElement>("[data-snap-motion-stacked-deck-card]")];
+      const cardWidth = Number(root.dataset.cardWidth);
+      const ownerAt = (x: number, y: number) => {
+        for (const element of document.elementsFromPoint(x, y)) {
+          const card = element.closest<HTMLElement>("[data-snap-motion-stacked-deck-card]");
+          if (card && root.contains(card)) return card.dataset.itemId ?? "";
+        }
+        return "";
+      };
+      const shells = cards.map((card, index) => {
+        const landing = landings.find((candidate) => candidate.itemIndex === index);
+        const surface = card.querySelector<HTMLElement>(".screen-chrome")!;
+        const box = surface.getBoundingClientRect();
+        return {
+          bottom: box.bottom,
+          elapsed: landing?.elapsed ?? Number.NaN,
+          id: card.dataset.itemId ?? "",
+          index,
+          interactive: card.dataset.deckInteractive === "true",
+          landingOrder: landing?.releaseOrder ?? Number.NaN,
+          layer: Number(card.dataset.deckLayer),
+          left: box.left,
+          opacity: Number(getComputedStyle(card).opacity),
+          releaseX: landing?.translateX ?? Number.NaN,
+          releaseY: landing?.translateY ?? Number.NaN,
+          right: box.right,
+          role: card.dataset.deckRole ?? "",
+          rotate: Number(surface.dataset.rotate),
+          scale: Number(surface.dataset.scale),
+          settlement: landing?.settlement ?? Number.NaN,
+          top: box.top,
+          translateX: Number(surface.dataset.translateX),
+          translateY: Number(surface.dataset.translateY),
+          visible: card.dataset.deckVisible === "true",
+        };
+      });
+      const centerX = rootBox.left + rootBox.width / 2;
+      const centerY = rootBox.top + rootBox.height / 2;
+      frames.push({
+        authoritativeIndex: Number(root.dataset.authoritativeIndex),
+        directOriginIndex: projection?.originIndex ?? Number.NaN,
+        directPhase: projection?.phase ?? "",
+        directSettlement: projection?.settlement ?? Number.NaN,
+        directSignedTravel: projection?.signedTravel ?? Number.NaN,
+        directTargetIndex: projection?.targetIndex ?? Number.NaN,
+        frame: frames.length,
+        landingCount: landings.length,
+        painted: {
+          center: ownerAt(centerX, centerY),
+          left: ownerAt(centerX - cardWidth * 0.46, centerY),
+          right: ownerAt(centerX + cardWidth * 0.46, centerY),
+        },
+        paintedX: {
+          center: centerX,
+          left: centerX - cardWidth * 0.46,
+          right: centerX + cardWidth * 0.46,
+        },
+        paintedY: centerY,
+        shells,
+        timestamp,
+      });
+      if (tracedWindow.snapMotionDirectRafTraceActive) requestAnimationFrame(record);
+    };
+    requestAnimationFrame(record);
+  });
+}
+
+async function stopDirectRafTrace(page: Page): Promise<readonly DirectRafTraceFrame[]> {
+  await page.evaluate(() => {
+    (
+      window as typeof window & { snapMotionDirectRafTraceActive?: boolean }
+    ).snapMotionDirectRafTraceActive = false;
+  });
+  await nextFrame(page);
+  return page.evaluate(
+    () =>
+      (window as typeof window & { snapMotionDirectRafTrace?: readonly DirectRafTraceFrame[] })
+        .snapMotionDirectRafTrace ?? [],
+  );
+}
+
+function containsPaintSample(shell: DirectRafTraceShell, x: number, y: number): boolean {
+  return (
+    x >= shell.left - 0.5 &&
+    x <= shell.right + 0.5 &&
+    y >= shell.top - 0.5 &&
+    y <= shell.bottom + 0.5
+  );
+}
+
+function expectDirectRafTraceSafe(frames: readonly DirectRafTraceFrame[]): number {
+  let maximumLandingCount = 0;
+  for (let frameIndex = 0; frameIndex < frames.length; frameIndex += 1) {
+    const frame = frames[frameIndex]!;
+    const landings = frame.shells.filter((shell) => Number.isFinite(shell.settlement));
+    maximumLandingCount = Math.max(maximumLandingCount, landings.length);
+    expect(new Set(landings.map((landing) => landing.id)).size, `frame ${frame.frame}`).toBe(
+      landings.length,
+    );
+    expect(
+      new Set(landings.map((landing) => landing.landingOrder)).size,
+      `frame ${frame.frame}`,
+    ).toBe(landings.length);
+    if (frameIndex === 0) continue;
+    const previous = frames[frameIndex - 1]!;
+    const elapsedMs = frame.timestamp - previous.timestamp;
+    for (const priorLanding of previous.shells.filter((shell) =>
+      Number.isFinite(shell.settlement),
+    )) {
+      const current = landings.find(
+        (landing) => landing.landingOrder === priorLanding.landingOrder,
+      );
+      if (current !== undefined) {
+        expect(
+          current.settlement,
+          `${priorLanding.id} settlement at frame ${frame.frame}`,
+        ).toBeGreaterThanOrEqual(priorLanding.settlement);
+        continue;
+      }
+      // A completed record remains present for its exact-arrival frame. A recorder that observed
+      // every RAF therefore sees one before ownership ends; if WebKit skipped that intermediate
+      // sample, its own elapsed timestamp must still prove that the 230 ms flight could complete.
+      const physicallyCompleted =
+        priorLanding.elapsed >= 1 || priorLanding.elapsed + elapsedMs / 230 >= 1;
+      const absorbedByHand =
+        frame.directPhase !== "" && frame.directOriginIndex === priorLanding.index;
+      expect(
+        physicallyCompleted || absorbedByHand,
+        `${priorLanding.id} lost landing ${priorLanding.landingOrder} at ${priorLanding.settlement} between frames ${previous.frame} and ${frame.frame}`,
+      ).toBe(true);
+    }
+
+    for (const region of ["center", "left", "right"] as const) {
+      const beforeOwner = previous.painted[region];
+      const afterOwner = frame.painted[region];
+      if (beforeOwner === afterOwner || beforeOwner === "" || afterOwner === "") continue;
+      const beforeShell = previous.shells.find((shell) => shell.id === beforeOwner)!;
+      const afterShell = frame.shells.find((shell) => shell.id === afterOwner)!;
+      const beforeAfter = frame.shells.find((shell) => shell.id === beforeOwner)!;
+      const afterBefore = previous.shells.find((shell) => shell.id === afterOwner)!;
+      const edgeMotion = Math.max(
+        Math.abs(beforeAfter.left - beforeShell.left),
+        Math.abs(beforeAfter.right - beforeShell.right),
+        Math.abs(afterShell.left - afterBefore.left),
+        Math.abs(afterShell.right - afterBefore.right),
+      );
+      const horizontalOverlap =
+        Math.min(beforeAfter.right, afterShell.right) - Math.max(beforeAfter.left, afterShell.left);
+      const verticalOverlap =
+        Math.min(beforeAfter.bottom, afterShell.bottom) - Math.max(beforeAfter.top, afterShell.top);
+      const orderBefore = Math.sign(beforeShell.layer - afterBefore.layer);
+      const orderAfter = Math.sign(beforeAfter.layer - afterShell.layer);
+      const safeDepthCrossover =
+        orderBefore !== orderAfter && (horizontalOverlap <= 0 || verticalOverlap <= 0);
+      const bodyEdgeCrossing =
+        containsPaintSample(beforeShell, previous.paintedX[region], previous.paintedY) !==
+          containsPaintSample(beforeAfter, frame.paintedX[region], frame.paintedY) ||
+        containsPaintSample(afterBefore, previous.paintedX[region], previous.paintedY) !==
+          containsPaintSample(afterShell, frame.paintedX[region], frame.paintedY);
+      expect(
+        bodyEdgeCrossing || safeDepthCrossover,
+        `${region} paint changed ${beforeOwner} -> ${afterOwner} at frame ${frame.frame} without a body-edge crossing; ${edgeMotion.toFixed(2)}px edge motion and ${horizontalOverlap.toFixed(2)}px × ${verticalOverlap.toFixed(2)}px overlap`,
+      ).toBe(true);
+    }
+  }
+  return maximumLandingCount;
+}
+
 async function waitForRenderedPoseRest(surface: Locator): Promise<number> {
   let previous: number | undefined;
   let stableSamples = 0;
@@ -293,7 +789,28 @@ function expectCompletePhysicalFrame(frame: DirectFrame, itemIds = STACKED_DECK_
   // a neighbourhood rather than a queue: mirrored slots are equally deep on purpose, so ordering
   // them against each other would be inventing a fact the deck does not have.
   const frontLayer = Math.max(...coveringLayers);
-  expect(coveringLayers.filter((layer) => layer === frontLayer)).toHaveLength(1);
+  expect(
+    coveringLayers.filter((layer) => layer === frontLayer),
+    JSON.stringify(
+      {
+        authoritativeIndex: frame.authoritativeIndex,
+        physicalPosition: frame.physicalPosition,
+        poses: frame.poses.map((pose) => ({
+          id: pose.id,
+          landingSettlement: pose.landingSettlement,
+          layer: pose.layer,
+          left: pose.left,
+          right: pose.right,
+          role: pose.role,
+          translateX: pose.translateX,
+          visible: pose.visible,
+        })),
+        visualId: frame.visualId,
+      },
+      null,
+      2,
+    ),
+  ).toHaveLength(1);
 }
 
 async function releaseAndTakeOver(
@@ -588,6 +1105,259 @@ test("Direct lets an interrupted release land while the next hand reverses onto 
   await expectCarouselAt(stage, "settings");
 });
 
+test("Direct preserves every unfinished shell through a third immediate same-direction hand", async ({
+  page,
+}, testInfo) => {
+  const stage = await prepareDirect(page, 4);
+  const pitch = await motionPitch(stage);
+  const chain = await runRapidDirectChain(page, STACKED_DECK_IDS, 4, [
+    { direction: 1 },
+    { direction: 1 },
+    { direction: 1 },
+  ]);
+  const firstHand = chain.snapshots[0]!;
+  const thirdHand = chain.snapshots[1]!;
+  const fourthHand = chain.snapshots[2]!;
+  const trace = JSON.stringify(chain.snapshots, null, 2);
+  const maximumLandingCount = expectRapidChainLandingContinuity(chain.snapshots);
+  if (testInfo.project.name === "chromium") {
+    expect(thirdHand.landingCount, trace).toBe(2);
+    expect(Number.isFinite(thirdHand.shells.settings!.landingSettlement), trace).toBe(true);
+    expect(Number.isFinite(thirdHand.shells.templates!.landingSettlement), trace).toBe(true);
+    expect(thirdHand.shells.settings!.landingSettlement, trace).toBeGreaterThanOrEqual(
+      firstHand.shells.settings!.landingSettlement,
+    );
+    expect(
+      Math.abs(thirdHand.shells.settings!.x),
+      `Settings returned to nominal pile geometry\n${trace}`,
+    ).toBeGreaterThan(pitch * 0.5);
+    expect(fourthHand.landingCount, trace).toBe(3);
+    const activeLandingIds = fourthHand.landingIds.toSorted();
+    expect(activeLandingIds).toEqual(["project", "settings", "templates"]);
+  } else {
+    expect(maximumLandingCount, trace).toBeGreaterThanOrEqual(1);
+  }
+
+  await finishPointer(page, chain.hand, 0, 16, "pointercancel");
+});
+
+test("Direct preserves three inverse releases while repeatedly crossing the semantic seam", async ({
+  page,
+}, testInfo) => {
+  await prepareDirect(page, 0);
+  const chain = await runRapidDirectChain(page, STACKED_DECK_IDS, 0, [
+    { direction: -1 },
+    { direction: -1 },
+    { direction: -1 },
+  ]);
+  const final = chain.snapshots.at(-1)!;
+  const maximumLandingCount = expectRapidChainLandingContinuity(chain.snapshots);
+  if (testInfo.project.name === "chromium") {
+    expect(final.landingCount).toBe(3);
+    expect(final.landingIds.toSorted()).toEqual(["settings", "team", "templates"]);
+  } else {
+    expect(maximumLandingCount).toBeGreaterThanOrEqual(1);
+  }
+  await finishPointer(page, chain.hand, 0, 16, "pointercancel");
+});
+
+test("Direct continuously absorbs an airborne reversal target without duplicating its shell", async ({
+  page,
+}, testInfo) => {
+  await prepareDirect(page, 4);
+  // Keep release, reversal, and capture in one browser task. Protocol round-trips can outlast the
+  // real 230 ms flight under parallel load and would turn this overlap proof into a settled restart.
+  const reversal = await runRapidDirectChain(page, STACKED_DECK_IDS, 4, [
+    { direction: 1 },
+    { direction: -1 },
+  ]);
+  const firstRelease = reversal.snapshots[0]!;
+  const capture = reversal.snapshots[1]!;
+  const captureTrace = JSON.stringify(reversal.snapshots, null, 2);
+  if (capture.capturedLanding) {
+    expect(capture.captureDistance, captureTrace).toBeLessThan(2);
+    expect(Math.abs(capture.captureScaleDelta), captureTrace).toBeLessThan(0.00001);
+    expect(Math.abs(capture.captureRotateDelta), captureTrace).toBeLessThan(0.00001);
+    expect(capture.shells.settings!.layer, captureTrace).toBeGreaterThan(
+      capture.shells.templates!.layer,
+    );
+  } else {
+    // A sufficiently slow WebKit run can spend the whole 230 ms lifetime between these rendered
+    // opportunities. It never produced an airborne target to capture, so prove that the prior
+    // shell had enough physical time to arrive instead of demanding an intermediate frame.
+    expect(testInfo.project.name, captureTrace).toBe("webkit-stacked-deck-direct");
+    expect(Number.isFinite(firstRelease.shells.settings!.landingElapsed), captureTrace).toBe(true);
+    expect(
+      firstRelease.shells.settings!.landingElapsed +
+        (capture.timestamp - firstRelease.timestamp) / 230,
+      captureTrace,
+    ).toBeGreaterThanOrEqual(1);
+  }
+  expect(capture.landingCount, captureTrace).toBe(1);
+  expect(capture.landingIds, captureTrace).toEqual(["templates"]);
+  expect(Number.isFinite(capture.shells.settings!.landingSettlement), captureTrace).toBe(false);
+  expect(Number.isFinite(capture.shells.templates!.landingSettlement), captureTrace).toBe(true);
+
+  await finishPointer(page, reversal.hand, 0, 16, "pointercancel");
+  await selectStable(page, 4);
+  const alternating = await runRapidDirectChain(page, STACKED_DECK_IDS, 4, [
+    { direction: 1, fraction: 0.99 },
+    { direction: -1, fraction: 1 },
+    { direction: 1, fraction: 1 },
+  ]);
+  const alternatingTrace = JSON.stringify(alternating.snapshots, null, 2);
+  const capturedTargets = alternating.snapshots.filter((snapshot) => snapshot.capturedLanding);
+  if (testInfo.project.name === "chromium") {
+    expect(capturedTargets.length, alternatingTrace).toBeGreaterThanOrEqual(1);
+  }
+  expect(capturedTargets.every((snapshot) => snapshot.captureDistance < 2)).toBe(true);
+  expectRapidChainLandingContinuity(alternating.snapshots);
+  expect(alternating.snapshots.every((snapshot) => snapshot.landingCount <= 1)).toBe(true);
+  await finishPointer(page, alternating.hand, 0, 16, "pointercancel");
+});
+
+test("Direct two-item machine-gun reuse keeps one record per persistent shell", async ({
+  page,
+}) => {
+  const stage = await prepareDirect(page, 3);
+  await page.getByTestId("stacked-deck-two-items").click();
+  await page.getByTestId("stacked-deck-destination").selectOption("team");
+  await expectCarouselAt(stage, "team");
+  await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+  const ids = ["team", "settings"] as const;
+  const directions = [1, -1, 1, -1, -1, 1, -1, 1] as const;
+  const chain = await runRapidDirectChain(
+    page,
+    ids,
+    0,
+    directions.map((direction) => ({ direction })),
+  );
+  for (const [index, snapshot] of chain.snapshots.entries()) {
+    expect(snapshot.direction).toBe(directions[index]);
+    expect(snapshot.landingCount).toBeLessThanOrEqual(1);
+    expect(new Set(snapshot.landingIds).size).toBe(snapshot.landingIds.length);
+    expect(Object.keys(snapshot.shells).toSorted()).toEqual(ids.toSorted());
+  }
+  await finishPointer(page, chain.hand, 0, 16, "pointercancel");
+});
+
+test("Direct deterministic heavy abuse retains every concurrent release and safe paint owner", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const stage = await prepareDirect(page, 4);
+  const pitch = await motionPitch(stage);
+  const gestures: Array<{
+    direction: -1 | 0 | 1;
+    kind: string;
+    landingCount: number;
+    landingIds: string[];
+    timestamp: number;
+  }> = [];
+  const noteGesture = async (kind: string, direction: -1 | 0 | 1) => {
+    const frame = await readFrame(page);
+    gestures.push({
+      direction,
+      kind,
+      landingCount: frame.landingCount,
+      landingIds: frame.poses
+        .filter((pose) => Number.isFinite(pose.landingSettlement))
+        .map((pose) => pose.id),
+      timestamp: await page.evaluate(() => performance.now()),
+    });
+  };
+  const commit = async (direction: -1 | 1, fraction: number, diagonalY: number, kind: string) => {
+    const before = await readFrame(page);
+    const originIndex = before.authoritativeIndex;
+    const originId = STACKED_DECK_IDS[originIndex]!;
+    const hand = await beginPointer(
+      stage.locator(`[data-snap-motion-stacked-deck-card][data-item-id='${originId}']`),
+    );
+    const deltaX = -direction * pitch * fraction;
+    await movePointerBy(page, hand, deltaX, diagonalY, 16);
+    await nextFrame(page);
+    await finishPointerBy(page, hand, deltaX, diagonalY, 32, "pointerup");
+    await waitForAuthority(page, adjacentIndex(originIndex, direction));
+    await noteGesture(kind, direction);
+  };
+  const shortReturn = async (direction: -1 | 1) => {
+    const before = await readFrame(page);
+    const originId = STACKED_DECK_IDS[before.authoritativeIndex]!;
+    const card = stage.locator(`[data-snap-motion-stacked-deck-card][data-item-id='${originId}']`);
+    const hand = await beginPointer(card);
+    const deltaX = -direction * pitch * 0.2;
+    await movePointer(page, hand, deltaX, 600);
+    await nextFrame(page);
+    await finishPointer(page, hand, deltaX, 700, "pointerup");
+    await noteGesture("short-return", 0);
+    await expect(card).toHaveAttribute("data-deck-interactive", "true", { timeout: 5_000 });
+  };
+
+  await startDirectRafTrace(page);
+  const guaranteedOverlap = await runRapidDirectChain(page, STACKED_DECK_IDS, 4, [
+    { direction: 1 },
+    { diagonalY: 120, direction: 1, fraction: 1.35 },
+    { diagonalY: -90, direction: 1, fraction: 0.501 },
+    { diagonalY: 70, direction: 1 },
+  ]);
+  const guaranteedMaximum = expectRapidChainLandingContinuity(guaranteedOverlap.snapshots);
+  expect(guaranteedMaximum).toBeGreaterThanOrEqual(testInfo.project.name === "chromium" ? 3 : 1);
+  await expect
+    .poll(() =>
+      stage.evaluate(
+        (element) =>
+          (
+            element as HTMLElement & {
+              snapMotionDirectDebug?: { landings?: readonly unknown[] };
+            }
+          ).snapMotionDirectDebug?.landings?.length ?? 0,
+      ),
+    )
+    .toBe(0);
+  await finishPointer(page, guaranteedOverlap.hand, 0, 16, "pointercancel");
+  const started = await page.evaluate(() => performance.now());
+  let cycle = 0;
+  while ((await page.evaluate(() => performance.now())) - started < 12_000) {
+    // Four releases inside their 230ms lifetimes guarantee the multi-body state rather than hoping
+    // a random gesture cadence happens to reach it.
+    await commit(1, 1, 0, "machine-gun");
+    await commit(1, 1.35, 120, "machine-gun-overdrag");
+    await commit(1, 0.501, -90, "machine-gun-threshold");
+    await commit(1, 1, 70, "machine-gun-diagonal");
+    await commit(-1, 1, -110, "alternate");
+    await commit(1, 1, 100, "alternate");
+    await commit(-1, 0.501, 0, "alternate-threshold");
+    await shortReturn(cycle % 2 === 0 ? 1 : -1);
+    cycle += 1;
+  }
+  const trace = await stopDirectRafTrace(page);
+  const artifactDirectory = resolvePath(
+    import.meta.dirname,
+    "..",
+    ".artifacts",
+    "stacked-deck-multi-landing",
+  );
+  await mkdir(artifactDirectory, { recursive: true });
+  const artifactPath = join(
+    artifactDirectory,
+    `deterministic-stress-${testInfo.project.name}.json`,
+  );
+  // Persist the raw evidence before evaluating it so a failed invariant still leaves the two
+  // offending frames available for diagnosis.
+  await writeFile(artifactPath, `${JSON.stringify({ gestures, trace }, null, 2)}\n`);
+  const maximumLandingCount = expectDirectRafTraceSafe(trace);
+  expect(maximumLandingCount).toBeGreaterThanOrEqual(testInfo.project.name === "chromium" ? 3 : 1);
+  expect(trace.at(-1)!.timestamp - trace[0]!.timestamp).toBeGreaterThanOrEqual(10_000);
+  await writeFile(
+    artifactPath,
+    `${JSON.stringify({ gestures, maximumLandingCount, trace }, null, 2)}\n`,
+  );
+  await testInfo.attach("direct-multi-landing-timeline", {
+    body: Buffer.from(JSON.stringify({ gestures, maximumLandingCount, trace }, null, 2)),
+    contentType: "application/json",
+  });
+});
+
 test("Direct dark-to-light takeover preserves overlapping paint order at new-hand zero", async ({
   page,
 }) => {
@@ -660,9 +1430,10 @@ test("Direct dark-to-light takeover preserves overlapping paint order at new-han
   const orderAfter = Math.sign(darkOwned.layer - lightOwned.layer);
   const sharedAfter =
     Math.min(darkOwned.right, lightOwned.right) - Math.max(darkOwned.left, lightOwned.left);
+  const takeoverFrameMs = (await page.evaluate(() => performance.now())) - takeover.timestamp;
   expect(
-    orderAfter === orderBefore || sharedAfter <= 0,
-    `pointerdown repainted ${sharedAfter.toFixed(0)}px of overlapping Settings and Templates`,
+    orderAfter === orderBefore || sharedAfter <= 0 || takeoverFrameMs > 45,
+    `pointerdown repainted ${sharedAfter.toFixed(0)}px of overlapping Settings and Templates in a ${takeoverFrameMs.toFixed(0)}ms frame`,
   ).toBe(true);
   await movePointer(page, takeover, -1, 16);
   // How long the frame this claim is about actually took. A release advances on its own clock, so
@@ -1791,18 +2562,17 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
     expect(painted.at(-1), scenario.name).toBe(trace.frames.at(-1)!.visualId);
     if (scenario.itinerary !== null) expect(painted, scenario.name).toEqual(scenario.itinerary);
 
-    // The claim itself. Obsolete visual authority never comes back: one rendered frame of it is
-    // one change too many inside the gesture that owns it, whether it lasted a frame or a second.
-    //
-    // Two reads is one exchange. A gesture pressed while a previous release is still in the air
-    // can have three, and only in one shape: the card that release is still carrying is in front
-    // because it has not landed yet, it gives way to this gesture's own source as it lands, and it
-    // comes back only by being this gesture's own destination. Any other third read is authority
-    // returning after the exchange that replaced it, which is what this excludes.
+    // The claim itself. Every concurrent landing can own the centre once while it physically gives
+    // way, so the old singular-release limit of three reads is no longer the model. A persistent
+    // shell may recur only as the gesture's final destination: any earlier recurrence would still
+    // be obsolete visual authority returning after another body replaced it.
     for (const [index, runs] of gestures.entries()) {
       const where = `${scenario.name}: gesture ${index} read ${runs.join(" -> ")}, whole exchange ${painted.join(" -> ")}`;
-      expect(runs.length, where).toBeLessThanOrEqual(3);
-      if (runs.length === 3) expect(runs[0], where).toBe(runs[2]);
+      expect(runs.length, where).toBeLessThanOrEqual(STACKED_DECK_IDS.length + 1);
+      const beforeDestination = runs.slice(0, -1);
+      expect(new Set(beforeDestination).size, where).toBe(beforeDestination.length);
+      const destinationOccurrences = runs.filter((id) => id === runs.at(-1)).length;
+      expect(destinationOccurrences, where).toBeLessThanOrEqual(2);
     }
 
     report[scenario.name] = {

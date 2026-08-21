@@ -290,7 +290,15 @@ describe(`Direct physics differential against ${oracle.provenance.generatedFrom.
           tuning,
           direct: {
             direction: 0,
-            landing: { itemIndex: ORIGIN, settlement, translateX: releaseX, translateY: 0 },
+            landings: [
+              {
+                itemIndex: ORIGIN,
+                releaseOrder: 1,
+                settlement,
+                translateX: releaseX,
+                translateY: 0,
+              },
+            ],
             originIndex: landed,
             phase: "held",
             settlement: 0,

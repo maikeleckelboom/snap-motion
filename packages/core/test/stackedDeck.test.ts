@@ -161,7 +161,7 @@ function expectEveryPaintSwapSafe(
           first,
           second,
           tuning,
-          `at progress ${current.progress}`,
+          `at progress ${current.progress}; ${first}: ${current.poses[first]!.translateX}/${current.poses[first]!.layer}; ${second}: ${current.poses[second]!.translateX}/${current.poses[second]!.layer}`,
         );
       }
     }
@@ -1589,12 +1589,15 @@ describe("Direct stacked deck projection", () => {
             poses: resolveDirectFrame(
               activeTraversal,
               directProjection(3, direction * progress, {
-                landing: {
-                  itemIndex: 2,
-                  settlement: Math.min(1, 0.1 + progress * rate),
-                  translateX: releaseX,
-                  translateY: 0,
-                },
+                landings: [
+                  {
+                    itemIndex: 2,
+                    releaseOrder: 1,
+                    settlement: Math.min(1, 0.1 + progress * rate),
+                    translateX: releaseX,
+                    translateY: 0,
+                  },
+                ],
                 phase: "held",
                 translateX: -direction * WIDE_TUNING.motionPitch * progress,
                 translateY: 0,
@@ -1607,6 +1610,172 @@ describe("Direct stacked deck projection", () => {
         expect(frames).toHaveLength(101);
       }
     }
+  });
+
+  it("resolves concurrent releases by explicit chronology, independent of collection order", () => {
+    const older = {
+      itemIndex: 4,
+      releaseOrder: 1,
+      settlement: 0.28,
+      translateX: -WIDE_TUNING.motionPitch,
+      translateY: 40,
+    };
+    const newer = {
+      itemIndex: 0,
+      releaseOrder: 2,
+      settlement: 0.12,
+      translateX: -WIDE_TUNING.motionPitch,
+      translateY: -30,
+    };
+    const active = traversal({
+      authoritativeIndex: 1,
+      phase: "neutral",
+      segmentOriginIndex: 1,
+      settledIndex: 1,
+      visualTopIndex: 1,
+    });
+    const resolve = (landings: readonly (typeof older)[]) =>
+      resolveDirectFrame(
+        active,
+        directProjection(1, 0, { landings, phase: "held", translateX: 0, translateY: 0 }),
+      );
+    const chronological = resolve([older, newer]);
+    const reversed = resolve([newer, older]);
+
+    expect(reversed.poses.map(exactPose)).toEqual(chronological.poses.map(exactPose));
+    expect(chronological.poses[4]!.layer).toBeGreaterThan(chronological.poses[0]!.layer);
+    expect(chronological.poses[0]!.layer).toBeGreaterThan(chronological.poses[1]!.layer);
+  });
+
+  it("keeps every paint swap safe with three landings and a live held exchange", () => {
+    const frames = Array.from({ length: 161 }, (_unused, step) => {
+      const progress = step / 160;
+      const active =
+        progress === 0
+          ? traversal({
+              authoritativeIndex: 3,
+              phase: "neutral",
+              segmentOriginIndex: 3,
+              settledIndex: 3,
+              visualTopIndex: 3,
+            })
+          : segment(3, -1, progress);
+      const poses = resolveDirectFrame(
+        active,
+        directProjection(3, -progress, {
+          landings: [
+            {
+              itemIndex: 4,
+              releaseOrder: 1,
+              settlement: Math.min(1, 0.24 + progress * 0.9),
+              translateX: -WIDE_TUNING.motionPitch,
+              translateY: 80,
+            },
+            {
+              itemIndex: 0,
+              releaseOrder: 2,
+              settlement: Math.min(1, 0.15 + progress * 0.9),
+              translateX: -WIDE_TUNING.motionPitch,
+              translateY: -60,
+            },
+            {
+              itemIndex: 1,
+              releaseOrder: 3,
+              settlement: Math.min(1, 0.06 + progress * 0.9),
+              translateX: -WIDE_TUNING.motionPitch,
+              translateY: 20,
+            },
+          ],
+          phase: "held",
+          translateX: progress * WIDE_TUNING.motionPitch,
+          translateY: 0,
+        }),
+      ).poses.map((pose) => ({ ...pose }));
+      return { poses, progress };
+    });
+
+    expectEveryPaintSwapSafe(frames);
+    expect(frames).toHaveLength(161);
+  });
+
+  it("gives an exposed symmetric pile one physical centre owner", () => {
+    const active = { ...segment(0, -1, 0.8), authoritativeIndex: 4 };
+    const frame = resolveDirectFrame(
+      active,
+      directProjection(0, -0.8, {
+        landings: [
+          {
+            itemIndex: 3,
+            releaseOrder: 1,
+            settlement: 0.73,
+            translateX: -WIDE_TUNING.motionPitch,
+            translateY: 0,
+          },
+          {
+            itemIndex: 4,
+            releaseOrder: 2,
+            settlement: 0.145,
+            translateX: -WIDE_TUNING.motionPitch * 0.8,
+            translateY: 0,
+          },
+        ],
+        phase: "held",
+        translateX: WIDE_TUNING.motionPitch * 0.8,
+        translateY: 0,
+      }),
+    );
+    const covering = frame.poses.filter((pose) => containsCardPoint(pose, 0, 0, WIDE_TUNING));
+    const frontLayer = Math.max(...covering.map((pose) => pose.layer));
+
+    expect(containsCardPoint(frame.poses[0]!, 0, 0, WIDE_TUNING)).toBe(false);
+    expect(containsCardPoint(frame.poses[4]!, 0, 0, WIDE_TUNING)).toBe(false);
+    expect(covering.filter((pose) => pose.layer === frontLayer)).toHaveLength(1);
+    expect(frame.poses[1]!.layer).toBeGreaterThan(frame.poses[2]!.layer);
+  });
+
+  it("hands a landing target to the next hand as one continuous physical shell", () => {
+    const release = {
+      itemIndex: 2,
+      releaseOrder: 1,
+      settlement: 0.3,
+      translateX: -520,
+      translateY: 190,
+    };
+    const arriving = resolveDirectFrame(
+      { ...segment(3, -1, 0.7), authoritativeIndex: 2 },
+      directProjection(3, -0.7, {
+        landings: [release],
+        phase: "parking",
+        settlementProgress: 0,
+        translateX: 300,
+        translateY: 0,
+      }),
+    );
+    const capturedPose = arriving.poses[2]!;
+    expect(capturedPose.interactive).toBe(true);
+
+    const captured = resolveDirectFrame(
+      traversal({
+        authoritativeIndex: 2,
+        phase: "neutral",
+        segmentOriginIndex: 2,
+        settledIndex: 2,
+        visualTopIndex: 2,
+      }),
+      directProjection(2, 0, {
+        inheritedPose: {
+          releaseOrder: release.releaseOrder,
+          rotate: capturedPose.rotate,
+          scale: capturedPose.scale,
+          shadowStrength: capturedPose.shadowStrength,
+        },
+        phase: "held",
+        translateX: capturedPose.translateX,
+        translateY: capturedPose.translateY,
+      }),
+    );
+    expect(physicalValues(captured.poses[2]!)).toEqual(physicalValues(capturedPose));
+    expect(captured.poses[2]!.layer).toBe(capturedPose.layer);
   });
 
   it("parks a full-pitch and an overdragged commit with finite geometry and no stall", () => {
@@ -1732,7 +1901,15 @@ describe("Direct stacked deck projection", () => {
       resolveDirectFrame(
         travel === 0 ? restingTop : segment(3, -1, travel),
         directProjection(3, -travel, {
-          landing: { itemIndex: 2, settlement, translateX: releaseX, translateY: releaseY },
+          landings: [
+            {
+              itemIndex: 2,
+              releaseOrder: 1,
+              settlement,
+              translateX: releaseX,
+              translateY: releaseY,
+            },
+          ],
           phase: "held",
           translateX: travel * 140,
           translateY: 0,
@@ -1913,5 +2090,45 @@ describe("stacked deck physical continuity", () => {
         targetIndex: 4,
       }),
     ).toThrowError("direct.targetIndex is not the directed cyclic neighbour");
+    const repeatedShell = {
+      itemIndex: 1,
+      releaseOrder: 1,
+      settlement: 0.2,
+      translateX: 500,
+      translateY: 0,
+    };
+    expect(() =>
+      resolveDirectFrame(
+        traversal(),
+        directProjection(0, 0, {
+          landings: [repeatedShell, { ...repeatedShell, releaseOrder: 2 }],
+        }),
+      ),
+    ).toThrowError("direct.landings");
+    expect(() =>
+      resolveDirectFrame(
+        traversal(),
+        directProjection(0, 0, {
+          landings: [repeatedShell, { ...repeatedShell, itemIndex: 2 }],
+        }),
+      ),
+    ).toThrowError("direct.landings");
+    expect(() =>
+      resolveDirectFrame(traversal(), directProjection(1, 0, { landings: [repeatedShell] })),
+    ).toThrowError("direct.landings");
+    expect(() =>
+      resolveDirectFrame(
+        traversal(),
+        directProjection(0, 0, {
+          inheritedPose: {
+            releaseOrder: 1,
+            rotate: 0,
+            scale: 1,
+            shadowStrength: 1,
+          },
+          landings: [repeatedShell],
+        }),
+      ),
+    ).toThrowError("direct.landings");
   });
 });

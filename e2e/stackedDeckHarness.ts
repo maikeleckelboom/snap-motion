@@ -261,8 +261,22 @@ export async function readFrame(page: Page) {
     const settledIndex = Number(element.dataset.settledIndex);
     const localPhysicalPosition = Number(element.dataset.physicalIndex);
     const diagnosticOrigin = interactionOriginIndex >= 0 ? interactionOriginIndex : settledIndex;
+    const directDebug = (
+      element as HTMLElement & {
+        snapMotionDirectDebug?: {
+          landings?: readonly {
+            elapsed: number;
+            itemIndex: number;
+            releaseOrder: number;
+            settlement: number;
+          }[];
+        };
+      }
+    ).snapMotionDirectDebug;
+    const directLandings = directDebug?.landings ?? [];
     const poses = [...document.querySelectorAll<HTMLElement>(".snap-motion-stacked-deck-card")].map(
       (item, index) => {
+        const landing = directLandings.find((candidate) => candidate.itemIndex === index);
         const motion = item.querySelector<HTMLElement>(".snap-motion-stacked-deck-card-motion")!;
         const surface = item.querySelector<HTMLElement>(".screen-chrome")!;
         const box = surface.getBoundingClientRect();
@@ -280,6 +294,9 @@ export async function readFrame(page: Page) {
           id: item.dataset.itemId ?? "",
           index,
           interactive: item.dataset.deckInteractive === "true",
+          landingElapsed: landing?.elapsed ?? Number.NaN,
+          landingOrder: landing?.releaseOrder ?? Number.NaN,
+          landingSettlement: landing?.settlement ?? Number.NaN,
           layer: Number(item.dataset.deckLayer),
           left: box.left,
           modelOpacity: Number(surface.dataset.opacity),
@@ -322,6 +339,7 @@ export async function readFrame(page: Page) {
       )?.disabled,
       interactionOwned: element.dataset.interactionOwned === "true",
       interactionOriginIndex,
+      landingCount: directLandings.length,
       maxAnchorSkip: Number(element.dataset.maxAnchorSkip),
       pendingTargetIndex: Number(element.dataset.pendingIndex),
       physicalCoordinate: {

@@ -14,7 +14,10 @@ import { computed, ref, watch } from "vue";
 import { preserveFocusBeforeSemanticChange } from "../../internal/accessibility/focus";
 import { createEnglishSnapMotionMessages } from "../../localization/messages";
 import { stackedDeckTransform, type StackedDeckCardState } from "../stacked-deck-contracts";
-import { useStackedDeckComponentMotion } from "../use-stacked-deck-motion";
+import {
+  useStackedDeckComponentMotion,
+  type StackedDeckDirectDebug,
+} from "../use-stacked-deck-motion";
 
 type TId = TItem["id"];
 
@@ -182,38 +185,61 @@ function publishSettlement(id: TId, index: number, reason: NavigationReason) {
   });
 }
 
-const deck = useStackedDeckComponentMotion<TId>({
-  ids,
-  exchange: () => props.exchange,
-  controlledId: () => props.activeId,
-  disabled: () => props.disabled,
-  initialId: props.items[Math.floor(props.items.length / 2)]?.id,
-  reducedMotionOverride,
-  root: focusScope,
-  stageWidth: () => props.fallbackStageWidth,
-  track,
-  viewport: root,
-  elasticity: () => props.elasticity,
-  programmaticImpulse: () => props.programmaticImpulse,
-  releasePolicy: () => props.releasePolicy,
-  spring: () => props.spring,
-  onActivate(_id, index) {
-    const item = props.items[index];
-    if (item) emit("activate", item, index);
+const directDebug = import.meta.env.DEV ? ({} satisfies StackedDeckDirectDebug) : undefined;
+const deck = useStackedDeckComponentMotion<TId>(
+  {
+    ids,
+    exchange: () => props.exchange,
+    controlledId: () => props.activeId,
+    disabled: () => props.disabled,
+    initialId: props.items[Math.floor(props.items.length / 2)]?.id,
+    reducedMotionOverride,
+    root: focusScope,
+    stageWidth: () => props.fallbackStageWidth,
+    track,
+    viewport: root,
+    elasticity: () => props.elasticity,
+    programmaticImpulse: () => props.programmaticImpulse,
+    releasePolicy: () => props.releasePolicy,
+    spring: () => props.spring,
+    onActivate(_id, index) {
+      const item = props.items[index];
+      if (item) emit("activate", item, index);
+    },
+    onActiveIdRequest(id, _index, reason) {
+      if (id === semanticActiveId.value) return;
+      if (props.activeId === undefined) {
+        internalActiveId.value = id;
+        // Accepted uncontrolled semantics immediately become this epoch's valid mechanical anchor,
+        // even while the spring that will settle there is still in flight.
+        mechanicalAnchorId.value = id;
+      }
+      emit("update:activeId", id);
+      emit("activeIdRequest", id, { reason });
+    },
+    onSettled: publishSettlement,
   },
-  onActiveIdRequest(id, _index, reason) {
-    if (id === semanticActiveId.value) return;
-    if (props.activeId === undefined) {
-      internalActiveId.value = id;
-      // Accepted uncontrolled semantics immediately become this epoch's valid mechanical anchor,
-      // even while the spring that will settle there is still in flight.
-      mechanicalAnchorId.value = id;
-    }
-    emit("update:activeId", id);
-    emit("activeIdRequest", id, { reason });
-  },
-  onSettled: publishSettlement,
-});
+  undefined,
+  directDebug,
+);
+
+if (import.meta.env.DEV) {
+  watch(
+    root,
+    (element, previous) => {
+      if (previous != null) {
+        delete (previous as HTMLElement & { snapMotionDirectDebug?: unknown })
+          .snapMotionDirectDebug;
+      }
+      if (element != null) {
+        (
+          element as HTMLElement & { snapMotionDirectDebug?: StackedDeckDirectDebug }
+        ).snapMotionDirectDebug = directDebug!;
+      }
+    },
+    { flush: "post" },
+  );
+}
 
 const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {
   const frame = deck.frame.value;

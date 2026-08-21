@@ -12,6 +12,7 @@ import {
   motionPitch,
   movePointer,
   destinations,
+  readFrame,
   viewport,
   waitForAuthority,
   type PointerOrigin,
@@ -107,6 +108,29 @@ async function exchangeAndTakeOver(
   return { index: destinationIndex, origin, pitch: held.pitch };
 }
 
+async function machineExchangeAndTakeOver(
+  page: Page,
+  held: OwnedCard,
+  direction: -1 | 1,
+): Promise<OwnedCard> {
+  const deltaX = -direction * held.pitch * 0.8;
+  await movePointer(page, held.origin, deltaX, 80);
+  await nextFrame(page);
+  await finishPointer(page, held.origin, deltaX, 100, "pointerup");
+  const destinationIndex =
+    (held.index + direction + STACKED_DECK_IDS.length) % STACKED_DECK_IDS.length;
+  await waitForAuthority(page, destinationIndex);
+  const destination = viewport(page).locator(
+    `[data-snap-motion-stacked-deck-card][data-item-id='${STACKED_DECK_IDS[destinationIndex]}']`,
+  );
+  await expect(destination).toHaveAttribute("data-deck-interactive", "true");
+  return {
+    index: destinationIndex,
+    origin: await beginPointer(destination),
+    pitch: held.pitch,
+  };
+}
+
 async function saveRecording(page: Page, name: string, run: () => Promise<void>): Promise<void> {
   if (process.env.SNAP_MOTION_ALLOW_DIRTY_TAKEOVER_VISUAL !== "true") {
     expect(revision.dirty, "acceptance recordings must name an exact clean revision").toBe(false);
@@ -128,6 +152,45 @@ test("records stateful chained takeover on realistic cards", async ({ page }) =>
       held = await exchangeAndTakeOver(page, held, direction, direction === 1 ? "fast" : "natural");
     }
     await finishPointer(page, held.origin, 0, 100, "pointercancel");
+  });
+});
+
+test("records 30-second concurrent-landing abuse on realistic cards", async ({ page }) => {
+  test.setTimeout(180_000);
+  const timeline: Array<{
+    readonly gesture: number;
+    readonly landingCount: number;
+    readonly landingIds: readonly string[];
+    readonly timestamp: number;
+  }> = [];
+  let interactionDurationMs = 0;
+  let maximumLandingCount = 0;
+  await saveRecording(page, "direct-multi-landing-real-cards-30s.webm", async () => {
+    let { held } = await prepare(page, 4);
+    const started = await page.evaluate(() => performance.now());
+    // Full forward revolutions create three-card airborne bursts. The alternating seam section then
+    // repeatedly exercises the naturally dark Settings / light Templates material boundary.
+    const directions = [1, 1, 1, 1, 1, 1, -1, 1, -1, 1, -1, -1, -1, -1, -1] as const;
+    let gesture = 0;
+    while ((await page.evaluate(() => performance.now())) - started < 31_000) {
+      held = await machineExchangeAndTakeOver(page, held, directions[gesture % directions.length]!);
+      const frame = await readFrame(page);
+      const timestamp = await page.evaluate(() => performance.now());
+      const landingIds = frame.poses
+        .filter((pose) => Number.isFinite(pose.landingSettlement))
+        .map((pose) => pose.id);
+      maximumLandingCount = Math.max(maximumLandingCount, frame.landingCount);
+      timeline.push({ gesture, landingCount: frame.landingCount, landingIds, timestamp });
+      gesture += 1;
+    }
+    interactionDurationMs = (await page.evaluate(() => performance.now())) - started;
+    await finishPointer(page, held.origin, 0, 100, "pointercancel");
+    await writeFile(
+      join(artifactDirectory, "direct-multi-landing-real-cards-30s-timeline.json"),
+      `${JSON.stringify({ interactionDurationMs, maximumLandingCount, timeline }, null, 2)}\n`,
+    );
+    expect(interactionDurationMs).toBeGreaterThanOrEqual(30_000);
+    expect(maximumLandingCount).toBeGreaterThanOrEqual(3);
   });
 });
 

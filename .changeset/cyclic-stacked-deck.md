@@ -16,12 +16,12 @@ The only physical behaviour the ring adds is that one shell per exchange crosses
 side of the pile to the other; it passes behind the deck and paints nothing between the two rests it
 is exact at.
 
-A press does not catch a card a release is still carrying. That release keeps its own path and its
-own clock and lands the shell while the next hand is already working, into whichever slot the deck
-is drawing for it by the time it arrives — including the top, when that hand reverses back onto the
-very shell still in the air. Because it is a whole release rather than a frozen frame, it changes
-its own depth where a release always does: once its path has carried it clear of everything it is
-going under.
+A press does not catch a card a release is still carrying. Every unfinished release keeps its own
+path and clock while later hands continue immediately, so several persistent shells may be in
+flight together and each lands in whichever slot the deck is drawing for it by the time it arrives.
+When a hand reaches a shell that is already airborne, it inherits that exact shell pose rather than
+creating another projection or restarting from rest. Release chronology determines relative
+airborne paint order, and depth changes only after the involved bodies are physically clear.
 
 Remove Stacked-Deck-specific pagination state and presentation. Generic pagination and finite
 ordinal accessibility announcements remain available to the surfaces that own them.

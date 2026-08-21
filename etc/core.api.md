@@ -1217,14 +1217,24 @@ export interface StackedDeckCommandContext {
 }
 
 // @public
+export interface StackedDeckDirectLanding {
+    readonly itemIndex: number;
+    readonly releaseOrder: number;
+    readonly rotate?: number;
+    readonly scale?: number;
+    readonly settlement: number;
+    readonly shadowStrength?: number;
+    readonly translateX: number;
+    readonly translateY: number;
+}
+
+// @public
 export interface StackedDeckDirectProjection {
     readonly direction: -1 | 0 | 1;
-    readonly landing?: null | {
-        readonly itemIndex: number;
-        readonly translateX: number;
-        readonly translateY: number;
-        readonly settlement: number;
+    readonly inheritedPose?: Pick<StackedDeckPose, "scale" | "rotate" | "shadowStrength"> & {
+        readonly releaseOrder: number;
     };
+    readonly landings?: readonly StackedDeckDirectLanding[];
     readonly originIndex: number;
     readonly phase?: "held" | "parking" | "returning";
     readonly settlement: number;

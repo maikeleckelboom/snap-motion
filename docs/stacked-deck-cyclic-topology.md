@@ -39,20 +39,29 @@ pile that no longer reads as one object.
 At rest the physical pile is the canonical ring rotated to the current item. Reconfiguration
 preserves the current semantic ID where possible, then rebuilds this order from the new collection.
 
-## Interrupted releases
+## Concurrent interrupted releases
 
 Presentation settlement is its own channel. A hand pressing the deck opens a new interaction; it
-does not cancel, freeze, or inherit whatever a previous release is still carrying. That release
-keeps the budget it started with and finishes independently, landing its shell in the slot the deck
-is drawing for it at the moment it arrives — which moves, because the new interaction is exchanging
-the deck underneath it, and which is the top of the deck when the new hand reverses back onto that
-same shell.
+does not cancel or freeze whatever previous releases are still carrying. Each unfinished release is
+owned by its persistent shell, keeps the budget it started with, and advances independently under
+one shared animation lifecycle. A later release adds another concurrent body; it cannot replace an
+older unfinished one. Each body lands in the slot the deck is drawing for that shell at the moment
+it arrives, which moves because new interactions may exchange the deck underneath it.
 
-A shell in the air is nearer the eye than the card a hand is holding, because that card is still on
-the deck and this one is not yet. It gives that rank up on the terms every release changes depth
-on: once its own path has carried it clear of both the pile and the card it is going under. The
-consequence is that a hand moving faster than cards can move will not be shown every exchange it
-commits — the deck's semantics are unaffected, but the picture is bounded by material.
+Release chronology explicitly orders simultaneous airborne bodies: an older body remains above a
+newer one until their trajectories provide physical clearance for the required depth crossover.
+Collection iteration and DOM order do not decide paint. A shell gives up an airborne rank only once
+its own path has carried it clear of the pile and every body it crosses.
+
+When the live hand reverses toward an airborne shell, Direct resolves the target and the landing
+through the same persistent pose. If that shell becomes the interactive top and is pressed again,
+the landing record is absorbed into the hand with its exact translation, scale, rotation, shadow,
+and chronology. The collection can therefore contain at most one landing per shell without a
+duplicate card, restart from nominal rest, or teleport. Item reconfiguration, mode changes,
+controlled synchronization, and teardown clear the complete presentation collection atomically
+under the component's existing cancellation policy; normal completion removes only the body that
+arrived. Disabling the deck rejects new input but does not erase physical presentation already in
+flight.
 
 ## Traversal and navigation
 

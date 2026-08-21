@@ -15,6 +15,7 @@ import {
   type ElasticityOptions,
   type SnapAnchor,
   type SpringConfiguration,
+  type StackedDeckDirectLanding,
   type StackedDeckDirectProjection,
   type StackedDeckExchange,
   type StackedDeckFrame,
@@ -188,6 +189,24 @@ type StackedDeckComponentMotionReturn<Id extends string> = Omit<
   "anchorsById" | "pileLayers" | "statusIndex"
 >;
 
+/** Internal per-release telemetry used by the rendered lab/browser proof. */
+export interface StackedDeckDirectLandingTelemetry extends StackedDeckDirectLanding {
+  readonly elapsed: number;
+}
+
+/** Development-only mutable view used by the repository's rendered-frame proof. */
+export interface StackedDeckDirectDebug {
+  landings?: readonly StackedDeckDirectLandingTelemetry[];
+  projection?: StackedDeckDirectProjection;
+}
+
+type MutableStackedDeckDirectLanding = {
+  -readonly [Key in keyof StackedDeckDirectLandingTelemetry]: StackedDeckDirectLandingTelemetry[Key];
+} & {
+  /** RAF-clock instant from which this shell alone owns its next progress delta. */
+  updatedAt: number;
+};
+
 interface StackedDeckPhysicalCoordinate<Id extends string> {
   readonly ids: readonly Id[];
   readonly originIndex: number;
@@ -228,6 +247,7 @@ function createStackedDeckPhysicalCoordinate<Id extends string>(
 export function useStackedDeckComponentMotion<Id extends string>(
   options: UseStackedDeckMotionOptions<Id>,
   onAnnouncement?: (index: number) => void,
+  directDebug?: StackedDeckDirectDebug,
 ): StackedDeckComponentMotionReturn<Id> {
   const ids = computed(() => toValue(options.ids));
   const isDirect = (): boolean => toValue(options.exchange) === "direct";
@@ -324,10 +344,16 @@ export function useStackedDeckComponentMotion<Id extends string>(
       // names appearing to be swapped for another one. An interaction with no hand, which is a
       // wheel burst, genuinely has no held shell and keeps travelling autonomously.
       const originIndex = model.beginInteraction();
-      clearDirectPresentation(true);
+      const originPose = frame.value.poses[originIndex];
+      clearDirectExchange(true);
       directProjection.originIndex = originIndex;
+      const capturedLanding =
+        originPose === undefined ? false : captureLandingShell(originIndex, originPose);
+      directProjection.translateX = handOriginTranslateX;
+      directProjection.translateY = handOriginTranslateY;
       if (handOwnsDirectShell()) directProjection.phase = "held";
       rebasePhysicalCoordinate(originIndex);
+      if (capturedLanding) triggerRef(state);
       return ids.value[originIndex];
     },
     // Direct has already captured the shell an unfinished release is still carrying, so its next
@@ -392,10 +418,13 @@ export function useStackedDeckComponentMotion<Id extends string>(
     if (id !== undefined) options.onSettled?.(id, published.announcementIndex, pendingReason);
   }
 
+  const directLandings: MutableStackedDeckDirectLanding[] = [];
+  let nextReleaseOrder = 0;
   const directProjection: {
     -readonly [Key in keyof StackedDeckDirectProjection]: StackedDeckDirectProjection[Key];
   } = {
     direction: 0,
+    landings: directLandings,
     originIndex: model.state.settledIndex,
     settlement: 0,
     signedTravel: 0,
@@ -403,6 +432,10 @@ export function useStackedDeckComponentMotion<Id extends string>(
     translateX: 0,
     translateY: 0,
   };
+  if (import.meta.env.DEV && directDebug !== undefined) {
+    directDebug.landings = directLandings;
+    directDebug.projection = directProjection;
+  }
   let suppressSnapshotPublication = false;
   watch(
     motion.snapshot,
@@ -475,8 +508,9 @@ export function useStackedDeckComponentMotion<Id extends string>(
 
   /** Elapsed fraction of the release in flight, while `releaseSettlement` is running it. */
   let releaseElapsed = 0;
-  /** Elapsed fraction of a release a later interaction interrupted, still finishing on its own. */
-  let landingElapsed = 0;
+  /** Translation owned at the frame a hand catches an already-airborne shell. */
+  let handOriginTranslateX = 0;
+  let handOriginTranslateY = 0;
   /** Whether this surface accepted the press that opened the interaction, on one of its cards. */
   let pressAcceptedOnCard = false;
 
@@ -503,35 +537,49 @@ export function useStackedDeckComponentMotion<Id extends string>(
       releaseSettlement.pause();
       // The shell now stands exactly where the resting deck draws it, so the projection can be
       // handed back — but only once the deck itself has nothing left to move.
-      if (atRest.value) clearDirectPresentation();
+      if (atRest.value) clearDirectExchange();
     },
     { immediate: false },
   );
 
   /**
-   * A release the next interaction interrupted, finishing on its own.
+   * Every release a later interaction interrupted, each finishing on its own clock.
    *
    * Pressing the deck is not catching the card a release threw over it, so that release is not
-   * cancelled and not frozen: it keeps the budget it started with and lands the shell while the
-   * new hand does whatever it is doing. The two are independent, which is why this is a second
-   * clock rather than a branch inside the first one.
+   * cancelled and not frozen: it keeps the budget it started with and lands the shell while later
+   * hands do whatever they are doing. One RAF advances the bounded collection, while elapsed and
+   * settlement remain independently owned by each physical shell.
    */
   const landingSettlement = useRafFn(
-    ({ delta }) => {
-      landingElapsed = Math.min(1, landingElapsed + delta / 230);
-      if (directProjection.landing != null) {
-        directProjection.landing = {
-          ...directProjection.landing,
-          settlement: smoothstep(landingElapsed),
-        };
+    ({ timestamp }) => {
+      for (let index = directLandings.length - 1; index >= 0; index -= 1) {
+        const landing = directLandings[index]!;
+        // Keep the exact-arrival owner observable for one rendered frame. Removing it in the same
+        // RAF that first advances it to one makes a trace read `unfinished -> absent`, even though
+        // the core resolves that final state to the live destination exactly. On the following RAF
+        // only this completed body is retired; every other release keeps its independent clock.
+        if (landing.elapsed >= 1) {
+          removeLanding(index);
+          continue;
+        }
+        // A record can be added while this shared RAF is already active. Its first delta begins at
+        // that shell's own release instant, never at the collection's previous tick: otherwise a
+        // long/skipped frame can charge a newborn landing for time in which it did not yet exist.
+        const delta = Math.max(0, timestamp - landing.updatedAt);
+        landing.updatedAt = timestamp;
+        landing.elapsed = Math.min(1, landing.elapsed + delta / 230);
+        landing.settlement = smoothstep(landing.elapsed);
       }
       triggerRef(state);
-      if (landingElapsed < 1) return;
-      landingSettlement.pause();
-      delete directProjection.landing;
     },
     { immediate: false },
   );
+
+  function removeLanding(index: number): void {
+    directLandings.copyWithin(index, index + 1);
+    directLandings.length -= 1;
+    if (directLandings.length === 0) landingSettlement.pause();
+  }
 
   /**
    * Hands an unfinished release over to its own clock, so a new interaction can begin without
@@ -540,21 +588,70 @@ export function useStackedDeckComponentMotion<Id extends string>(
   function detachLandingRelease(): void {
     if (directProjection.phase !== "parking" || releaseElapsed >= 1) return;
     if (directProjection.translateX === 0 && directProjection.translateY === 0) return;
-    landingElapsed = releaseElapsed;
-    directProjection.landing = {
-      itemIndex: directProjection.originIndex,
-      settlement: smoothstep(releaseElapsed),
-      translateX: directProjection.translateX,
-      translateY: directProjection.translateY,
-    };
+    const existingIndex = directLandings.findIndex(
+      (landing) => landing.itemIndex === directProjection.originIndex,
+    );
+    const existing = existingIndex < 0 ? undefined : directLandings[existingIndex];
+    const releaseOrder =
+      existing?.releaseOrder ??
+      directProjection.inheritedPose?.releaseOrder ??
+      (nextReleaseOrder += 1);
+    const updatedAt = performance.now();
+    const landing =
+      existing ??
+      ({
+        elapsed: releaseElapsed,
+        itemIndex: directProjection.originIndex,
+        releaseOrder,
+        settlement: smoothstep(releaseElapsed),
+        translateX: directProjection.translateX,
+        translateY: directProjection.translateY,
+        updatedAt,
+      } satisfies MutableStackedDeckDirectLanding);
+    landing.elapsed = releaseElapsed;
+    landing.releaseOrder = releaseOrder;
+    landing.settlement = smoothstep(releaseElapsed);
+    landing.translateX = directProjection.translateX;
+    landing.translateY = directProjection.translateY;
+    landing.updatedAt = updatedAt;
+    if (directProjection.inheritedPose === undefined) {
+      delete landing.scale;
+      delete landing.rotate;
+      delete landing.shadowStrength;
+    } else {
+      landing.scale = directProjection.inheritedPose.scale;
+      landing.rotate = directProjection.inheritedPose.rotate;
+      landing.shadowStrength = directProjection.inheritedPose.shadowStrength;
+    }
+    if (existing === undefined) directLandings.push(landing);
     landingSettlement.resume();
+  }
+
+  /** Absorbs one landing into the hand from the exact pose already rendered for that same shell. */
+  function captureLandingShell(
+    itemIndex: number,
+    pose: StackedDeckFrame["poses"][number],
+  ): boolean {
+    const landingIndex = directLandings.findIndex((landing) => landing.itemIndex === itemIndex);
+    if (landingIndex < 0) return false;
+    const landing = directLandings[landingIndex]!;
+    handOriginTranslateX = pose.translateX;
+    handOriginTranslateY = pose.translateY;
+    directProjection.inheritedPose = {
+      releaseOrder: landing.releaseOrder,
+      rotate: pose.rotate,
+      scale: pose.scale,
+      shadowStrength: pose.shadowStrength,
+    };
+    removeLanding(landingIndex);
+    return true;
   }
 
   /**
    * Ends this interaction's presentation. `handOver` is what a hand taking the deck over needs: the
    * release it interrupted is not cancelled by the press, it is handed to its own clock to finish.
    */
-  function clearDirectPresentation(handOver = false): void {
+  function clearDirectExchange(handOver = false): void {
     if (handOver) detachLandingRelease();
     releaseSettlement.pause();
     directProjection.settlement = 0;
@@ -563,11 +660,18 @@ export function useStackedDeckComponentMotion<Id extends string>(
     directProjection.signedTravel = 0;
     directProjection.targetIndex = null;
     delete directProjection.phase;
+    delete directProjection.inheritedPose;
+    handOriginTranslateX = handOriginTranslateY = 0;
     if (handOver) return;
     pressAcceptedOnCard = false;
+  }
+
+  /** Cancels every presentation record under the surface's atomic reset policy. */
+  function clearDirectPresentation(): void {
+    clearDirectExchange();
     landingSettlement.pause();
-    landingElapsed = 0;
-    delete directProjection.landing;
+    directLandings.length = 0;
+    nextReleaseOrder = 0;
   }
 
   /**
@@ -593,7 +697,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
       // travelling, keeps its projection — the release records itself, and the settlement hands the
       // projection back at the frame where its pose already equals resting geometry.
       if (directProjection.phase !== "held" && !releaseSettlement.isActive.value) {
-        clearDirectPresentation();
+        clearDirectExchange();
       }
     },
     { flush: "sync" },
@@ -611,8 +715,8 @@ export function useStackedDeckComponentMotion<Id extends string>(
     // still parking was handed to its own clock to finish.
     if (!handOwnsDirectShell()) return;
     directProjection.phase = "held";
-    directProjection.translateX = deltaX;
-    directProjection.translateY = deltaY;
+    directProjection.translateX = handOriginTranslateX + deltaX;
+    directProjection.translateY = handOriginTranslateY + deltaY;
     triggerRef(state);
   }
 
@@ -712,7 +816,10 @@ export function useStackedDeckComponentMotion<Id extends string>(
 
   function traverse(originIndex: number, targetIndex: number, direction: -1 | 1): boolean {
     // A command opens its own interaction, with no hand and no anchor of its own.
-    clearDirectPresentation();
+    // Any release it interrupts remains a concurrent physical body, exactly as it does for a
+    // pointer hand. The autonomous command does not inherit pointer ownership.
+    clearDirectExchange(true);
+    pressAcceptedOnCard = false;
     model.openInteraction(originIndex, direction);
     rebasePhysicalCoordinate(originIndex, direction);
     motion.moveTo(model.idAt(targetIndex)!);
@@ -848,7 +955,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
           // A shell the hand never moved has no release. Both giving a zero vector back and
           // carrying it into the pile end at the pose it is already drawn at, so the press ends
           // the presentation rather than holding the deck through a settlement with nothing in it.
-          clearDirectPresentation();
+          clearDirectExchange();
         } else {
           // One immutable decision, taken from the frame the hand ended on: which shell was
           // released — the presentation's own record of it, because the model may already have
