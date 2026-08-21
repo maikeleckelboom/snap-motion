@@ -540,6 +540,54 @@ test("Direct establishes a new zero throughout parking and after parking outruns
   await finishPointer(page, takeover, 0, 100, "pointercancel");
 });
 
+test("Direct lets an interrupted release land while the next hand reverses onto it", async ({
+  page,
+}) => {
+  const stage = await prepareDirect(page, 4);
+  const pitch = await motionPitch(stage);
+  const settings = stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='settings']");
+  const origin = await beginPointer(settings);
+  await movePointer(page, origin, -pitch, 600);
+  await nextFrame(page);
+  await finishPointer(page, origin, -pitch, 1_100, "pointerup");
+
+  // Take the deck over while that release is still carrying Settings, then reverse back toward it.
+  // Settings is both the shell still landing and this gesture's own target, so the two have to
+  // become one continuous motion rather than the landing being dropped and the reveal restarted.
+  const templates = stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='templates']");
+  await waitForAuthority(page, 0);
+  const takeover = await beginPointer(templates);
+  const path: number[] = [];
+  for (let step = 1; step <= 24; step += 1) {
+    await movePointer(page, takeover, (pitch * step) / 24, 40 * step);
+    await nextFrame(page);
+    path.push(await surfaceTranslateX(page, "settings"));
+  }
+  const trail = `settings path: ${path.map((x) => x.toFixed(0)).join(" ")}`;
+
+  // The press did not catch it: it is still out over the deck, on the way its release was taking
+  // it, rather than back in the pile where a cancelled release would have put it.
+  const pileEdge = Math.abs(await surfaceTranslateX(page, "team"));
+  expect(Math.abs(path[0]!), trail).toBeGreaterThan(pileEdge);
+  // It goes out before it comes in — its own release finishing, not a reveal starting over — and
+  // once it is more than half way home it never goes back out, so the hand turning around did not
+  // restart it. The path itself is not asserted pixel by pixel: its clearance is measured against
+  // a card the hand is still moving, so a pixel of wobble on the way in is the hand's, not a
+  // restart. Continuity frame by frame is pinned deterministically in the core differential.
+  const peak = Math.max(...path.map((x) => Math.abs(x)));
+  const homeward = path.findIndex((x) => Math.abs(x) < peak / 2);
+  expect(homeward, trail).toBeGreaterThan(0);
+  expect(
+    path.slice(homeward).every((x) => Math.abs(x) < peak / 2),
+    trail,
+  ).toBe(true);
+  // And it arrives as this gesture's own target, on the top of the deck.
+  expect(Math.abs(path.at(-1)!), trail).toBeLessThan(1);
+
+  await finishPointer(page, takeover, pitch, 1_100, "pointerup");
+  await expectCarouselAt(stage, "settings");
+});
+
 test("Direct dark-to-light takeover preserves overlapping paint order at new-hand zero", async ({
   page,
 }) => {
@@ -604,26 +652,41 @@ test("Direct dark-to-light takeover preserves overlapping paint order at new-han
 
   const darkOwned = owned.poses.find((pose) => pose.id === "settings")!;
   const lightOwned = owned.poses.find((pose) => pose.id === "templates")!;
-  // A press cannot land a shell a release is still carrying: the pixels the two of them share
-  // still belong to the card they belonged to on the frame before it.
+  // A press cannot land a shell a release is still carrying. The release may reach its own depth
+  // change on this very frame — that is its path, not the press — but only where the two of them
+  // share no pixel. What cannot happen is the pixels they do share changing hands.
   expect(owned.physicalPosition).toBeCloseTo(0, 6);
+  const orderBefore = Math.sign(darkBefore.layer - lightBefore.layer);
+  const orderAfter = Math.sign(darkOwned.layer - lightOwned.layer);
+  const sharedAfter =
+    Math.min(darkOwned.right, lightOwned.right) - Math.max(darkOwned.left, lightOwned.left);
   expect(
-    Math.sign(darkOwned.layer - lightOwned.layer),
-    "pointerdown repainted overlapping Settings and Templates pixels",
-  ).toBe(Math.sign(darkBefore.layer - lightBefore.layer));
+    orderAfter === orderBefore || sharedAfter <= 0,
+    `pointerdown repainted ${sharedAfter.toFixed(0)}px of overlapping Settings and Templates`,
+  ).toBe(true);
   await movePointer(page, takeover, -1, 16);
-  await nextFrame(page);
+  // How long the frame this claim is about actually took. A release advances on its own clock, so
+  // a browser that spends a hundred milliseconds on one frame steps over the middle of that
+  // release's path — the stretch it stands clear on — without ever rendering it. That is a fact
+  // about the frame rate rather than about the projection, and it is pinned per-frame and
+  // deterministically in the core differential; here it only makes the claim below unanswerable.
+  const frameMs = await page.evaluate(
+    () =>
+      new Promise<number>((done) => {
+        const start = performance.now();
+        requestAnimationFrame(() => done(performance.now() - start));
+      }),
+  );
   const firstMovement = await readFrame(page);
   const darkMoved = firstMovement.poses.find((pose) => pose.id === "settings")!;
   const lightMoved = firstMovement.poses.find((pose) => pose.id === "templates")!;
-  const firstMovementOverlap =
+  const orderMoved = Math.sign(darkMoved.layer - lightMoved.layer);
+  const sharedMoved =
     Math.min(darkMoved.right, lightMoved.right) - Math.max(darkMoved.left, lightMoved.left);
-  if (firstMovementOverlap > 0) {
-    expect(
-      Math.sign(darkMoved.layer - lightMoved.layer),
-      "the first new-hand pixel repainted overlapping Settings and Templates",
-    ).toBe(Math.sign(darkBefore.layer - lightBefore.layer));
-  }
+  expect(
+    orderMoved === orderAfter || sharedMoved <= 0 || frameMs > 45,
+    `the first new-hand pixel repainted ${sharedMoved.toFixed(0)}px of overlapping Settings and Templates in a ${frameMs.toFixed(0)}ms frame`,
+  ).toBe(true);
   await finishPointer(page, takeover, -1, 100, "pointercancel");
 });
 
@@ -1592,7 +1655,6 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
   test.setTimeout(240_000);
   const stage = await prepareDirect(page);
   const pitch = await motionPitch(stage);
-  const templates = STACKED_DECK_IDS[0];
   const team = STACKED_DECK_IDS[3];
   const settings = STACKED_DECK_IDS[4];
   const scenarios = [
@@ -1624,7 +1686,12 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
       },
     },
     {
-      itinerary: [settings, templates, settings, templates],
+      // No itinerary, for the same reason as the two bursts above and one more of its own: three
+      // flicks resolve here inside about eight rendered frames, and a card that has been released
+      // takes longer than that to get out of the way — it is still over the deck when the next
+      // flick commits. What the deck resolved to is unaffected; what a person can be shown of it is
+      // bounded by how fast material moves. The claims below are the ones that hold either way.
+      itinerary: null,
       name: "fast-alternating-wrap",
       startIndex: 4,
       async run() {
@@ -1723,6 +1790,7 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
     expect(painted[0], scenario.name).toBe(trace.frames[0]!.visualId);
     expect(painted.at(-1), scenario.name).toBe(trace.frames.at(-1)!.visualId);
     if (scenario.itinerary !== null) expect(painted, scenario.name).toEqual(scenario.itinerary);
+
     // The claim itself. Obsolete visual authority never comes back: one rendered frame of it is
     // one change too many inside the gesture that owns it, whether it lasted a frame or a second.
     //

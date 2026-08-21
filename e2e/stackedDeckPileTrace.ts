@@ -296,12 +296,25 @@ export async function capturePileSnapshot(page: Page): Promise<PileSnapshot> {
   };
 }
 
+/**
+ * Every subordinate shell, held to what the exchange itself is allowed to do to it.
+ *
+ * `released` names the frames after the hand has let go. There the exchange is over as far as the
+ * pile is concerned — it is already at its destination rest — and the only thing still moving is
+ * the shell the hand threw, which arcs clear of the deck on its way into the pile and uncovers
+ * whatever was behind it while it is out there. How much of itself a background shell shows is
+ * therefore not bounded by its two rests on those frames, and asserting that it is only holds for
+ * an implementation that hides the whole pile for the duration. What is asserted on every frame is
+ * the claim that matters: the shell the ring carries across the fold contributes nothing at the
+ * centre of the deck.
+ */
 export function expectPileSnapshotWithinEndpointEnvelope(
   snapshot: PileSnapshot,
   source: PileSnapshot,
   destination: PileSnapshot,
   sourceIndex: number,
   direction: PileTraceDirection,
+  released = false,
 ): void {
   const destinationIndex =
     (sourceIndex + direction + STACKED_DECK_IDS.length) % STACKED_DECK_IDS.length;
@@ -314,25 +327,27 @@ export function expectPileSnapshotWithinEndpointEnvelope(
       source.painted.materials[id]!.pixelCount,
       destination.painted.materials[id]!.pixelCount,
     );
-    expect(
-      snapshot.painted.materials[id]!.pixelCount,
-      `${id} during ${sourceIndex} ${direction} at ${snapshot.rendered.signedLocalDistance}; ` +
-        `poses=${JSON.stringify(
-          snapshot.rendered.poses.map(
-            ({ bottom, id: poseId, layer, left, right, scale, top, translateX, translateY }) => ({
-              bottom,
-              id: poseId,
-              layer,
-              left,
-              right,
-              scale,
-              top,
-              translateX,
-              translateY,
-            }),
-          ),
-        )}`,
-    ).toBeLessThanOrEqual(endpointEnvelope + tolerance);
+    if (!released) {
+      expect(
+        snapshot.painted.materials[id]!.pixelCount,
+        `${id} during ${sourceIndex} ${direction} at ${snapshot.rendered.signedLocalDistance}; ` +
+          `poses=${JSON.stringify(
+            snapshot.rendered.poses.map(
+              ({ bottom, id: poseId, layer, left, right, scale, top, translateX, translateY }) => ({
+                bottom,
+                id: poseId,
+                layer,
+                left,
+                right,
+                scale,
+                top,
+                translateX,
+                translateY,
+              }),
+            ),
+          )}`,
+      ).toBeLessThanOrEqual(endpointEnvelope + tolerance);
+    }
     const sourceSlot = signedRingSlot(
       ringDepth(sourceIndex, index, STACKED_DECK_IDS.length),
       STACKED_DECK_IDS.length,

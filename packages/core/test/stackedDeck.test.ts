@@ -145,7 +145,6 @@ function expectPairPaintSwapSafe(
 function expectEveryPaintSwapSafe(
   frames: readonly { poses: readonly StackedDeckPose[]; progress: number }[],
   tuning = WIDE_TUNING,
-  exempt: (first: number, second: number) => boolean = () => false,
 ) {
   for (let frameIndex = 1; frameIndex < frames.length; frameIndex += 1) {
     const previous = frames[frameIndex - 1]!;
@@ -156,7 +155,7 @@ function expectEveryPaintSwapSafe(
           previous.poses[first]!.layer - previous.poses[second]!.layer,
         );
         const currentOrder = Math.sign(current.poses[first]!.layer - current.poses[second]!.layer);
-        if (previousOrder === currentOrder || exempt(first, second)) continue;
+        if (previousOrder === currentOrder) continue;
         expectPairPaintSwapSafe(
           current.poses,
           first,
@@ -1172,11 +1171,6 @@ describe("stacked deck persistent physical cards", () => {
   });
 });
 
-/** Hermite ease over the unit interval, matching the projection's own reveal. */
-function ease(value: number): number {
-  return value * value * (3 - 2 * value);
-}
-
 describe("Direct stacked deck projection", () => {
   it("keeps a direction-authoritative zero-travel command at exact source rest", () => {
     const source = resolveFrame(traversal());
@@ -1573,54 +1567,45 @@ describe("Direct stacked deck projection", () => {
   });
 
   it("keeps every chained takeover paint swap outside overlapping bodies", () => {
-    const parking = resolveDirectFrame(
-      { ...segment(2, 1, 0.8), authoritativeIndex: 3 },
-      directProjection(2, 0.8, {
-        phase: "parking",
-        translateX: -WIDE_TUNING.motionPitch * 0.8,
-        translateY: 0,
-        settlementProgress: 0.08,
-      }),
-    );
-    const captured = parking.poses.map((pose) => ({ ...pose }));
-
-    for (const direction of [-1, 1] as const) {
-      const frames = Array.from({ length: 101 }, (_, step) => {
-        const progress = step / 100;
-        const activeTraversal =
-          progress === 0
-            ? traversal({
-                authoritativeIndex: 3,
-                phase: "neutral",
-                segmentOriginIndex: 3,
-                settledIndex: 2,
-                visualTopIndex: 3,
-              })
-            : segment(3, direction, progress);
-        return {
-          poses: resolveDirectFrame(
-            activeTraversal,
-            directProjection(3, direction * progress, {
-              phase: "held",
-              translateX: -direction * WIDE_TUNING.motionPitch * progress,
-              translateY: 0,
-              continuity: { itemIndex: 2, progress: 0.2, pose: captured[2]! },
-            }),
-          ).poses.map((pose) => ({ ...pose })),
-          progress,
-        };
-      });
-      // Every pair except the ones the interrupted shell itself is in.
-      //
-      // A hand that takes over a release still most of a pitch from home inherits a shell that is
-      // above the whole deck and has to reach a rank deep inside it. Its own release would have
-      // carried it clear first and changed depth out there, but this hand stopped that release and
-      // handed the shell to its own exchange, which brings it straight down through every rank in
-      // between while the deck is still under it. Letting an interrupted release finish its own
-      // path is what would close this; nothing short of that does, and no other pair in any other
-      // gesture needs the exemption.
-      expectEveryPaintSwapSafe(frames, WIDE_TUNING, (first, second) => first === 2 || second === 2);
-      expect(frames).toHaveLength(101);
+    const releaseX = -WIDE_TUNING.motionPitch * 0.8;
+    // A release interrupted a tenth of the way home, finishing while the next hand drags. The two
+    // run on their own clocks — one on time, one on the hand — so the rate of the release against
+    // the gesture is swept rather than assumed.
+    for (const rate of [0.4, 1, 2, 5]) {
+      for (const direction of [-1, 1] as const) {
+        const frames = Array.from({ length: 101 }, (_unused, step) => {
+          const progress = step / 100;
+          const activeTraversal =
+            progress === 0
+              ? traversal({
+                  authoritativeIndex: 3,
+                  phase: "neutral",
+                  segmentOriginIndex: 3,
+                  settledIndex: 2,
+                  visualTopIndex: 3,
+                })
+              : segment(3, direction, progress);
+          return {
+            poses: resolveDirectFrame(
+              activeTraversal,
+              directProjection(3, direction * progress, {
+                landing: {
+                  itemIndex: 2,
+                  settlement: Math.min(1, 0.1 + progress * rate),
+                  translateX: releaseX,
+                  translateY: 0,
+                },
+                phase: "held",
+                translateX: -direction * WIDE_TUNING.motionPitch * progress,
+                translateY: 0,
+              }),
+            ).poses.map((pose) => ({ ...pose })),
+            progress,
+          };
+        });
+        expectEveryPaintSwapSafe(frames);
+        expect(frames).toHaveLength(101);
+      }
     }
   });
 
@@ -1733,70 +1718,71 @@ describe("Direct stacked deck projection", () => {
     }
   });
 
-  it("resumes a still-parking shell from its rendered pose rather than its nominal rest", () => {
-    const parking = resolveDirectFrame(
-      { ...segment(2, 1, 0.7), authoritativeIndex: 3 },
-      directProjection(2, 0.7, {
-        phase: "parking",
-        translateX: -520,
-        translateY: 190,
-        settlementProgress: 0.24,
-      }),
-    );
-    // The new hand opens on the card that release was travelling to, and the shell still parking
-    // is the anchor it resolves that shell from. The anchor records where the new interaction
-    // already stood when it was taken, so the two agree at exactly that travel.
-    const capturedTravel = 0.3;
-    const anchored = (withAnchor: boolean) =>
+  it("finishes an interrupted release on its own path", () => {
+    const releaseX = -520;
+    const releaseY = 190;
+    const restingTop = traversal({
+      authoritativeIndex: 3,
+      segmentOriginIndex: 3,
+      settledIndex: 3,
+      visualTopIndex: 3,
+    });
+    /** One frame of a hand on card 3 while a release is still carrying card 2. */
+    const landingAt = (settlement: number, travel = 0) =>
       resolveDirectFrame(
-        segment(3, -1, capturedTravel),
-        directProjection(3, -capturedTravel, {
+        travel === 0 ? restingTop : segment(3, -1, travel),
+        directProjection(3, -travel, {
+          landing: { itemIndex: 2, settlement, translateX: releaseX, translateY: releaseY },
           phase: "held",
-          translateX: 140,
+          translateX: travel * 140,
           translateY: 0,
-          ...(withAnchor
-            ? {
-                continuity: {
-                  itemIndex: 2,
-                  progress: ease(capturedTravel),
-                  pose: { ...parking.poses[2]! },
-                },
-              }
-            : {}),
         }),
       );
 
-    expect(physicalValues(anchored(true).poses[2]!)).toEqual(physicalValues(parking.poses[2]!));
-    // Without the anchor the same frame teleports that shell to the pose nominal interpolation
-    // gives it, which is the jump the anchor exists to prevent.
-    expect(physicalValues(anchored(false).poses[2]!)).not.toEqual(
-      physicalValues(parking.poses[2]!),
-    );
+    // A press does not catch it: at the release's own zero it is exactly where the hand let go.
+    expect(landingAt(0).poses[2]!).toMatchObject({ translateX: releaseX, translateY: releaseY });
 
-    // Past the captured travel the anchor hands the shell back to the ordinary interpolation, and
-    // by the end of the exchange it is exactly where the destination pile puts it.
-    const completed = resolveDirectFrame(
-      segment(3, -1, 1),
-      directProjection(3, -1, {
-        phase: "held",
-        translateX: 598,
-        translateY: 0,
-        continuity: {
-          itemIndex: 2,
-          progress: ease(capturedTravel),
-          pose: { ...parking.poses[2]! },
-        },
-      }),
+    // Arrived, it is exactly the pose the deck draws for it, with nothing of the release left.
+    const settled = resolveDirectFrame(
+      restingTop,
+      directProjection(3, 0, { phase: "held", translateX: 0, translateY: 0 }),
     );
-    const destination = resolveFrame(
-      traversal({
-        authoritativeIndex: 2,
-        segmentOriginIndex: 2,
-        settledIndex: 2,
-        visualTopIndex: 2,
-      }),
+    expect(physicalValues(landingAt(1).poses[2]!)).toEqual(physicalValues(settled.poses[2]!));
+
+    // Nothing about the path between those two ends is a step, including the moment this hand
+    // reverses back toward that very shell and the release starts arriving at the top of the deck
+    // instead of in the pile.
+    const path = Array.from({ length: 401 }, (_unused, step) => {
+      const travel = step / 400;
+      return { ...landingAt(Math.min(1, travel * 1.5), travel).poses[2]!, travel };
+    });
+    const steps = path.slice(1).map((shell, index) => ({
+      scale: Math.abs(shell.scale - path[index]!.scale),
+      travel: shell.travel,
+      x: Math.abs(shell.translateX - path[index]!.translateX),
+    }));
+    const widestX = steps.reduce((worst, step) => (step.x > worst.x ? step : worst));
+    const widestScale = steps.reduce((worst, step) => (step.scale > worst.scale ? step : worst));
+    expect(widestX.x, `landing handoff at travel ${widestX.travel.toFixed(3)}`).toBeLessThan(
+      WIDE_TUNING.cardWidth / 20,
     );
-    expect(physicalValues(completed.poses[2]!)).toEqual(physicalValues(destination.poses[2]!));
+    expect(
+      widestScale.scale,
+      `landing handoff at travel ${widestScale.travel.toFixed(3)}`,
+    ).toBeLessThan(0.02);
+    // It ends as this exchange's own target, on the top of the deck.
+    expect(physicalValues(landingAt(1, 1).poses[2]!)).toEqual(
+      physicalValues(
+        resolveFrame(
+          traversal({
+            authoritativeIndex: 2,
+            segmentOriginIndex: 2,
+            settledIndex: 2,
+            visualTopIndex: 2,
+          }),
+        ).poses[2]!,
+      ),
+    );
   });
 });
 

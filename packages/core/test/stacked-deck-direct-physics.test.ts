@@ -265,69 +265,68 @@ describe(`Direct physics differential against ${oracle.provenance.generatedFrom.
    * A press is not a landing.
    *
    * A hand can take hold of the deck while a previous release is still carrying a shell over it.
-   * That shell is physically the nearest thing to the eye, and it is nearer than the card the new
-   * hand has just taken hold of, which is still part of the deck. The two overlap almost exactly
-   * at that moment, so letting the press decide their order would repaint every pixel they share
-   * while neither of them moved.
+   * That release is not caught by the press: the shell keeps its own path and its own settlement,
+   * so on the frame the press lands it is exactly where it already was, and it is still the thing
+   * nearest the eye — nearer than the card the hand has just taken hold of, which is on the deck.
    */
-  test("keeps a release in flight above the card a new hand takes hold of", () => {
+  test("lets a release in flight finish its own path over the card a new hand holds", () => {
     const storage = createStackedDeckFrame(ITEM_COUNT);
-    const release = resolveSample(
-      {
-        originIndex: ORIGIN,
-        direction: 1,
-        signedTravel: 1,
-        settlement: 0.04,
-        translateX: -tuning.motionPitch,
-        phase: "parking",
-      },
-      storage,
-    );
-    const carried = { ...release.poses[ORIGIN]! };
+    const releaseX = -tuning.motionPitch;
     const landed = ORIGIN + 1;
-    const half = tuning.cardWidth / 2;
-    // The premise: the shell the release is carrying is in front, and the two bodies overlap.
-    expect(carried.layer).toBeGreaterThan(release.poses[landed]!.layer);
-    const overlap =
-      Math.min(carried.translateX, release.poses[landed]!.translateX) +
-      half -
-      (Math.max(carried.translateX, release.poses[landed]!.translateX) - half);
-    expect(overlap).toBeGreaterThan(0);
 
-    const taken = createStackedDeckFrame(ITEM_COUNT);
-    const model = new StackedDeckModel({ ids: IDS, initialId: IDS[landed]! });
-    model.openInteraction(landed, 1);
-    const state = model.update({
-      phase: "dragging",
-      physicalPosition: 0,
-      targetIndex: null,
-      nearestIndex: landed,
-    });
-    const frame = resolveStackedDeckFrame(
-      {
-        itemCount: ITEM_COUNT,
-        traversal: state.traversal,
-        tuning,
-        direct: {
-          continuity: { itemIndex: ORIGIN, progress: 0, pose: carried },
-          direction: 0,
-          originIndex: landed,
-          phase: "held",
-          settlement: 0,
-          signedTravel: 0,
-          targetIndex: null,
-          translateX: 0,
-          translateY: 0,
+    function press(settlement: number) {
+      const model = new StackedDeckModel({ ids: IDS, initialId: IDS[landed]! });
+      model.openInteraction(landed, 1);
+      const state = model.update({
+        phase: "dragging",
+        physicalPosition: 0,
+        targetIndex: null,
+        nearestIndex: landed,
+      });
+      return resolveStackedDeckFrame(
+        {
+          itemCount: ITEM_COUNT,
+          traversal: state.traversal,
+          tuning,
+          direct: {
+            direction: 0,
+            landing: { itemIndex: ORIGIN, settlement, translateX: releaseX, translateY: 0 },
+            originIndex: landed,
+            phase: "held",
+            settlement: 0,
+            signedTravel: 0,
+            targetIndex: null,
+            translateX: 0,
+            translateY: 0,
+          },
         },
-      },
-      taken,
-    );
-    // Nothing moved, so nothing repainted: the carried shell is exactly where it was, and it is
-    // still in front of the card the hand now holds.
-    expect(frame.poses[ORIGIN]!.translateX).toBeCloseTo(carried.translateX, 6);
-    expect(frame.poses[ORIGIN]!.translateY).toBeCloseTo(carried.translateY, 6);
-    expect(frame.poses[ORIGIN]!.scale).toBeCloseTo(carried.scale, 6);
-    expect(frame.poses[ORIGIN]!.layer).toBeGreaterThan(frame.poses[landed]!.layer);
+        storage,
+      );
+    }
+
+    // The frame the press lands on is the frame the release was already drawing.
+    const pressed = press(0);
+    expect(pressed.poses[ORIGIN]!.translateX).toBeCloseTo(releaseX, 6);
+    expect(pressed.poses[ORIGIN]!.layer).toBeGreaterThan(pressed.poses[landed]!.layer);
+
+    // It goes behind only once its own path has carried it clear of the deck's top.
+    const clearSeparation = tuning.cardWidth + 2;
+    for (let step = 0; step <= 200; step += 1) {
+      const frame = press(step / 200);
+      const shell = frame.poses[ORIGIN]!;
+      if (shell.layer > frame.poses[landed]!.layer) continue;
+      expect(
+        Math.abs(shell.translateX),
+        `the release went behind the deck at ${shell.translateX.toFixed(1)}px, which the top still covers`,
+      ).toBeGreaterThanOrEqual(clearSeparation);
+      break;
+    }
+
+    // Arrived: exactly the pose the deck draws for it, with no trace of the release left.
+    const arrived = press(1);
+    const settled = press(1);
+    expect(arrived.poses[ORIGIN]!.translateX).toBeCloseTo(settled.poses[ORIGIN]!.translateX, 6);
+    expect(arrived.poses[ORIGIN]!.layer).toBeLessThan(arrived.poses[landed]!.layer);
   });
 
   /**

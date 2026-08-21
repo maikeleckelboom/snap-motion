@@ -39,6 +39,21 @@ pile that no longer reads as one object.
 At rest the physical pile is the canonical ring rotated to the current item. Reconfiguration
 preserves the current semantic ID where possible, then rebuilds this order from the new collection.
 
+## Interrupted releases
+
+Presentation settlement is its own channel. A hand pressing the deck opens a new interaction; it
+does not cancel, freeze, or inherit whatever a previous release is still carrying. That release
+keeps the budget it started with and finishes independently, landing its shell in the slot the deck
+is drawing for it at the moment it arrives — which moves, because the new interaction is exchanging
+the deck underneath it, and which is the top of the deck when the new hand reverses back onto that
+same shell.
+
+A shell in the air is nearer the eye than the card a hand is holding, because that card is still on
+the deck and this one is not yet. It gives that rank up on the terms every release changes depth
+on: once its own path has carried it clear of both the pile and the card it is going under. The
+consequence is that a hand moving faster than cards can move will not be shown every exchange it
+commits — the deck's semantics are unaffected, but the picture is bounded by material.
+
 ## Traversal and navigation
 
 Relative commands carry `-1 | 1` as first-class direction and resolve exactly one ring neighbour.

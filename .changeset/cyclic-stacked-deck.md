@@ -16,5 +16,12 @@ The only physical behaviour the ring adds is that one shell per exchange crosses
 side of the pile to the other; it passes behind the deck and paints nothing between the two rests it
 is exact at.
 
+A press does not catch a card a release is still carrying. That release keeps its own path and its
+own clock and lands the shell while the next hand is already working, into whichever slot the deck
+is drawing for it by the time it arrives — including the top, when that hand reverses back onto the
+very shell still in the air. Because it is a whole release rather than a frozen frame, it changes
+its own depth where a release always does: once its path has carried it clear of everything it is
+going under.
+
 Remove Stacked-Deck-specific pagination state and presentation. Generic pagination and finite
 ordinal accessibility announcements remain available to the surfaces that own them.

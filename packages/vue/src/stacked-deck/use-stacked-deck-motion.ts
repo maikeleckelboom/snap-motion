@@ -109,18 +109,6 @@ function smoothstep(value: number): number {
   return value * value * (3 - 2 * value);
 }
 
-/**
- * Which side of `fromIndex` the ring reaches `toIndex` on, across the one-step offsets a single
- * exchange can produce. A ring gives both directions a neighbour, so this cannot be an ordinal
- * difference; anything further apart than one exchange is not a resumable offset at all.
- */
-function signedNeighbourOffset(fromIndex: number, toIndex: number, itemCount: number): -1 | 0 | 1 {
-  if (fromIndex === toIndex || itemCount < 2) return 0;
-  if (resolveStackedDeckNeighbor(fromIndex, 1, itemCount) === toIndex) return 1;
-  if (resolveStackedDeckNeighbor(fromIndex, -1, itemCount) === toIndex) return -1;
-  return 0;
-}
-
 const STACKED_DECK_CONFIGURATION_DEFAULTS: ControllerConfiguration = {
   spring: tightPreset.spring,
   releasePolicy: { ...tightPreset.release, maxAnchorSkip: STACKED_DECK_ANCHOR_SKIP },
@@ -487,6 +475,10 @@ export function useStackedDeckComponentMotion<Id extends string>(
 
   /** Elapsed fraction of the release in flight, while `releaseSettlement` is running it. */
   let releaseElapsed = 0;
+  /** Elapsed fraction of a release a later interaction interrupted, still finishing on its own. */
+  let landingElapsed = 0;
+  /** Whether this surface accepted the press that opened the interaction, on one of its cards. */
+  let pressAcceptedOnCard = false;
 
   /**
    * The released shell's own settlement, on its own frame budget rather than competing for the one
@@ -517,10 +509,53 @@ export function useStackedDeckComponentMotion<Id extends string>(
   );
 
   /**
-   * Ends an unfinished release. `keepAnchor` is what a hand taking the deck over needs: the anchor
-   * it captured on the way in is how the still-travelling shell stays continuous.
+   * A release the next interaction interrupted, finishing on its own.
+   *
+   * Pressing the deck is not catching the card a release threw over it, so that release is not
+   * cancelled and not frozen: it keeps the budget it started with and lands the shell while the
+   * new hand does whatever it is doing. The two are independent, which is why this is a second
+   * clock rather than a branch inside the first one.
    */
-  function clearDirectPresentation(keepAnchor = false): void {
+  const landingSettlement = useRafFn(
+    ({ delta }) => {
+      landingElapsed = Math.min(1, landingElapsed + delta / 230);
+      if (directProjection.landing != null) {
+        directProjection.landing = {
+          ...directProjection.landing,
+          settlement: smoothstep(landingElapsed),
+        };
+      }
+      triggerRef(state);
+      if (landingElapsed < 1) return;
+      landingSettlement.pause();
+      delete directProjection.landing;
+    },
+    { immediate: false },
+  );
+
+  /**
+   * Hands an unfinished release over to its own clock, so a new interaction can begin without
+   * either catching that shell or leaving it stranded in mid-air.
+   */
+  function detachLandingRelease(): void {
+    if (directProjection.phase !== "parking" || releaseElapsed >= 1) return;
+    if (directProjection.translateX === 0 && directProjection.translateY === 0) return;
+    landingElapsed = releaseElapsed;
+    directProjection.landing = {
+      itemIndex: directProjection.originIndex,
+      settlement: smoothstep(releaseElapsed),
+      translateX: directProjection.translateX,
+      translateY: directProjection.translateY,
+    };
+    landingSettlement.resume();
+  }
+
+  /**
+   * Ends this interaction's presentation. `handOver` is what a hand taking the deck over needs: the
+   * release it interrupted is not cancelled by the press, it is handed to its own clock to finish.
+   */
+  function clearDirectPresentation(handOver = false): void {
+    if (handOver) detachLandingRelease();
     releaseSettlement.pause();
     directProjection.settlement = 0;
     directProjection.translateX = directProjection.translateY = 0;
@@ -528,7 +563,11 @@ export function useStackedDeckComponentMotion<Id extends string>(
     directProjection.signedTravel = 0;
     directProjection.targetIndex = null;
     delete directProjection.phase;
-    if (!keepAnchor) delete directProjection.continuity;
+    if (handOver) return;
+    pressAcceptedOnCard = false;
+    landingSettlement.pause();
+    landingElapsed = 0;
+    delete directProjection.landing;
   }
 
   /**
@@ -541,7 +580,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
    * the projection's autonomous depth rule.
    */
   function handOwnsDirectShell(): boolean {
-    return isDirect() && motion.isDragging.value && directProjection.continuity !== undefined;
+    return isDirect() && motion.isDragging.value && pressAcceptedOnCard;
   }
 
   watch(
@@ -563,30 +602,13 @@ export function useStackedDeckComponentMotion<Id extends string>(
   function onDirectPointerSample(deltaX?: number, deltaY?: number): void {
     if (!isDirect()) return;
     if (deltaX === undefined || deltaY === undefined) {
-      directProjection.continuity = null;
-      // A press during an unfinished release anchors on the shell that release owns, which the
-      // model may already have closed its interaction on.
-      const continuityIndex = model.state.interactionOriginIndex ?? presentationOriginIndex();
-      if (continuityIndex === null) return;
-      // How far the new interaction has already travelled at the frame it is taking over on. The
-      // scalar mass keeps the position the unfinished release left it at, so that travel is real
-      // and the capture is the pose belonging to it. It is measured from the card this hand will
-      // be measured from, expressed in the coordinate the mass currently stands in — those two
-      // differ by one exchange for as long as an interrupted release has not rebased yet.
-      const resumedOffset = signedNeighbourOffset(
-        physicalCoordinate.originIndex,
-        state.value.currentIndex,
-        model.itemCount,
-      );
-      directProjection.continuity = {
-        itemIndex: continuityIndex,
-        progress: smoothstep(Math.min(1, Math.abs(physicalIndex.value - resumedOffset))),
-        pose: { ...frame.value.poses[continuityIndex]! },
-      };
+      // The press itself. It resolves nothing physical: whatever a previous release is carrying
+      // keeps travelling on its own, and this only records that the surface took the press.
+      pressAcceptedOnCard = true;
       return;
     }
     // The hand that owns this shell already opened its interaction, which is where whatever was
-    // still parking stopped animating and became the anchor this sample continues from.
+    // still parking was handed to its own clock to finish.
     if (!handOwnsDirectShell()) return;
     directProjection.phase = "held";
     directProjection.translateX = deltaX;

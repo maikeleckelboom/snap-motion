@@ -143,7 +143,7 @@ test("Direct parking inserts the outgoing card before an occluded fold shell re-
       () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
     );
     const snapshot = await capturePileSnapshot(page);
-    expectPileSnapshotWithinEndpointEnvelope(snapshot, sourceRest, destinationRest, 2, -1);
+    expectPileSnapshotWithinEndpointEnvelope(snapshot, sourceRest, destinationRest, 2, -1, true);
     switchingPixels.push(snapshot.painted.materials.settings!.pixelCount);
     if (
       snapshot.rendered.controllerPhase === "idle" &&

@@ -38,16 +38,20 @@ export interface StackedDeckDirectProjection {
    */
   readonly settlement: number;
   /**
-   * Optional interruption anchor. A new interaction resolves from the already-rendered physical
-   * frame rather than first teleporting a still-parking shell to nominal rest geometry.
+   * A release this interaction interrupted, still carrying a shell.
+   *
+   * Pressing the deck does not catch the card a previous release threw over it. That release keeps
+   * its own path and its own settlement, independently of whatever this hand is doing, and lands
+   * the shell in whichever slot the deck is drawing for it by the time it arrives.
    */
-  readonly continuity?: null | {
-    /** Stable item whose current physical pose differs from the nominal endpoint interpolation. */
+  readonly landing?: null | {
+    /** The shell that release is still carrying. It is never this interaction's own origin. */
     readonly itemIndex: number;
-    /** Endpoint interpolation progress of the new interaction at the captured frame. */
-    readonly progress: number;
-    /** Its resolved pose at interruption. */
-    readonly pose: StackedDeckPose;
+    /** The vector the hand let go of it with, in stage coordinates. */
+    readonly translateX: number;
+    readonly translateY: number;
+    /** Its own bounded settlement, which this interaction neither drives nor interrupts. */
+    readonly settlement: number;
   };
 }
 
@@ -224,6 +228,13 @@ const HAND_LAYER = TOP_LAYER + 1;
  * there: exactly one shell is airborne, and a hand can only take hold of a card the deck still has.
  */
 const AIRBORNE_LAYER = HAND_LAYER + 1;
+/**
+ * The width of the stretch a landing release holds its full clearance over, as the value the
+ * ordinary release envelope reaches at each end of it. A quarter of the way in and a quarter from
+ * the end: wide enough that no frame can step over it, narrow enough that both endpoints are still
+ * approached by the same curve every other release uses.
+ */
+const LANDING_CLEAR_PLATEAU = 4 * 0.25 * (1 - 0.25);
 const TARGET_LAYER = 400;
 const PILE_LAYER_STEP = 10;
 /**
@@ -995,13 +1006,7 @@ function wrapsAcrossFold(sourceSlot: number, destinationSlot: number): boolean {
   );
 }
 
-/**
- * Carries one subordinate shell from the rest it is in to the rest the exchange leaves it in.
- *
- * An interrupted shell resolves from the pose it was actually rendered at rather than from the one
- * nominal interpolation would have given it, and rejoins that interpolation at the travel the
- * capture was taken at.
- */
+/** Carries one subordinate shell from the rest it is in to the rest the exchange leaves it in. */
 function resolveDirectShell(
   pose: MutableStackedDeckPose,
   index: number,
@@ -1012,34 +1017,14 @@ function resolveDirectShell(
   tuning: StackedDeckTuning,
 ): void {
   setRingPose(resetPose(directDestinationPose), targetIndex, index, output.poses.length, tuning);
-  const continuity = projection.continuity;
-  if (continuity == null || continuity.itemIndex !== index) {
-    moveDirectPose(pose, directDestinationPose, reveal);
-    return;
-  }
-  const continuityReveal = continuity.progress;
-  // A capture taken at this interaction's own zero is exact there and has nothing to replay, which
-  // is the limit of the general case rather than an exception to it.
-  moveDirectPose(
-    pose,
-    continuity.pose,
-    continuityReveal <= TRAVERSAL_EPSILON ? 1 : Math.min(1, reveal / continuityReveal),
-  );
-  // A shell captured mid-release was thrown over the deck and has not landed on it yet, so it is
-  // still the thing physically nearest the eye — including nearer than the card a new hand has
-  // just taken hold of, which is still part of the deck. Ranking it there rather than leaving it
-  // level with that hand is what keeps a press from repainting the pixels the two of them share.
-  if (pose.layer >= HAND_LAYER) pose.layer = AIRBORNE_LAYER;
-  if (reveal <= continuityReveal) return;
-  moveDirectPose(pose, directDestinationPose, (reveal - continuityReveal) / (1 - continuityReveal));
-  if (pose.layer >= HAND_LAYER) pose.layer = AIRBORNE_LAYER;
+  moveDirectPose(pose, directDestinationPose, reveal);
 }
 
 /**
  * Projects Direct from one stable interaction origin. The target and remaining pile depend only on
  * scalar traversal; the hand-owned shell alone may read the raw two-axis translation.
  */
-function setDirectFrame(
+function setDirectExchange(
   output: MutableStackedDeckFrame,
   projection: StackedDeckDirectProjection,
   tuning: StackedDeckTuning,
@@ -1155,13 +1140,6 @@ function setDirectFrame(
       return;
     }
   }
-  // A shell a previous release is still carrying keeps the pose and the rank that release gave it,
-  // whether or not this interaction has named a neighbour yet. Presentation settlement is its own
-  // channel: a press is not a landing, and nothing about it can put that shell back in the pile.
-  const resumed = targetIndex === null ? projection.continuity : null;
-  if (resumed != null && resumed.itemIndex !== projection.originIndex) {
-    Object.assign(output.poses[resumed.itemIndex]!, resumed.pose);
-  }
   // Held and given back are the same expression, because a shell no hand has let go of has no
   // settlement: it keeps the whole raw vector, and a cancelled one hands that vector back as its
   // own settlement completes, ending on the exact source top.
@@ -1171,27 +1149,105 @@ function setDirectFrame(
   // Physical ownership, which is what this rank means. A command that has not moved yet has no
   // hand and nothing to own, so it stays the resting top rather than claiming the hand's rank.
   if (phase !== undefined) outgoing.layer = HAND_LAYER;
-  // A shell a release threw over the deck is still in the air, and it keeps the rank it was
-  // captured with for exactly as long as the release itself would have: until this exchange has
-  // carried it most of the way down, or until it and the card this hand is holding stand clear of
-  // each other. That is the same pair of conditions the release changes its own depth on, because
-  // a discrete change is only invisible between bodies that share no pixel.
-  const carried = projection.continuity;
-  if (
-    carried != null &&
-    carried.itemIndex !== projection.originIndex &&
-    carried.pose.layer >= HAND_LAYER
-  ) {
-    const carriedPose = output.poses[carried.itemIndex]!;
-    const landing =
-      reveal <= carried.progress ? 0 : (reveal - carried.progress) / (1 - carried.progress);
-    if (
-      landing < CROSSOVER_SETTLEMENT &&
-      Math.abs(carriedPose.translateX - outgoing.translateX) < clearSeparation
-    ) {
-      carriedPose.layer = AIRBORNE_LAYER;
-    }
-  }
+}
+
+/**
+ * One Direct frame: the exchange this hand is performing, and — independently of it — whatever a
+ * release it interrupted is still finishing. The two are separate physical facts, so they are
+ * resolved as two passes rather than folded into one.
+ */
+function setDirectFrame(
+  output: MutableStackedDeckFrame,
+  projection: StackedDeckDirectProjection,
+  tuning: StackedDeckTuning,
+): void {
+  setDirectExchange(output, projection, tuning);
+  applyLandingRelease(output, projection, tuning);
+}
+
+const landingReleasePose = resetPose({} as MutableStackedDeckPose);
+const landingDeckPose = resetPose({} as MutableStackedDeckPose);
+
+/**
+ * Finishes a release the next interaction interrupted.
+ *
+ * Pressing the deck is not catching the card a previous release threw over it. That card is in the
+ * air, on a path of its own, and it keeps travelling: the same curve every release uses, with the
+ * one difference that its destination is moving, because the deck underneath it is being exchanged
+ * while it comes down. Reading the slot the deck is currently drawing for it as that destination is
+ * what makes the two continuous — including when this hand reverses back toward that very shell,
+ * where the destination becomes the top of the deck and the landing simply arrives there instead.
+ *
+ * Because it is a whole release rather than a frozen frame, it changes its own depth on the terms
+ * every release changes depth on: its path carries it clear of the deck's top first, so nothing it
+ * passes shares a pixel with it at the frame it goes behind.
+ */
+function applyLandingRelease(
+  output: MutableStackedDeckFrame,
+  projection: StackedDeckDirectProjection,
+  tuning: StackedDeckTuning,
+): void {
+  const landing = projection.landing;
+  if (landing == null || landing.itemIndex === projection.originIndex) return;
+  const pose = output.poses[landing.itemIndex];
+  if (pose === undefined) return;
+  const settlement = clamp(landing.settlement, 0, 1) || 0;
+  // Arrived: the deck is already drawing it exactly where the release was taking it.
+  if (settlement >= 1 - TRAVERSAL_EPSILON) return;
+  const clearSeparation = tuning.cardWidth + CROSSOVER_CLEARANCE;
+  Object.assign(landingDeckPose, pose);
+  // The frame the hand let go on: the deck's top, carrying the vector it was let go with.
+  setTopPose(resetPose(landingReleasePose), false);
+  landingReleasePose.translateX = landing.translateX;
+  landingReleasePose.translateY = landing.translateY;
+
+  // What it has to get past is decided by where it is landing. A shell coming down into the pile
+  // has to get under the pile, which is gathered at the centre of the stage and as wide as its own
+  // fan; a shell this exchange is making the deck's top is landing on the pile rather than beneath
+  // it, and has nothing there to clear. Either way it still has to get under the card this hand is
+  // holding, which is the deck's top wherever the hand has carried it. A release at rest clears all
+  // of that at once because there it is all the same place.
+  // A leaning card reaches further than its width: the corner it lifts is what actually touches
+  // the body beside it, so every separation below carries the whole of that reach.
+  const lean = tuning.cardHeight * Math.sin(Math.abs(tuning.topRotate) * (Math.PI / 180));
+  const bodySeparation = clearSeparation + lean;
+  const pileSeparation = wholePileClearSeparation(output.poses.length, tuning) + lean;
+  const beneathPile = landingDeckPose.layer < TARGET_LAYER;
+  const passing = output.poses[projection.originIndex]!;
+  // The way it was already going: a release extends its own throw to get clear, it does not turn
+  // around to do it.
+  const side = Math.sign(
+    landing.translateX - landingDeckPose.translateX || landing.translateX || 1,
+  );
+  const handLimit = passing.translateX + side * bodySeparation;
+  const pileLimit = side * pileSeparation;
+  const limit = beneathPile
+    ? side > 0
+      ? Math.max(pileLimit, handLimit)
+      : Math.min(pileLimit, handLimit)
+    : handLimit;
+  Object.assign(pose, landingReleasePose);
+  moveDirectPose(pose, landingDeckPose, settlement);
+  // Zero at both ends, so both endpoints stay exact, and standing exactly clear for the whole
+  // stretch between them rather than touching that mark at a single instant. A release changing
+  // depth at one apex only has to be clear on the frame it happens on; this one is landing into a
+  // deck a hand is still moving, and a browser that steps over that instant inside a single long
+  // frame would land it while the two still overlap. Measuring the shortfall from where the path
+  // has actually reached on this frame is what holds the clearance across the whole stretch rather
+  // than only at its middle.
+  pose.translateX +=
+    side *
+    Math.max(0, side * (limit - pose.translateX)) *
+    Math.min(1, (4 * settlement * (1 - settlement)) / LANDING_CLEAR_PLATEAU);
+  // Over them until its own path has carried it clear of every one, and behind for the rest of its
+  // way in. Reading the separation the frame is about to render — rather than the settlement that
+  // produced it — is what keeps the change invisible at any frame rate.
+  // Depth changes once, at the middle of the plateau, and never changes back. Asking instead
+  // whether it happens to stand clear on this frame would let a hand moving toward it push it back
+  // in front after it had gone behind; the plateau is what makes the one crossing safe, so the
+  // crossing is read from the path's own progress rather than from a separation the hand can move.
+  if (settlement < CROSSOVER_SETTLEMENT) pose.layer = AIRBORNE_LAYER;
+  pose.interactive = false;
 }
 
 /**
@@ -1231,6 +1287,12 @@ export function resolveStackedDeckFrame(
       throw new RangeError("direct.targetIndex is not the directed cyclic neighbour");
     }
     assertFiniteNumber(direct.signedTravel, "direct.signedTravel");
+    const landing = direct.landing;
+    if (landing != null) {
+      assertIndex(landing.itemIndex, options.itemCount, "direct.landing.itemIndex");
+      assertFiniteNumber(landing.translateX, "direct.landing.translateX");
+      assertFiniteNumber(landing.translateY, "direct.landing.translateY");
+    }
   }
   const sourceTopIndex =
     direct?.originIndex ??

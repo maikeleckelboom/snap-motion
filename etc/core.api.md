@@ -1218,12 +1218,13 @@ export interface StackedDeckCommandContext {
 
 // @public
 export interface StackedDeckDirectProjection {
-    readonly continuity?: null | {
-        readonly itemIndex: number;
-        readonly progress: number;
-        readonly pose: StackedDeckPose;
-    };
     readonly direction: -1 | 0 | 1;
+    readonly landing?: null | {
+        readonly itemIndex: number;
+        readonly translateX: number;
+        readonly translateY: number;
+        readonly settlement: number;
+    };
     readonly originIndex: number;
     readonly phase?: "held" | "parking" | "returning";
     readonly settlement: number;
