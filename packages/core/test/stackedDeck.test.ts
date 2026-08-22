@@ -11,6 +11,7 @@ import {
   resolveStackedDeckTuning,
   type MutableStackedDeckFrame,
   type MutableStackedDeckTraversal,
+  type StackedDeckDirectLanding,
   type StackedDeckDirectProjection,
   type StackedDeckPose,
   type StackedDeckTraversal,
@@ -259,12 +260,20 @@ function resolveFrame(
   return resolveStackedDeckFrame({ itemCount, traversal: activeTraversal, tuning }, output);
 }
 
+/**
+ * One exchange plus whatever is still in the air over it. The two are separate frame inputs, and
+ * this bundles them only so a scenario reads as the one physical situation it is.
+ */
+type DirectFixture = StackedDeckDirectProjection & {
+  readonly landings?: readonly StackedDeckDirectLanding[];
+};
+
 function directProjection(
   originIndex: number,
   _scalarDistance: number,
-  overrides: Partial<StackedDeckDirectProjection> & { settlementProgress?: number } = {},
+  overrides: Partial<DirectFixture> & { settlementProgress?: number } = {},
   itemCount = 5,
-): StackedDeckDirectProjection {
+): DirectFixture {
   const { settlementProgress, ...projection } = overrides;
   return {
     direction: Math.sign(_scalarDistance) as -1 | 0 | 1,
@@ -284,15 +293,17 @@ function directProjection(
 
 function resolveDirectFrame(
   activeTraversal: StackedDeckTraversal,
-  direct: StackedDeckDirectProjection,
+  fixture: DirectFixture,
   itemCount = 5,
 ) {
+  const { landings, ...direct } = fixture;
   return resolveStackedDeckFrame(
     {
       itemCount,
       traversal: activeTraversal,
       tuning: WIDE_TUNING,
       direct,
+      ...(landings === undefined ? {} : { landings }),
     },
     createStackedDeckFrame(itemCount),
   );
@@ -1733,7 +1744,18 @@ describe("Direct stacked deck projection", () => {
     expect(frame.poses[1]!.layer).toBeGreaterThan(frame.poses[2]!.layer);
   });
 
-  it("hands a landing target to the next hand as one continuous physical shell", () => {
+  /**
+   * A release still in the air is a presentation, and nothing about the deck naming it can make it
+   * an input origin.
+   *
+   * The exchange the accepted Direct kernel performs is measured from a shell that is physically
+   * covering the pile it hands depth to. An airborne shell covers nothing — its own release threw
+   * it clear — so the discrete target and pile handoff would happen in the open. Naming it as the
+   * live authoritative destination is precisely the case where it looks most like a card a hand
+   * could take, and is exactly where it must still refuse: it stays visible, it keeps travelling,
+   * and the deck underneath it is what input can reach.
+   */
+  it("keeps a landing shell non-interactive even as the deck's live destination", () => {
     const release = {
       itemIndex: 2,
       releaseOrder: 1,
@@ -1741,41 +1763,38 @@ describe("Direct stacked deck projection", () => {
       translateX: -520,
       translateY: 190,
     };
-    const arriving = resolveDirectFrame(
+    for (const settlement of [0, 0.3, 0.7, 1]) {
+      const arriving = resolveDirectFrame(
+        { ...segment(3, -1, 0.7), authoritativeIndex: 2 },
+        directProjection(3, -0.7, {
+          landings: [{ ...release, settlement }],
+          phase: "parking",
+          settlementProgress: 0,
+          translateX: 300,
+          translateY: 0,
+        }),
+      );
+      const landingPose = arriving.poses[2]!;
+      expect(landingPose.interactive, `settlement ${settlement}`).toBe(false);
+      // Refused, not cancelled: it is still on the stage and still the deck's own destination.
+      expect(landingPose.visible, `settlement ${settlement}`).toBe(true);
+      expect(landingPose.opacity, `settlement ${settlement}`).toBeGreaterThan(0);
+    }
+  });
+
+  /** The one interactive card is the shell a hand can actually lift off this deck. */
+  it("offers the live destination once its release has been retired", () => {
+    const settled = resolveDirectFrame(
       { ...segment(3, -1, 0.7), authoritativeIndex: 2 },
       directProjection(3, -0.7, {
-        landings: [release],
         phase: "parking",
         settlementProgress: 0,
         translateX: 300,
         translateY: 0,
       }),
     );
-    const capturedPose = arriving.poses[2]!;
-    expect(capturedPose.interactive).toBe(true);
-
-    const captured = resolveDirectFrame(
-      traversal({
-        authoritativeIndex: 2,
-        phase: "neutral",
-        segmentOriginIndex: 2,
-        settledIndex: 2,
-        visualTopIndex: 2,
-      }),
-      directProjection(2, 0, {
-        inheritedPose: {
-          releaseOrder: release.releaseOrder,
-          rotate: capturedPose.rotate,
-          scale: capturedPose.scale,
-          shadowStrength: capturedPose.shadowStrength,
-        },
-        phase: "held",
-        translateX: capturedPose.translateX,
-        translateY: capturedPose.translateY,
-      }),
-    );
-    expect(physicalValues(captured.poses[2]!)).toEqual(physicalValues(capturedPose));
-    expect(captured.poses[2]!.layer).toBe(capturedPose.layer);
+    expect(settled.poses.filter((pose) => pose.interactive)).toHaveLength(1);
+    expect(settled.poses[2]!.interactive).toBe(true);
   });
 
   it("parks a full-pitch and an overdragged commit with finite geometry and no stall", () => {
@@ -2104,7 +2123,7 @@ describe("stacked deck physical continuity", () => {
           landings: [repeatedShell, { ...repeatedShell, releaseOrder: 2 }],
         }),
       ),
-    ).toThrowError("direct.landings");
+    ).toThrowError("landings");
     expect(() =>
       resolveDirectFrame(
         traversal(),
@@ -2112,23 +2131,10 @@ describe("stacked deck physical continuity", () => {
           landings: [repeatedShell, { ...repeatedShell, itemIndex: 2 }],
         }),
       ),
-    ).toThrowError("direct.landings");
+    ).toThrowError("landings");
+    // A shell cannot be this interaction's source and one of its unfinished releases at once.
     expect(() =>
       resolveDirectFrame(traversal(), directProjection(1, 0, { landings: [repeatedShell] })),
-    ).toThrowError("direct.landings");
-    expect(() =>
-      resolveDirectFrame(
-        traversal(),
-        directProjection(0, 0, {
-          inheritedPose: {
-            releaseOrder: 1,
-            rotate: 0,
-            scale: 1,
-            shadowStrength: 1,
-          },
-          landings: [repeatedShell],
-        }),
-      ),
-    ).toThrowError("direct.landings");
+    ).toThrowError("landings");
   });
 });

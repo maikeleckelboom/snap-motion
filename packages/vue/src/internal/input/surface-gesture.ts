@@ -19,10 +19,16 @@ export interface SurfaceGestureOptions {
   /** Whether a tap on this item would open it rather than select it. */
   readonly isOpenEligible: (index: number) => boolean;
   readonly disabled?: () => boolean;
-  /** Forwards a pointer that has been accepted, so the controller can take ownership. */
-  readonly forwardPointerDown: (event: PointerEvent) => void;
-  /** Optional non-reactive preparation and raw movement for the tracked pointer. */
-  readonly onPointerSample?: (deltaX?: number, deltaY?: number) => void;
+  /**
+   * Forwards a pointer that has been accepted, so the controller can take ownership.
+   *
+   * The item this sequence began on is stated rather than left to be inferred: `-1` is a press the
+   * surface's own items did not claim. A surface whose transaction has to begin from a specific
+   * physical item refuses that press; one that drags its whole track does not care.
+   */
+  readonly forwardPointerDown: (event: PointerEvent, originIndex: number) => void;
+  /** Optional non-reactive raw movement for the tracked pointer, once it began on an item. */
+  readonly onPointerSample?: (deltaX: number, deltaY: number) => void;
   readonly onResolved: (
     resolution: DirectManipulationResolution,
     gesture: CompletedSurfaceGesture,
@@ -217,7 +223,10 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     if (gesture && !activePointers.has(event.pointerId)) {
       gesture.involvedMultiplePointers = true;
       activePointers.add(event.pointerId);
-      options.forwardPointerDown(event);
+      // A second contact joins the sequence already in progress, so it is forwarded on that
+      // sequence's origin rather than on its own: whether this surface owns the gesture at all was
+      // settled by the first press.
+      options.forwardPointerDown(event, gesture.originIndex ?? -1);
       return;
     }
     if (!isSupportedPrimaryPointerStart(event)) return;
@@ -249,10 +258,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
       maximumDisplacement: 0,
     };
     activePointers.add(event.pointerId);
-    if (originElement !== undefined && originIndex >= 0) {
-      options.onPointerSample?.();
-    }
-    options.forwardPointerDown(event);
+    options.forwardPointerDown(event, originIndex);
   }
 
   function abandon(event: PointerEvent) {

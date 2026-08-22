@@ -345,9 +345,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
     const { snapshot, velocity } = context;
     const originIndex = model.state.interactionOriginIndex;
     const direction = model.state.interactionDirection;
-    if (!isDirect() || !pressAcceptedOnCard || originIndex === null || direction === 0) {
-      return undefined;
-    }
+    if (!isDirect() || originIndex === null || direction === 0) return undefined;
     const originId = model.idAt(originIndex)!;
     const chosen = resolveSnapReleaseTarget({
       anchors: snapshot.anchors,
@@ -370,8 +368,8 @@ export function useStackedDeckComponentMotion<Id extends string>(
     ...currentConfiguration(),
     resolveDragOrigin: () => {
       // A hand opening an interaction supersedes an unfinished release rather than inheriting its
-      // release frame. The anchor that hand captured on the way in is kept: it is how the shell it
-      // interrupted stays continuous.
+      // release frame. That release is handed to its own clock and keeps travelling; this
+      // interaction begins at the deck it can actually reach, from that shell's own rest.
       //
       // Origin and lifecycle are bound in one statement, because a frame is rendered between any
       // two that are not. A presentation carrying a new origin with no owner is not an unowned
@@ -382,16 +380,10 @@ export function useStackedDeckComponentMotion<Id extends string>(
       // names appearing to be swapped for another one. An interaction with no hand, which is a
       // wheel burst, genuinely has no held shell and keeps travelling autonomously.
       const originIndex = model.beginInteraction();
-      const originPose = frame.value.poses[originIndex];
       clearDirectExchange(true);
       directProjection.originIndex = originIndex;
-      const capturedLanding =
-        originPose === undefined ? false : captureLandingShell(originIndex, originPose);
-      directProjection.translateX = handOriginTranslateX;
-      directProjection.translateY = handOriginTranslateY;
       if (handOwnsDirectShell()) directProjection.phase = "held";
       rebasePhysicalCoordinate(originIndex);
-      if (capturedLanding) triggerRef(state);
       return ids.value[originIndex];
     },
     resolveReleaseTarget: resolveDirectReleaseTarget,
@@ -463,7 +455,6 @@ export function useStackedDeckComponentMotion<Id extends string>(
     -readonly [Key in keyof StackedDeckDirectProjection]: StackedDeckDirectProjection[Key];
   } = {
     direction: 0,
-    landings: directLandings,
     originIndex: model.state.settledIndex,
     settlement: 0,
     signedTravel: 0,
@@ -542,11 +533,6 @@ export function useStackedDeckComponentMotion<Id extends string>(
 
   /** Elapsed fraction of the release in flight, while `releaseSettlement` is running it. */
   let releaseElapsed = 0;
-  /** Translation owned at the frame a hand catches an already-airborne shell. */
-  let handOriginTranslateX = 0;
-  let handOriginTranslateY = 0;
-  /** Whether this surface accepted the press that opened the interaction, on one of its cards. */
-  let pressAcceptedOnCard = false;
 
   /**
    * The released shell's own settlement, on its own frame budget rather than competing for the one
@@ -626,10 +612,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
       (landing) => landing.itemIndex === directProjection.originIndex,
     );
     const existing = existingIndex < 0 ? undefined : directLandings[existingIndex];
-    const releaseOrder =
-      existing?.releaseOrder ??
-      directProjection.inheritedPose?.releaseOrder ??
-      (nextReleaseOrder += 1);
+    const releaseOrder = existing?.releaseOrder ?? (nextReleaseOrder += 1);
     const updatedAt = performance.now();
     const landing =
       existing ??
@@ -648,37 +631,8 @@ export function useStackedDeckComponentMotion<Id extends string>(
     landing.translateX = directProjection.translateX;
     landing.translateY = directProjection.translateY;
     landing.updatedAt = updatedAt;
-    if (directProjection.inheritedPose === undefined) {
-      delete landing.scale;
-      delete landing.rotate;
-      delete landing.shadowStrength;
-    } else {
-      landing.scale = directProjection.inheritedPose.scale;
-      landing.rotate = directProjection.inheritedPose.rotate;
-      landing.shadowStrength = directProjection.inheritedPose.shadowStrength;
-    }
     if (existing === undefined) directLandings.push(landing);
     landingSettlement.resume();
-  }
-
-  /** Absorbs one landing into the hand from the exact pose already rendered for that same shell. */
-  function captureLandingShell(
-    itemIndex: number,
-    pose: StackedDeckFrame["poses"][number],
-  ): boolean {
-    const landingIndex = directLandings.findIndex((landing) => landing.itemIndex === itemIndex);
-    if (landingIndex < 0) return false;
-    const landing = directLandings[landingIndex]!;
-    handOriginTranslateX = pose.translateX;
-    handOriginTranslateY = pose.translateY;
-    directProjection.inheritedPose = {
-      releaseOrder: landing.releaseOrder,
-      rotate: pose.rotate,
-      scale: pose.scale,
-      shadowStrength: pose.shadowStrength,
-    };
-    removeLanding(landingIndex);
-    return true;
   }
 
   /**
@@ -694,10 +648,6 @@ export function useStackedDeckComponentMotion<Id extends string>(
     directProjection.signedTravel = 0;
     directProjection.targetIndex = null;
     delete directProjection.phase;
-    delete directProjection.inheritedPose;
-    handOriginTranslateX = handOriginTranslateY = 0;
-    if (handOver) return;
-    pressAcceptedOnCard = false;
   }
 
   /** Cancels every presentation record under the surface's atomic reset policy. */
@@ -709,8 +659,11 @@ export function useStackedDeckComponentMotion<Id extends string>(
   }
 
   /**
-   * Whether a hand owns the Direct shell: a pointer the controller has taken, on a press this
-   * surface accepted on one of its cards.
+   * Whether a hand owns the Direct shell: a pointer the controller has taken.
+   *
+   * There is nothing to ask beyond that, because a Direct pointer sequence is only ever forwarded
+   * to the controller from a card this surface is offering. A wheel burst still opens an
+   * interaction and still has no hand, which is the distinction this draws.
    *
    * Deliberately one fact, asked in one place. A presentation that declared itself held by a hand
    * whose movement it would then refuse would pin a shell at the frame it was pressed on for the
@@ -718,7 +671,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
    * the projection's autonomous depth rule.
    */
   function handOwnsDirectShell(): boolean {
-    return isDirect() && motion.isDragging.value && pressAcceptedOnCard;
+    return isDirect() && motion.isDragging.value;
   }
 
   watch(
@@ -737,20 +690,14 @@ export function useStackedDeckComponentMotion<Id extends string>(
     { flush: "sync" },
   );
 
-  function onDirectPointerSample(deltaX?: number, deltaY?: number): void {
-    if (!isDirect()) return;
-    if (deltaX === undefined || deltaY === undefined) {
-      // The press itself. It resolves nothing physical: whatever a previous release is carrying
-      // keeps travelling on its own, and this only records that the surface took the press.
-      pressAcceptedOnCard = true;
-      return;
-    }
+  function onDirectPointerSample(deltaX: number, deltaY: number): void {
     // The hand that owns this shell already opened its interaction, which is where whatever was
-    // still parking was handed to its own clock to finish.
+    // still parking was handed to its own clock to finish. The shell it is holding began at that
+    // card's own rest, so the hand's displacement is the whole of its translation.
     if (!handOwnsDirectShell()) return;
     directProjection.phase = "held";
-    directProjection.translateX = handOriginTranslateX + deltaX;
-    directProjection.translateY = handOriginTranslateY + deltaY;
+    directProjection.translateX = deltaX;
+    directProjection.translateY = deltaY;
     triggerRef(state);
   }
 
@@ -795,6 +742,12 @@ export function useStackedDeckComponentMotion<Id extends string>(
         traversal,
         tuning: activeTuning.value,
         ...(originIndex === null ? {} : { direct: directProjection }),
+        // Independently of whether anything is being exchanged. A release outlives the interaction
+        // that threw it, and the deck it is coming down onto may since have finished and gone
+        // still — so the collection is stated on every frame, and holding a record is exactly what
+        // draws that shell as an unfinished landing. That is what lets one question — is this
+        // shell an active landing — be truthful for input as well as for paint.
+        ...(directLandings.length === 0 ? {} : { landings: directLandings }),
       },
       frameStorage,
     );
@@ -857,12 +810,26 @@ export function useStackedDeckComponentMotion<Id extends string>(
     return true;
   }
 
+  /**
+   * Whether this shell is one a release still has in the air.
+   *
+   * The same fact the projection states by refusing to draw such a shell as interactive, asked
+   * where a command has no pose to consult. An exchange is measured from the deck's own top, and a
+   * card whose release has not put it back on the deck yet is not that top however the model names
+   * it — a reversal can commit back to a shell that is still hundreds of pixels away.
+   *
+   * Nothing is queued and nothing is timed by this: the frame that release arrives, the card is an
+   * ordinary deck top again and the very same command is accepted.
+   */
+  function isReleaseInFlight(index: number): boolean {
+    return directLandings.some((landing) => landing.itemIndex === index);
+  }
+
   function traverse(originIndex: number, targetIndex: number, direction: -1 | 1): boolean {
     // A command opens its own interaction, with no hand and no anchor of its own.
     // Any release it interrupts remains a concurrent physical body, exactly as it does for a
     // pointer hand. The autonomous command does not inherit pointer ownership.
     clearDirectExchange(true);
-    pressAcceptedOnCard = false;
     model.openInteraction(originIndex, direction);
     rebasePhysicalCoordinate(originIndex, direction);
     motion.moveTo(model.idAt(targetIndex)!);
@@ -874,7 +841,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
     const command = model.resolveRelativeCommand(direction, { owned: owned.value });
     if (command.kind !== "traverse") return false;
     const id = model.idAt(command.targetIndex);
-    if (id === undefined) return false;
+    if (id === undefined || isReleaseInFlight(command.originIndex)) return false;
     acceptDestination(id, reason);
     return traverse(command.originIndex, command.targetIndex, command.direction);
   }
@@ -888,10 +855,12 @@ export function useStackedDeckComponentMotion<Id extends string>(
     if (command.kind === "none") return false;
     const id = model.idAt(command.targetIndex);
     if (id === undefined) return false;
-    acceptDestination(id, reason);
     if (command.kind === "traverse") {
+      if (isReleaseInFlight(command.originIndex)) return false;
+      acceptDestination(id, reason);
       return traverse(command.originIndex, command.targetIndex, command.direction);
     }
+    acceptDestination(id, reason);
     return synchronizeIndex(command.targetIndex, reason, command.announce);
   }
 
@@ -918,12 +887,14 @@ export function useStackedDeckComponentMotion<Id extends string>(
     if (index < 0) return false;
     if (disabled() || owned.value) return synchronizeIndex(index, "external", false);
     const command = model.resolveAbsoluteCommand(index, { owned: false, atRest: atRest.value });
-    if (command.kind === "traverse") {
+    // Authoritative state always lands. An exchange whose source is still a release in the air has
+    // no deck to exchange, so this adopts the destination exactly instead — the same answer the
+    // policy already gives while the deck is held, and for the same reason.
+    if (command.kind === "traverse" && !isReleaseInFlight(command.originIndex)) {
       pendingReason = "external";
       return traverse(command.originIndex, command.targetIndex, command.direction);
     }
-    if (command.kind === "synchronize")
-      return synchronizeIndex(command.targetIndex, "external", false);
+    if (command.kind !== "none") return synchronizeIndex(command.targetIndex, "external", false);
     return true;
   }
 
@@ -973,6 +944,11 @@ export function useStackedDeckComponentMotion<Id extends string>(
   function onWheel(event: WheelEvent) {
     if (disabled()) return;
     if (!motion.isWheeling.value && owned.value) return;
+    // A burst opens its exchange from the card the deck names, exactly as a hand does — it simply
+    // has no press to be refused at. A shell whose own release still has it is not that card yet,
+    // so the burst that would be measured from it does not open. A burst already running keeps its
+    // envelope: this decides whether one begins, never how one continues.
+    if (!motion.isWheeling.value && isReleaseInFlight(model.state.currentIndex)) return;
     // No reason is claimed here. A WheelEvent arriving is not a wheel navigation: it may be a
     // vertical page scroll, or belong to a descendant that owns its own scrolling. `onTargetSelected`
     // names the reason once a burst has actually resolved a destination on this surface.
@@ -990,7 +966,22 @@ export function useStackedDeckComponentMotion<Id extends string>(
     },
     isOpenEligible: isInspectEligible,
     disabled,
-    forwardPointerDown: motion.onPointerDown,
+    /**
+     * A Direct transaction begins on a card or it does not begin.
+     *
+     * The accepted Direct kernel exchanges depth between a source that is physically covering the
+     * pile and the neighbour it uncovers. A press that resolved to no card of this deck — the
+     * stage between the shells, a pile edge the surface is not offering, a release still in the
+     * air over it — has no such source, and forwarding it anyway would open a transaction whose
+     * origin is only whatever the controller happened to be resting on. That is the same gesture
+     * getting a different release model for having landed a few pixels off a card.
+     *
+     * Shuffle drags its whole deck as one body and keeps its own semantics unchanged.
+     */
+    forwardPointerDown(event, originIndex) {
+      if (isDirect() && originIndex < 0) return;
+      motion.onPointerDown(event);
+    },
     onPointerSample: onDirectPointerSample,
     onResolved(resolution, completed) {
       if (directProjection.phase === "held") {
@@ -1016,6 +1007,9 @@ export function useStackedDeckComponentMotion<Id extends string>(
         }
       }
       if (completed.cancelled) {
+        // A press this surface refused never took the deck, so a cancellation of it has nothing to
+        // undo — and undoing it would abort an exchange that press was never part of.
+        if (isDirect() && completed.originIndex === undefined) return;
         // A cancelled gesture undoes itself, which means returning to the card it began on. That is
         // the interaction's own origin, not the settled selection: a gesture that took over a
         // running spring began on a card the controller had not committed to yet.

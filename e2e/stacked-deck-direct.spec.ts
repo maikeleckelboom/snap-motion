@@ -18,6 +18,7 @@ import {
   readFrame,
   viewport,
   waitForAuthority,
+  waitForOfferedCard,
 } from "./stackedDeckHarness";
 
 async function nextFrame(page: Page): Promise<void> {
@@ -68,8 +69,7 @@ interface RapidDirectChainSnapshot {
   readonly captureDistance: number;
   readonly captureRotateDelta: number;
   readonly captureScaleDelta: number;
-  readonly capturedLanding: boolean;
-  readonly capturedLandingOrder: number;
+  readonly openedOnAirborneShell: boolean;
   readonly direction: -1 | 1;
   readonly landingCount: number;
   readonly landingIds: readonly string[];
@@ -238,7 +238,9 @@ async function runRapidDirectChain(
         currentIndex = (currentIndex + step.direction + ids.length) % ids.length;
         await firstInteractiveFrame(currentIndex);
         const beforeCapture = readPose(ids[currentIndex]!);
-        const capturedLanding = Number.isFinite(beforeCapture.landingSettlement);
+        // Whether the shell this press opened on was still a release in the air. It never is —
+        // the deck does not offer one — so this records that rather than a capture.
+        const openedOnAirborneShell = Number.isFinite(beforeCapture.landingSettlement);
         hand = begin(currentIndex);
         await Promise.resolve();
         await Promise.resolve();
@@ -252,8 +254,7 @@ async function runRapidDirectChain(
           ),
           captureRotateDelta: afterCapture.rotate - beforeCapture.rotate,
           captureScaleDelta: afterCapture.scale - beforeCapture.scale,
-          capturedLanding,
-          capturedLandingOrder: beforeCapture.landingOrder,
+          openedOnAirborneShell,
           direction: heldDirection,
           landingCount: landings.length,
           landingIds,
@@ -306,12 +307,12 @@ function expectRapidChainLandingContinuity(snapshots: readonly RapidDirectChainS
         expect(stillLanding.landingSettlement).toBeGreaterThanOrEqual(prior.landingSettlement);
         continue;
       }
-      const physicallyCompleted = prior.landingElapsed + elapsedMs / 230 >= 1;
-      const absorbedByHand = current.capturedLandingOrder === prior.landingOrder;
+      // Physical arrival is now the only way a release leaves this collection. Nothing absorbs one,
+      // so a record that is gone has to have had the flight time to get where it was going.
       expect(
-        physicallyCompleted || absorbedByHand,
+        prior.landingElapsed + elapsedMs / 230,
         `landing ${prior.landingOrder} disappeared at ${prior.landingSettlement}`,
-      ).toBe(true);
+      ).toBeGreaterThanOrEqual(1);
     }
   }
   return maximumLandingCount;
@@ -1161,42 +1162,41 @@ test("Direct preserves three inverse releases while repeatedly crossing the sema
   await finishPointer(page, chain.hand, 0, 16, "pointercancel");
 });
 
-test("Direct continuously absorbs an airborne reversal target without duplicating its shell", async ({
-  page,
-}, testInfo) => {
+/**
+ * A reversal commits the deck back to the very shell it just threw — and that shell is not on the
+ * deck yet.
+ *
+ * It is in the air on its own release, and the exchange the Direct kernel performs is measured from
+ * a source that is physically covering the pile it hands depth to. So the deck offers nothing for
+ * those frames: the hand this chain drives waits for that shell to arrive, and presses it as an
+ * ordinary deck top. Nothing is queued, nothing is cancelled, and the release keeps the clock and
+ * the path it already had — it simply finishes being a release before it can be anything else.
+ */
+test("Direct never absorbs an airborne reversal target into the next hand", async ({ page }) => {
   await prepareDirect(page, 4);
-  // Keep release, reversal, and capture in one browser task. Protocol round-trips can outlast the
-  // real 230 ms flight under parallel load and would turn this overlap proof into a settled restart.
+  // Keep release, reversal, and the next press in one browser task. Protocol round-trips can
+  // outlast the real 230 ms flight under parallel load and would turn this into a settled restart.
   const reversal = await runRapidDirectChain(page, STACKED_DECK_IDS, 4, [
     { direction: 1 },
     { direction: -1 },
   ]);
-  const firstRelease = reversal.snapshots[0]!;
   const capture = reversal.snapshots[1]!;
   const captureTrace = JSON.stringify(reversal.snapshots, null, 2);
-  if (capture.capturedLanding) {
-    expect(capture.captureDistance, captureTrace).toBeLessThan(2);
-    expect(Math.abs(capture.captureScaleDelta), captureTrace).toBeLessThan(0.00001);
-    expect(Math.abs(capture.captureRotateDelta), captureTrace).toBeLessThan(0.00001);
-    expect(capture.shells.settings!.layer, captureTrace).toBeGreaterThan(
-      capture.shells.templates!.layer,
-    );
-  } else {
-    // A sufficiently slow WebKit run can spend the whole 230 ms lifetime between these rendered
-    // opportunities. It never produced an airborne target to capture, so prove that the prior
-    // shell had enough physical time to arrive instead of demanding an intermediate frame.
-    expect(testInfo.project.name, captureTrace).toBe("webkit-stacked-deck-direct");
-    expect(Number.isFinite(firstRelease.shells.settings!.landingElapsed), captureTrace).toBe(true);
-    expect(
-      firstRelease.shells.settings!.landingElapsed +
-        (capture.timestamp - firstRelease.timestamp) / 230,
-      captureTrace,
-    ).toBeGreaterThanOrEqual(1);
-  }
-  expect(capture.landingCount, captureTrace).toBe(1);
-  expect(capture.landingIds, captureTrace).toEqual(["templates"]);
+  // The press opened on a shell that had physically arrived, so nothing was absorbed and nothing
+  // moved: a hand taking the deck's top does not displace it.
+  expect(capture.openedOnAirborneShell, captureTrace).toBe(false);
+  expect(capture.captureDistance, captureTrace).toBeLessThan(2);
+  expect(Math.abs(capture.captureScaleDelta), captureTrace).toBeLessThan(0.00001);
+  expect(Math.abs(capture.captureRotateDelta), captureTrace).toBeLessThan(0.00001);
+  // The shell this hand took hold of is a deck card; the shell it let go of on the way in is the
+  // one in the air. Exactly one of each, and one record per persistent shell.
   expect(Number.isFinite(capture.shells.settings!.landingSettlement), captureTrace).toBe(false);
   expect(Number.isFinite(capture.shells.templates!.landingSettlement), captureTrace).toBe(true);
+  expect(capture.landingCount, captureTrace).toBe(1);
+  expect(capture.landingIds, captureTrace).toEqual(["templates"]);
+  expect(Object.keys(capture.shells).toSorted(), captureTrace).toEqual(
+    [...STACKED_DECK_IDS].toSorted(),
+  );
 
   await finishPointer(page, reversal.hand, 0, 16, "pointercancel");
   await selectStable(page, 4);
@@ -1206,11 +1206,11 @@ test("Direct continuously absorbs an airborne reversal target without duplicatin
     { direction: 1, fraction: 1 },
   ]);
   const alternatingTrace = JSON.stringify(alternating.snapshots, null, 2);
-  const capturedTargets = alternating.snapshots.filter((snapshot) => snapshot.capturedLanding);
-  if (testInfo.project.name === "chromium") {
-    expect(capturedTargets.length, alternatingTrace).toBeGreaterThanOrEqual(1);
-  }
-  expect(capturedTargets.every((snapshot) => snapshot.captureDistance < 2)).toBe(true);
+  expect(
+    alternating.snapshots.filter((snapshot) => snapshot.openedOnAirborneShell),
+    alternatingTrace,
+  ).toEqual([]);
+  expect(alternating.snapshots.every((snapshot) => snapshot.captureDistance < 2)).toBe(true);
   expectRapidChainLandingContinuity(alternating.snapshots);
   expect(alternating.snapshots.every((snapshot) => snapshot.landingCount <= 1)).toBe(true);
   await finishPointer(page, alternating.hand, 0, 16, "pointercancel");
@@ -1270,9 +1270,12 @@ test("Direct deterministic heavy abuse retains every concurrent release and safe
     const before = await readFrame(page);
     const originIndex = before.authoritativeIndex;
     const originId = STACKED_DECK_IDS[originIndex]!;
-    const hand = await beginPointer(
-      stage.locator(`[data-snap-motion-stacked-deck-card][data-item-id='${originId}']`),
-    );
+    const card = stage.locator(`[data-snap-motion-stacked-deck-card][data-item-id='${originId}']`);
+    // An alternating commit can name a shell that is still finishing its own release, which is on
+    // its way to the top rather than on it. A hand presses the card the deck is offering, so this
+    // waits for that shell to arrive rather than pressing one that is not there yet.
+    await expect(card).toHaveAttribute("data-deck-interactive", "true", { timeout: 5_000 });
+    const hand = await beginPointer(card);
     const deltaX = -direction * pitch * fraction;
     await movePointerBy(page, hand, deltaX, diagonalY, 16);
     await nextFrame(page);
@@ -2462,15 +2465,22 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
       // takes longer than that to get out of the way — it is still over the deck when the next
       // flick commits. What the deck resolved to is unaffected; what a person can be shown of it is
       // bounded by how fast material moves. The claims below are the ones that hold either way.
+      //
+      // The chain runs one way. Reversing this fast would land the next press on the shell the last
+      // one threw, which is still finishing its own release and so is not a card the deck offers —
+      // that seam has its own regression rather than being smuggled in here, where waiting for the
+      // shell to arrive would replace this tight window with a settling one and measure something
+      // else entirely. Crossing 4 → 0 is the semantic wrap this scenario is named for.
       itinerary: null,
-      name: "fast-alternating-wrap",
+      name: "fast-wrap",
       startIndex: 4,
       async run() {
         for (const [direction, targetIndex] of [
           [1, 0],
-          [-1, 4],
-          [1, 0],
+          [1, 1],
+          [1, 2],
         ] as const) {
+          await waitForOfferedCard(page);
           await fastFlick(page, direction, pitch);
           await waitForAuthority(page, targetIndex);
           // Authority crosses before the release tail ends. The following press therefore tests

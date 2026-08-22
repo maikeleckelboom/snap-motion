@@ -20,6 +20,7 @@ import {
   releaseHeldAtRest,
   viewport,
   waitForAuthority,
+  waitForOfferedCard,
   type HeldTraversal,
 } from "./stackedDeckHarness";
 
@@ -867,6 +868,10 @@ test("pointer, wheel, and keyboard cross former ordinal edges as adjacent exchan
     await expectCarouselAt(stage, IDS.at(-1)!);
 
     const pitch = await motionPitch(stage);
+    // The reversal above committed the deck back to the shell it had just thrown, which is still
+    // finishing its own release. A burst opens its exchange from the card the deck names exactly as
+    // a hand does, so it waits for that card to be on the deck rather than on its way to it.
+    await waitForOfferedCard(page);
     await stage.evaluate((element, deltaX) => {
       element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX }));
     }, pitch * 0.65);

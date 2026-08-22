@@ -54,10 +54,16 @@ Collection iteration and DOM order do not decide paint. A shell gives up an airb
 its own path has carried it clear of the pile and every body it crosses.
 
 When the live hand reverses toward an airborne shell, Direct resolves the target and the landing
-through the same persistent pose. If that shell becomes the interactive top and is pressed again,
-the landing record is absorbed into the hand with its exact translation, scale, rotation, shadow,
-and chronology. The collection can therefore contain at most one landing per shell without a
-duplicate card, restart from nominal rest, or teleport. Item reconfiguration, mode changes,
+through the same persistent pose, so that shell simply arrives at the top of the deck instead of in
+the pile. Until it arrives it remains presentation: it is not interactive, it does not receive
+pointer input, and it is never the source of a new exchange. The accepted Direct kernel exchanges
+depth between a source that is physically covering the pile and the neighbour it uncovers, and a
+shell its own release has thrown clear covers nothing — so pointer, wheel, keyboard, and imperative
+exchanges all refuse an origin that is still in flight, and all accept it on the frame it lands.
+This is material availability rather than a cooldown: no duration is involved, the release is
+neither shortened nor cancelled, and every other physically valid interaction stays available. The
+collection therefore contains at most one landing per shell, with no duplicate card, restart from
+nominal rest, or teleport. Item reconfiguration, mode changes,
 controlled synchronization, and teardown clear the complete presentation collection atomically
 under the component's existing cancellation policy; normal completion removes only the body that
 arrived. Disabling the deck rejects new input but does not erase physical presentation already in
@@ -73,6 +79,14 @@ Absolute navigation is not a directional throw. An unambiguous cyclic neighbour 
 exchange. A non-neighbour synchronizes directly. In a two-item deck the other item is both cyclic
 neighbours, so a named absolute destination synchronizes unless the initiating action already
 supplies direction.
+
+A Direct pointer sequence begins on a card the deck is offering or it does not begin. A press that
+resolves to no such card — the stage between the shells, a pile edge the surface is not offering, a
+release still in the air over it — is not forwarded, so there is no origin-less drag whose exchange
+would be measured from wherever the controller happened to be resting. Shuffle drags the whole deck
+as one body and keeps its own input semantics. Authoritative controlled selection is never refused:
+where an exchange has no source on the deck, the destination is adopted exactly, which is the same
+answer the policy already gives while the deck is held.
 
 ## Presentation mapping
 

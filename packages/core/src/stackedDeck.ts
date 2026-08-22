@@ -7,7 +7,13 @@ export type StackedDeckExchange = "shuffle" | "direct";
 export type StackedDeckRole = "top" | "target" | "hidden";
 export type StackedDeckTraversalPhase = "idle" | "neutral" | "traversing" | "elastic";
 
-/** One released persistent shell that has not yet physically arrived in the current deck. */
+/**
+ * One released persistent shell that has not yet physically arrived in the current deck.
+ *
+ * It is a presentation for its whole flight: it keeps travelling on its own clock, it stays
+ * visible, and it is never part of the deck configuration an exchange is measured from. A hand
+ * reaches the deck underneath it, never the shell itself.
+ */
 export interface StackedDeckDirectLanding {
   /** The shell this release still carries. */
   readonly itemIndex: number;
@@ -17,12 +23,6 @@ export interface StackedDeckDirectLanding {
   readonly translateX: number;
   /** Vertical component of the release vector, in stage coordinates. */
   readonly translateY: number;
-  /** Release-frame material geometry, retained when this shell was caught from another landing. */
-  readonly scale?: number;
-  /** Release-frame rotation retained for a same-shell handoff. */
-  readonly rotate?: number;
-  /** Release-frame elevation retained for a same-shell handoff. */
-  readonly shadowStrength?: number;
   /** Its own bounded settlement, which later interactions neither drive nor interrupt. */
   readonly settlement: number;
 }
@@ -57,15 +57,6 @@ export interface StackedDeckDirectProjection {
    * divide — physical parking completion.
    */
   readonly settlement: number;
-  /**
-   * Every unfinished release a later interaction interrupted. They are concurrent physical bodies,
-   * not queued actions, and each lands in whichever slot the deck currently draws for its shell.
-   */
-  readonly landings?: readonly StackedDeckDirectLanding[];
-  /** Exact material pose and chronology captured with an already-airborne shell. */
-  readonly inheritedPose?: Pick<StackedDeckPose, "scale" | "rotate" | "shadowStrength"> & {
-    readonly releaseOrder: number;
-  };
 }
 
 /**
@@ -204,6 +195,16 @@ export interface ResolveStackedDeckFrameOptions {
   readonly tuning: StackedDeckTuning;
   /** Present only while Direct has an interaction-specific physical owner. */
   readonly direct?: StackedDeckDirectProjection;
+  /**
+   * Every release that has not physically arrived yet.
+   *
+   * A body still in the air outlives the exchange that threw it, so this is stated beside `direct`
+   * rather than inside it: a hand may take the deck, finish, and give it back while one of these is
+   * still coming down, and the deck at rest is exactly as capable of having one over it as a deck
+   * mid-exchange. Passing a record here is what draws that shell as an unfinished landing — and so
+   * is also what makes it presentation rather than a card the deck is offering.
+   */
+  readonly landings?: readonly StackedDeckDirectLanding[];
 }
 
 interface ProfileValues {
@@ -309,6 +310,8 @@ const DIRECT_LANDING_NUMBER_KEYS = [
   "settlement",
   "releaseOrder",
 ] as const;
+/** Shared empty collection, so a frame with nothing in the air allocates nothing. */
+const EMPTY_LANDINGS: readonly StackedDeckDirectLanding[] = [];
 
 /**
  * The shallow vertical step works with scale recession and rotation: the outer bottom corner
@@ -1046,7 +1049,6 @@ function setDirectExchange(
   const reveal = smoothstep(distance);
   const outgoing = output.poses[projection.originIndex]!;
   const phase = projection.phase;
-  const inheritedReleaseOrder = projection.inheritedPose?.releaseOrder;
   // A direction-authoritative command names its neighbour before its spring has moved. Until some
   // geometry expresses that exchange there is nothing physical to promote: declaring the hidden
   // neighbour top on that frame would be a material handoff with no motion to justify it.
@@ -1131,11 +1133,6 @@ function setDirectExchange(
       const clearance = Math.max(0, clearSeparation - Math.abs(apexX));
       outgoing.translateX = departureX;
       outgoing.translateY = departureY;
-      if (projection.inheritedPose !== undefined) {
-        outgoing.scale = projection.inheritedPose.scale;
-        outgoing.rotate = projection.inheritedPose.rotate;
-        outgoing.shadowStrength = projection.inheritedPose.shadowStrength;
-      }
       moveDirectPose(outgoing, directDestinationPose, progress);
       // Zero at both ends and unit at the apex, so both endpoints stay exact, not nearly exact.
       outgoing.translateX +=
@@ -1152,9 +1149,6 @@ function setDirectExchange(
       if (progress < CROSSOVER_SETTLEMENT && Math.abs(outgoing.translateX) < clearSeparation) {
         outgoing.layer = HAND_LAYER;
       }
-      if (inheritedReleaseOrder !== undefined && progress < CROSSOVER_SETTLEMENT) {
-        outgoing.layer = AIRBORNE_LAYER + getLandingRank(projection, inheritedReleaseOrder);
-      }
       // A shell still travelling is still this exchange's top, however far behind the new one it
       // has already been painted. It becomes an ordinary hidden rank at the frame it arrives.
       outgoing.role = progress < 1 - TRAVERSAL_EPSILON ? "top" : "hidden";
@@ -1167,30 +1161,18 @@ function setDirectExchange(
   const retained = 1 - settlement;
   outgoing.translateX = projection.translateX * retained;
   outgoing.translateY = projection.translateY * retained;
-  if (projection.inheritedPose !== undefined) {
-    outgoing.scale = mix(projection.inheritedPose.scale, outgoing.scale, settlement);
-    outgoing.rotate = mix(projection.inheritedPose.rotate, outgoing.rotate, settlement);
-    outgoing.shadowStrength = mix(
-      projection.inheritedPose.shadowStrength,
-      outgoing.shadowStrength,
-      settlement,
-    );
-  }
   // Physical ownership, which is what this rank means. A command that has not moved yet has no
   // hand and nothing to own, so it stays the resting top rather than claiming the hand's rank.
-  if (phase !== undefined) {
-    if (inheritedReleaseOrder === undefined) {
-      outgoing.layer = HAND_LAYER;
-    } else {
-      outgoing.layer = AIRBORNE_LAYER + getLandingRank(projection, inheritedReleaseOrder);
-    }
-  }
+  if (phase !== undefined) outgoing.layer = HAND_LAYER;
 }
 
 /**
- * One Direct frame: the exchange this hand is performing, and — independently of it — every
- * release an interaction interrupted and that is still finishing. They are separate physical
- * facts, so they are resolved as separate passes rather than folded into the active exchange.
+ * One Direct exchange, and the shell this hand is holding while it performs it.
+ *
+ * Unfinished releases are deliberately not resolved here. They are a separate physical fact with a
+ * separate lifetime — one can still be coming down over a deck that has no exchange at all — so the
+ * frame applies them once, to every frame, rather than only to the frames an exchange happens to
+ * own.
  */
 function setDirectFrame(
   output: MutableStackedDeckFrame,
@@ -1198,17 +1180,16 @@ function setDirectFrame(
   tuning: StackedDeckTuning,
 ): void {
   setDirectExchange(output, projection, tuning);
-  applyLandingReleases(output, projection, tuning);
-  ensureDirectCentreOwner(output, projection, tuning);
 }
 
 const landingReleasePose = resetPose({} as MutableStackedDeckPose);
 const landingDeckPose = resetPose({} as MutableStackedDeckPose);
 
-function getLandingRank(projection: StackedDeckDirectProjection, releaseOrder: number): number {
+function getLandingRank(
+  landings: readonly StackedDeckDirectLanding[],
+  releaseOrder: number,
+): number {
   let rank = 0;
-  const landings = projection.landings;
-  if (landings === undefined) return rank;
   for (const landing of landings) {
     if (landing.releaseOrder > releaseOrder) rank += 1;
   }
@@ -1228,15 +1209,23 @@ function getLandingRank(projection: StackedDeckDirectProjection, releaseOrder: n
  * Because it is a whole release rather than a frozen frame, it changes its own depth on the terms
  * every release changes depth on: its path carries it clear of the deck's top first, so nothing it
  * passes shares a pixel with it at the frame it goes behind.
+ *
+ * For that whole flight it is presentation and nothing else. A release still in the air is not a
+ * card the deck is offering: the exchange a hand opens has to be measured from a shell that is
+ * physically covering the pile it will hand depth to, which this one is not. So it is refused as an
+ * input origin for exactly as long as this record exists — including the single frame where it has
+ * arrived and the deck is already drawing it, since that record is what the adapter retires.
  */
 function applyLandingRelease(
   output: MutableStackedDeckFrame,
-  projection: StackedDeckDirectProjection,
+  landings: readonly StackedDeckDirectLanding[],
+  held: StackedDeckPose | undefined,
   landing: StackedDeckDirectLanding,
   tuning: StackedDeckTuning,
 ): void {
   const pose = output.poses[landing.itemIndex];
   if (pose === undefined) return;
+  pose.interactive = false;
   const settlement = clamp(landing.settlement, 0, 1) || 0;
   // Arrived: the deck is already drawing it exactly where the release was taking it.
   if (settlement >= 1 - TRAVERSAL_EPSILON) return;
@@ -1246,9 +1235,6 @@ function applyLandingRelease(
   setTopPose(resetPose(landingReleasePose), false);
   landingReleasePose.translateX = landing.translateX;
   landingReleasePose.translateY = landing.translateY;
-  landingReleasePose.scale = landing.scale ?? 1;
-  landingReleasePose.rotate = landing.rotate ?? 0;
-  landingReleasePose.shadowStrength = landing.shadowStrength ?? 1;
 
   // What it has to get past is decided by where it is landing. A shell coming down into the pile
   // has to get under the pile, which is gathered at the centre of the stage and as wide as its own
@@ -1262,13 +1248,14 @@ function applyLandingRelease(
   const bodySeparation = clearSeparation + lean;
   const pileSeparation = wholePileClearSeparation(output.poses.length, tuning) + lean;
   const beneathPile = landingDeckPose.layer < TARGET_LAYER;
-  const passing = output.poses[projection.originIndex]!;
   // The way it was already going: a release extends its own throw to get clear, it does not turn
   // around to do it.
   const side = Math.sign(
     landing.translateX - landingDeckPose.translateX || landing.translateX || 1,
   );
-  const handLimit = passing.translateX + side * bodySeparation;
+  // No hand is holding anything when no exchange owns this frame, so the body it has to get under
+  // is the deck's own top, which is at rest at the centre.
+  const handLimit = (held?.translateX ?? 0) + side * bodySeparation;
   const pileLimit = side * pileSeparation;
   const limit = beneathPile
     ? side > 0
@@ -1295,13 +1282,7 @@ function applyLandingRelease(
   // whether it happens to stand clear on this frame would let a hand moving toward it push it back
   // in front after it had gone behind; the plateau is what makes the one crossing safe, so the
   // crossing is read from the path's own progress rather than from a separation the hand can move.
-  let landingRank = getLandingRank(projection, landing.releaseOrder);
-  if (
-    projection.inheritedPose !== undefined &&
-    projection.inheritedPose.releaseOrder > landing.releaseOrder
-  ) {
-    landingRank += 1;
-  }
+  const landingRank = getLandingRank(landings, landing.releaseOrder);
   if (settlement < CROSSOVER_SETTLEMENT) {
     pose.layer = AIRBORNE_LAYER + landingRank;
   }
@@ -1313,21 +1294,17 @@ function applyLandingRelease(
     landingRank *
     bodySeparation *
     Math.min(1, (4 * settlement * (1 - settlement)) / LANDING_CLEAR_PLATEAU);
-  // A landing that has become the live authoritative top may be caught immediately. The adapter
-  // then removes this record and seeds the hand from this exact pose, so there is still one shell.
-  pose.interactive = landingDeckPose.interactive;
 }
 
 /** Resolves all unfinished releases without allowing collection iteration to decide their result. */
 function applyLandingReleases(
   output: MutableStackedDeckFrame,
-  projection: StackedDeckDirectProjection,
+  landings: readonly StackedDeckDirectLanding[],
+  held: StackedDeckPose | undefined,
   tuning: StackedDeckTuning,
 ): void {
-  const landings = projection.landings;
-  if (landings === undefined || landings.length === 0) return;
   for (const landing of landings) {
-    applyLandingRelease(output, projection, landing, tuning);
+    applyLandingRelease(output, landings, held, landing, tuning);
   }
 }
 
@@ -1427,47 +1404,28 @@ export function resolveStackedDeckFrame(
       throw new RangeError("direct.targetIndex is not the directed cyclic neighbour");
     }
     assertFiniteNumber(direct.signedTravel, "direct.signedTravel");
-    const landings = direct.landings;
-    if (landings !== undefined) {
-      if (landings.length > options.itemCount) throw new RangeError("direct.landings");
-      for (let index = 0; index < landings.length; index += 1) {
-        const landing = landings[index]!;
-        assertIndex(landing.itemIndex, options.itemCount, "direct.landings");
-        for (const key of DIRECT_LANDING_NUMBER_KEYS) {
-          assertFiniteNumber(landing[key]!, "direct.landings");
-        }
-        assertNonNegative(landing.releaseOrder, "direct.landings");
-        if (landing.scale !== undefined) {
-          assertNonNegative(landing.scale, "direct.landings");
-        }
-        if (landing.rotate !== undefined) {
-          assertFiniteNumber(landing.rotate, "direct.landings");
-        }
-        if (landing.shadowStrength !== undefined) {
-          assertNonNegative(landing.shadowStrength, "direct.landings");
-        }
-        for (let priorIndex = 0; priorIndex < index; priorIndex += 1) {
-          const prior = landings[priorIndex]!;
-          if (
-            prior.itemIndex === landing.itemIndex ||
-            prior.releaseOrder === landing.releaseOrder
-          ) {
-            throw new RangeError("direct.landings");
-          }
-        }
-        if (
-          landing.itemIndex === direct.originIndex ||
-          landing.releaseOrder === direct.inheritedPose?.releaseOrder
-        ) {
-          throw new RangeError("direct.landings");
-        }
+  }
+  const landings = options.landings ?? EMPTY_LANDINGS;
+  if (landings.length > options.itemCount) throw new RangeError("landings");
+  for (let index = 0; index < landings.length; index += 1) {
+    const landing = landings[index]!;
+    assertIndex(landing.itemIndex, options.itemCount, "landings");
+    for (const key of DIRECT_LANDING_NUMBER_KEYS) {
+      assertFiniteNumber(landing[key]!, "landings");
+    }
+    assertNonNegative(landing.releaseOrder, "landings");
+    for (let priorIndex = 0; priorIndex < index; priorIndex += 1) {
+      const prior = landings[priorIndex]!;
+      if (prior.itemIndex === landing.itemIndex || prior.releaseOrder === landing.releaseOrder) {
+        throw new RangeError("landings");
       }
     }
-    if (direct.inheritedPose !== undefined) {
-      assertNonNegative(direct.inheritedPose.releaseOrder, "direct.inheritedPose.releaseOrder");
-      assertNonNegative(direct.inheritedPose.scale, "direct.inheritedPose.scale");
-      assertFiniteNumber(direct.inheritedPose.rotate, "direct.inheritedPose.rotate");
-      assertNonNegative(direct.inheritedPose.shadowStrength, "direct.inheritedPose.shadowStrength");
+    // The exchange a hand is performing is measured from a shell that physically covers the deck.
+    // A release still in the air covers nothing, so it can be a landing or this interaction's
+    // source, never both at once. With no exchange there is no such source and nothing to collide
+    // with: a shell can be coming down onto a deck that is otherwise perfectly still.
+    if (direct !== undefined && landing.itemIndex === direct.originIndex) {
+      throw new RangeError("landings");
     }
   }
   const sourceTopIndex =
@@ -1480,17 +1438,30 @@ export function resolveStackedDeckFrame(
   }
   if (direct !== undefined) {
     setDirectFrame(output, direct, options.tuning);
-    return output;
-  }
-  const top = output.poses[traversal.visualTopIndex]!;
-  // The pile pass already posed the deck's centre slot as the top card. The one thing it cannot
-  // know is whether the deck is holding still enough to be operated.
-  if (traversal.phase === "idle") top.interactive = true;
+  } else {
+    const top = output.poses[traversal.visualTopIndex]!;
+    // The pile pass already posed the deck's centre slot as the top card. The one thing it cannot
+    // know is whether the deck is holding still enough to be operated.
+    if (traversal.phase === "idle") top.interactive = true;
 
-  if (traversal.phase === "elastic") {
-    top.translateX = -traversal.signedLocalDistance * options.tuning.motionPitch;
-  } else if (traversal.phase === "traversing" && traversal.segmentTargetIndex !== null) {
-    setShuffleFrame(output, traversal, options.tuning);
+    if (traversal.phase === "elastic") {
+      top.translateX = -traversal.signedLocalDistance * options.tuning.motionPitch;
+    } else if (traversal.phase === "traversing" && traversal.segmentTargetIndex !== null) {
+      setShuffleFrame(output, traversal, options.tuning);
+    }
   }
+  // Last, and on every frame. A shell still in the air is its own body with its own clock, and it
+  // is over whatever the deck is doing underneath it — an exchange, a shuffle, or nothing at all.
+  // Applying it here is also what makes the record and the picture one fact: while it is drawn as
+  // an unfinished landing it is presentation, and the deck is not offering it.
+  if (landings.length > 0) {
+    applyLandingReleases(
+      output,
+      landings,
+      direct === undefined ? undefined : output.poses[direct.originIndex],
+      options.tuning,
+    );
+  }
+  if (direct !== undefined) ensureDirectCentreOwner(output, direct, options.tuning);
   return output;
 }

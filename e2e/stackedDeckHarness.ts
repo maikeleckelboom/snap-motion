@@ -391,6 +391,39 @@ export async function waitForAuthority(page: Page, index: number) {
   );
 }
 
+/**
+ * Resolves on the first rendered frame the deck is offering a card to press.
+ *
+ * A release still in the air is a presentation, so while the card the deck names is one of those it
+ * is on its way to the top rather than on it, and there is nothing an exchange could be measured
+ * from. This waits on that material fact rather than on a duration: it resolves on the current
+ * frame whenever a card is already offered, which is almost always.
+ */
+export async function waitForOfferedCard(page: Page) {
+  await viewport(page).evaluate(
+    (element) =>
+      new Promise<void>((resolve, reject) => {
+        let remainingFrames = 60;
+        const tick = () => {
+          if (
+            element.querySelector(
+              "[data-snap-motion-stacked-deck-card][data-deck-interactive='true']",
+            )
+          ) {
+            resolve();
+          } else if ((remainingFrames -= 1) <= 0) {
+            reject(new Error("the deck never offered a card to press"));
+          } else {
+            requestAnimationFrame(tick);
+          }
+        };
+        // Asked on this frame first: a deck that is already offering a card costs nothing here, so
+        // the ordinary case keeps whatever timing its caller had.
+        tick();
+      }),
+  );
+}
+
 /** A complete throw with no waiting: press, accelerate, release. */
 export async function flick(page: Page, direction: -1 | 1, pitch: number) {
   const origin = await beginPointer(viewport(page));

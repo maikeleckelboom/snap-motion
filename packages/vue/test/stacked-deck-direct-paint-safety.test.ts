@@ -133,6 +133,47 @@ interface Violation {
   shift: number;
 }
 
+/**
+ * The deck configuration one press found, recorded at the frame it pressed on.
+ *
+ * The accepted Direct kernel exchanges depth between a source physically covering the pile and the
+ * neighbour it uncovers. That premise is a property of the frame an interaction opens on, so it is
+ * captured there rather than inferred afterwards from where the deck ended up.
+ */
+interface AcceptedOrigin {
+  readonly tick: number;
+  /** The card the hand actually went down on. */
+  readonly pressedIndex: number;
+  /** The card the deck then opened its hand-owned transaction from. */
+  readonly index: number;
+  readonly interactiveIndices: readonly number[];
+  readonly landingIndices: readonly number[];
+}
+
+/** Everything an accepted Direct origin has to be able to say for itself. */
+function premiseBreaches(origins: readonly AcceptedOrigin[]): string[] {
+  const breaches: string[] = [];
+  for (const origin of origins) {
+    if (origin.index !== origin.pressedIndex) {
+      breaches.push(
+        `frame ${origin.tick}: pressed card ${origin.pressedIndex}, opened on card ${origin.index}`,
+      );
+    }
+    if (origin.landingIndices.includes(origin.index)) {
+      breaches.push(`frame ${origin.tick}: card ${origin.index} was still a release in the air`);
+    }
+    if (!origin.interactiveIndices.includes(origin.index)) {
+      breaches.push(`frame ${origin.tick}: card ${origin.index} was not an interactive card`);
+    }
+    if (origin.interactiveIndices.length !== 1) {
+      breaches.push(
+        `frame ${origin.tick}: ${origin.interactiveIndices.length} cards were interactive at once`,
+      );
+    }
+  }
+  return breaches;
+}
+
 function paintViolations(frames: readonly Frame[], width: number, height: number): Violation[] {
   const points: { x: number; y: number }[] = [];
   for (let x = -width; x <= width; x += width / 16) {
@@ -225,17 +266,22 @@ function deck(items: readonly Screen[] = screens) {
     tuning: { cardWidth: number; cardHeight: number };
     root: HTMLElement & { snapMotionDirectDebug?: unknown };
     settledId: string;
+    next: () => boolean;
   };
   const stage = wrapper.get(".snap-motion-stacked-deck").element as HTMLElement;
   stage.setPointerCapture = () => {};
   stage.releasePointerCapture = () => {};
 
   const frames: Frame[] = [];
+  const origins: AcceptedOrigin[] = [];
+  /** A press the deck has not (yet) opened a hand-owned transaction from. */
+  let pendingPress: Omit<AcceptedOrigin, "index"> | undefined;
   let tick = 0;
   let hand = 0;
   let pointerId = 900;
   let maxLandings = 0;
   let sawAirborneCapture = false;
+  let sawAirborneOrigin = false;
   let sawExposedSymmetricPile = false;
   let sawRetirementUnderInteraction = false;
   let previousLandingCount = 0;
@@ -268,6 +314,20 @@ function deck(items: readonly Screen[] = screens) {
     ) {
       sawAirborneCapture = true;
     }
+    // The same fact stated from the records rather than from the geometry: a shell an unfinished
+    // release still owns, being used as the source of an exchange by whatever owns the deck now.
+    if (
+      projection?.phase !== undefined &&
+      landings.some((landing) => landing.itemIndex === originIndex)
+    ) {
+      sawAirborneOrigin = true;
+    }
+    // A press becomes an accepted Direct origin at the frame a hand owns a shell because of it.
+    // Until then it is only a press, and it may yet turn out to be one the deck refused.
+    if (pendingPress !== undefined && projection?.phase === "held") {
+      origins.push({ ...pendingPress, index: originIndex });
+      pendingPress = undefined;
+    }
     // Both exchange bodies away from the deck's centre, leaving two pile shells of equal depth
     // covering it: the arrangement whose paint order has no body over it to hide it.
     const covering = poses.filter((pose) => contains(pose, 0, 0, 680, 425));
@@ -295,6 +355,25 @@ function deck(items: readonly Screen[] = screens) {
 
   capture();
 
+  async function pressCard(index: number) {
+    const debug = view.root?.snapMotionDirectDebug as
+      | { landings?: readonly { itemIndex: number }[] }
+      | undefined;
+    pendingPress = {
+      tick,
+      pressedIndex: index,
+      interactiveIndices: view.frame.poses.flatMap((pose, at) => (pose.interactive ? [at] : [])),
+      landingIndices: (debug?.landings ?? []).map((landing) => landing.itemIndex),
+    };
+    pointerId += 1;
+    hand = 0;
+    (
+      wrapper.findAll("[data-snap-motion-stacked-deck-card]")[index]!.element as HTMLElement
+    ).dispatchEvent(pointerEvent("pointerdown", 0, pointerId));
+    await nextTick();
+    return index;
+  }
+
   return {
     frames,
     async step(count = 1) {
@@ -307,14 +386,40 @@ function deck(items: readonly Screen[] = screens) {
     async press() {
       const index = view.frame.poses.findIndex((pose) => pose.interactive);
       if (index < 0) return -1;
-      pointerId += 1;
-      hand = 0;
-      (
-        wrapper.findAll("[data-snap-motion-stacked-deck-card]")[index]!.element as HTMLElement
-      ).dispatchEvent(pointerEvent("pointerdown", 0, pointerId));
-      await nextTick();
-      return index;
+      return pressCard(index);
     },
+    /**
+     * Presses one named card whether or not the deck is offering it.
+     *
+     * A finger does not consult a pose before it lands. This is the only way to ask what a press on
+     * a shell the deck is not offering actually does, which is a different question from what a
+     * press on the card it *is* offering does.
+     */
+    pressCard,
+    /** The cards the deck is offering right now. */
+    interactiveIndices: () =>
+      view.frame.poses.flatMap((pose, index) => (pose.interactive ? [index] : [])),
+    /** Every release still in the air right now, as its own record. */
+    landings: () =>
+      (
+        (
+          view.root?.snapMotionDirectDebug as
+            | {
+                landings?: readonly {
+                  itemIndex: number;
+                  settlement: number;
+                  releaseOrder: number;
+                }[];
+              }
+            | undefined
+        )?.landings ?? []
+      ).map((landing) => ({ ...landing })),
+    settledId: () => view.settledId,
+    settledIndex: () => screens.findIndex((screen) => screen.id === view.settledId),
+    /** One adjacent card forward, as a command rather than a hand. */
+    next: () => view.next(),
+    /** Every press that has so far become a hand-owned Direct source. */
+    acceptedOrigins: (): readonly AcceptedOrigin[] => origins,
     async drag(to: number) {
       while (Math.abs(to - hand) > MAX_HAND_STEP) {
         hand += Math.sign(to - hand) * MAX_HAND_STEP;
@@ -333,6 +438,11 @@ function deck(items: readonly Screen[] = screens) {
       window.dispatchEvent(pointerEvent("pointerup", hand, pointerId));
       await nextTick();
     },
+    /** The other way a pointer sequence can end: the browser taking it away. */
+    async cancel() {
+      window.dispatchEvent(pointerEvent("pointercancel", hand, pointerId));
+      await nextTick();
+    },
     finish() {
       const tuning = view.tuning;
       const settledId = view.settledId;
@@ -340,12 +450,15 @@ function deck(items: readonly Screen[] = screens) {
       clock.restore();
       return {
         frames,
+        origins,
         settledId,
         maxLandings,
         sawAirborneCapture,
+        sawAirborneOrigin,
         sawExposedSymmetricPile,
         sawRetirementUnderInteraction,
         breaches: envelopeBreaches(frames),
+        premise: premiseBreaches(origins),
         violations: paintViolations(frames, tuning.cardWidth, tuning.cardHeight),
       };
     },
@@ -357,6 +470,10 @@ type Result = ReturnType<ReturnType<typeof deck>["finish"]>;
 /**
  * Everything a run of rendered frames has to be able to say for itself, as the empty list it is
  * when the deck was physical the whole way through.
+ *
+ * The origin premise is checked here rather than in one dedicated scenario, because it is what
+ * makes the accepted depth handoff correct in every one of them: an exchange measured from a shell
+ * that is not covering the pile is the defect, whatever gesture produced it.
  */
 function complaints(result: Result): string[] {
   return [
@@ -365,6 +482,7 @@ function complaints(result: Result): string[] {
         `frame ${violation.fromTick}->${violation.toTick}: card ${violation.before} gave ${violation.points} sampled points to card ${violation.after} after ${violation.shift.toFixed(2)}px of motion`,
     ),
     ...result.breaches,
+    ...result.premise,
   ];
 }
 
@@ -472,25 +590,23 @@ describe("StackedDeck Direct rendered material", () => {
   }, 180_000);
 
   /**
-   * The one seam this projection has not closed, pinned exactly rather than excluded.
+   * The recorded airborne-capture defect, at the gesture that produced it.
    *
    * A subordinate pile shell takes the exchange's depth on the first frame the exchange has any
    * geometry at all. What makes that invisible is the shell being lifted: at that frame it is still
    * over the deck, covering the whole pile, and a depth change under an opaque body is not a change.
    *
    * A hand that catches a shell already in the air never lifts anything off this deck. Its
-   * interaction-local zero is a frame where the deck's own top is hundreds of pixels away and the
-   * pile is uncovered, so on the next frame the same write lands in the open:
+   * interaction-local zero was a frame where the deck's own top was hundreds of pixels away and the
+   * pile uncovered, so the same write landed in the open — two shells beside the deck's centre
+   * exchanging paint order after under 3px of motion. The premise the accepted kernel needs was
+   * simply false there, and no choreography over the top of it could make it true.
    *
-   *   packages/core/src/stackedDeck.ts, `moveDirectPose`: `pose.layer = destination.layer`
-   *
-   * reached through `resolveDirectShell` at `reveal ≈ 0.1`, where the two shells beside the deck's
-   * centre exchange paint order after under 3px of motion. Closing it needs either the pile's own
-   * depth model or the frame the target takes the top on, so it is recorded here rather than
-   * patched around. This reproduces every run and fails the moment the behaviour changes — which
-   * includes the run where someone fixes it.
+   * So the state is gone rather than decorated: a release still in the air is a presentation until
+   * it arrives, and this gesture — four rapid throws, each pressing one frame after the last let
+   * go — now produces no capture, no origin-less transaction, and no unearned pixel.
    */
-  it("still exchanges two pile faces when a hand catches a shell in mid-air", async () => {
+  it("never lets a hand catch a shell in mid-air", async () => {
     const surface = deck();
     for (const to of [-420, 380, -340, 300]) {
       await surface.press();
@@ -501,41 +617,176 @@ describe("StackedDeck Direct rendered material", () => {
     }
     await surface.step(40);
     const result = surface.finish();
-    // Everything the released envelope owns still holds through it.
-    expect(result.breaches, `released envelope: ${result.breaches.join("; ")}`).toEqual([]);
-    expect(result.sawAirborneCapture, "no shell was caught in the air").toBe(true);
-    const seam = result.violations.map((violation) => ({
-      cards: [violation.before, violation.after],
-      movedUnderThreePixels: violation.shift < 3,
-      where: `frame ${violation.fromTick}->${violation.toTick}`,
-    }));
-    expect(seam).toEqual([{ cards: [4, 1], movedUnderThreePixels: true, where: "frame 18->19" }]);
+    // The scenario still reaches the state it exists to test: shells were genuinely in the air
+    // when the next hands pressed.
+    expect(result.maxLandings, "no release was ever in the air").toBeGreaterThanOrEqual(1);
+    expect(result.sawAirborneOrigin, "a landing shell was used as an exchange source").toBe(false);
+    expect(result.sawAirborneCapture, "a shell was caught in the air").toBe(false);
+    expect(complaints(result), "rapid chained throws").toEqual([]);
   }, 120_000);
 
-  it("lets a hand catch a shell already in the air and reverse through its own zero", async () => {
+  /**
+   * A shell still finishing its release stays a release.
+   *
+   * The hand here goes down on that exact shell — the deck is drawing it hundreds of pixels off
+   * centre, so a finger can reach it — and then drags a full card's worth. Nothing about that may
+   * turn it into a source: it is not offered, so the press opens nothing, and its own landing keeps
+   * the clock and the path it already had. The deck it is falling into is untouched.
+   */
+  it("refuses a pointer that goes down on a shell still in the air", async () => {
     const surface = deck();
-    // Throw one shell so it commits and parks.
+    // Two throws in quick succession, so the first is handed to its own clock and is genuinely a
+    // record of a release in the air rather than the exchange the deck is currently performing.
+    for (let throwIndex = 0; throwIndex < 2; throwIndex += 1) {
+      await surface.press();
+      await surface.step();
+      await surface.drag(-560);
+      await surface.release();
+      await surface.step(1);
+    }
+    const airborne = surface.landings();
+    expect(airborne, "no release was in the air to press").not.toHaveLength(0);
+    const shell = airborne[0]!;
+    expect(surface.interactiveIndices(), "the airborne shell was offered").not.toContain(
+      shell.itemIndex,
+    );
+    const acceptedBefore = surface.acceptedOrigins().length;
+    const framesBefore = surface.frames.length;
+
+    await surface.pressCard(shell.itemIndex);
+    await surface.step();
+    await surface.drag(100);
+    await surface.release();
+    await surface.step(1);
+
+    // Still travelling, on its own clock, from its own release — neither cancelled nor held.
+    const stillFlying = surface.landings().find((landing) => landing.itemIndex === shell.itemIndex);
+    expect(stillFlying, "the landing was cancelled by the press").toBeDefined();
+    expect(stillFlying!.releaseOrder, "the landing was re-released").toBe(shell.releaseOrder);
+    expect(stillFlying!.settlement, "the landing was frozen").toBeGreaterThan(shell.settlement);
+    // No hand ever took hold of anything, so no transaction opened.
+    expect(surface.acceptedOrigins(), "the press opened a transaction").toHaveLength(
+      acceptedBefore,
+    );
+    expect(
+      surface.frames.slice(framesBefore).every((frame) => frame.phase !== "held"),
+      "a hand owned a shell it had pressed in mid-air",
+    ).toBe(true);
+
+    await surface.step(40);
+    const result = surface.finish();
+    expect(result.sawAirborneOrigin, "a landing shell was used as an exchange source").toBe(false);
+    expect(result.sawAirborneCapture, "a shell was caught in the air").toBe(false);
+    expect(complaints(result), "press on an airborne shell").toEqual([]);
+  }, 120_000);
+
+  /**
+   * The same invariant where there is no pose for a hand to consult.
+   *
+   * A reversal can commit the deck back to the very shell it threw, so the card the model names is
+   * still hundreds of pixels away with its own release carrying it home. A keyboard or programmatic
+   * exchange measured from there would hand depth between bodies that are not where the kernel
+   * assumes — the pointer path refuses it because nothing is offered, and this path has to refuse it
+   * for the same physical reason.
+   *
+   * It is availability, not a timer: the frame that release arrives, the same command is accepted.
+   */
+  it("refuses a command whose source is still a release in the air", async () => {
+    const surface = deck();
+    // Throw one shell, then reverse the next hand back onto it so the deck commits to it again.
     await surface.press();
     await surface.step();
     await surface.drag(-560);
     await surface.release();
     await surface.step(2);
-    // The next hand takes the new top and draws back toward the shell still in the air, which is
-    // what makes that shell this exchange's target and so something a hand can take hold of.
     await surface.press();
     await surface.step();
-    await surface.drag(420);
+    await surface.drag(560);
     await surface.release();
-    await surface.step();
-    // That same shell, caught at the exact pose it was drawn at, then reversed through the
-    // interaction-local zero it was given and carried on the other way.
+    await surface.step(1);
+
+    const settled = surface.settledIndex();
+    expect(
+      surface.landings().map((landing) => landing.itemIndex),
+      "the deck did not commit back to the shell it threw",
+    ).toContain(settled);
+    expect(surface.next(), "a command exchanged a deck the shell had not reached").toBe(false);
+    await surface.step(2);
+    expect(surface.settledIndex(), "the refused command moved the deck").toBe(settled);
+
+    // Arrived. Nothing was queued, and the very same command is now an ordinary exchange.
+    await surface.step(20);
+    expect(surface.landings(), "the release never arrived").toHaveLength(0);
+    expect(surface.next(), "an arrived shell was still refused").toBe(true);
+    await surface.step(30);
+    expect(complaints(surface.finish()), "command after an airborne source").toEqual([]);
+  }, 120_000);
+
+  /**
+   * A press the deck refused has nothing to take back.
+   *
+   * Cancellation is how a gesture undoes itself, and a gesture that never took the deck did not do
+   * anything to undo. Letting the browser take a refused press away must therefore leave the
+   * exchange already in flight exactly where it was going — it was never that press's to abort.
+   */
+  it("lets a refused press be cancelled without aborting the exchange in flight", async () => {
+    const surface = deck();
     await surface.press();
     await surface.step();
-    for (const to of [180, 360, 180, 0, -180, -360]) await surface.drag(to);
+    await surface.drag(-560);
+    await surface.release();
+    await surface.step(2);
+
+    // A pile shell, pressed while the committed exchange is still settling, then taken away.
+    const offered = surface.interactiveIndices();
+    const pile = [0, 1, 2, 3, 4].find((index) => !offered.includes(index))!;
+    await surface.pressCard(pile);
+    await surface.step();
+    await surface.drag(-300);
+    await surface.cancel();
+    await surface.step(40);
+
+    const result = surface.finish();
+    // Only the first hand ever opened anything, and this press was not it.
+    expect(
+      result.origins.map((origin) => origin.pressedIndex),
+      "the refused press opened a transaction",
+    ).not.toContain(pile);
+    expect(result.origins, "more than the one real hand opened a transaction").toHaveLength(1);
+    // The exchange the first hand committed to still arrived.
+    expect(result.settledId, "the cancelled press took the exchange back").toBe("d");
+    expect(complaints(result), "cancelled refused press").toEqual([]);
+  }, 120_000);
+
+  /**
+   * The same pointer gesture, on a card the deck is not offering.
+   *
+   * A pile shell at rest is visible and has a box a finger can land in, but it is not a card this
+   * deck is offering, and the exchange the Direct kernel performs has no meaning measured from it.
+   * Forwarding that press anyway would open a transaction whose origin is only wherever the
+   * controller happened to be resting — the same gesture getting a different release model for
+   * having landed a few pixels off the top card.
+   */
+  it("refuses a pointer that goes down on a pile shell the deck is not offering", async () => {
+    const surface = deck();
+    const offered = surface.interactiveIndices();
+    expect(offered, "the resting deck offers exactly one card").toHaveLength(1);
+    const pile = [0, 1, 2, 3, 4].find((index) => index !== offered[0])!;
+    const settledBefore = surface.settledId();
+
+    await surface.pressCard(pile);
+    await surface.step();
+    await surface.drag(-520);
     await surface.release();
     await surface.step(24);
+
     const result = surface.finish();
-    expect(result.sawAirborneCapture, "no shell was caught in the air").toBe(true);
-    expect(complaints(result), "held reversal after an airborne catch").toEqual([]);
+    expect(result.origins, "a press the deck does not offer opened a transaction").toEqual([]);
+    expect(
+      result.frames.every((frame) => frame.phase === "none"),
+      "the deck was held by a press it had refused",
+    ).toBe(true);
+    expect(result.settledId, "the deck moved").toBe(settledBefore);
+    expect(complaints(result), "press on a pile shell").toEqual([]);
   }, 120_000);
 });
