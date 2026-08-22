@@ -2,6 +2,7 @@ import {
   createCoverflowGeometry,
   createStackedDeckFrame,
   isStackedDeckInspectEligible,
+  resolveReleaseTarget as resolveSnapReleaseTarget,
   resolveSpeedInCards,
   resolveStackedDeckNeighbor,
   resolveStackedDeckFrame,
@@ -12,6 +13,7 @@ import {
   tightPreset,
   type ActiveIdRequestDetails,
   type ControllerConfiguration,
+  type ControllerSnapshot,
   type ElasticityOptions,
   type SnapAnchor,
   type SpringConfiguration,
@@ -324,6 +326,42 @@ export function useStackedDeckComponentMotion<Id extends string>(
     );
   }
 
+  /**
+   * Holds one released Direct transaction to the one adjacent exchange its hand opened.
+   *
+   * A hand owns exactly one adjacent card, on the side it took it from. Letting go decides between
+   * the two ends of that one exchange — the neighbour it was pulling toward, or the card it began
+   * on — and nothing else. A mass that carries on past its own origin is this transaction being
+   * given back with momentum still in it, not the deck being handed the opposite neighbour by a
+   * spring: there is no second decision in a release, and a numeric zero crossing is not one.
+   *
+   * Which of the two ends it is remains the accepted release policy's answer, taken over exactly
+   * those two anchors, so a fling still flings and a slow let-go still falls back.
+   */
+  function resolveDirectReleaseTarget(context: {
+    snapshot: ControllerSnapshot<Id>;
+    velocity: number;
+  }): Id | undefined {
+    const { snapshot, velocity } = context;
+    const originIndex = model.state.interactionOriginIndex;
+    const direction = model.state.interactionDirection;
+    if (!isDirect() || !pressAcceptedOnCard || originIndex === null || direction === 0) {
+      return undefined;
+    }
+    const originId = model.idAt(originIndex)!;
+    const chosen = resolveSnapReleaseTarget({
+      anchors: snapshot.anchors,
+      position: snapshot.position,
+      velocity,
+      activeId: originId,
+      policy: currentConfiguration().releasePolicy,
+    })?.id;
+    return chosen ===
+      model.idAt(resolveStackedDeckNeighbor(originIndex, direction, model.itemCount))
+      ? chosen
+      : originId;
+  }
+
   const motion = useCarouselMotion<Id>({
     anchors: initialGeometry.anchors,
     bounds: initialGeometry.bounds,
@@ -356,6 +394,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
       if (capturedLanding) triggerRef(state);
       return ids.value[originIndex];
     },
+    resolveReleaseTarget: resolveDirectReleaseTarget,
     // Direct has already captured the shell an unfinished release is still carrying, so its next
     // hand can own a genuinely new transaction while that capture keeps the frame continuous.
     // Shuffle keeps ordinary interruption semantics unchanged.
@@ -455,14 +494,9 @@ export function useStackedDeckComponentMotion<Id extends string>(
       });
       publish(published);
       if (snapshot.phase !== "idle" || owned.value) return;
-      if (directProjection.phase === "parking" && published.interactionDirection !== 0) {
-        directProjection.direction = published.interactionDirection;
-        directProjection.signedTravel = published.interactionDirection;
-        directProjection.targetIndex = resolveStackedDeckNeighbor(
-          directProjection.originIndex,
-          published.interactionDirection,
-          model.itemCount,
-        );
+      if (directProjection.phase === "parking" && directProjection.direction !== 0) {
+        // Its own side, travelled the whole way: the exchange this release committed to, complete.
+        directProjection.signedTravel = directProjection.direction;
       } else if (directProjection.phase === "returning") {
         directProjection.direction = 0;
         directProjection.signedTravel = 0;
@@ -734,17 +768,26 @@ export function useStackedDeckComponentMotion<Id extends string>(
     }
     const originIndex =
       (isDirect() ? model.state.interactionOriginIndex : null) ?? presentationOriginIndex();
-    const releaseAtMechanicalRest =
-      atRest.value &&
-      (directProjection.phase === "parking" || directProjection.phase === "returning");
+    // A shell this presentation let go of is still travelling to where it was thrown. The exchange
+    // it is finishing was settled at that frame, and what the deck's own mass does inside it —
+    // including carrying on past the origin and coming back — is that same transaction.
+    const releaseInFlight =
+      directProjection.phase === "parking" || directProjection.phase === "returning";
+    const releaseAtMechanicalRest = atRest.value && releaseInFlight;
     if (originIndex !== null && !releaseAtMechanicalRest) {
       directProjection.originIndex = originIndex;
-      directProjection.direction = state.value.interactionDirection;
       directProjection.signedTravel = physicalIndex.value;
-      directProjection.targetIndex =
-        directProjection.direction === 0 || itemCount < 2
-          ? null
-          : resolveStackedDeckNeighbor(originIndex, directProjection.direction, itemCount);
+      // Scalar travel is read either way, because that is how far the deck has actually come. Which
+      // exchange it is travel in is a hand's to choose and a release's to have chosen: reading it
+      // back off the settling mass would let a spring crossing its own zero hand the deck to the
+      // opposite neighbour, while the card that release is carrying is still in the air over it.
+      if (!releaseInFlight) {
+        directProjection.direction = state.value.interactionDirection;
+        directProjection.targetIndex =
+          directProjection.direction === 0 || itemCount < 2
+            ? null
+            : resolveStackedDeckNeighbor(originIndex, directProjection.direction, itemCount);
+      }
     }
     resolveStackedDeckFrame(
       {

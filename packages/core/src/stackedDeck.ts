@@ -980,22 +980,12 @@ function setShuffleFrame(
 
 const directDestinationPose = resetPose({} as MutableStackedDeckPose);
 
-const directGeometryKeys = [
-  "translateX",
-  "translateY",
-  "scale",
-  "rotate",
-  "shadowStrength",
-] as const;
-
 function moveDirectPose(
   pose: MutableStackedDeckPose,
   destination: StackedDeckPose,
   progress: number,
 ): void {
-  for (const key of directGeometryKeys) {
-    pose[key] = mix(pose[key], destination[key], progress);
-  }
+  movePoseGeometry(pose, destination, progress);
   // Depth and role are discrete, so they belong to the exchange rather than to a point along it.
   // A directed interaction names its neighbour before the hand has moved at all, and on that frame
   // there is no exchange yet: the deck is its own rest, down to the order it paints in.
@@ -1046,7 +1036,13 @@ function setDirectExchange(
   tuning: StackedDeckTuning,
 ): void {
   const itemCount = output.poses.length;
-  const distance = clamp(Math.abs(projection.signedTravel), 0, 1);
+  // How far the deck has come toward the neighbour this exchange named — and never how far it has
+  // come away from it. One interaction owns one adjacent exchange, so travel past its own origin is
+  // that exchange being given back with momentum rather than the opposite one beginning: the deck
+  // is exactly its own rest there, and it is drawn as its own rest, down to the order it paints in.
+  // A hand keeps naming the neighbour it is pulling toward, so this is its own absolute travel; it
+  // is a release, whose side was settled when the hand let go, that this can hold to one answer.
+  const distance = clamp(projection.signedTravel * projection.direction, 0, 1);
   const reveal = smoothstep(distance);
   const outgoing = output.poses[projection.originIndex]!;
   const phase = projection.phase;
