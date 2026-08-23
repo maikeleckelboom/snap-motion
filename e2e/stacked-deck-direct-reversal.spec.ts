@@ -6,6 +6,7 @@ import {
   beginHeldTraversal,
   destinations,
   finishPointer,
+  finishPointerBy,
   holdPhysicalIndex,
   holdPointerAt,
   movePointerBy,
@@ -99,6 +100,162 @@ const DENSE_CROSSING = [
   0.6, 0.4, 0.2, 0.1, 0.05, 0.02, 0, -0.02, -0.05, -0.1, -0.2, -0.4, -0.6,
 ] as const;
 
+type BrowserFrame = Awaited<ReturnType<typeof readFrame>> & {
+  readonly centreCoveringIndices: readonly number[];
+  readonly centreOwnerIndex: number;
+  readonly pointerId: number;
+  readonly requestedTravel: number;
+  readonly sourceCoversCentre: boolean;
+};
+
+function poseCoversDeckCentre(
+  frame: Awaited<ReturnType<typeof readFrame>>,
+  index: number,
+  cardHeight: number,
+) {
+  const pose = frame.poses[index]!;
+  if (!pose.visible || pose.opacity <= 0 || pose.scale <= 0) return false;
+  const radians = (-pose.rotate * Math.PI) / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const localX = (-pose.translateX * cosine + pose.translateY * sine) / pose.scale;
+  const localY = (-pose.translateX * sine - pose.translateY * cosine) / pose.scale;
+  return Math.abs(localX) <= frame.cardWidth / 2 && Math.abs(localY) <= cardHeight / 2;
+}
+
+function captureCentreOwnership(
+  frame: Awaited<ReturnType<typeof readFrame>>,
+  cardHeight: number,
+  pointerId: number,
+  requestedTravel: number,
+): BrowserFrame {
+  const centreCoveringIndices = frame.poses.flatMap((_pose, index) =>
+    poseCoversDeckCentre(frame, index, cardHeight) ? [index] : [],
+  );
+  const centreOwnerIndex = centreCoveringIndices.reduce((owner, index) => {
+    if (owner < 0) return index;
+    const ownerLayer = frame.poses[owner]!.layer;
+    const candidateLayer = frame.poses[index]!.layer;
+    return candidateLayer > ownerLayer || (candidateLayer === ownerLayer && index > owner)
+      ? index
+      : owner;
+  }, -1);
+  return {
+    ...frame,
+    centreCoveringIndices,
+    centreOwnerIndex,
+    pointerId,
+    requestedTravel,
+    sourceCoversCentre: centreCoveringIndices.includes(3),
+  };
+}
+
+function exposedCentrePaintViolations(frames: readonly BrowserFrame[]) {
+  const violations: {
+    after: number;
+    before: number;
+    from: number;
+    higherBodyOccludedAfter: boolean;
+    higherBodyOccludedBefore: boolean;
+    overlapAfter: boolean;
+    overlapBefore: boolean;
+    to: number;
+  }[] = [];
+  for (let index = 1; index < frames.length; index += 1) {
+    const previous = frames[index - 1]!;
+    const current = frames[index]!;
+    const before = previous.centreOwnerIndex;
+    const after = current.centreOwnerIndex;
+    if (before < 0 || after < 0 || before === after) continue;
+    const overlapBefore =
+      previous.centreCoveringIndices.includes(before) &&
+      previous.centreCoveringIndices.includes(after);
+    const overlapAfter =
+      current.centreCoveringIndices.includes(before) &&
+      current.centreCoveringIndices.includes(after);
+    if (!overlapBefore || !overlapAfter) continue;
+    const higherBodyOccludedBefore = previous.centreCoveringIndices.some(
+      (candidate) =>
+        candidate !== before &&
+        candidate !== after &&
+        previous.poses[candidate]!.layer >
+          Math.max(previous.poses[before]!.layer, previous.poses[after]!.layer),
+    );
+    const higherBodyOccludedAfter = current.centreCoveringIndices.some(
+      (candidate) =>
+        candidate !== before &&
+        candidate !== after &&
+        current.poses[candidate]!.layer >
+          Math.max(current.poses[before]!.layer, current.poses[after]!.layer),
+    );
+    if (higherBodyOccludedBefore && higherBodyOccludedAfter) continue;
+    violations.push({
+      after,
+      before,
+      from: index - 1,
+      higherBodyOccludedAfter,
+      higherBodyOccludedBefore,
+      overlapAfter,
+      overlapBefore,
+      to: index,
+    });
+  }
+  return violations;
+}
+
+function exposedFailureReport(frames: readonly BrowserFrame[], violations: readonly unknown[]) {
+  const first = violations[0] as
+    | {
+        readonly after: number;
+        readonly before: number;
+        readonly from: number;
+        readonly to: number;
+      }
+    | undefined;
+  if (first === undefined) return "no exposed centre paint violation";
+  return JSON.stringify(
+    {
+      firstViolation: {
+        ...first,
+        afterId: STACKED_DECK_IDS[first.after],
+        beforeId: STACKED_DECK_IDS[first.before],
+      },
+      frames: frames.slice(Math.max(0, first.from - 2), first.to + 3).map((frame) => ({
+        authoritativeIndex: frame.authoritativeIndex,
+        centreCoveringIds: frame.centreCoveringIndices.map((index) => STACKED_DECK_IDS[index]),
+        centreOwnerId: STACKED_DECK_IDS[frame.centreOwnerIndex],
+        controllerPhase: frame.controllerPhase,
+        directProjection: frame.directProjection,
+        interactionDirection: frame.interactionDirection,
+        interactionOwned: frame.interactionOwned,
+        landingCount: frame.landingCount,
+        physicalIndex: frame.physicalIndex,
+        physicalPosition: frame.physicalPosition,
+        pointerId: frame.pointerId,
+        progress: frame.progress,
+        requestedTravel: frame.requestedTravel,
+        shells: frame.poses.map((pose) => ({
+          id: pose.id,
+          interactive: pose.interactive,
+          layer: pose.layer,
+          role: pose.role,
+          rotate: pose.rotate,
+          scale: pose.scale,
+          translateX: pose.translateX,
+          translateY: pose.translateY,
+          visibility: pose.visibility,
+          visible: pose.visible,
+        })),
+        sourceCoversCentre: frame.sourceCoversCentre,
+        traversalDirection: frame.direction,
+        visualTopIndex: frame.visualTopIndex,
+      })),
+    },
+    null,
+    2,
+  );
+}
+
 test("one held Direct reversal traces a single physical path through neutral", async ({ page }) => {
   const stage = viewport(page);
   const rests = await openReversal(page, 2);
@@ -187,6 +344,126 @@ test("a reversing hand keeps its grip on the card in both axes", async ({ page }
     await finishPointer(page, held.origin, 0, held.elapsedMs + 80, "pointercancel");
   }
   await expectCarouselAt(stage, STACKED_DECK_IDS[2]!);
+});
+
+test("an exposed held two-axis reversal changes centre material only by physical motion", async ({
+  page,
+}) => {
+  const stage = viewport(page);
+  await page.getByTestId("stacked-deck-exchange-direct").click();
+  const held = await beginHeldTraversal(page, 3);
+  const initial = await readFrame(page);
+  const cardHeight = initial.poses[3]!.height;
+  const verticalClearance = cardHeight / 2 + Math.max(32, cardHeight * 0.12);
+  const path = [
+    0.7, 0.6, 0.56, 0.54, 0.5, 0.2, 0.05, 0.02, 0.005, 0, -0.005, -0.02, -0.05, -0.2, -0.5, -0.54,
+    -0.56, -0.6, -0.7,
+  ] as const;
+  const frames: BrowserFrame[] = [];
+  const sampled: BrowserFrame[] = [];
+  let currentTravel = 0;
+
+  async function capture(travel: number) {
+    held.elapsedMs += 34;
+    await movePointerBy(page, held.origin, -travel * held.pitch, verticalClearance, held.elapsedMs);
+    await page.waitForTimeout(24);
+    const frame = captureCentreOwnership(
+      await readFrame(page),
+      cardHeight,
+      held.origin.pointerId,
+      travel,
+    );
+    frames.push(frame);
+    return frame;
+  }
+
+  try {
+    // The source leaves vertically before scalar navigation begins. The displacement is derived
+    // from the rendered card body, so the same proof works across deck profiles.
+    for (let step = 1; step <= 6; step += 1) {
+      held.elapsedMs += 34;
+      await movePointerBy(page, held.origin, 0, (verticalClearance * step) / 6, held.elapsedMs);
+      await page.waitForTimeout(24);
+      frames.push(
+        captureCentreOwnership(await readFrame(page), cardHeight, held.origin.pointerId, 0),
+      );
+    }
+    await capture(0);
+    await capture(0);
+    const crossingStart = 0;
+
+    const reversePath = path.map((_checkpoint, index) => path[path.length - 1 - index]!);
+    for (const checkpoint of [...path, ...reversePath]) {
+      const steps = Math.max(
+        1,
+        Math.ceil((Math.abs(checkpoint - currentTravel) * held.pitch) / 18),
+      );
+      for (let step = 1; step <= steps; step += 1) {
+        await capture(currentTravel + ((checkpoint - currentTravel) * step) / steps);
+      }
+      await capture(checkpoint);
+      sampled.push(await capture(checkpoint));
+      currentTravel = checkpoint;
+    }
+
+    const crossing = frames.slice(crossingStart);
+    expect(
+      crossing.every(
+        (frame) =>
+          frame.controllerPhase === "dragging" &&
+          frame.interactionOwned &&
+          frame.directProjection?.phase === "held",
+      ),
+      "the same held pointer did not own the complete crossing",
+    ).toBe(true);
+    expect(new Set(crossing.map((frame) => frame.pointerId))).toEqual(
+      new Set([held.origin.pointerId]),
+    );
+    expect(
+      crossing.every((frame) => frame.landingCount === 0),
+      "a held crossing opened a release or landing",
+    ).toBe(true);
+    const interactionDirections = new Set(crossing.map((frame) => frame.interactionDirection));
+    expect(interactionDirections.has(-1) && interactionDirections.has(1)).toBe(true);
+    const projectionDirections = new Set(
+      crossing.map((frame) => frame.directProjection?.direction),
+    );
+    expect(projectionDirections.has(-1) && projectionDirections.has(1)).toBe(true);
+    const targetIndices = new Set(crossing.map((frame) => frame.directProjection?.targetIndex));
+    expect(targetIndices.has(2) && targetIndices.has(4)).toBe(true);
+
+    for (const frame of sampled) {
+      expect(frame.poses[3]!.translateX, `team X at ${frame.requestedTravel}`).toBeCloseTo(
+        -frame.requestedTravel * held.pitch,
+        3,
+      );
+      expect(frame.poses[3]!.translateY, `team Y at ${frame.requestedTravel}`).toBeCloseTo(
+        verticalClearance,
+        3,
+      );
+      expect(frame.physicalPosition, `physical travel at ${frame.requestedTravel}`).toBeCloseTo(
+        frame.requestedTravel,
+        3,
+      );
+      expect(frame.directProjection?.signedTravel).toBeCloseTo(frame.requestedTravel, 3);
+      expect(frame.sourceCoversCentre, `team covered centre at ${frame.requestedTravel}`).toBe(
+        false,
+      );
+    }
+
+    const violations = exposedCentrePaintViolations(crossing);
+    expect(violations, exposedFailureReport(crossing, violations)).toEqual([]);
+  } finally {
+    await finishPointerBy(
+      page,
+      held.origin,
+      -currentTravel * held.pitch,
+      verticalClearance,
+      held.elapsedMs + 80,
+      "pointercancel",
+    );
+  }
+  await expectCarouselAt(stage, STACKED_DECK_IDS[3]!);
 });
 
 test("a reversing touch contact tracks the same physical path as a mouse", async ({ page }) => {

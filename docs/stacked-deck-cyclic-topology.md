@@ -56,14 +56,15 @@ its own path has carried it clear of the pile and every body it crosses.
 When the live hand reverses toward an airborne shell, Direct resolves the target and the landing
 through the same persistent pose, so that shell simply arrives at the top of the deck instead of in
 the pile. Until it arrives it remains presentation: it is not interactive, it does not receive
-pointer input, and it is never the source of a new exchange. The accepted Direct kernel exchanges
-depth between a source that is physically covering the pile and the neighbour it uncovers, and a
-shell its own release has thrown clear covers nothing — so pointer, wheel, keyboard, and imperative
-exchanges all refuse an origin that is still in flight, and all accept it on the frame it lands.
-This is material availability rather than a cooldown: no duration is involved, the release is
-neither shortened nor cancelled, and every other physically valid interaction stays available. The
-collection therefore contains at most one landing per shell, with no duplicate card, restart from
-nominal rest, or teleport. Item reconfiguration, mode changes,
+pointer input, and it is never the source of a new exchange. An airborne shell cannot be an exchange
+origin because it is no longer on the deck; the live Direct source is different. Its raw two-axis
+pointer lock may carry it vertically clear of the pile while its scalar interaction remains held.
+That exposed state is valid and uses the physical under-card path described below. Pointer, wheel,
+keyboard, and imperative exchanges still refuse an origin that is itself in flight, and accept it
+on the frame it lands. This is material availability rather than a cooldown: no duration is
+involved, the release is neither shortened nor cancelled, and every other physically valid
+interaction stays available. The collection therefore contains at most one landing per shell, with
+no duplicate card, restart from nominal rest, or teleport. Item reconfiguration, mode changes,
 controlled synchronization, and teardown clear the complete presentation collection atomically
 under the component's existing cancellation policy; normal completion removes only the body that
 arrived. Disabling the deck rejects new input but does not erase physical presentation already in
@@ -94,6 +95,16 @@ Shuffle evaluates the canonical forward top-to-rear exchange. Backward evaluates
 exchange in reverse, retaining Shuffle's detour and depth crossover. Direct uses the same endpoint
 ring order while retaining its existing pointer-owned shell, two-axis hand vector, release parking,
 clear-body crossover, interruption continuity, and per-rendered-frame material authority.
+
+Direct keeps semantic direction and physical paint authority separate when raw vertical travel
+exposes the pile. The forward ring neighbour is the canonical under-card at neutral. Reversing
+toward the opposite neighbour moves that under-card laterally clear of the complete pile before it
+changes depth, while every subordinate shell changes destination depth only inside the target's
+physical occlusion. The scalar direction and directed target still change immediately, including
+across cyclic and two-item topology; neither fact can select a different opaque centre owner. A
+return retraces the same geometry and a committed release continues from it because both retain the
+raw release vector. If the directed target is itself an unfinished landing, its existing
+landing-owned compositor remains authoritative rather than using an airborne body as pile cover.
 
 There is no wrap-specific path, pose, layer rule, or shell recycling. Interior and ordinal-wrap
 exchanges use the same normalized progression after remapping item identities.

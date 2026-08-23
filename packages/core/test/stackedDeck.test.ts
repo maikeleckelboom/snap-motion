@@ -1400,11 +1400,6 @@ describe("Direct stacked deck projection", () => {
     expect(paintOrder(neutral.poses)).toEqual(paintOrder(rest.poses));
 
     for (const frame of frames) {
-      const far = frame.progress >= 0 ? backwardIndex : forwardIndex;
-      // The neighbour this travel is not exchanging cannot gain a pixel from a direction change.
-      expect(frame.painted[far]!.total, `idle neighbour at ${frame.progress}`).toBeLessThanOrEqual(
-        restPainted[far]!.total,
-      );
       if (Math.abs(frame.progress) > CROSSING_BAND) continue;
       // Everything the crossing is allowed to repaint is what the hand itself swept: the strip the
       // source uncovered on one side and the strip it newly covers on the other. Changing direction
@@ -1434,12 +1429,85 @@ describe("Direct stacked deck projection", () => {
       }
     }
 
-    // Each monotone half keeps the deck's own clear-or-covered crossover rule. The crossing itself
-    // is governed by the swept-area bound above: a hand-held reversal exposes a strip of the card
-    // beneath it from the first sub-pixel, which is the deck working, not a paint order changing
-    // between bodies that share no pixel.
-    expectEveryPaintSwapSafe(frames.filter((frame) => frame.progress >= 0));
-    expectEveryPaintSwapSafe(frames.filter((frame) => frame.progress < 0));
+    // One sequence, including the consecutive pair on which direction and target change. A body
+    // may gain material because its own edge moved through a sampled pixel; no relative paint order
+    // may change while overlapping bodies remain uncovered.
+    expectEveryPaintSwapSafe(frames);
+  });
+
+  it("keeps the exposed pile physical across the complete held two-axis reversal", () => {
+    const pitch = WIDE_TUNING.motionPitch;
+    const verticalClearance =
+      WIDE_TUNING.cardHeight / 2 + Math.max(32, WIDE_TUNING.cardHeight * 0.12);
+    const path = [
+      0.7, 0.6, 0.56, 0.54, 0.5, 0.2, 0.05, 0.02, 0.005, 0, -0.005, -0.02, -0.05, -0.2, -0.5, -0.54,
+      -0.56, -0.6, -0.7,
+    ] as const;
+    const travels: number[] = [];
+    let priorTravel = 0;
+    const reversePath = path.map((_checkpoint, index) => path[path.length - 1 - index]!);
+    for (const checkpoint of [...path, ...reversePath]) {
+      const steps = Math.max(1, Math.ceil((Math.abs(checkpoint - priorTravel) * pitch) / 3));
+      for (let step = 1; step <= steps; step += 1) {
+        travels.push(priorTravel + ((checkpoint - priorTravel) * step) / steps);
+      }
+      // Repeated stationary samples keep this a velocity-independent rendered-frame proof.
+      travels.push(checkpoint, checkpoint);
+      priorTravel = checkpoint;
+    }
+    for (const { itemCount, label, originIndex } of [
+      { itemCount: 5, label: "interior", originIndex: 3 },
+      { itemCount: 5, label: "cyclic boundary", originIndex: 0 },
+      { itemCount: 2, label: "two items", originIndex: 0 },
+    ] as const) {
+      let direction: -1 | 1 = 1;
+      const frames = travels.map((travel) => {
+        if (travel !== 0) direction = Math.sign(travel) as -1 | 1;
+        const resting = traversal({
+          authoritativeIndex: originIndex,
+          segmentOriginIndex: originIndex,
+          settledIndex: originIndex,
+          visualTopIndex: originIndex,
+        });
+        const targetIndex = resolveStackedDeckNeighbor(originIndex, direction, itemCount);
+        const poses = resolveDirectFrame(
+          travel === 0
+            ? resting
+            : segmentForCount(originIndex, direction, Math.abs(travel), itemCount),
+          directProjection(
+            originIndex,
+            travel,
+            {
+              direction,
+              phase: "held",
+              targetIndex,
+              translateX: -travel * pitch,
+              translateY: verticalClearance,
+            },
+            itemCount,
+          ),
+          itemCount,
+        ).poses.map((pose) => ({ ...pose }));
+        expect(
+          containsCardPoint(poses[originIndex]!, 0, 0, WIDE_TUNING),
+          `${label} source covered the centre at ${travel}`,
+        ).toBe(false);
+        return { direction, poses, progress: travel, targetIndex };
+      });
+
+      expect(new Set(frames.map((frame) => frame.direction)), `${label} directions`).toEqual(
+        new Set([-1, 1]),
+      );
+      expect(new Set(frames.map((frame) => frame.targetIndex)), `${label} targets`).toEqual(
+        new Set([
+          resolveStackedDeckNeighbor(originIndex, -1, itemCount),
+          resolveStackedDeckNeighbor(originIndex, 1, itemCount),
+        ]),
+      );
+      // Deliberately one sequence. Splitting this at zero omits the only consecutive pair capable
+      // of proving that an exposed pile did not exchange material when direction changed.
+      expectEveryPaintSwapSafe(frames);
+    }
   });
 
   it("keeps interior overdrag attached to one origin and one adjacent destination", () => {
@@ -1740,8 +1808,9 @@ describe("Direct stacked deck projection", () => {
 
     expect(containsCardPoint(frame.poses[0]!, 0, 0, WIDE_TUNING)).toBe(false);
     expect(containsCardPoint(frame.poses[4]!, 0, 0, WIDE_TUNING)).toBe(false);
+    // Identity is intentionally not asserted. The complete reversal sequence above owns continuity;
+    // this frame owns only uniqueness, so DOM order can never become the material tie-break.
     expect(covering.filter((pose) => pose.layer === frontLayer)).toHaveLength(1);
-    expect(frame.poses[1]!.layer).toBeGreaterThan(frame.poses[2]!.layer);
   });
 
   /**

@@ -270,6 +270,15 @@ export async function readFrame(page: Page) {
             releaseOrder: number;
             settlement: number;
           }[];
+          projection?: {
+            direction: -1 | 0 | 1;
+            originIndex: number;
+            phase?: "held" | "parking" | "returning";
+            signedTravel: number;
+            targetIndex: number | null;
+            translateX: number;
+            translateY: number;
+          };
         };
       }
     ).snapMotionDirectDebug;
@@ -338,6 +347,7 @@ export async function readFrame(page: Page) {
         '[data-testid="stacked-deck-inspect"]',
       )?.disabled,
       interactionOwned: element.dataset.interactionOwned === "true",
+      interactionDirection: Number(element.dataset.interactionDirection),
       interactionOriginIndex,
       landingCount: directLandings.length,
       maxAnchorSkip: Number(element.dataset.maxAnchorSkip),
@@ -351,6 +361,8 @@ export async function readFrame(page: Page) {
       direction: Number(element.dataset.segmentDirection),
       physicalIndex: diagnosticOrigin + localPhysicalPosition,
       physicalPosition: localPhysicalPosition,
+      directProjection:
+        directDebug?.projection === undefined ? null : { ...directDebug.projection },
       progress: Number(element.dataset.segmentProgress),
       segmentOriginIndex: Number(element.dataset.segmentOriginIndex),
       segmentPhase: element.dataset.segmentPhase ?? "",

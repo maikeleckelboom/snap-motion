@@ -1007,16 +1007,20 @@ function moveDirectPose(
   pose.role = destination.role;
 }
 
-/**
- * True for the one subordinate shell a ring exchange moves across the deck rather than one slot
- * along it.
- *
- * Every other shell shifts by exactly one slot, which is the same local motion a collection with
- * ends produces. The shell at the far edge has nowhere further to go: the ring's order continues
- * through it, so it leaves one side of the fold and re-enters the other. That is a topology fact
- * about which item is adjacent, and it is the only one; it is confined to this shell so that it
- * can never reach the exchange the hand is performing.
- */
+/** Carries one shell directly between its source- and destination-ring poses. */
+function resolveDirectDestinationShell(
+  pose: MutableStackedDeckPose,
+  index: number,
+  targetIndex: number,
+  output: MutableStackedDeckFrame,
+  reveal: number,
+  tuning: StackedDeckTuning,
+): void {
+  setRingPose(resetPose(directDestinationPose), targetIndex, index, output.poses.length, tuning);
+  moveDirectPose(pose, directDestinationPose, reveal);
+}
+
+/** The one folded shell whose destination side is opposite its source side. */
 function wrapsAcrossFold(sourceSlot: number, destinationSlot: number): boolean {
   return (
     sourceSlot !== 0 &&
@@ -1025,18 +1029,31 @@ function wrapsAcrossFold(sourceSlot: number, destinationSlot: number): boolean {
   );
 }
 
-/** Carries one subordinate shell from the rest it is in to the rest the exchange leaves it in. */
-function resolveDirectShell(
+/**
+ * Carries the card already exposed beneath the held source out of a reversing exchange.
+ *
+ * Direct has one canonical under-card: the forward neighbour. When the opposite neighbour becomes
+ * the target, this body remains the pile's paint owner until a lateral detour has carried it clear
+ * of the complete pile. It changes depth there, then returns behind the new target. Reversing the
+ * scalar retraces the same path, so neither direction nor a target identity can exchange material
+ * while overlapping bodies stand still.
+ */
+function moveDirectNeutralCover(
   pose: MutableStackedDeckPose,
-  index: number,
-  targetIndex: number,
-  output: MutableStackedDeckFrame,
-  projection: StackedDeckDirectProjection,
-  reveal: number,
+  destination: StackedDeckPose,
+  progress: number,
+  itemCount: number,
   tuning: StackedDeckTuning,
 ): void {
-  setRingPose(resetPose(directDestinationPose), targetIndex, index, output.poses.length, tuning);
-  moveDirectPose(pose, directDestinationPose, reveal);
+  const sourceLayer = pose.layer;
+  const side = Math.sign(pose.translateX || destination.translateX || 1);
+  movePoseGeometry(pose, destination, progress);
+  pose.translateX +=
+    side * wholePileClearSeparation(itemCount, tuning) * 4 * progress * (1 - progress);
+  // Both directions cross this point at the same geometry. The detour clears the complete pile at
+  // the midpoint, so this is a depth handoff between bodies that share no pixel, not a threshold
+  // standing in for one.
+  pose.layer = progress < AUTHORITY_MIDPOINT ? sourceLayer + 1 : destination.layer;
 }
 
 /**
@@ -1046,6 +1063,7 @@ function resolveDirectShell(
 function setDirectExchange(
   output: MutableStackedDeckFrame,
   projection: StackedDeckDirectProjection,
+  landings: readonly StackedDeckDirectLanding[],
   tuning: StackedDeckTuning,
 ): void {
   const itemCount = output.poses.length;
@@ -1073,10 +1091,32 @@ function setDirectExchange(
   const clearSeparation = tuning.cardWidth + CROSSOVER_CLEARANCE;
   if (targetIndex !== null) {
     const target = output.poses[targetIndex]!;
+    const targetSourceLayer = target.layer;
+    const neutralCoverIndex = resolveStackedDeckNeighbor(projection.originIndex, 1, itemCount);
+    const targetIsLanding = landings.some((landing) => landing.itemIndex === targetIndex);
+    // Horizontal travel already moves the held source edge through every pixel it uncovers. Raw Y
+    // does not move target or pile geometry, so only a source vertically clear of the deck needs a
+    // separate physical under-card path. The release retains this raw vector, keeping the same
+    // compositor through parking or return without a lifecycle latch or threshold proxy.
+    const sourceVerticallyExposesPile =
+      phase !== undefined &&
+      !coversDeckCentreAtTranslation(outgoing, 0, projection.translateY, tuning);
+    const useExposedPilePath = sourceVerticallyExposesPile && !targetIsLanding;
     // The target resolves before the rest of the pile. It is the body the ring's own shell passes
     // behind, so it has to be a settled physical fact before anything is measured against it —
     // otherwise where that shell hides would depend on nothing more physical than array order.
-    resolveDirectShell(target, targetIndex, targetIndex, output, projection, reveal, tuning);
+    if (useExposedPilePath) {
+      setRingPose(
+        resetPose(directDestinationPose),
+        targetIndex,
+        targetIndex,
+        output.poses.length,
+        tuning,
+      );
+      movePoseGeometry(target, directDestinationPose, reveal);
+    } else {
+      resolveDirectDestinationShell(target, targetIndex, targetIndex, output, reveal, tuning);
+    }
     for (let index = 0; index < itemCount; index += 1) {
       if (index === projection.originIndex || index === targetIndex) continue;
       const pose = output.poses[index]!;
@@ -1089,18 +1129,23 @@ function setDirectExchange(
         resolveStackedDeckDepth(targetIndex, index, itemCount),
         itemCount,
       );
-      if (wrapsAcrossFold(sourceSlot, destinationSlot)) {
-        // The ring's own shell. It crosses the deck behind the exchange rather than across it,
-        // contributing no material of its own between the two folded rests it is exact at, and it
-        // takes the rear for the whole crossing so that every shell it was already behind on the
-        // side it is leaving stays in front of it the entire way.
-        movePileShell(pose, directDestinationPose, target, reveal);
-        if (reveal > TRAVERSAL_EPSILON && reveal < AUTHORITY_MIDPOINT) {
-          pose.layer = TARGET_LAYER - itemCount * PILE_LAYER_STEP;
+      if (!useExposedPilePath) {
+        if (wrapsAcrossFold(sourceSlot, destinationSlot)) {
+          movePileShell(pose, directDestinationPose, target, reveal);
+          if (reveal > TRAVERSAL_EPSILON && reveal < AUTHORITY_MIDPOINT) {
+            pose.layer = TARGET_LAYER - itemCount * PILE_LAYER_STEP;
+          }
+        } else {
+          resolveDirectDestinationShell(pose, index, targetIndex, output, reveal, tuning);
         }
-        continue;
+      } else if (index === neutralCoverIndex) {
+        moveDirectNeutralCover(pose, directDestinationPose, reveal, itemCount, tuning);
+      } else {
+        // Every subordinate depth change happens while the shell is physically contained by the
+        // target. This used to copy destination depth on the first non-zero reveal, which was safe
+        // only while the held source happened to cover the pile.
+        movePileShell(pose, directDestinationPose, target, reveal);
       }
-      resolveDirectShell(pose, index, targetIndex, output, projection, reveal, tuning);
     }
     // The neighbour is named before the hand moves, and naming is not exchanging. Until some
     // geometry expresses the exchange, the deck is exactly its own rest — including which shell
@@ -1108,8 +1153,12 @@ function setDirectExchange(
     if (reveal > TRAVERSAL_EPSILON) {
       // Never downward: a target that is also the shell a previous release is still carrying is
       // already above the deck, and promotion cannot be a reason to drop it under the deck's top.
-      target.layer = Math.max(target.layer, TOP_LAYER);
-      if (reveal < 1 - TRAVERSAL_EPSILON) target.role = "target";
+      // The canonical under-card already owns the exposed pile. The opposite target earns that
+      // depth only after the under-card's detour has carried it clear of the complete pile.
+      const targetOwnsPaint =
+        !useExposedPilePath || targetIndex === neutralCoverIndex || reveal >= AUTHORITY_MIDPOINT;
+      target.layer = targetOwnsPaint ? Math.max(target.layer, TOP_LAYER) : targetSourceLayer;
+      target.role = reveal < 1 - TRAVERSAL_EPSILON ? "target" : "top";
     }
 
     if (phase === undefined || phase === "parking") {
@@ -1187,9 +1236,10 @@ function setDirectExchange(
 function setDirectFrame(
   output: MutableStackedDeckFrame,
   projection: StackedDeckDirectProjection,
+  landings: readonly StackedDeckDirectLanding[],
   tuning: StackedDeckTuning,
 ): void {
-  setDirectExchange(output, projection, tuning);
+  setDirectExchange(output, projection, landings, tuning);
 }
 
 const landingReleasePose = resetPose({} as MutableStackedDeckPose);
@@ -1319,36 +1369,44 @@ function applyLandingReleases(
 }
 
 /** Whether one transformed card body contains the deck's physical centre. */
-function coversDeckCentre(pose: StackedDeckPose, tuning: StackedDeckTuning): boolean {
+function coversDeckCentreAtTranslation(
+  pose: StackedDeckPose,
+  translateX: number,
+  translateY: number,
+  tuning: StackedDeckTuning,
+): boolean {
   if (!pose.visible || pose.opacity <= 0 || pose.scale <= 0) return false;
   const radians = (-pose.rotate * Math.PI) / 180;
   const cosine = Math.cos(radians);
   const sine = Math.sin(radians);
-  const localX = (-pose.translateX * cosine + pose.translateY * sine) / pose.scale;
-  const localY = (-pose.translateX * sine - pose.translateY * cosine) / pose.scale;
+  const localX = (-translateX * cosine + translateY * sine) / pose.scale;
+  const localY = (-translateX * sine - translateY * cosine) / pose.scale;
   return Math.abs(localX) <= tuning.cardWidth / 2 && Math.abs(localY) <= tuning.cardHeight / 2;
 }
 
+function coversDeckCentre(pose: StackedDeckPose, tuning: StackedDeckTuning): boolean {
+  return coversDeckCentreAtTranslation(pose, pose.translateX, pose.translateY, tuning);
+}
+
 /**
- * Gives an exposed symmetric pile one physical centre owner.
+ * Gives an exposed symmetric pile one physical centre owner without consulting semantic direction.
  *
- * Folded slots at equal distance deliberately share depth while a top body covers them. Concurrent
- * landings can put both active exchange bodies outside the centre, exposing that otherwise harmless
- * tie. The pile shell on the departing source's side is the one that body uncovers; promoting it by
- * one subordinate layer makes that opening physical and deterministic. Direction can change only
- * through neutral, where the source covers the pile, so the tie-break itself is never a visible
- * paint swap. No rest geometry, source/target choreography, or ring depth is changed.
+ * Folded slots at equal distance deliberately share depth while a top body covers them. A held
+ * source can leave the centre vertically, so neutral is not evidence that the tie is covered. The
+ * forward ring neighbour is the canonical under-card; remaining ties follow fixed source-ring
+ * proximity and orientation. Direction may reverse independently while this paint owner remains a
+ * physical body whose edge has to move before another material can replace it.
  */
 function ensureDirectCentreOwner(
   output: MutableStackedDeckFrame,
   projection: StackedDeckDirectProjection,
   tuning: StackedDeckTuning,
 ): void {
-  if (projection.direction === 0 || projection.targetIndex === null) return;
+  if (output.poses.length < 2) return;
   let frontLayer = Number.NEGATIVE_INFINITY;
   let frontCount = 0;
   let ownerIndex = -1;
-  let ownerSide = Number.NEGATIVE_INFINITY;
+  let ownerRank = Number.NEGATIVE_INFINITY;
   for (let index = 0; index < output.poses.length; index += 1) {
     const pose = output.poses[index]!;
     if (!coversDeckCentre(pose, tuning)) continue;
@@ -1356,20 +1414,20 @@ function ensureDirectCentreOwner(
       frontLayer = pose.layer;
       frontCount = 1;
       ownerIndex = index;
-      ownerSide = Number.NEGATIVE_INFINITY;
+      ownerRank = Number.NEGATIVE_INFINITY;
     } else if (pose.layer === frontLayer) {
       frontCount += 1;
     } else {
       continue;
     }
     const slot = signedRingSlot(
-      resolveStackedDeckDepth(projection.targetIndex, index, output.poses.length),
+      resolveStackedDeckDepth(projection.originIndex, index, output.poses.length),
       output.poses.length,
     );
-    const side = -projection.direction * slot;
-    if (side > ownerSide) {
+    const rank = -Math.abs(slot) * 2 + (slot > 0 ? 1 : 0);
+    if (rank > ownerRank) {
       ownerIndex = index;
-      ownerSide = side;
+      ownerRank = rank;
     }
   }
   if (frontCount > 1 && frontLayer < TARGET_LAYER && ownerIndex >= 0) {
@@ -1447,7 +1505,7 @@ export function resolveStackedDeckFrame(
     return output;
   }
   if (direct !== undefined) {
-    setDirectFrame(output, direct, options.tuning);
+    setDirectFrame(output, direct, landings, options.tuning);
   } else {
     const top = output.poses[traversal.visualTopIndex]!;
     // The pile pass already posed the deck's centre slot as the top card. The one thing it cannot

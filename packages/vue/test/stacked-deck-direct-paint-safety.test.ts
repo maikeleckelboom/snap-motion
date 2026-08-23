@@ -34,6 +34,7 @@ interface Pose {
   readonly rotate: number;
   readonly opacity: number;
   readonly layer: number;
+  readonly role: string;
   readonly visible: boolean;
   readonly interactive: boolean;
 }
@@ -41,11 +42,27 @@ interface Pose {
 interface Frame {
   readonly tick: number;
   readonly poses: readonly Pose[];
-  readonly direction: -1 | 0 | 1;
+  readonly controllerPhase: string;
+  readonly pointerId: number | null;
+  readonly pointerInteractionActive: boolean;
+  readonly pointerOwned: boolean;
+  readonly physicalIndex: number;
+  readonly physicalPosition: number;
+  readonly traversalDirection: -1 | 0 | 1;
+  readonly interactionDirection: -1 | 0 | 1;
+  readonly localProgress: number;
+  readonly authoritativeIndex: number;
+  readonly visualTopIndex: number;
+  readonly projectionDirection: -1 | 0 | 1;
   readonly targetIndex: number | null;
   readonly originIndex: number;
   readonly signedTravel: number;
   readonly phase: string;
+  readonly sourceX: number;
+  readonly sourceY: number;
+  readonly centreCoveringIds: readonly string[];
+  readonly centreOwnerId: string | null;
+  readonly sourceCoversCentre: boolean;
   readonly landings: readonly { itemIndex: number; settlement: number; releaseOrder: number }[];
 }
 
@@ -82,13 +99,13 @@ function installClock() {
   };
 }
 
-function pointerEvent(type: string, clientX: number, pointerId: number) {
+function pointerEvent(type: string, clientX: number, pointerId: number, clientY = 0) {
   return new PointerEvent(type, {
     bubbles: true,
     buttons: type === "pointerdown" || type === "pointermove" ? 1 : 0,
     cancelable: true,
     clientX,
-    clientY: 0,
+    clientY,
     isPrimary: true,
     pointerId,
     pointerType: "mouse",
@@ -131,6 +148,8 @@ interface Violation {
   after: number;
   points: number;
   shift: number;
+  x: number;
+  y: number;
 }
 
 /**
@@ -206,6 +225,8 @@ function paintViolations(frames: readonly Frame[], width: number, height: number
           current.poses[before]!.translateX - previous.poses[before]!.translateX,
           current.poses[before]!.translateY - previous.poses[before]!.translateY,
         ),
+        x: point.x,
+        y: point.y,
       });
     }
   }
@@ -227,9 +248,9 @@ function envelopeBreaches(frames: readonly Frame[]) {
       continue;
     }
     if (previous !== null) {
-      if (frame.direction !== previous.direction) {
+      if (frame.projectionDirection !== previous.direction) {
         breaches.push(
-          `frame ${frame.tick}: released direction ${previous.direction} became ${frame.direction}`,
+          `frame ${frame.tick}: released direction ${previous.direction} became ${frame.projectionDirection}`,
         );
       }
       if (frame.targetIndex !== previous.targetIndex) {
@@ -238,7 +259,7 @@ function envelopeBreaches(frames: readonly Frame[]) {
         );
       }
     }
-    previous = { direction: frame.direction, targetIndex: frame.targetIndex };
+    previous = { direction: frame.projectionDirection, targetIndex: frame.targetIndex };
   }
   return breaches;
 }
@@ -246,7 +267,7 @@ function envelopeBreaches(frames: readonly Frame[]) {
 /** No hand crosses the stage in one frame; 120px per frame is already a very fast flick. */
 const MAX_HAND_STEP = 120;
 
-function deck(items: readonly Screen[] = screens) {
+function deck(items: readonly Screen[] = screens, activeId?: string) {
   const clock = installClock();
   const wrapper = mount(TypedStackedDeck, {
     props: {
@@ -254,6 +275,7 @@ function deck(items: readonly Screen[] = screens) {
       itemLabel: (item: Screen) => item.title,
       label: "Direct paint safety",
       exchange: "direct" as const,
+      ...(activeId === undefined ? {} : { activeId }),
     },
     slots: {
       card: (card: StackedDeckCardState<Screen, string>) =>
@@ -263,7 +285,23 @@ function deck(items: readonly Screen[] = screens) {
   });
   const view = wrapper.vm as unknown as {
     frame: { poses: readonly Pose[] };
-    tuning: { cardWidth: number; cardHeight: number };
+    tuning: { cardWidth: number; cardHeight: number; motionPitch: number };
+    diagnostics: {
+      phase: string;
+      pointerInteractionActive: boolean;
+      pointerOwned: boolean;
+    };
+    physicalIndex: number;
+    state: {
+      interactionDirection: -1 | 0 | 1;
+      interactionOriginIndex: number | null;
+      traversal: {
+        authoritativeIndex: number;
+        direction: -1 | 0 | 1;
+        localProgress: number;
+        visualTopIndex: number;
+      };
+    };
     root: HTMLElement & { snapMotionDirectDebug?: unknown };
     settledId: string;
     next: () => boolean;
@@ -278,6 +316,7 @@ function deck(items: readonly Screen[] = screens) {
   let pendingPress: Omit<AcceptedOrigin, "index"> | undefined;
   let tick = 0;
   let hand = 0;
+  let handY = 0;
   let pointerId = 900;
   let maxLandings = 0;
   let sawAirborneCapture = false;
@@ -305,6 +344,19 @@ function deck(items: readonly Screen[] = screens) {
     const poses = view.frame.poses.map((pose) => ({ ...pose }));
     const originIndex = projection?.originIndex ?? -1;
     const signedTravel = projection?.signedTravel ?? 0;
+    const centreCovering = poses.flatMap((pose, index) =>
+      contains(pose, 0, 0, view.tuning.cardWidth, view.tuning.cardHeight) ? [index] : [],
+    );
+    const centreOwner = centreCovering.reduce<number | null>((owner, index) => {
+      if (owner === null) return index;
+      const ownerLayer = poses[owner]!.layer;
+      const candidateLayer = poses[index]!.layer;
+      return candidateLayer > ownerLayer || (candidateLayer === ownerLayer && index > owner)
+        ? index
+        : owner;
+    }, null);
+    const modelState = view.state;
+    const pointerOwned = view.diagnostics.pointerOwned;
     // A hand holding a shell its own interaction has not moved, while that shell is nowhere near
     // the deck, is a hand that took it already in the air.
     if (
@@ -344,11 +396,29 @@ function deck(items: readonly Screen[] = screens) {
     frames.push({
       tick: tick++,
       poses,
-      direction: projection?.direction ?? 0,
+      controllerPhase: view.diagnostics.phase,
+      pointerId: pointerOwned ? pointerId : null,
+      pointerInteractionActive: view.diagnostics.pointerInteractionActive,
+      pointerOwned,
+      physicalIndex:
+        (modelState.interactionOriginIndex ?? modelState.traversal.visualTopIndex) +
+        view.physicalIndex,
+      physicalPosition: view.physicalIndex,
+      traversalDirection: modelState.traversal.direction,
+      interactionDirection: modelState.interactionDirection,
+      localProgress: modelState.traversal.localProgress,
+      authoritativeIndex: modelState.traversal.authoritativeIndex,
+      visualTopIndex: modelState.traversal.visualTopIndex,
+      projectionDirection: projection?.direction ?? 0,
       targetIndex: projection?.targetIndex ?? null,
       originIndex,
       signedTravel,
       phase: projection?.phase ?? "none",
+      sourceX: poses[originIndex]?.translateX ?? 0,
+      sourceY: poses[originIndex]?.translateY ?? 0,
+      centreCoveringIds: centreCovering.map((index) => screens[index]?.id ?? `${index}`),
+      centreOwnerId: centreOwner === null ? null : (screens[centreOwner]?.id ?? `${centreOwner}`),
+      sourceCoversCentre: centreCovering.includes(originIndex),
       landings,
     });
   }
@@ -367,9 +437,10 @@ function deck(items: readonly Screen[] = screens) {
     };
     pointerId += 1;
     hand = 0;
+    handY = 0;
     (
       wrapper.findAll("[data-snap-motion-stacked-deck-card]")[index]!.element as HTMLElement
-    ).dispatchEvent(pointerEvent("pointerdown", 0, pointerId));
+    ).dispatchEvent(pointerEvent("pointerdown", 0, pointerId, 0));
     await nextTick();
     return index;
   }
@@ -420,6 +491,7 @@ function deck(items: readonly Screen[] = screens) {
     next: () => view.next(),
     /** Every press that has so far become a hand-owned Direct source. */
     acceptedOrigins: (): readonly AcceptedOrigin[] => origins,
+    tuning: () => ({ ...view.tuning }),
     async drag(to: number) {
       while (Math.abs(to - hand) > MAX_HAND_STEP) {
         hand += Math.sign(to - hand) * MAX_HAND_STEP;
@@ -434,13 +506,35 @@ function deck(items: readonly Screen[] = screens) {
       await clock.step();
       capture();
     },
+    /** Drives the same owned pointer in both axes and records repeated stationary rendered frames. */
+    async drag2d(toX: number, toY: number, stationaryFrames = 0) {
+      while (Math.hypot(toX - hand, toY - handY) > MAX_HAND_STEP) {
+        const remaining = Math.hypot(toX - hand, toY - handY);
+        const fraction = MAX_HAND_STEP / remaining;
+        hand += (toX - hand) * fraction;
+        handY += (toY - handY) * fraction;
+        window.dispatchEvent(pointerEvent("pointermove", hand, pointerId, handY));
+        await nextTick();
+        await clock.step();
+        capture();
+      }
+      hand = toX;
+      handY = toY;
+      for (let frame = 0; frame <= stationaryFrames; frame += 1) {
+        window.dispatchEvent(pointerEvent("pointermove", hand, pointerId, handY));
+        await nextTick();
+        await clock.step();
+        capture();
+      }
+      return frames.at(-1)!;
+    },
     async release() {
-      window.dispatchEvent(pointerEvent("pointerup", hand, pointerId));
+      window.dispatchEvent(pointerEvent("pointerup", hand, pointerId, handY));
       await nextTick();
     },
     /** The other way a pointer sequence can end: the browser taking it away. */
     async cancel() {
-      window.dispatchEvent(pointerEvent("pointercancel", hand, pointerId));
+      window.dispatchEvent(pointerEvent("pointercancel", hand, pointerId, handY));
       await nextTick();
     },
     finish() {
@@ -486,6 +580,90 @@ function complaints(result: Result): string[] {
   ];
 }
 
+/** Browser paint order, including the DOM fallback that equal layers would otherwise conceal. */
+function relativePaintOrder(poses: readonly Pose[], first: number, second: number): -1 | 1 {
+  const layerDifference = poses[first]!.layer - poses[second]!.layer;
+  if (layerDifference !== 0) return layerDifference > 0 ? 1 : -1;
+  return first > second ? 1 : -1;
+}
+
+function firstViolationReport(
+  frames: readonly Frame[],
+  violations: readonly Violation[],
+  width: number,
+  height: number,
+) {
+  const violation = violations[0];
+  if (violation === undefined) return "no physical paint violation";
+  const currentAt = frames.findIndex((frame) => frame.tick === violation.toTick);
+  const previous = frames[currentAt - 1]!;
+  const current = frames[currentAt]!;
+  const changed = {
+    after: relativePaintOrder(current.poses, violation.before, violation.after),
+    before: relativePaintOrder(previous.poses, violation.before, violation.after),
+    first: violation.before,
+    second: violation.after,
+  };
+  const pair = [changed.first, changed.second] as const;
+  const containsPair = (frame: Frame) =>
+    pair.every((index) => contains(frame.poses[index]!, violation.x, violation.y, width, height));
+  const coveredByHigherBody = (frame: Frame) =>
+    frame.poses.some(
+      (pose, index) =>
+        !pair.includes(index) &&
+        contains(pose, violation.x, violation.y, width, height) &&
+        relativePaintOrder(frame.poses, index, pair[0]) > 0 &&
+        relativePaintOrder(frame.poses, index, pair[1]) > 0,
+    );
+  const telemetry = frames
+    .slice(Math.max(0, currentAt - 2), Math.min(frames.length, currentAt + 3))
+    .map((frame) => ({
+      authoritativeIndex: frame.authoritativeIndex,
+      centreCoveringIds: frame.centreCoveringIds,
+      centreOwnerId: frame.centreOwnerId,
+      controllerPhase: frame.controllerPhase,
+      interactionDirection: frame.interactionDirection,
+      localProgress: frame.localProgress,
+      phase: frame.phase,
+      physicalIndex: frame.physicalIndex,
+      physicalPosition: frame.physicalPosition,
+      pointerId: frame.pointerId,
+      pointerInteractionActive: frame.pointerInteractionActive,
+      pointerOwned: frame.pointerOwned,
+      projectionDirection: frame.projectionDirection,
+      sourceCoversCentre: frame.sourceCoversCentre,
+      sourceX: frame.sourceX,
+      sourceY: frame.sourceY,
+      shells: frame.poses.map((pose, index) => ({ id: screens[index]?.id ?? `${index}`, ...pose })),
+      signedTravel: frame.signedTravel,
+      targetIndex: frame.targetIndex,
+      tick: frame.tick,
+      traversalDirection: frame.traversalDirection,
+      visualTopIndex: frame.visualTopIndex,
+    }));
+  return JSON.stringify(
+    {
+      firstViolation: {
+        ...violation,
+        afterId: screens[violation.after]?.id,
+        beforeId: screens[violation.before]?.id,
+        firstRelativePaintOrderChange: {
+          ...changed,
+          firstId: screens[changed.first]?.id,
+          secondId: screens[changed.second]?.id,
+        },
+        higherBodyOccludedAfter: coveredByHigherBody(current),
+        higherBodyOccludedBefore: coveredByHigherBody(previous),
+        overlapAfter: containsPair(current),
+        overlapBefore: containsPair(previous),
+      },
+      frames: telemetry,
+    },
+    null,
+    2,
+  );
+}
+
 /** One gesture: press whatever the deck offers, follow a hand path, let go, let it settle. */
 async function gesture(path: readonly number[], settleFrames: number) {
   const surface = deck();
@@ -498,6 +676,97 @@ async function gesture(path: readonly number[], settleFrames: number) {
 }
 
 describe("StackedDeck Direct rendered material", () => {
+  it("keeps an exposed held two-axis reversal physically continuous", async () => {
+    const surface = deck(screens, "d");
+    expect(surface.settledId(), "the regression did not start on team").toBe("d");
+    expect(await surface.press(), "the team shell was not interactive").toBe(3);
+    await surface.step();
+    const heldStart = surface.frames.length;
+
+    const tuning = surface.tuning();
+    const verticalClearance = tuning.cardHeight / 2 + Math.max(32, tuning.cardHeight * 0.12);
+    await surface.drag2d(0, verticalClearance, 2);
+    const path = [
+      0.7, 0.6, 0.56, 0.54, 0.5, 0.2, 0.05, 0.02, 0.005, 0, -0.005, -0.02, -0.05, -0.2, -0.5, -0.54,
+      -0.56, -0.6, -0.7,
+    ] as const;
+    const reversePath = path.map((_travel, index) => path[path.length - 1 - index]!);
+    const requested = [...path, ...reversePath];
+    const sampled: { frame: Frame; travel: number }[] = [];
+    for (const travel of requested) {
+      sampled.push({
+        frame: await surface.drag2d(-travel * tuning.motionPitch, verticalClearance, 2),
+        travel,
+      });
+    }
+
+    const heldFrames = surface.frames.slice(heldStart);
+    expect(
+      heldFrames.some((frame) => frame.phase === "held"),
+      "Direct never became held",
+    ).toBe(true);
+    expect(
+      heldFrames.every(
+        (frame) =>
+          frame.phase === "held" &&
+          frame.controllerPhase === "dragging" &&
+          frame.pointerOwned &&
+          frame.pointerInteractionActive,
+      ),
+      "the crossing left uninterrupted held pointer ownership",
+    ).toBe(true);
+    expect(
+      [...new Set(heldFrames.map((frame) => frame.pointerId))],
+      "more than one pointer owned the crossing",
+    ).toEqual([heldFrames[0]!.pointerId]);
+    expect(heldFrames[0]!.pointerId, "the crossing had no pointer owner").not.toBeNull();
+    expect(
+      surface.acceptedOrigins(),
+      "the gesture opened more than one Direct origin",
+    ).toHaveLength(1);
+    expect(surface.acceptedOrigins()[0]!.index, "the held origin was not team").toBe(3);
+
+    for (const { frame, travel } of sampled) {
+      expect(frame.sourceX, `team X at ${travel}`).toBeCloseTo(-travel * tuning.motionPitch, 5);
+      expect(frame.sourceY, `team Y at ${travel}`).toBeCloseTo(verticalClearance, 5);
+      expect(frame.physicalPosition, `physical travel at ${travel}`).toBeCloseTo(travel, 5);
+      expect(frame.signedTravel, `projection travel at ${travel}`).toBeCloseTo(travel, 5);
+      expect(frame.sourceCoversCentre, `team covered the centre at ${travel}`).toBe(false);
+    }
+    const modelDirections = new Set(heldFrames.map((frame) => frame.interactionDirection));
+    expect(
+      modelDirections.has(-1) && modelDirections.has(1),
+      "model direction did not visit both signs",
+    ).toBe(true);
+    const projectionDirections = new Set(heldFrames.map((frame) => frame.projectionDirection));
+    expect(
+      projectionDirections.has(-1) && projectionDirections.has(1),
+      "projection direction did not visit both signs",
+    ).toBe(true);
+    const targetIndices = new Set(heldFrames.map((frame) => frame.targetIndex));
+    expect(
+      targetIndices.has(2) && targetIndices.has(4),
+      "Direct target did not visit settings and map",
+    ).toBe(true);
+    expect(
+      heldFrames.every((frame) => frame.landings.length === 0),
+      "a held reversal opened a landing lifecycle",
+    ).toBe(true);
+
+    const violations = paintViolations(heldFrames, tuning.cardWidth, tuning.cardHeight);
+    const diagnostic = firstViolationReport(
+      heldFrames,
+      violations,
+      tuning.cardWidth,
+      tuning.cardHeight,
+    );
+    await surface.cancel();
+    const result = surface.finish();
+    expect(result.settledId, "pointercancel changed the semantic card").toBe("d");
+    if (violations.length > 0) throw new Error(diagnostic);
+    expect(violations).toEqual([]);
+  }, 120_000);
+
   /**
    * The recorded defect, exactly.
    *

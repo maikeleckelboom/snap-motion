@@ -9,8 +9,8 @@ import {
   STACKED_DECK_IDS,
   beginPointer,
   destinations,
-  finishPointer,
-  movePointer,
+  finishPointerBy,
+  movePointerBy,
   motionPitch,
   readFrame,
   viewport,
@@ -47,6 +47,7 @@ interface ReversalSample {
   readonly physicalPosition: number;
   readonly requestedTravel: number;
   readonly segmentTargetId: string | null;
+  readonly verticalHand: number;
   /** Physical travel the hand did not ask for. This is the number the defect used to move. */
   readonly unexplainedTravel: number;
 }
@@ -81,11 +82,20 @@ async function record(page: Page, name: string, run: () => Promise<void>): Promi
  */
 function heldHand(origin: PointerOrigin, pitch: number, itemCount: number) {
   let elapsedMs = 0;
+  let lastTravel = 0;
+  let lastVerticalHand = 0;
   return {
-    async sample(page: Page, travel: number, stepMs = 34): Promise<ReversalSample> {
+    async sample(
+      page: Page,
+      travel: number,
+      stepMs = 34,
+      verticalHand = lastVerticalHand,
+    ): Promise<ReversalSample> {
       elapsedMs += stepMs;
       const handDelta = -travel * pitch;
-      await movePointer(page, origin, handDelta, elapsedMs);
+      lastTravel = travel;
+      lastVerticalHand = verticalHand;
+      await movePointerBy(page, origin, handDelta, verticalHand, elapsedMs);
       const frame = await readFrame(page);
       const controllerPosition = Number(await viewport(page).getAttribute("data-position"));
       const targetIndex = frame.segmentTargetIndex;
@@ -101,15 +111,29 @@ function heldHand(origin: PointerOrigin, pitch: number, itemCount: number) {
             ? null
             : (STACKED_DECK_IDS[targetIndex % itemCount] ?? null),
         unexplainedTravel: frame.physicalPosition - travel,
+        verticalHand,
       };
     },
     async finish(page: Page): Promise<void> {
-      await finishPointer(page, origin, 0, elapsedMs + 90, "pointercancel");
+      await finishPointerBy(
+        page,
+        origin,
+        -lastTravel * pitch,
+        lastVerticalHand,
+        elapsedMs + 90,
+        "pointercancel",
+      );
     },
     /** Smoothly walks the hand from where it is to `travel`, so a recording can be watched. */
-    async glide(page: Page, from: number, to: number, steps = 24): Promise<void> {
+    async glide(
+      page: Page,
+      from: number,
+      to: number,
+      steps = 24,
+      verticalHand = lastVerticalHand,
+    ): Promise<void> {
       for (let step = 1; step <= steps; step += 1) {
-        await this.sample(page, from + ((to - from) * step) / steps, 34);
+        await this.sample(page, from + ((to - from) * step) / steps, 34, verticalHand);
         await page.waitForTimeout(26);
       }
     },
@@ -231,6 +255,28 @@ test("records the held Direct reversal review set", async ({ page }) => {
     await page.waitForTimeout(300);
     await held.finish(page);
     await settleAt(page, 2);
+  });
+
+  // The supplied defect: team is vertically clear while one pointer reverses through both cyclic
+  // neighbours. Vertical clearance is derived from the rendered card rather than a viewport magic
+  // number, and remains fixed while scalar travel crosses both signs twice.
+  await select(page, 3);
+  recordings.exposedTwoAxis = await record(page, "direct-held-reversal-exposed-2d", async () => {
+    const held = await openHeld(page, 3);
+    const cardHeight = (await readFrame(page)).poses[3]!.height;
+    const verticalClearance = cardHeight / 2 + Math.max(32, cardHeight * 0.12);
+    for (let step = 1; step <= 8; step += 1) {
+      await held.sample(page, 0, 34, (verticalClearance * step) / 8);
+      await page.waitForTimeout(26);
+    }
+    await held.glide(page, 0, 0.7, 28, verticalClearance);
+    await page.waitForTimeout(420);
+    await held.glide(page, 0.7, -0.7, 52, verticalClearance);
+    await page.waitForTimeout(420);
+    await held.glide(page, -0.7, 0.7, 52, verticalClearance);
+    await page.waitForTimeout(420);
+    await held.finish(page);
+    await settleAt(page, 3);
   });
 
   // Deep into resistance, then straight back across the press point in one coalesced sample.

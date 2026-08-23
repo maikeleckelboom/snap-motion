@@ -220,6 +220,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       data-testid="stacked-deck-viewport"
       :data-gallery-open="galleryOpen ? 'true' : 'false'"
       :data-interaction-origin-index="state?.interactionOriginIndex ?? -1"
+      :data-interaction-direction="state?.interactionDirection ?? 0"
       :data-interaction-owned="deck?.owned ? 'true' : 'false'"
       :data-authoritative-index="currentIndex"
       :data-card-width="deck?.tuning.cardWidth"

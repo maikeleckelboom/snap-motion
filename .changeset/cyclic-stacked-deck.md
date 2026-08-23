@@ -22,6 +22,12 @@ flight together and each lands in whichever slot the deck is drawing for it by t
 Release chronology determines relative airborne paint order, and depth changes only after the
 involved bodies are physically clear.
 
+Held Direct reversal also keeps physical paint authority continuous when raw vertical pointer travel
+has carried the source clear of the deck. Semantic direction and target may still change immediately,
+but the exposed under-card moves clear of the complete pile before changing depth and subordinate
+shells change depth only under physical occlusion; scalar neutral no longer assumes the source is
+covering that handoff.
+
 A shell that is still in the air is a presentation until it lands. It stays visible and keeps
 travelling, but the deck does not offer it: an exchange is measured from a card that is physically
 covering the pile it hands depth to, and a released shell is covering nothing. So it can be neither
