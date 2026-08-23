@@ -24,14 +24,16 @@ involved bodies are physically clear.
 
 Held Direct reversal also keeps physical paint authority continuous when raw vertical pointer travel
 has carried the source clear of the deck. Semantic direction and target may still change immediately,
-but the exposed under-card moves clear of the complete pile before changing depth and subordinate
-shells change depth only under physical occlusion; scalar neutral no longer assumes the source is
-covering that handoff.
+but the exposed under-card continuously recedes without losing opacity, travels clear of the complete
+pile, and changes depth there; subordinate shells change depth only under physical occlusion. Scalar
+neutral no longer assumes the source is covering that handoff.
 
-Direct now maps raw-Y exposure through a continuous clear/contained crossover instead of selecting
-between two pile choreographies. A directed target that is still landing is projected first on its
-own continuous clock and becomes the actual physical cover for dependent shells, so reaching
-settlement and retiring the record cannot switch the deck between two pose fields.
+Direct now uses one scalar-driven clear/contained choreography that is physically safe even when the
+held source does not cover the pile. Raw vertical travel moves only that source and never changes a
+target or pile pose. A directed target that is still landing is projected first on its own continuous
+clock; the target's actual physical coverage continuously admits the same scalar pile path as it
+approaches the deck, and settlement `1` is exactly the record-free pose. Retiring that record
+therefore cannot switch the deck between two pose fields.
 
 A shell that is still in the air is a presentation until it lands. It stays visible and keeps
 travelling, but the deck does not offer it: an exchange is measured from a card that is physically

@@ -97,21 +97,23 @@ ring order while retaining its existing pointer-owned shell, two-axis hand vecto
 clear-body crossover, interruption continuity, and per-rendered-frame material authority.
 
 Direct keeps semantic direction and physical paint authority separate in one continuous pose field.
-Scalar travel alone selects the target and endpoint rings. Raw vertical travel only measures the
-physical clearance required between the ordinary source-covered route and the exposed-safe route:
-the pile moves through a clear/contained crossover, changes paint authority there, and continues
-without a pose jump. The forward ring neighbour is the canonical under-card at neutral. Reversing
-toward the opposite neighbour moves that under-card laterally clear of the complete pile before it
-changes depth, while every subordinate shell changes destination depth only inside the target's
-physical occlusion. Direction and target still change immediately across cyclic and two-item
-topology; neither raw Y nor target landing lifetime selects between discrete choreographies. A return
-retraces the same geometry and a committed release continues from it because both retain the raw
-release vector.
+Scalar travel alone selects the target, endpoint rings, and every non-held pose. Raw vertical travel
+moves only the hand-owned source; it is never a deck-layout or paint-authority input. The forward
+ring neighbour is the canonical under-card at neutral. Reversing toward the opposite neighbour
+continuously recedes that under-card to a non-zero scale, carries the opaque body clear of the
+complete pile, changes its depth there, and returns it beneath the target before it expands into its
+destination slot. Every other subordinate shell changes destination depth only inside the target's
+physical occlusion. This same scalar choreography is physically valid even when the held source is
+completely absent from the deck centre. Direction and target still change immediately across cyclic
+and two-item topology; neither raw Y nor target landing lifetime selects between choreographies. A
+return retraces the same geometry and a committed release continues from it because both retain the
+raw release vector.
 
 If the directed target is itself an unfinished landing, Direct first resolves that target on its
-own landing clock, then uses the body that will actually render as the subordinate pile's cover. At
-settlement `1` the landing pose is already exactly the ordinary target pose, so retiring its record
-cannot change deck geometry, layer ownership, or choreography.
+own landing clock. As the body approaches the deck, its actual continuous centre coverage admits the
+same scalar pile path and the body that will actually render becomes its subordinate cover. At
+settlement `1` the admission is complete and the landing pose is exactly the ordinary target pose,
+so retiring its record cannot change deck geometry, layer ownership, or choreography.
 
 There is no wrap-specific path, pose, layer rule, or shell recycling. Interior and ordinal-wrap
 exchanges use the same normalized progression after remapping item identities.

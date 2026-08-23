@@ -1248,6 +1248,57 @@ describe("Direct stacked deck projection", () => {
   });
 
   it("keeps the held origin on the raw vector while Y cannot move target or pile geometry", () => {
+    const originIndex = 3;
+    const travel = -0.3;
+    const invariantRawX = -travel * WIDE_TUNING.motionPitch;
+    const boundary = WIDE_TUNING.cardHeight / 2;
+    const epsilon = 0.001;
+    const rawYValues = [
+      0,
+      1,
+      -1,
+      WIDE_TUNING.cardHeight / 8,
+      -WIDE_TUNING.cardHeight / 8,
+      WIDE_TUNING.cardHeight / 4,
+      -WIDE_TUNING.cardHeight / 4,
+      boundary - epsilon,
+      -(boundary - epsilon),
+      boundary + epsilon,
+      -(boundary + epsilon),
+      WIDE_TUNING.cardHeight * 2,
+      -WIDE_TUNING.cardHeight * 2,
+    ];
+    const invariantTraversal = segment(originIndex, -1, Math.abs(travel));
+    const frames = rawYValues.map((translateY) => ({
+      frame: resolveDirectFrame(
+        invariantTraversal,
+        directProjection(originIndex, travel, {
+          direction: -1,
+          phase: "held",
+          targetIndex: resolveStackedDeckNeighbor(originIndex, -1, 5),
+          translateX: invariantRawX,
+          translateY,
+        }),
+      ),
+      translateY,
+    }));
+    const nonHeldPoses = (frame: (typeof frames)[number]["frame"]) =>
+      frame.poses.filter((_, index) => index !== originIndex).map(exactPose);
+    const baseline = nonHeldPoses(frames[0]!.frame);
+
+    for (const { frame, translateY } of frames) {
+      expect(frame.poses[originIndex]).toMatchObject({
+        translateX: invariantRawX,
+        translateY,
+        scale: 1,
+        rotate: 0,
+        opacity: 1,
+      });
+      expect(nonHeldPoses(frame), `raw Y ${translateY} changed non-held Direct poses`).toEqual(
+        baseline,
+      );
+    }
+
     for (const direction of [-1, 1] as const) {
       for (let step = 0; step <= 1_000; step += 1) {
         const progress = step / 1_000;
@@ -1419,7 +1470,35 @@ describe("Direct stacked deck projection", () => {
 
     const neutral = frames[travels.indexOf(0)]!;
     expect(neutral.poses.map(poseGeometry)).toEqual(restGeometry);
-    expect(paintOrder(neutral.poses)).toEqual(paintOrder(rest.poses));
+    const neutralVariants = ([-1, 1] as const).flatMap((direction) =>
+      [0, WIDE_TUNING.cardHeight / 2 + 32].map((translateY) =>
+        resolveDirectFrame(
+          traversal(),
+          directProjection(2, 0, {
+            direction,
+            phase: "held",
+            targetIndex: resolveStackedDeckNeighbor(2, direction, 5),
+            translateY,
+          }),
+        ),
+      ),
+    );
+    const neutralNonHeldOrder = paintOrder(
+      neutralVariants[0]!.poses.filter((_pose, index) => index !== 2),
+    );
+    for (const variant of neutralVariants) {
+      expect(variant.poses.filter((_pose, index) => index !== 2).map(poseGeometry)).toEqual(
+        restGeometry.filter((_pose, index) => index !== 2),
+      );
+      expect(paintOrder(variant.poses.filter((_pose, index) => index !== 2))).toEqual(
+        neutralNonHeldOrder,
+      );
+      const coveringPile = variant.poses.filter(
+        (pose, index) => index !== 2 && containsCardPoint(pose, 0, 0, WIDE_TUNING),
+      );
+      const frontLayer = Math.max(...coveringPile.map((pose) => pose.layer));
+      expect(coveringPile.filter((pose) => pose.layer === frontLayer)).toHaveLength(1);
+    }
 
     for (const frame of frames) {
       if (Math.abs(frame.progress) > CROSSING_BAND) continue;

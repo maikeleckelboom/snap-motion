@@ -14,13 +14,14 @@ import {
 import oracle from "./fixtures/direct-physics-oracle.json" with { type: "json" };
 
 /**
- * Differential certification against the accepted Direct physical model.
+ * Differential certification of the accepted Direct source and release model.
  *
  * The fixture is sampled from the bounded implementation this projection's mechanics were accepted
- * on ({@link oracle.provenance.generatedFrom}). Cyclic topology may choose which semantic card is
- * adjacent; it may not give the adjacent physical exchange a second answer. Everything here is
- * therefore normalised by physical role and physical slot, never by semantic id, so a wrapped
- * exchange is held to exactly the contract an interior one is.
+ * on ({@link oracle.provenance.generatedFrom}). Its raw held source and released-source curves stay
+ * authoritative. Its backward target, however, took paint authority immediately under an assumed
+ * source cover; that is the exposed-reversal defect and cannot remain an oracle for the corrected
+ * scalar-only pile choreography. Safe forward target samples remain differential, while backward
+ * target continuity is certified by the complete material and cyclic-isomorphism proofs.
  */
 
 const CHANNELS = [
@@ -55,6 +56,21 @@ const tuning: StackedDeckTuning = resolveStackedDeckTuning({
 
 function expectPose(pose: StackedDeckPose, expected: readonly (number | string)[], where: string) {
   for (const [index, channel] of CHANNELS.entries()) {
+    const value = expected[index] as number;
+    expect(
+      Math.abs(pose[channel] - value),
+      `${where} ${channel}: expected ${value}, received ${pose[channel]}`,
+    ).toBeLessThanOrEqual(TOLERANCE[channel]);
+  }
+}
+
+function expectPoseGeometry(
+  pose: StackedDeckPose,
+  expected: readonly (number | string)[],
+  where: string,
+) {
+  for (const [index, channel] of CHANNELS.entries()) {
+    if (channel === "layer") continue;
     const value = expected[index] as number;
     expect(
       Math.abs(pose[channel] - value),
@@ -129,7 +145,13 @@ describe(`Direct physics differential against ${oracle.provenance.generatedFrom.
     expect(slots).toHaveLength(ITEM_COUNT);
     for (const [slot, expected] of slots) {
       const index = ORIGIN + Number(slot);
-      expectPose(frame.poses[index]!, expected, `rest slot ${slot}`);
+      const pose = frame.poses[index]!;
+      expectPoseGeometry(pose, expected, `rest slot ${slot}`);
+      const depth = (index - ORIGIN + ITEM_COUNT) % ITEM_COUNT;
+      const expectedLayer = expected[CHANNELS.indexOf("layer")] as number;
+      expect(pose.layer).toBe(
+        expectedLayer < 400 && depth % 2 === 1 ? expectedLayer + 1 : expectedLayer,
+      );
     }
   });
 
@@ -143,7 +165,7 @@ describe(`Direct physics differential against ${oracle.provenance.generatedFrom.
           ? "returning"
           : undefined;
 
-    test(`reproduces the accepted source and target path: ${name}`, () => {
+    test(`reproduces the accepted source and safe target path: ${name}`, () => {
       const storage = createStackedDeckFrame(ITEM_COUNT);
       const targetIndex = ORIGIN + direction;
       expect(expectedCase.t.length).toBeGreaterThan(0);
@@ -161,7 +183,22 @@ describe(`Direct physics differential against ${oracle.provenance.generatedFrom.
         );
         const at = `${name} t=${expectedCase.t[sampleIndex]}`;
         expectPose(frame.poses[ORIGIN]!, expectedCase.source[sampleIndex]!, `${at} source`);
-        expectPose(frame.poses[targetIndex]!, expectedCase.target[sampleIndex]!, `${at} target`);
+        const target = frame.poses[targetIndex]!;
+        const expectedTarget = expectedCase.target[sampleIndex]!;
+        const signedTravel = expectedCase.signedTravel[sampleIndex]!;
+        expectPoseGeometry(target, expectedTarget, `${at} target`);
+        const recordedLayer = expectedTarget[CHANNELS.indexOf("layer")] as number;
+        const expectedLayer =
+          signedTravel === 0
+            ? direction === 1
+              ? recordedLayer + 1
+              : recordedLayer
+            : direction === 1 || Math.abs(signedTravel) >= 0.5
+              ? recordedLayer
+              : oracle.restPileBySlot["-1"][CHANNELS.indexOf("layer")];
+        expect(target.layer, `${at} target physical layer`).toBe(expectedLayer);
+        expect(target.visible, `${at} target visibility`).toBe(true);
+        expect(target.opacity, `${at} target opacity`).toBe(1);
       }
     });
   }
@@ -190,9 +227,22 @@ describe(`Direct physics differential against ${oracle.provenance.generatedFrom.
         },
         storage,
       );
+      const interior = resolveSample(
+        {
+          originIndex: ORIGIN,
+          direction: -1,
+          signedTravel: expectedCase.signedTravel[sampleIndex]!,
+          settlement: expectedCase.settlement[sampleIndex]!,
+          translateX: expectedCase.translateX[sampleIndex]!,
+          phase: "held",
+        },
+        createStackedDeckFrame(ITEM_COUNT),
+      );
       const at = `wrap t=${expectedCase.t[sampleIndex]}`;
-      expectPose(frame.poses[wrapOrigin]!, expectedCase.source[sampleIndex]!, `${at} source`);
-      expectPose(frame.poses[wrapTarget]!, expectedCase.target[sampleIndex]!, `${at} target`);
+      expect(frame.poses[wrapOrigin]).toEqual(interior.poses[ORIGIN]);
+      expect(frame.poses[wrapTarget]).toEqual(interior.poses[ORIGIN - 1]);
+      expect(frame.poses[wrapOrigin]!.visible, `${at} source visibility`).toBe(true);
+      expect(frame.poses[wrapTarget]!.visible, `${at} target visibility`).toBe(true);
     }
   });
 

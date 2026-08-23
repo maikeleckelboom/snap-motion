@@ -51,10 +51,7 @@ export interface StackedDeckDirectProjection {
   readonly phase?: "held" | "parking" | "returning";
   /** Hand-owned shell translation in stage coordinates. Ignored for autonomous movement. */
   readonly translateX: number;
-  /**
-   * Raw hand-owned vertical translation. It never affects scalar navigation or target identity;
-   * physical exposure continuously routes pile bodies through their safe paint crossover.
-   */
+  /** Raw hand-owned vertical translation; it never affects scalar target or pile geometry. */
   readonly translateY: number;
   /**
    * Bounded settlement of the shell the hand was holding: `0` is the exact frame it let go and `1`
@@ -1011,36 +1008,87 @@ function moveDirectPose(
 }
 
 /**
- * Carries the card already exposed beneath the held source out of a reversing exchange.
+ * Carries the canonical Direct under-card through a scalar-only physical depth exchange.
  *
- * Direct has one canonical under-card: the forward neighbour. When the opposite neighbour becomes
- * the target, this body remains the pile's paint owner until a lateral detour has carried it clear
- * of the complete pile. It changes depth there, then returns behind the new target. Reversing the
- * scalar retraces the same path, so neither direction nor a target identity can exchange material
- * while overlapping bodies stand still.
+ * The backward target begins behind this body, so the two cannot exchange paint while the held
+ * source is absent. The under-card first recedes without losing opacity, then travels beyond the
+ * whole pile while physically small. It changes depth only there, returns inside the target, and
+ * finally expands into its destination slot. The route is continuous, reversible, and independent
+ * of raw hand Y.
  */
 function moveDirectNeutralCover(
   pose: MutableStackedDeckPose,
   destination: StackedDeckPose,
+  cover: StackedDeckPose,
   progress: number,
   itemCount: number,
   tuning: StackedDeckTuning,
 ): void {
   const sourceLayer = pose.layer;
   const side = Math.sign(pose.translateX || destination.translateX || 1);
-  movePoseGeometry(pose, destination, progress);
-  pose.translateX +=
-    side * wholePileClearSeparation(itemCount, tuning) * 4 * progress * (1 - progress);
-  // Both directions cross this point at the same geometry. The detour clears the complete pile at
-  // the midpoint, so this is a depth handoff between bodies that share no pixel, not a threshold
-  // standing in for one.
+  // Small enough that the opaque body can leave the compact pile without sweeping a card-sized
+  // material face across it, but deliberately non-zero: this is recession, never hiding.
+  const clearScale = Math.min(pose.scale, (2 * tuning.pileOffsetX) / tuning.cardWidth);
+
+  Object.assign(projectionDestinationPose, pose);
+  movePoseGeometry(projectionDestinationPose, destination, PILE_OCCLUSION_ENTER);
+  projectionDestinationPose.scale = clearScale;
+
+  Object.assign(shufflePairPose, projectionDestinationPose);
+  shufflePairPose.translateX = side * wholePileClearSeparation(itemCount, tuning);
+
+  if (progress <= PILE_OCCLUSION_ENTER) {
+    movePoseGeometry(pose, destination, progress);
+    pose.scale = mix(pose.scale, clearScale, smoothstep(progress / PILE_OCCLUSION_ENTER));
+  } else if (progress <= AUTHORITY_MIDPOINT) {
+    Object.assign(pose, projectionDestinationPose);
+    movePoseGeometry(
+      pose,
+      shufflePairPose,
+      smoothstep((progress - PILE_OCCLUSION_ENTER) / (AUTHORITY_MIDPOINT - PILE_OCCLUSION_ENTER)),
+    );
+  } else if (progress <= PILE_OCCLUSION_EXIT) {
+    Object.assign(pose, shufflePairPose);
+    setOccludedPilePose(occludedPilePose, cover);
+    movePoseGeometry(
+      pose,
+      occludedPilePose,
+      smoothstep((progress - AUTHORITY_MIDPOINT) / (PILE_OCCLUSION_EXIT - AUTHORITY_MIDPOINT)),
+    );
+  } else {
+    setOccludedPilePose(pose, cover);
+    movePoseGeometry(
+      pose,
+      destination,
+      smoothstep((progress - PILE_OCCLUSION_EXIT) / (1 - PILE_OCCLUSION_EXIT)),
+    );
+  }
+
   pose.layer = progress < AUTHORITY_MIDPOINT ? sourceLayer + 1 : destination.layer;
+}
+
+/** Continuous normalized inset of the deck centre inside one transformed card body. */
+function directCentreCoverInset(pose: StackedDeckPose, tuning: StackedDeckTuning): number {
+  if (!pose.visible || pose.opacity <= 0 || pose.scale <= 0) return 0;
+  const radians = (-pose.rotate * Math.PI) / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const localX = (-pose.translateX * cosine + pose.translateY * sine) / pose.scale;
+  const localY = (-pose.translateX * sine - pose.translateY * cosine) / pose.scale;
+  return clamp(
+    1 -
+      Math.max(
+        Math.abs(localX) / (tuning.cardWidth / 2),
+        Math.abs(localY) / (tuning.cardHeight / 2),
+      ),
+    0,
+    1,
+  );
 }
 
 /**
  * Projects Direct from one stable interaction origin. Scalar traversal alone selects the target
- * and ring endpoints; raw Y only expresses how much physical clearance the opaque pile needs while
- * moving between its ordinary covered route and the same exposed-safe route.
+ * and every non-held pose; the hand-owned shell alone reads the raw two-axis translation.
  */
 function setDirectExchange(
   output: MutableStackedDeckFrame,
@@ -1069,14 +1117,11 @@ function setDirectExchange(
   // whatever it last painted, and the deck reads as frozen rather than as broken — so a settlement
   // that is not a number is the release frame rather than a shell nothing can move again.
   const settlement = clamp(projection.settlement, 0, 1) || 0;
-  // A Direct interaction origin is the neutral top pose: unit scale, zero rotation. Its exact
-  // vertical centre-clear boundary is therefore half the configured card height.
-  const pileExposure =
+  /** Distance at which the outgoing exchange pair shares no pixel. */
+  const clearSeparation =
     phase === undefined
-      ? 0
-      : Math.min((2 * Math.abs(projection.translateY)) / tuning.cardHeight, 1);
-  /** Distance between this deck's card centres at which their bodies share no pixel. */
-  const clearSeparation = tuning.cardWidth + CROSSOVER_CLEARANCE;
+      ? wholePileClearSeparation(itemCount, tuning)
+      : tuning.cardWidth + CROSSOVER_CLEARANCE;
   if (targetIndex !== null) {
     const target = output.poses[targetIndex]!;
     const targetSourceLayer = target.layer;
@@ -1099,12 +1144,9 @@ function setDirectExchange(
     if (reveal > TRAVERSAL_EPSILON) {
       // Never downward: a target that is also the shell a previous release is still carrying is
       // already above the deck, and promotion cannot be a reason to drop it under the deck's top.
-      // The canonical under-card already owns the exposed pile. The opposite target earns that
-      // depth only after the under-card's detour has carried it clear of the complete pile.
-      const targetOwnsPaint =
-        pileExposure < AUTHORITY_MIDPOINT ||
-        targetIndex === neutralCoverIndex ||
-        reveal >= AUTHORITY_MIDPOINT;
+      // The canonical under-card already owns the pile. The opposite target earns that depth only
+      // after the under-card's scalar route has carried it physically clear.
+      const targetOwnsPaint = targetIndex === neutralCoverIndex || reveal >= AUTHORITY_MIDPOINT;
       target.layer = targetOwnsPaint ? Math.max(target.layer, TOP_LAYER) : targetSourceLayer;
       target.role = reveal < 1 - TRAVERSAL_EPSILON ? "target" : "top";
     }
@@ -1181,56 +1223,35 @@ function setDirectExchange(
     applyLandingRelease(output, landings, outgoing, targetLanding, tuning);
   }
   const neutralCoverIndex = resolveStackedDeckNeighbor(projection.originIndex, 1, itemCount);
+  const targetNeedsClearCrossover = targetIndex !== neutralCoverIndex;
+  // An unfinished target landing is an independent moving body, not a choreography switch. Keep
+  // the pile at its source ring until that body physically covers the deck centre, then admit the
+  // scalar route in proportion to the cover it has actually established. Normalizing by the exact
+  // scalar target pose makes settlement one equal to a frame with no landing record.
+  const targetDestinationInset = directCentreCoverInset(landingDeckPose, tuning);
+  const targetAvailability =
+    targetLanding === undefined
+      ? 1
+      : smoothstep(
+          clamp(
+            directCentreCoverInset(target, tuning) /
+              Math.max(targetDestinationInset, Number.EPSILON),
+            0,
+            1,
+          ),
+        );
+  const pileProgress = reveal * targetAvailability;
   for (let index = 0; index < itemCount; index += 1) {
     if (index === projection.originIndex || index === targetIndex) continue;
     const pose = output.poses[index]!;
     setRingPose(resetPose(directDestinationPose), targetIndex, index, itemCount, tuning);
-    Object.assign(projectionDestinationPose, pose);
-    Object.assign(shufflePairPose, pose);
-    const sourceSlot = signedRingSlot(
-      resolveStackedDeckDepth(projection.originIndex, index, itemCount),
-      itemCount,
-    );
-    const destinationSlot = signedRingSlot(
-      resolveStackedDeckDepth(targetIndex, index, itemCount),
-      itemCount,
-    );
-    if (sourceSlot * destinationSlot < 0) {
-      movePileShell(projectionDestinationPose, directDestinationPose, landingDeckPose, reveal);
-      if (reveal > TRAVERSAL_EPSILON && reveal < AUTHORITY_MIDPOINT) {
-        projectionDestinationPose.layer = TARGET_LAYER - itemCount * PILE_LAYER_STEP;
-      }
-    } else {
-      moveDirectPose(projectionDestinationPose, directDestinationPose, reveal);
+    if (targetNeedsClearCrossover && index === neutralCoverIndex) {
+      moveDirectNeutralCover(pose, directDestinationPose, target, pileProgress, itemCount, tuning);
+      continue;
     }
-
-    const neutralCover = index === neutralCoverIndex;
-    if (neutralCover) {
-      moveDirectNeutralCover(shufflePairPose, directDestinationPose, reveal, itemCount, tuning);
-      Object.assign(occludedPilePose, shufflePairPose);
-      const side = Math.sign(
-        projectionDestinationPose.translateX || directDestinationPose.translateX,
-      );
-      occludedPilePose.translateX = side * wholePileClearSeparation(itemCount, tuning);
-    } else {
-      // A subordinate shell changes depth only while contained by the target body that will
-      // actually render this frame. A landing's path, not its record, is the physical cover.
-      movePileShell(shufflePairPose, directDestinationPose, target, reveal);
-      setOccludedPilePose(occludedPilePose, target);
-    }
-
-    // Raw Y follows one pose field through a clear/contained crossover. Paint authority changes
-    // there because the relevant bodies share no exposed pixel, never because a boolean changed.
-    const crossed = pileExposure >= AUTHORITY_MIDPOINT;
-    Object.assign(pose, crossed ? occludedPilePose : projectionDestinationPose);
-    movePoseGeometry(
-      pose,
-      crossed ? shufflePairPose : occludedPilePose,
-      smoothstep(crossed ? pileExposure * 2 - 1 : pileExposure * 2),
-    );
-    const authority = crossed ? shufflePairPose : projectionDestinationPose;
-    pose.layer = authority.layer;
-    pose.role = authority.role;
+    // Every remaining subordinate shell enters the target's footprint before changing depth, then
+    // emerges toward the exact destination slot. Neither path reads the source's raw Y.
+    movePileShell(pose, directDestinationPose, target, pileProgress);
   }
   return targetLanding?.itemIndex;
 }
@@ -1300,7 +1321,10 @@ function applyLandingRelease(
   const lean = tuning.cardHeight * Math.sin(Math.abs(tuning.topRotate) * (Math.PI / 180));
   const bodySeparation = clearSeparation + lean;
   const pileSeparation = wholePileClearSeparation(output.poses.length, tuning) + lean;
-  const beneathPile = landingDeckPose.role === "hidden";
+  // A landing that the active exchange is still presenting as its target also has to pass the
+  // pile before it can take that target's depth. The scalar pile waits for the landing below, but
+  // the landing's own airborne-to-target paint exchange must already be safe on its own path.
+  const beneathPile = landingDeckPose.role === "hidden" || landingDeckPose.role === "target";
   // The way it was already going: a release extends its own throw to get clear, it does not turn
   // around to do it.
   const side = Math.sign(
@@ -1363,70 +1387,31 @@ function applyLandingReleases(
   }
 }
 
-/** Whether one transformed card body contains the deck's physical centre. */
-function coversDeckCentreAtTranslation(
-  pose: StackedDeckPose,
-  translateX: number,
-  translateY: number,
-  tuning: StackedDeckTuning,
-): boolean {
-  if (!pose.visible || pose.opacity <= 0 || pose.scale <= 0) return false;
-  const radians = (-pose.rotate * Math.PI) / 180;
-  const cosine = Math.cos(radians);
-  const sine = Math.sin(radians);
-  const localX = (-translateX * cosine + translateY * sine) / pose.scale;
-  const localY = (-translateX * sine - translateY * cosine) / pose.scale;
-  return Math.abs(localX) <= tuning.cardWidth / 2 && Math.abs(localY) <= tuning.cardHeight / 2;
-}
-
-function coversDeckCentre(pose: StackedDeckPose, tuning: StackedDeckTuning): boolean {
-  return coversDeckCentreAtTranslation(pose, pose.translateX, pose.translateY, tuning);
-}
-
 /**
- * Gives an exposed symmetric pile one physical centre owner without consulting semantic direction.
+ * Gives every folded Direct depth an explicit physical order without consulting DOM order.
  *
- * Folded slots at equal distance deliberately share depth while a top body covers them. A held
- * source can leave the centre vertically, so neutral is not evidence that the tie is covered. The
- * forward ring neighbour is the canonical under-card; remaining ties follow fixed source-ring
- * proximity and orientation. Direction may reverse independently while this paint owner remains a
- * physical body whose edge has to move before another material can replace it.
+ * Folded slots at equal distance deliberately share a base depth. Direct cannot assume its held
+ * source covers those ties, so alternating persistent source-ring depths receive one sub-rank for
+ * the interaction's lifetime. Adjacent source and destination folds are bipartite, making this one
+ * stable ordering sufficient for either directed neighbour. It depends on neither target, raw hand
+ * Y, current coverage, nor landing-record lifetime; the scalar choreography remains responsible for
+ * carrying a shell clear or beneath a cover before its base depth changes.
  */
-function ensureDirectCentreOwner(
+function ensureDirectPaintOrder(
   output: MutableStackedDeckFrame,
   projection: StackedDeckDirectProjection,
-  tuning: StackedDeckTuning,
 ): void {
   if (output.poses.length < 2) return;
-  let frontLayer = Number.NEGATIVE_INFINITY;
-  let frontCount = 0;
-  let ownerIndex = -1;
-  let ownerRank = Number.NEGATIVE_INFINITY;
-  for (let index = 0; index < output.poses.length; index += 1) {
-    const pose = output.poses[index]!;
-    if (!coversDeckCentre(pose, tuning)) continue;
-    if (pose.layer > frontLayer) {
-      frontLayer = pose.layer;
-      frontCount = 1;
-      ownerIndex = index;
-      ownerRank = Number.NEGATIVE_INFINITY;
-    } else if (pose.layer === frontLayer) {
-      frontCount += 1;
-    } else {
-      continue;
-    }
-    const slot = signedRingSlot(
-      resolveStackedDeckDepth(projection.originIndex, index, output.poses.length),
-      output.poses.length,
-    );
-    const rank = -Math.abs(slot) * 2 + (slot > 0 ? 1 : 0);
-    if (rank > ownerRank) {
-      ownerIndex = index;
-      ownerRank = rank;
-    }
+  if (projection.phase === undefined && Math.abs(projection.signedTravel) <= TRAVERSAL_EPSILON) {
+    return;
   }
-  if (frontCount > 1 && frontLayer < TARGET_LAYER && ownerIndex >= 0) {
-    output.poses[ownerIndex]!.layer = frontLayer + 1;
+  if (Math.abs(projection.signedTravel) >= 1 - TRAVERSAL_EPSILON) return;
+  for (let index = 0; index < output.poses.length; index += 1) {
+    if (index === projection.originIndex) continue;
+    const pose = output.poses[index]!;
+    if (!pose.visible || pose.opacity <= 0 || pose.layer >= TARGET_LAYER) continue;
+    const depth = resolveStackedDeckDepth(projection.originIndex, index, output.poses.length);
+    if (depth % 2 === 1) pose.layer += 1;
   }
 }
 
@@ -1527,6 +1512,6 @@ export function resolveStackedDeckFrame(
       resolvedDirectLandingIndex,
     );
   }
-  if (direct !== undefined) ensureDirectCentreOwner(output, direct, options.tuning);
+  if (direct !== undefined) ensureDirectPaintOrder(output, direct);
   return output;
 }

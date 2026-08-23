@@ -243,6 +243,7 @@ describe("StackedDeck Direct held reversal", () => {
   it("meets the canonical source ring exactly at the neutral crossing", async () => {
     const held = heldDirect();
     held.press();
+    let neutralPileOrder: readonly string[] | undefined;
 
     for (const approach of [
       [0.6, 0.3, 0.02, 0],
@@ -253,7 +254,12 @@ describe("StackedDeck Direct held reversal", () => {
       const deck = held.deck;
       expect(deck.physicalIndex).toBe(0);
       expect(geometry(deck.frame.poses)).toEqual(held.rest.geometry);
-      expect(paintOrder(deck.frame.poses)).toEqual(held.rest.paintOrder);
+      const pileOrder = paintOrder(
+        deck.frame.poses.filter((_pose, index) => index !== held.originIndex),
+      );
+      neutralPileOrder ??= pileOrder;
+      expect(pileOrder).toEqual(neutralPileOrder);
+      expect(pileOrder.some((order) => order.includes("="))).toBe(false);
     }
     held.unmount();
   });
