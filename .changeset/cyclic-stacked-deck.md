@@ -28,6 +28,11 @@ but the exposed under-card moves clear of the complete pile before changing dept
 shells change depth only under physical occlusion; scalar neutral no longer assumes the source is
 covering that handoff.
 
+Direct now maps raw-Y exposure through a continuous clear/contained crossover instead of selecting
+between two pile choreographies. A directed target that is still landing is projected first on its
+own continuous clock and becomes the actual physical cover for dependent shells, so reaching
+settlement and retiring the record cannot switch the deck between two pose fields.
+
 A shell that is still in the air is a presentation until it lands. It stays visible and keeps
 travelling, but the deck does not offer it: an exchange is measured from a card that is physically
 covering the pile it hands depth to, and a released shell is covering nothing. So it can be neither

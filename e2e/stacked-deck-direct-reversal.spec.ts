@@ -256,6 +256,22 @@ function exposedFailureReport(frames: readonly BrowserFrame[], violations: reado
   );
 }
 
+function largestInternalPoseJump(before: BrowserFrame, after: BrowserFrame, sourceIndex: number) {
+  const radius = Math.hypot(before.cardWidth, before.poses[sourceIndex]!.height) / 2;
+  return Math.max(
+    0,
+    ...before.poses.map((pose, index) => {
+      if (index === sourceIndex) return 0;
+      const next = after.poses[index]!;
+      return Math.max(
+        Math.hypot(next.translateX - pose.translateX, next.translateY - pose.translateY),
+        Math.abs(next.scale - pose.scale) * radius,
+        Math.abs(next.rotate - pose.rotate) * (Math.PI / 180) * radius,
+      );
+    }),
+  );
+}
+
 test("one held Direct reversal traces a single physical path through neutral", async ({ page }) => {
   const stage = viewport(page);
   const rests = await openReversal(page, 2);
@@ -344,6 +360,78 @@ test("a reversing hand keeps its grip on the card in both axes", async ({ page }
     await finishPointer(page, held.origin, 0, held.elapsedMs + 80, "pointercancel");
   }
   await expectCarouselAt(stage, STACKED_DECK_IDS[2]!);
+});
+
+test("Direct poses remain continuous across the exact raw-Y exposure boundary", async ({
+  page,
+}) => {
+  const stage = viewport(page);
+  await page.getByTestId("stacked-deck-exchange-direct").click();
+  const held = await beginHeldTraversal(page, 3);
+  const initial = await readFrame(page);
+  const source = initial.poses[3]!;
+  const radians = (-source.rotate * Math.PI) / 180;
+  const horizontalFactor = Math.abs(Math.sin(radians));
+  const verticalFactor = Math.abs(Math.cos(radians));
+  const boundary = Math.min(
+    horizontalFactor <= Number.EPSILON
+      ? Number.POSITIVE_INFINITY
+      : (initial.cardWidth * source.scale) / (2 * horizontalFactor),
+    verticalFactor <= Number.EPSILON
+      ? Number.POSITIVE_INFINITY
+      : (source.height * source.scale) / (2 * verticalFactor),
+  );
+  const travel = -0.3;
+  const pointerX = -travel * held.pitch;
+  const frames: BrowserFrame[] = [];
+  const jumps: number[] = [];
+
+  async function capture(x: number, y: number) {
+    held.elapsedMs += 34;
+    await movePointerBy(page, held.origin, x, y, held.elapsedMs);
+    await page.waitForTimeout(16);
+    const frame = captureCentreOwnership(
+      await readFrame(page),
+      source.height,
+      held.origin.pointerId,
+      -x / held.pitch,
+    );
+    expect(frame.poses[3]!.translateX).toBeCloseTo(x, 3);
+    expect(frame.poses[3]!.translateY).toBeCloseTo(y, 3);
+    expect(frame.directProjection?.phase).toBe("held");
+    expect(frame.directProjection?.direction).toBe(-1);
+    expect(frame.directProjection?.targetIndex).toBe(2);
+    frames.push(frame);
+    return frame;
+  }
+
+  try {
+    await capture(pointerX, boundary - 2);
+    for (const epsilon of [1, 0.1, 0.01, 0.001]) {
+      const below = await capture(pointerX, boundary - epsilon);
+      const above = await capture(pointerX, boundary + epsilon);
+      jumps.push(largestInternalPoseJump(below, above, 3));
+      const belowAgain = await capture(pointerX, boundary - epsilon);
+      jumps.push(largestInternalPoseJump(above, belowAgain, 3));
+    }
+    for (const epsilon of [1, 0.1, 0.01, 0.001]) {
+      const below = await capture(pointerX - epsilon, boundary - epsilon);
+      const above = await capture(pointerX + epsilon, boundary + epsilon);
+      jumps.push(largestInternalPoseJump(below, above, 3));
+      const belowAgain = await capture(pointerX - epsilon, boundary - epsilon);
+      jumps.push(largestInternalPoseJump(above, belowAgain, 3));
+    }
+
+    expect(
+      jumps.at(-1),
+      `smallest diagonal crossing retained a ${jumps.at(-1)}px pose jump`,
+    ).toBeLessThanOrEqual(0.05);
+    const violations = exposedCentrePaintViolations(frames);
+    expect(violations, exposedFailureReport(frames, violations)).toEqual([]);
+  } finally {
+    await finishPointer(page, held.origin, 0, held.elapsedMs + 80, "pointercancel");
+  }
+  await expectCarouselAt(stage, STACKED_DECK_IDS[3]!);
 });
 
 test("an exposed held two-axis reversal changes centre material only by physical motion", async ({

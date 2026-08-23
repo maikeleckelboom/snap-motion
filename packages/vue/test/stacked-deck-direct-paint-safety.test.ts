@@ -152,6 +152,23 @@ interface Violation {
   y: number;
 }
 
+interface PoseJump {
+  readonly distance: number;
+  readonly rotateDistance: number;
+  readonly scaleDistance: number;
+  readonly shellIndex: number;
+  readonly translateDistance: number;
+}
+
+interface ContinuityProbe {
+  readonly after: Frame;
+  readonly before: Frame;
+  readonly epsilon: number;
+  readonly jump: PoseJump;
+  readonly kind: "diagonal" | "landing-retirement" | "vertical";
+  readonly pointerDelta: number;
+}
+
 /**
  * The deck configuration one press found, recorded at the frame it pressed on.
  *
@@ -231,6 +248,56 @@ function paintViolations(frames: readonly Frame[], width: number, height: number
     }
   }
   return [...found.values()];
+}
+
+/** Positive raw-Y travel at which this transformed card ceases to contain the deck centre. */
+function verticalCentreBoundary(pose: Pose, width: number, height: number) {
+  const radians = (-pose.rotate * Math.PI) / 180;
+  const horizontalFactor = Math.abs(Math.sin(radians));
+  const verticalFactor = Math.abs(Math.cos(radians));
+  const horizontalBoundary =
+    horizontalFactor <= Number.EPSILON
+      ? Number.POSITIVE_INFINITY
+      : (width * pose.scale) / (2 * horizontalFactor);
+  const verticalBoundary =
+    verticalFactor <= Number.EPSILON
+      ? Number.POSITIVE_INFINITY
+      : (height * pose.scale) / (2 * verticalFactor);
+  return Math.min(horizontalBoundary, verticalBoundary);
+}
+
+/** Largest physical pose change, with scale and rotation converted to card-corner displacement. */
+function largestPoseJump(
+  before: Frame,
+  after: Frame,
+  width: number,
+  height: number,
+  excludedIndices: readonly number[] = [],
+): PoseJump {
+  const radius = Math.hypot(width, height) / 2;
+  let largest: PoseJump = {
+    distance: 0,
+    rotateDistance: 0,
+    scaleDistance: 0,
+    shellIndex: -1,
+    translateDistance: 0,
+  };
+  for (let index = 0; index < before.poses.length; index += 1) {
+    if (excludedIndices.includes(index)) continue;
+    const previous = before.poses[index]!;
+    const current = after.poses[index]!;
+    const translateDistance = Math.hypot(
+      current.translateX - previous.translateX,
+      current.translateY - previous.translateY,
+    );
+    const scaleDistance = Math.abs(current.scale - previous.scale) * radius;
+    const rotateDistance = Math.abs(current.rotate - previous.rotate) * (Math.PI / 180) * radius;
+    const distance = Math.max(translateDistance, scaleDistance, rotateDistance);
+    if (distance > largest.distance) {
+      largest = { distance, rotateDistance, scaleDistance, shellIndex: index, translateDistance };
+    }
+  }
+  return largest;
 }
 
 /**
@@ -664,6 +731,62 @@ function firstViolationReport(
   );
 }
 
+function continuityReport(
+  boundary: number,
+  probes: readonly ContinuityProbe[],
+  frames: readonly Frame[],
+  violations: readonly Violation[],
+) {
+  const frameRecord = (frame: Frame) => ({
+    centreOwnerId: frame.centreOwnerId,
+    interactionDirection: frame.interactionDirection,
+    landings: frame.landings,
+    phase: frame.phase,
+    pointerId: frame.pointerId,
+    pointerOwned: frame.pointerOwned,
+    projectionDirection: frame.projectionDirection,
+    shells: frame.poses.map((pose, index) => ({ id: screens[index]?.id ?? `${index}`, ...pose })),
+    signedTravel: frame.signedTravel,
+    sourceX: frame.sourceX,
+    sourceY: frame.sourceY,
+    targetIndex: frame.targetIndex,
+    tick: frame.tick,
+  });
+  return JSON.stringify(
+    {
+      boundary,
+      firstPaintViolation: violations[0],
+      firstPaintViolationFrames:
+        violations[0] === undefined
+          ? []
+          : frames
+              .filter(
+                (frame) =>
+                  frame.tick >= violations[0]!.fromTick - 1 &&
+                  frame.tick <= violations[0]!.toTick + 1,
+              )
+              .map(frameRecord),
+      probes: probes.map((probe) => ({
+        after: frameRecord(probe.after),
+        before: frameRecord(probe.before),
+        epsilon: probe.epsilon,
+        jump: {
+          ...probe.jump,
+          shellId:
+            probe.jump.shellIndex < 0
+              ? null
+              : (screens[probe.jump.shellIndex]?.id ?? `${probe.jump.shellIndex}`),
+        },
+        kind: probe.kind,
+        pointerDelta: probe.pointerDelta,
+      })),
+      retirementFrames: frames.slice(-4).map(frameRecord),
+    },
+    null,
+    2,
+  );
+}
+
 /** One gesture: press whatever the deck offers, follow a hand path, let go, let it settle. */
 async function gesture(path: readonly number[], settleFrames: number) {
   const surface = deck();
@@ -676,6 +799,229 @@ async function gesture(path: readonly number[], settleFrames: number) {
 }
 
 describe("StackedDeck Direct rendered material", () => {
+  it("keeps held Direct poses continuous across the raw-Y exposure boundary", async () => {
+    const surface = deck(screens, "d");
+    expect(surface.settledId(), "the exposure seam did not start on team").toBe("d");
+    expect(await surface.press(), "the team shell was not interactive").toBe(3);
+    await surface.step();
+
+    const tuning = surface.tuning();
+    const held = surface.frames.at(-1)!;
+    const boundary = verticalCentreBoundary(held.poses[3]!, tuning.cardWidth, tuning.cardHeight);
+    const travel = -0.3;
+    const pointerX = -travel * tuning.motionPitch;
+    const probes: ContinuityProbe[] = [];
+    const epsilons = [1, 0.1, 0.01, 0.001] as const;
+
+    const paintSequences: Frame[][] = [];
+    const seamFrames: Frame[] = [];
+    const sampleVerticalSeam = async (seam: number) => {
+      await surface.drag2d(pointerX, seam - 2, 3);
+      const seamStart = surface.frames.length - 1;
+      for (const epsilon of epsilons) {
+        const below = await surface.drag2d(pointerX, seam - epsilon, 2);
+        const above = await surface.drag2d(pointerX, seam + epsilon, 2);
+        probes.push({
+          after: above,
+          before: below,
+          epsilon,
+          jump: largestPoseJump(below, above, tuning.cardWidth, tuning.cardHeight, [3]),
+          kind: "vertical",
+          pointerDelta: epsilon * 2,
+        });
+        const belowAgain = await surface.drag2d(pointerX, seam - epsilon, 2);
+        probes.push({
+          after: belowAgain,
+          before: above,
+          epsilon,
+          jump: largestPoseJump(above, belowAgain, tuning.cardWidth, tuning.cardHeight, [3]),
+          kind: "vertical",
+          pointerDelta: epsilon * 2,
+        });
+      }
+      const sequence = surface.frames.slice(seamStart);
+      paintSequences.push(sequence);
+      seamFrames.push(...sequence);
+    };
+
+    // Each complete crossing stays intact. Distinct seams start their own sampled window so the
+    // oracle never mistakes repositioning between experiments for an infinitesimal input step.
+    await sampleVerticalSeam(boundary);
+    await sampleVerticalSeam(boundary / 2);
+
+    // The same seam under a real diagonal input: X and Y both cross by the same physical epsilon.
+    await surface.drag2d(pointerX - 2, boundary - 2, 3);
+    const diagonalStart = surface.frames.length - 1;
+    for (const epsilon of epsilons) {
+      const belowTravel = travel + epsilon / tuning.motionPitch;
+      const aboveTravel = travel - epsilon / tuning.motionPitch;
+      const below = await surface.drag2d(-belowTravel * tuning.motionPitch, boundary - epsilon, 2);
+      const above = await surface.drag2d(-aboveTravel * tuning.motionPitch, boundary + epsilon, 2);
+      probes.push({
+        after: above,
+        before: below,
+        epsilon,
+        jump: largestPoseJump(below, above, tuning.cardWidth, tuning.cardHeight, [3]),
+        kind: "diagonal",
+        pointerDelta: Math.hypot(epsilon * 2, epsilon * 2),
+      });
+      const belowAgain = await surface.drag2d(
+        -belowTravel * tuning.motionPitch,
+        boundary - epsilon,
+        2,
+      );
+      probes.push({
+        after: belowAgain,
+        before: above,
+        epsilon,
+        jump: largestPoseJump(above, belowAgain, tuning.cardWidth, tuning.cardHeight, [3]),
+        kind: "diagonal",
+        pointerDelta: Math.hypot(epsilon * 2, epsilon * 2),
+      });
+    }
+    const diagonalFrames = surface.frames.slice(diagonalStart);
+    paintSequences.push(diagonalFrames);
+    seamFrames.push(...diagonalFrames);
+
+    const violations = paintSequences.flatMap((frames) =>
+      paintViolations(frames, tuning.cardWidth, tuning.cardHeight),
+    );
+    const continuityFailures: string[] = [];
+    for (const kind of ["vertical", "diagonal"] as const) {
+      const maxima = epsilons.map((epsilon) =>
+        Math.max(
+          ...probes
+            .filter((probe) => probe.kind === kind && probe.epsilon === epsilon)
+            .map((probe) => probe.jump.distance),
+        ),
+      );
+      for (let index = 1; index < maxima.length; index += 1) {
+        const previous = maxima[index - 1]!;
+        const current = maxima[index]!;
+        if (previous > 0.05 && current >= previous * 0.5) {
+          continuityFailures.push(`${kind} pose jump did not converge: ${previous} -> ${current}`);
+        }
+      }
+      if (maxima.at(-1)! > 0.05) {
+        continuityFailures.push(`${kind} retained a ${maxima.at(-1)}px infinitesimal pose jump`);
+      }
+    }
+
+    const diagnostic = continuityReport(boundary, probes, seamFrames, violations);
+    await surface.cancel();
+    const result = surface.finish();
+    expect(result.settledId, "pointercancel changed the semantic card").toBe("d");
+    expect(
+      seamFrames.every(
+        (frame) =>
+          frame.phase === "held" &&
+          frame.controllerPhase === "dragging" &&
+          frame.pointerOwned &&
+          frame.pointerInteractionActive &&
+          frame.targetIndex === 2 &&
+          frame.projectionDirection === -1,
+      ),
+      "the exposure probe left the one held team-to-map interaction",
+    ).toBe(true);
+    expect(
+      contains(
+        { ...held.poses[3]!, translateX: 0, translateY: boundary - 0.001 },
+        0,
+        0,
+        tuning.cardWidth,
+        tuning.cardHeight,
+      ),
+      "the derived lower epsilon was already vertically clear",
+    ).toBe(true);
+    expect(
+      contains(
+        { ...held.poses[3]!, translateX: 0, translateY: boundary + 0.001 },
+        0,
+        0,
+        tuning.cardWidth,
+        tuning.cardHeight,
+      ),
+      "the derived upper epsilon did not cross the vertical boundary",
+    ).toBe(false);
+    if (continuityFailures.length > 0 || violations.length > 0) {
+      throw new Error(`${continuityFailures.join("\n")}\n${diagnostic}`);
+    }
+    expect(continuityFailures).toEqual([]);
+    expect(violations).toEqual([]);
+  }, 120_000);
+
+  it("keeps a vertically exposed held deck continuous when its target landing retires", async () => {
+    // Throw map into the team pile, then immediately take team and reverse toward that still-airborne
+    // map shell. The same pointer remains stationary while map reaches its exact slot and its record
+    // is retired on the following RAF.
+    const surface = deck(screens, "c");
+    expect(await surface.press(), "map was not the initial source").toBe(2);
+    await surface.step();
+    await surface.drag(-560);
+    await surface.release();
+    await surface.step(2);
+    expect(await surface.press(), "team did not take over the release").toBe(3);
+    await surface.step();
+    expect(
+      surface.landings().some((landing) => landing.itemIndex === 2),
+      "map was not an unfinished landing",
+    ).toBe(true);
+
+    const tuning = surface.tuning();
+    const held = surface.frames.at(-1)!;
+    const boundary = verticalCentreBoundary(held.poses[3]!, tuning.cardWidth, tuning.cardHeight);
+    const travel = -0.3;
+    await surface.drag2d(-travel * tuning.motionPitch, boundary + 24, 3);
+    const seamStart = surface.frames.length - 1;
+    for (
+      let frame = 0;
+      frame < 32 && surface.landings().some((landing) => landing.itemIndex === 2);
+      frame += 1
+    ) {
+      await surface.step();
+    }
+
+    const seamFrames = surface.frames.slice(seamStart);
+    const retirementAt = seamFrames.findIndex(
+      (frame, index) =>
+        index > 0 &&
+        seamFrames[index - 1]!.landings.some((landing) => landing.itemIndex === 2) &&
+        !frame.landings.some((landing) => landing.itemIndex === 2),
+    );
+    expect(
+      retirementAt,
+      "the target landing never retired under the held interaction",
+    ).toBeGreaterThan(0);
+    const before = seamFrames[retirementAt - 1]!;
+    const after = seamFrames[retirementAt]!;
+    const jump = largestPoseJump(before, after, tuning.cardWidth, tuning.cardHeight);
+    const probe: ContinuityProbe = {
+      after,
+      before,
+      epsilon: 0,
+      jump,
+      kind: "landing-retirement",
+      pointerDelta: 0,
+    };
+    const violations = paintViolations(seamFrames, tuning.cardWidth, tuning.cardHeight);
+    const diagnostic = continuityReport(boundary, [probe], seamFrames, violations);
+    await surface.cancel();
+    surface.finish();
+
+    expect(before.landings.find((landing) => landing.itemIndex === 2)?.settlement).toBe(1);
+    expect(before.phase).toBe("held");
+    expect(after.phase).toBe("held");
+    expect(before.targetIndex).toBe(2);
+    expect(after.targetIndex).toBe(2);
+    expect(before.pointerId).toBe(after.pointerId);
+    expect(before.pointerOwned && after.pointerOwned).toBe(true);
+    expect(before.sourceX).toBeCloseTo(after.sourceX, 8);
+    expect(before.sourceY).toBeCloseTo(after.sourceY, 8);
+    if (jump.distance > 0.05 || violations.length > 0) throw new Error(diagnostic);
+    expect(jump.distance).toBeLessThanOrEqual(0.05);
+    expect(violations).toEqual([]);
+  }, 120_000);
+
   it("keeps an exposed held two-axis reversal physically continuous", async () => {
     const surface = deck(screens, "d");
     expect(surface.settledId(), "the regression did not start on team").toBe("d");

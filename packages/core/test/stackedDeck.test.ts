@@ -198,6 +198,28 @@ function poseGeometry(pose: StackedDeckPose) {
   };
 }
 
+/** Largest corner displacement retained by any persistent shell between two projection inputs. */
+function largestPoseDisplacement(
+  before: readonly StackedDeckPose[],
+  after: readonly StackedDeckPose[],
+  tuning: StackedDeckTuning,
+  excludedIndices: readonly number[] = [],
+) {
+  const radius = Math.hypot(tuning.cardWidth, tuning.cardHeight) / 2;
+  return Math.max(
+    0,
+    ...before.map((pose, index) => {
+      if (excludedIndices.includes(index)) return 0;
+      const next = after[index]!;
+      return Math.max(
+        Math.hypot(next.translateX - pose.translateX, next.translateY - pose.translateY),
+        Math.abs(next.scale - pose.scale) * radius,
+        Math.abs(next.rotate - pose.rotate) * (Math.PI / 180) * radius,
+      );
+    }),
+  );
+}
+
 /**
  * Relative paint order, which is the only thing a layer number means. Reported pair by pair so a
  * renumbering that preserves every relative order reads as the same order, because it is one.
@@ -1508,6 +1530,81 @@ describe("Direct stacked deck projection", () => {
       // of proving that an exposed pile did not exchange material when direction changed.
       expectEveryPaintSwapSafe(frames);
     }
+  });
+
+  it("keeps every Direct pose continuous across the exact vertical exposure boundary", () => {
+    const originIndex = 3;
+    const travel = -0.3;
+    const direction = -1;
+    const boundary = WIDE_TUNING.cardHeight / 2;
+    const active = segment(originIndex, direction, Math.abs(travel));
+    const jumps: number[] = [];
+    const frameSequences: { poses: readonly StackedDeckPose[]; progress: number }[][] = [];
+
+    for (const seam of [boundary / 2, boundary]) {
+      const frames: { poses: readonly StackedDeckPose[]; progress: number }[] = [];
+      const resolve = (translateY: number) => {
+        const poses = resolveDirectFrame(
+          active,
+          directProjection(originIndex, travel, {
+            direction,
+            phase: "held",
+            targetIndex: resolveStackedDeckNeighbor(originIndex, direction, 5),
+            translateX: -travel * WIDE_TUNING.motionPitch,
+            translateY,
+          }),
+        ).poses.map((pose) => ({ ...pose }));
+        frames.push({ poses, progress: translateY });
+        return poses;
+      };
+      for (const epsilon of [1, 0.1, 0.01, 0.001]) {
+        const below = resolve(seam - epsilon);
+        const above = resolve(seam + epsilon);
+        jumps.push(largestPoseDisplacement(below, above, WIDE_TUNING, [originIndex]));
+        const belowAgain = resolve(seam - epsilon);
+        jumps.push(largestPoseDisplacement(above, belowAgain, WIDE_TUNING, [originIndex]));
+      }
+      frameSequences.push(frames);
+    }
+
+    expect
+      .soft(
+        jumps.at(-1),
+        `an infinitesimal raw-Y crossing retained a ${jumps.at(-1)}px internal pose jump`,
+      )
+      .toBeLessThanOrEqual(0.05);
+    for (const frames of frameSequences) expectEveryPaintSwapSafe(frames);
+  });
+
+  it("keeps Direct choreography unchanged when a settled target landing record retires", () => {
+    const originIndex = 3;
+    const travel = -0.3;
+    const active = segment(originIndex, -1, Math.abs(travel));
+    const projection = {
+      phase: "held" as const,
+      translateX: -travel * WIDE_TUNING.motionPitch,
+      translateY: WIDE_TUNING.cardHeight / 2 + 24,
+    };
+    const targetIndex = resolveStackedDeckNeighbor(originIndex, -1, 5);
+    const withSettledLanding = resolveDirectFrame(
+      active,
+      directProjection(originIndex, travel, {
+        ...projection,
+        landings: [
+          {
+            itemIndex: targetIndex,
+            releaseOrder: 1,
+            settlement: 1,
+            translateX: -560,
+            translateY: 0,
+          },
+        ],
+      }),
+    );
+    const retired = resolveDirectFrame(active, directProjection(originIndex, travel, projection));
+
+    expect(withSettledLanding.poses.map(poseGeometry)).toEqual(retired.poses.map(poseGeometry));
+    expect(paintOrder(withSettledLanding.poses)).toEqual(paintOrder(retired.poses));
   });
 
   it("keeps interior overdrag attached to one origin and one adjacent destination", () => {
