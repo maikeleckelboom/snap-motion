@@ -2610,3 +2610,124 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
 `,
   );
 });
+
+/**
+ * A hand that gives the deck back releases nothing.
+ *
+ * The two ways a Direct gesture ends are decided by the controller at the frame the pointer goes
+ * up, and this surface's own gesture recogniser publishes its result before that — a browser drains
+ * microtasks between two listeners for one event, so asked then the deck reports no destination at
+ * all. Read there, a release that kept its own card looks exactly like one that gave it up, and the
+ * whole released-shell choreography runs over a card that never left. Only a real browser schedules
+ * those two listeners far enough apart to show it, which is why this lives here.
+ */
+test("Direct unwinds a partial hold that resolves its own origin, releasing nothing", async ({
+  page,
+}) => {
+  const stage = await prepareDirect(page, 2);
+  const pitch = await motionPitch(stage);
+  const card = stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='map']");
+  await expect(card).toHaveAttribute("data-deck-interactive", "true");
+
+  await page.evaluate(() => {
+    const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
+    const traced = window as typeof window & { snapMotionReturnTrace?: unknown[] };
+    const frames: {
+      phase: string;
+      settlement: number;
+      travel: number;
+      landings: number;
+      sourceX: number;
+    }[] = [];
+    traced.snapMotionReturnTrace = frames;
+    const record = () => {
+      const debug = (
+        root as HTMLElement & {
+          snapMotionDirectDebug?: {
+            landings?: readonly unknown[];
+            projection?: {
+              originIndex: number;
+              phase?: string;
+              settlement: number;
+              signedTravel: number;
+            };
+          };
+        }
+      ).snapMotionDirectDebug;
+      const projection = debug?.projection;
+      const shells = [...root.querySelectorAll<HTMLElement>(".screen-chrome")];
+      frames.push({
+        phase: projection?.phase ?? "none",
+        settlement: projection?.settlement ?? 0,
+        travel: projection?.signedTravel ?? 0,
+        landings: debug?.landings?.length ?? 0,
+        sourceX:
+          projection === undefined
+            ? 0
+            : Number(shells[projection.originIndex]?.dataset.translateX ?? 0),
+      });
+      requestAnimationFrame(record);
+    };
+    requestAnimationFrame(record);
+  });
+
+  // Real pointer input, not a dispatched event. A synthetic release from inside one script keeps
+  // that script on the stack, so the microtask checkpoint between the two listeners never happens
+  // and the ordering this test exists for cannot occur. The hand goes out to a third of a pitch and
+  // stops, so the release carries no velocity of its own.
+  const box = (await card.boundingBox())!;
+  const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  for (let step = 1; step <= 8; step += 1) {
+    await page.mouse.move(from.x - (pitch * 0.33 * step) / 8, from.y + step * 5);
+    await page.waitForTimeout(28);
+  }
+  for (let hold = 0; hold < 8; hold += 1) {
+    await page.mouse.move(from.x - pitch * 0.33, from.y + 40);
+    await page.waitForTimeout(40);
+  }
+  await page.mouse.up();
+  await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+  await page.waitForTimeout(120);
+
+  const report = await page.evaluate(() => {
+    const frames = (
+      window as typeof window & {
+        snapMotionReturnTrace?: {
+          phase: string;
+          settlement: number;
+          travel: number;
+          landings: number;
+          sourceX: number;
+        }[];
+      }
+    ).snapMotionReturnTrace!;
+    const held = frames.findIndex((frame) => frame.phase === "held");
+    const after = frames.slice(held < 0 ? 0 : held);
+    return {
+      phases: [...new Set(after.map((frame) => frame.phase))],
+      maxLandings: Math.max(0, ...after.map((frame) => frame.landings)),
+      // A clock of its own is exactly a frame where the presentation advanced and the deck did not.
+      secondClock: after.filter(
+        (frame, index) =>
+          index > 0 &&
+          frame.phase !== "none" &&
+          after[index - 1]!.phase !== "none" &&
+          Math.abs(frame.travel - after[index - 1]!.travel) < 1e-9 &&
+          Math.abs(frame.settlement - after[index - 1]!.settlement) > 1e-9,
+      ).length,
+      finalSourceX: after.at(-1)!.sourceX,
+      returned: after.some((frame) => frame.phase === "returning"),
+    };
+  });
+
+  expect(report.returned, "the release was never recognised as giving the card back").toBe(true);
+  expect(report.phases, "a card that never left was released into the deck").not.toContain(
+    "parking",
+  );
+  expect(report.maxLandings, "a return put a shell in the air").toBe(0);
+  expect(report.secondClock, "the presentation ran on a clock the deck was not on").toBe(0);
+  expect(Math.abs(report.finalSourceX), "the card did not come all the way home").toBeLessThan(0.5);
+  await expectCarouselAt(stage, "map");
+});

@@ -40,21 +40,31 @@ export interface StackedDeckDirectProjection {
   readonly targetIndex: number | null;
   /** Signed interaction-local travel from the origin, before presentation easing. */
   readonly signedTravel: number;
-  /** Pointer lifecycle; omitted autonomous exchanges park directly along scalar travel. */
+  /**
+   * Pointer lifecycle; omitted autonomous exchanges park directly along scalar travel.
+   *
+   * `parking` and `returning` are not two flavours of one event. A hand that keeps the destination
+   * has released a shell into the deck, and that shell finishes on a path and a clock of its own.
+   * A hand that gives the destination back released nothing: the exchange it opened is still the
+   * one on screen, and what follows is that exchange running backwards to the rest it started at.
+   */
   readonly phase?: "held" | "parking" | "returning";
   /** Hand-owned shell translation in stage coordinates. Ignored for autonomous movement. */
   readonly translateX: number;
   /** Raw hand-owned vertical translation; it never affects scalar target or pile geometry. */
   readonly translateY: number;
   /**
-   * Bounded presentation settlement of the released shell: `0` is the exact frame the hand let go
-   * of it and `1` is the exact frame it owns at the end of its release. It stays `0` for as long
-   * as a hand still holds the shell, which has not been released from anything yet.
+   * Bounded settlement of the shell the hand was holding: `0` is the exact frame it let go and `1`
+   * is the exact frame that shell owns at the end. It stays `0` for as long as a hand still holds
+   * it, which has not been let go of at all.
    *
-   * It is owned by the presentation and never derived from remaining logical travel. Logical
-   * navigation can complete a whole pitch while the pointer-locked shell is still hundreds of
-   * pixels from the slot it is parking into, so scalar completion cannot express — and must never
-   * divide — physical parking completion.
+   * What drives it is the lifecycle's to decide, and the two do not agree. A `parking` release is
+   * owned by the presentation and never derived from remaining logical travel: navigation can
+   * complete a whole pitch while the pointer-locked shell is still hundreds of pixels from the slot
+   * it is parking into, so scalar completion cannot express — and must never divide — physical
+   * parking completion. A `returning` exchange is the opposite case, because nothing was released
+   * and there is no second body: the deck's own way back to interaction-local zero is the whole of
+   * the movement, so the shell's vector is exactly what that return has left of it.
    */
   readonly settlement: number;
 }

@@ -354,10 +354,17 @@ export function useStackedDeckComponentMotion<Id extends string>(
       activeId: originId,
       policy: currentConfiguration().releasePolicy,
     })?.id;
-    return chosen ===
-      model.idAt(resolveStackedDeckNeighbor(originIndex, direction, model.itemCount))
-      ? chosen
-      : originId;
+    const target =
+      chosen === model.idAt(resolveStackedDeckNeighbor(originIndex, direction, model.itemCount))
+        ? chosen
+        : originId;
+    // The presentation opens here, on the frame the decision is made, because there is nowhere
+    // later to ask. A browser drains microtasks between two listeners for one event, so the
+    // gesture this surface tracks publishes its result before the controller has even been told
+    // the pointer went up: asked then, the deck still reports no destination at all, and a release
+    // that kept its own card reads as one that gave it up.
+    openDirectRelease(target === originId);
+    return target;
   }
 
   const motion = useCarouselMotion<Id>({
@@ -533,6 +540,8 @@ export function useStackedDeckComponentMotion<Id extends string>(
 
   /** Elapsed fraction of the release in flight, while `releaseSettlement` is running it. */
   let releaseElapsed = 0;
+  /** Interaction-local travel at the frame the hand last moved the shell it is holding. */
+  let heldTravel = 0;
 
   /**
    * The released shell's own settlement, on its own frame budget rather than competing for the one
@@ -644,6 +653,8 @@ export function useStackedDeckComponentMotion<Id extends string>(
     releaseSettlement.pause();
     directProjection.settlement = 0;
     directProjection.translateX = directProjection.translateY = 0;
+    // Paired with the vector it was recorded beside, so they are given up together.
+    heldTravel = 0;
     directProjection.direction = 0;
     directProjection.signedTravel = 0;
     directProjection.targetIndex = null;
@@ -698,7 +709,68 @@ export function useStackedDeckComponentMotion<Id extends string>(
     directProjection.phase = "held";
     directProjection.translateX = deltaX;
     directProjection.translateY = deltaY;
+    // Recorded with the vector it belongs to, because a return gives both of them back together.
+    // The deck's own scalar and the hand's two axes are the same movement seen twice, and pairing
+    // them here is what lets one be expressed as a proportion of the other later.
+    heldTravel = physicalIndex.value;
     triggerRef(state);
+  }
+
+  /**
+   * How far this exchange has come toward the neighbour it named, bounded to the one adjacent
+   * screen it owns. Travel back past the origin is this exchange being given back completely, not
+   * the opposite one beginning, so it reads as nought rather than as negative.
+   */
+  function boundedDirectDistance(travel: number): number {
+    return Math.min(Math.max(travel * directProjection.direction, 0), 1);
+  }
+
+  /**
+   * How much of the held frame a return still has to give back.
+   *
+   * The proportion of its own travel the controller has not yet undone — nought exactly where the
+   * deck reaches its interaction-local zero, and one at the frame the hand let go. Bounded at both
+   * ends, so a spring crossing its own zero rests the shell exactly on the source rather than
+   * carrying it past into the opposite exchange.
+   */
+  function remainingDirectReturn(): number {
+    const released = boundedDirectDistance(heldTravel);
+    if (released <= 0) return 0;
+    return Math.min(1, boundedDirectDistance(directProjection.signedTravel) / released);
+  }
+
+  /**
+   * Ends the hold and opens whatever settles it, from the frame the release was decided on.
+   *
+   * One immutable decision: which shell was let go — the presentation's own record of it, because
+   * the model may already have closed the interaction — where it was, since the raw vector is
+   * already on the projection and is not touched here, and whether the deck kept the destination or
+   * gave it back. Whatever settles it opens in the same statement, so nothing can be projected
+   * between the two.
+   *
+   * Those two answers are not two flavours of one event. Keeping the destination is a release: a
+   * shell was let go into the deck, and it now has a path and a clock of its own to finish on.
+   * Giving it back released nothing — the exchange the hand opened is still the one on screen, and
+   * the controller is already carrying its scalar home — so that unwinds on that one movement
+   * rather than on a second clock beside it.
+   */
+  function openDirectRelease(returnedToOrigin: boolean): void {
+    if (directProjection.phase !== "held") return;
+    if (directProjection.translateX === 0 && directProjection.translateY === 0) {
+      // A shell the hand never moved has no release. Both giving a zero vector back and carrying
+      // it into the pile end at the pose it is already drawn at, so the press ends the
+      // presentation rather than holding the deck through a settlement with nothing in it.
+      clearDirectExchange();
+      return;
+    }
+    directProjection.phase = returnedToOrigin ? "returning" : "parking";
+    directProjection.settlement = 0;
+    releaseElapsed = 0;
+    // Only a release owns the presentation's own settlement. A return keeps it in exactly one
+    // case: no exchange was ever named, so there is nothing for the controller to carry back and
+    // nothing to be a proportion of — only a vector the deck never travelled for. No target is
+    // revealed there, so there is nothing for that clock to disagree with.
+    if (!returnedToOrigin || directProjection.direction === 0) releaseSettlement.resume();
   }
 
   let frameStorage = createStackedDeckFrame(ids.value.length);
@@ -735,6 +807,14 @@ export function useStackedDeckComponentMotion<Id extends string>(
             ? null
             : resolveStackedDeckNeighbor(originIndex, directProjection.direction, itemCount);
       }
+    }
+    // One movement, read off the movement itself. The controller owns the spring carrying this
+    // exchange back to interaction-local zero, so how much of the held frame is left is simply how
+    // much of that travel is left — and the shell's whole two-axis vector is that same proportion
+    // of the vector the hand let go of. Both ends stay exact: the release frame keeps the pointer's
+    // own vector, and the deck's own zero is the source's own rest.
+    if (directProjection.phase === "returning" && directProjection.direction !== 0) {
+      directProjection.settlement = 1 - remainingDirectReturn();
     }
     resolveStackedDeckFrame(
       {
@@ -984,28 +1064,10 @@ export function useStackedDeckComponentMotion<Id extends string>(
     },
     onPointerSample: onDirectPointerSample,
     onResolved(resolution, completed) {
-      if (directProjection.phase === "held") {
-        if (directProjection.translateX === 0 && directProjection.translateY === 0) {
-          // A shell the hand never moved has no release. Both giving a zero vector back and
-          // carrying it into the pile end at the pose it is already drawn at, so the press ends
-          // the presentation rather than holding the deck through a settlement with nothing in it.
-          clearDirectExchange();
-        } else {
-          // One immutable decision, taken from the frame the hand ended on: which shell was
-          // released — the presentation's own record of it, because the model may already have
-          // closed the interaction — where it was, since the raw vector is already on the
-          // projection and is not touched here, and whether the deck kept the destination or gave
-          // it back. The settlement opens in the same statement, so nothing can be projected
-          // between the two.
-          directProjection.phase =
-            motion.targetId.value === model.idAt(directProjection.originIndex)
-              ? "returning"
-              : "parking";
-          directProjection.settlement = 0;
-          releaseElapsed = 0;
-          releaseSettlement.resume();
-        }
-      }
+      // The controller opens the release itself, on the frame it resolves one. Reaching here with
+      // a shell still held means it never resolved one for this gesture — the deck named no
+      // exchange at all — so nothing was given up and there is nothing to give back but a vector.
+      openDirectRelease(true);
       if (completed.cancelled) {
         // A press this surface refused never took the deck, so a cancellation of it has nothing to
         // undo — and undoing it would abort an exchange that press was never part of.
