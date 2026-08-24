@@ -15,10 +15,17 @@ along remaining scalar travel, which can already be finished at the moment the h
 the exact frame it was released on into its exact pile slot, without fading, rebasing, or
 duplication. It keeps the paint order the hand released it with until the two card bodies are
 laterally clear of each other, and passes behind the new top there, so the depth change repaints
-nothing. Mechanical rest no longer takes that path away from it. Cancel, reversal, re-grab,
-controlled takeover, and collection changes remain immediately interruptible; boundary overdrag is
-explicitly reported as resisted rather than fabricated pointer lock. Autonomous and reduced-motion
-Direct navigation use the same endpoint model without inventing a cursor.
+nothing. Mechanical rest no longer takes that path away from it. Cancellation, held reversal,
+controlled takeover, and collection changes remain immediately interruptible. A release still in
+the air stays visible and keeps landing independently, but cannot be recaptured as a new origin.
+Cyclic overdrag remains bounded to the one adjacent transaction rather than fabricating additional
+travel. Autonomous and reduced-motion Direct navigation use the same endpoint model without
+inventing a cursor.
+
+Ordinary pointer release is classified exactly once where the release resolver chooses between the
+interaction origin and its directed neighbour. A committed release opens parking and owns its
+presentation clock; a return opens no landing and remains coupled to the controller's way back to
+interaction-local zero. Zero-direction and cancelled gestures explicitly return to their origin.
 
 A hand takes ownership of the shell it presses on in the same statement that binds the presentation
 to its interaction. Those were two steps — the origin moved when the drag opened, the lifecycle

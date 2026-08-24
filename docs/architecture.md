@@ -108,9 +108,10 @@ one direction-independent implementation. Hidden is an internal final anchor and
 largest canonical position.
 
 For layered presentations, geometry and DOM paint order are intentionally separate outputs of the
-same frame resolver. The deck assigns layers from explicit exchange roles and never flips them at a
-progress threshold. The settled selection remains the sole authority for caption, focus,
-inspection, and announcement timing until controller settlement.
+same frame resolver. The deck assigns layers from explicit exchange roles and changes relative
+paint order only after the involved bodies are physically clear or while they are fully occluded.
+The settled selection remains the sole authority for caption, focus, inspection, and announcement
+timing until controller settlement.
 
 ## Remeasurement
 

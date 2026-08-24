@@ -444,12 +444,20 @@ describe("StackedDeck Direct origin return", () => {
     const result = surface.finish();
     const after = result.frames.slice(releaseFrame);
     expect(
+      after.some((frame) => frame.phase === "returning"),
+      "the return never opened",
+    ).toBe(true);
+    expect(
       after.every((frame) => frame.phase !== "parking"),
       "nothing was released",
     ).toBe(true);
     expect(
       after.every((frame) => frame.landings === 0),
       "a hold put a shell in the air",
+    ).toBe(true);
+    expect(
+      after.every((frame) => frame.direction === 0 && frame.targetIndex === null),
+      "vertical-only release named an exchange",
     ).toBe(true);
     expect(result.settledId, "the deck moved").toBe("c");
     expect(geometry(result.finalPoses)).toEqual(geometry(result.restPoses));
@@ -470,6 +478,10 @@ describe("StackedDeck Direct origin return", () => {
     await surface.step(60);
     const result = surface.finish();
     const after = result.frames.slice(releaseFrame);
+    expect(
+      after.some((frame) => frame.phase === "returning"),
+      "cancellation never returned",
+    ).toBe(true);
     expect(
       after.every((frame) => frame.phase !== "parking"),
       "a cancelled hold parked",

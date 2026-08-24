@@ -300,8 +300,7 @@ const CROSSOVER_CLEARANCE = 2;
 const PILE_OCCLUSION_ENTER = 0.25;
 const PILE_OCCLUSION_EXIT = 0.75;
 const PILE_OCCLUDED_SCALE = 0.72;
-// The rear target changes depth inside numerical rest, while the source still covers every pixel;
-// by the first perceptible hand movement it is ready to be revealed as the Direct destination.
+// These are scalar choreography coordinates. Raw pointer axes never select a pile route or handoff.
 const TUNING_NUMBER_KEYS = [
   "cardWidth",
   "cardHeight",

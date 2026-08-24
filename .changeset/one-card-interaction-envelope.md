@@ -15,11 +15,11 @@ boundaries every existing consumer already gets, and supplying boundaries turns 
 into the same bounded resistance the physical bounds use, so a very long drag resists instead of
 dying against a frozen surface. Physical bounds keep using `elasticity` either way.
 
-`resolveStackedDeckTraversal` accepts optional `traversalBounds`. Inside them the projection behaves
-exactly as before, completing every crossed anchor in order; at the limit it stops promoting and
-reports the remaining travel through the existing `elastic` phase, so no second target is invented
-and no second visual top is promoted. Omitting the bounds keeps the primitive free to traverse the
-whole deck.
+`resolveStackedDeckTraversal` receives a semantic interaction origin and an interaction-local
+physical position. It resolves exactly one explicitly directed cyclic neighbour; after that one
+pitch it stops promoting and reports the remaining travel through the existing `elastic` phase, so
+no second target is invented and no second visual top is promoted. Wrapped neighbours use the same
+bounded operation after the adapter rotates and atomically rebases the finite controller anchors.
 
 `useSnapMotion` and `useCarouselMotion` accept `resolveDragOrigin`. It is called exactly once when
 the controller takes physical ownership — a pointer drag, or the first delta of a coalesced wheel

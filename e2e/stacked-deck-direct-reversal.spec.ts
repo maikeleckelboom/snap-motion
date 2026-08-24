@@ -123,6 +123,36 @@ function poseCoversDeckCentre(
   return Math.abs(localX) <= frame.cardWidth / 2 && Math.abs(localY) <= cardHeight / 2;
 }
 
+function nonHeldRenderedPoseState(frame: Awaited<ReturnType<typeof readFrame>>, heldIndex: number) {
+  return frame.poses
+    .filter((_pose, index) => index !== heldIndex)
+    .map(
+      ({
+        interactive,
+        layer,
+        opacity,
+        role,
+        rotate,
+        scale,
+        shadowStrength,
+        translateX,
+        translateY,
+        visible,
+      }) => ({
+        interactive,
+        layer,
+        opacity,
+        role,
+        rotate,
+        scale,
+        shadowStrength,
+        translateX,
+        translateY,
+        visible,
+      }),
+    );
+}
+
 function captureCentreOwnership(
   frame: Awaited<ReturnType<typeof readFrame>>,
   cardHeight: number,
@@ -256,22 +286,6 @@ function exposedFailureReport(frames: readonly BrowserFrame[], violations: reado
   );
 }
 
-function largestInternalPoseJump(before: BrowserFrame, after: BrowserFrame, sourceIndex: number) {
-  const radius = Math.hypot(before.cardWidth, before.poses[sourceIndex]!.height) / 2;
-  return Math.max(
-    0,
-    ...before.poses.map((pose, index) => {
-      if (index === sourceIndex) return 0;
-      const next = after.poses[index]!;
-      return Math.max(
-        Math.hypot(next.translateX - pose.translateX, next.translateY - pose.translateY),
-        Math.abs(next.scale - pose.scale) * radius,
-        Math.abs(next.rotate - pose.rotate) * (Math.PI / 180) * radius,
-      );
-    }),
-  );
-}
-
 test("one held Direct reversal traces a single physical path through neutral", async ({ page }) => {
   const stage = viewport(page);
   const rests = await openReversal(page, 2);
@@ -362,9 +376,7 @@ test("a reversing hand keeps its grip on the card in both axes", async ({ page }
   await expectCarouselAt(stage, STACKED_DECK_IDS[2]!);
 });
 
-test("Direct poses remain continuous across the exact raw-Y exposure boundary", async ({
-  page,
-}) => {
+test("raw Y moves only the held Direct source", async ({ page }) => {
   const stage = viewport(page);
   await page.getByTestId("stacked-deck-exchange-direct").click();
   const held = await beginHeldTraversal(page, 3);
@@ -383,51 +395,58 @@ test("Direct poses remain continuous across the exact raw-Y exposure boundary", 
   );
   const travel = -0.3;
   const pointerX = -travel * held.pitch;
-  const frames: BrowserFrame[] = [];
-  const jumps: number[] = [];
+  const epsilon = 0.001;
+  const rawYValues = [
+    0,
+    epsilon,
+    -epsilon,
+    1,
+    -1,
+    source.height / 8,
+    -source.height / 8,
+    source.height / 4,
+    -source.height / 4,
+    boundary - epsilon,
+    -(boundary - epsilon),
+    boundary + epsilon,
+    -(boundary + epsilon),
+    source.height * 2,
+    -source.height * 2,
+  ];
+  let baseline: ReturnType<typeof nonHeldRenderedPoseState> | undefined;
 
   async function capture(x: number, y: number) {
     held.elapsedMs += 34;
     await movePointerBy(page, held.origin, x, y, held.elapsedMs);
     await page.waitForTimeout(16);
-    const frame = captureCentreOwnership(
-      await readFrame(page),
-      source.height,
-      held.origin.pointerId,
-      -x / held.pitch,
-    );
+    const frame = await readFrame(page);
     expect(frame.poses[3]!.translateX).toBeCloseTo(x, 3);
     expect(frame.poses[3]!.translateY).toBeCloseTo(y, 3);
     expect(frame.directProjection?.phase).toBe("held");
     expect(frame.directProjection?.direction).toBe(-1);
     expect(frame.directProjection?.targetIndex).toBe(2);
-    frames.push(frame);
+    expect(frame.directProjection?.signedTravel).toBeCloseTo(travel, 5);
     return frame;
   }
 
   try {
-    await capture(pointerX, boundary - 2);
-    for (const epsilon of [1, 0.1, 0.01, 0.001]) {
-      const below = await capture(pointerX, boundary - epsilon);
-      const above = await capture(pointerX, boundary + epsilon);
-      jumps.push(largestInternalPoseJump(below, above, 3));
-      const belowAgain = await capture(pointerX, boundary - epsilon);
-      jumps.push(largestInternalPoseJump(above, belowAgain, 3));
-    }
-    for (const epsilon of [1, 0.1, 0.01, 0.001]) {
-      const below = await capture(pointerX - epsilon, boundary - epsilon);
-      const above = await capture(pointerX + epsilon, boundary + epsilon);
-      jumps.push(largestInternalPoseJump(below, above, 3));
-      const belowAgain = await capture(pointerX - epsilon, boundary - epsilon);
-      jumps.push(largestInternalPoseJump(above, belowAgain, 3));
-    }
+    for (const translateY of rawYValues) {
+      const frame = await capture(pointerX, translateY);
+      const nonHeld = nonHeldRenderedPoseState(frame, 3);
+      baseline ??= nonHeld;
+      expect(nonHeld, `raw Y ${translateY} changed a non-held rendered pose`).toEqual(baseline);
 
-    expect(
-      jumps.at(-1),
-      `smallest diagonal crossing retained a ${jumps.at(-1)}px pose jump`,
-    ).toBeLessThanOrEqual(0.05);
-    const violations = exposedCentrePaintViolations(frames);
-    expect(violations, exposedFailureReport(frames, violations)).toEqual([]);
+      if (!poseCoversDeckCentre(frame, 3, source.height)) {
+        const coveringLayers = frame.poses.flatMap((pose, index) =>
+          poseCoversDeckCentre(frame, index, source.height) ? [pose.layer] : [],
+        );
+        const frontLayer = Math.max(...coveringLayers);
+        expect(
+          coveringLayers.filter((layer) => layer === frontLayer),
+          `raw Y ${translateY} left exposed material to DOM order`,
+        ).toHaveLength(1);
+      }
+    }
   } finally {
     await finishPointer(page, held.origin, 0, held.elapsedMs + 80, "pointercancel");
   }

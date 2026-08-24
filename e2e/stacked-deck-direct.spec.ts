@@ -2719,6 +2719,11 @@ async function realMouseRelease(
       (frame) => frame.phase === "parking" || frame.phase === "returning",
     );
     const released = opened < 0 ? [] : live.slice(opened);
+    const lifecycleOpenings = live.filter(
+      (frame, index) =>
+        (frame.phase === "parking" || frame.phase === "returning") &&
+        frame.phase !== live[index - 1]?.phase,
+    ).length;
     const releaseX = released[0]?.sourceX ?? 0;
     const releaseY = released[0]?.sourceY ?? 0;
     return {
@@ -2726,6 +2731,7 @@ async function realMouseRelease(
       maxLandings: Math.max(0, ...after.map((frame) => frame.landings)),
       controllerTarget: released.at(-1)?.controllerTarget ?? "",
       settledId: after.at(-1)?.activeId ?? "",
+      lifecycleOpenings,
       openedPhase: released[0]?.phase ?? "",
       // The regression stated physically: the shell still sitting on the vector the hand let go of
       // while the deck underneath it has moved on by a real amount.
@@ -2775,6 +2781,7 @@ for (const direction of [1, -1] as const) {
     const report = await realMouseRelease(page, stage, "return", direction);
 
     expect(report.openedPhase, "the release was not opened as a return").toBe("returning");
+    expect(report.lifecycleOpenings, "the return lifecycle opened more than once").toBe(1);
     expect(report.phases, "a card that never left was released into the deck").not.toContain(
       "parking",
     );
@@ -2801,6 +2808,7 @@ for (const direction of [1, -1] as const) {
     const report = await realMouseRelease(page, stage, "commit", direction);
 
     expect(report.openedPhase, "the release was not opened as a parking exchange").toBe("parking");
+    expect(report.lifecycleOpenings, "the parking lifecycle opened more than once").toBe(1);
     expect(report.phases, "a released card was treated as one that came back").not.toContain(
       "returning",
     );
