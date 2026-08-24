@@ -230,6 +230,11 @@ function deck() {
       window.dispatchEvent(pointerEvent("pointerup", handXFor(physical), verticalHand));
       await nextTick();
     },
+    /** The other way a pointer sequence ends: the browser taking it away mid-hold. */
+    async cancel(physical: number, verticalHand = 0) {
+      window.dispatchEvent(pointerEvent("pointercancel", handXFor(physical), verticalHand));
+      await nextTick();
+    },
     settledId: () => view.settledId,
     finish() {
       const settledId = view.settledId;
@@ -413,6 +418,68 @@ describe("StackedDeck Direct origin return", () => {
       early.map((frame) => frame.tick),
       "the held shell was home before the deck was",
     ).toEqual([]);
+  }, 60_000);
+
+  /**
+   * A hold the deck never travelled for.
+   *
+   * A hand can carry a card without moving the deck at all — straight down, say. There is no
+   * exchange to unwind then and nothing for a controller return to be a proportion of, so this one
+   * release does keep the presentation's own settlement. It is still not a release into the deck:
+   * nothing was let go, nothing lands, and the card comes back to exactly where it was picked up.
+   */
+  it("gives a vertical-only hold back without an exchange to unwind", async () => {
+    const surface = deck();
+    await surface.press();
+    await surface.step();
+    for (const at of [30, 60, 90]) await surface.hold(0, at);
+    await surface.settleHand(0, 90);
+    const projection = surface.projection()!;
+    expect(projection.direction, "a vertical hand named an exchange").toBe(0);
+    expect(projection.translateY, "the hand never carried the card").toBe(90);
+
+    const releaseFrame = surface.frames.length;
+    await surface.release(0, 90);
+    await surface.step(40);
+    const result = surface.finish();
+    const after = result.frames.slice(releaseFrame);
+    expect(
+      after.every((frame) => frame.phase !== "parking"),
+      "nothing was released",
+    ).toBe(true);
+    expect(
+      after.every((frame) => frame.landings === 0),
+      "a hold put a shell in the air",
+    ).toBe(true);
+    expect(result.settledId, "the deck moved").toBe("c");
+    expect(geometry(result.finalPoses)).toEqual(geometry(result.restPoses));
+  }, 60_000);
+
+  /**
+   * A cancellation resolves no destination, so it is the one completion the gesture callback owns.
+   * It is a return by definition: an undone gesture keeps nothing.
+   */
+  it("unwinds a hold the browser takes away mid-gesture", async () => {
+    const surface = deck();
+    await surface.press();
+    await surface.step();
+    for (const at of [0.1, 0.2, 0.3]) await surface.hold(at);
+    await surface.settleHand(0.3);
+    const releaseFrame = surface.frames.length;
+    await surface.cancel(0.3);
+    await surface.step(60);
+    const result = surface.finish();
+    const after = result.frames.slice(releaseFrame);
+    expect(
+      after.every((frame) => frame.phase !== "parking"),
+      "a cancelled hold parked",
+    ).toBe(true);
+    expect(
+      after.every((frame) => frame.landings === 0),
+      "a cancelled hold landed",
+    ).toBe(true);
+    expect(result.settledId, "a cancelled hold changed the deck").toBe("c");
+    expect(geometry(result.finalPoses)).toEqual(geometry(result.restPoses));
   }, 60_000);
 
   /**

@@ -2611,35 +2611,24 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
   );
 });
 
-/**
- * A hand that gives the deck back releases nothing.
- *
- * The two ways a Direct gesture ends are decided by the controller at the frame the pointer goes
- * up, and this surface's own gesture recogniser publishes its result before that — a browser drains
- * microtasks between two listeners for one event, so asked then the deck reports no destination at
- * all. Read there, a release that kept its own card looks exactly like one that gave it up, and the
- * whole released-shell choreography runs over a card that never left. Only a real browser schedules
- * those two listeners far enough apart to show it, which is why this lives here.
- */
-test("Direct unwinds a partial hold that resolves its own origin, releasing nothing", async ({
-  page,
-}) => {
-  const stage = await prepareDirect(page, 2);
-  const pitch = await motionPitch(stage);
-  const card = stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='map']");
-  await expect(card).toHaveAttribute("data-deck-interactive", "true");
+interface DirectReleaseFrame {
+  readonly phase: string;
+  readonly settlement: number;
+  readonly travel: number;
+  readonly landings: number;
+  readonly sourceX: number;
+  readonly sourceY: number;
+  readonly controllerTarget: string;
+  readonly activeId: string;
+}
 
+/** Records every rendered frame of one release, from the browser's own animation clock. */
+async function recordDirectReleaseFrames(page: Page): Promise<void> {
   await page.evaluate(() => {
     const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
-    const traced = window as typeof window & { snapMotionReturnTrace?: unknown[] };
-    const frames: {
-      phase: string;
-      settlement: number;
-      travel: number;
-      landings: number;
-      sourceX: number;
-    }[] = [];
-    traced.snapMotionReturnTrace = frames;
+    const traced = window as typeof window & { snapMotionReleaseTrace?: DirectReleaseFrame[] };
+    const frames: DirectReleaseFrame[] = [];
+    traced.snapMotionReleaseTrace = frames;
     const record = () => {
       const debug = (
         root as HTMLElement & {
@@ -2665,69 +2654,163 @@ test("Direct unwinds a partial hold that resolves its own origin, releasing noth
           projection === undefined
             ? 0
             : Number(shells[projection.originIndex]?.dataset.translateX ?? 0),
+        sourceY:
+          projection === undefined
+            ? 0
+            : Number(shells[projection.originIndex]?.dataset.translateY ?? 0),
+        controllerTarget: root.dataset.targetId ?? "",
+        activeId: root.dataset.activeId ?? "",
       });
       requestAnimationFrame(record);
     };
     requestAnimationFrame(record);
   });
+}
 
-  // Real pointer input, not a dispatched event. A synthetic release from inside one script keeps
-  // that script on the stack, so the microtask checkpoint between the two listeners never happens
-  // and the ordering this test exists for cannot occur. The hand goes out to a third of a pitch and
-  // stops, so the release carries no velocity of its own.
+/**
+ * One release driven by real pointer input.
+ *
+ * Real input matters here and is not a preference. A synthetic event dispatched from inside a
+ * script keeps that script on the stack, so the microtask checkpoint a browser performs between two
+ * listeners for one event never happens — and this surface's gesture recogniser and the low-level
+ * drag recogniser are two such listeners. Dispatching by hand collapses their ordering, which is
+ * exactly the ordering a release decision has to survive.
+ */
+async function realMouseRelease(
+  page: Page,
+  stage: Locator,
+  kind: "return" | "commit",
+  direction: -1 | 1,
+) {
+  const pitch = await motionPitch(stage);
+  const card = stage.locator("[data-snap-motion-stacked-deck-card][data-deck-interactive='true']");
+  await expect(card).toHaveCount(1);
   const box = (await card.boundingBox())!;
   const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await recordDirectReleaseFrames(page);
+
+  // Physical forward travel is a leftward hand, so a forward direction moves the pointer left.
+  const reach = (kind === "return" ? 0.33 : 0.85) * pitch * -direction;
+  const steps = kind === "return" ? 8 : 6;
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
-  for (let step = 1; step <= 8; step += 1) {
-    await page.mouse.move(from.x - (pitch * 0.33 * step) / 8, from.y + step * 5);
-    await page.waitForTimeout(28);
+  for (let step = 1; step <= steps; step += 1) {
+    await page.mouse.move(from.x + (reach * step) / steps, from.y + step * 5);
+    await page.waitForTimeout(kind === "return" ? 28 : 12);
   }
-  for (let hold = 0; hold < 8; hold += 1) {
-    await page.mouse.move(from.x - pitch * 0.33, from.y + 40);
-    await page.waitForTimeout(40);
+  if (kind === "return") {
+    // Stopped before letting go, so the release carries no velocity and resolves its own origin.
+    for (let hold = 0; hold < 8; hold += 1) {
+      await page.mouse.move(from.x + reach, from.y + 40);
+      await page.waitForTimeout(40);
+    }
   }
   await page.mouse.up();
   await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
-  await page.waitForTimeout(120);
+  await page.waitForTimeout(160);
 
-  const report = await page.evaluate(() => {
-    const frames = (
-      window as typeof window & {
-        snapMotionReturnTrace?: {
-          phase: string;
-          settlement: number;
-          travel: number;
-          landings: number;
-          sourceX: number;
-        }[];
-      }
-    ).snapMotionReturnTrace!;
+  return page.evaluate(() => {
+    const frames = (window as typeof window & { snapMotionReleaseTrace?: DirectReleaseFrame[] })
+      .snapMotionReleaseTrace!;
     const held = frames.findIndex((frame) => frame.phase === "held");
     const after = frames.slice(held < 0 ? 0 : held);
+    const live = after.filter((frame) => frame.phase !== "none");
+    const opened = live.findIndex(
+      (frame) => frame.phase === "parking" || frame.phase === "returning",
+    );
+    const released = opened < 0 ? [] : live.slice(opened);
+    const releaseX = released[0]?.sourceX ?? 0;
+    const releaseY = released[0]?.sourceY ?? 0;
     return {
       phases: [...new Set(after.map((frame) => frame.phase))],
       maxLandings: Math.max(0, ...after.map((frame) => frame.landings)),
-      // A clock of its own is exactly a frame where the presentation advanced and the deck did not.
-      secondClock: after.filter(
+      controllerTarget: released.at(-1)?.controllerTarget ?? "",
+      settledId: after.at(-1)?.activeId ?? "",
+      openedPhase: released[0]?.phase ?? "",
+      // The regression stated physically: the shell still sitting on the vector the hand let go of
+      // while the deck underneath it has moved on by a real amount.
+      stuckOnReleaseVector: released.filter(
         (frame, index) =>
           index > 0 &&
-          frame.phase !== "none" &&
-          after[index - 1]!.phase !== "none" &&
-          Math.abs(frame.travel - after[index - 1]!.travel) < 1e-9 &&
-          Math.abs(frame.settlement - after[index - 1]!.settlement) > 1e-9,
+          Math.abs(frame.travel - released[0]!.travel) > 0.05 &&
+          Math.abs(frame.sourceX - releaseX) < 1e-6 &&
+          Math.abs(frame.sourceY - releaseY) < 1e-6,
       ).length,
-      finalSourceX: after.at(-1)!.sourceX,
-      returned: after.some((frame) => frame.phase === "returning"),
+      sourceMoved: Math.max(
+        0,
+        ...released.map((frame) => Math.hypot(frame.sourceX - releaseX, frame.sourceY - releaseY)),
+      ),
+      maxSettlement: Math.max(0, ...released.map((frame) => frame.settlement)),
+      // A clock of its own: the presentation advancing on a frame the deck did not move on.
+      settlementWithoutTravel: released.filter(
+        (frame, index) =>
+          index > 0 &&
+          Math.abs(frame.travel - released[index - 1]!.travel) < 1e-9 &&
+          Math.abs(frame.settlement - released[index - 1]!.settlement) > 1e-9,
+      ).length,
+      finalSource: Math.hypot(after.at(-1)!.sourceX, after.at(-1)!.sourceY),
     };
   });
+}
 
-  expect(report.returned, "the release was never recognised as giving the card back").toBe(true);
-  expect(report.phases, "a card that never left was released into the deck").not.toContain(
-    "parking",
-  );
-  expect(report.maxLandings, "a return put a shell in the air").toBe(0);
-  expect(report.secondClock, "the presentation ran on a clock the deck was not on").toBe(0);
-  expect(Math.abs(report.finalSourceX), "the card did not come all the way home").toBeLessThan(0.5);
-  await expectCarouselAt(stage, "map");
-});
+/**
+ * A Direct release is classified exactly once, by the code that resolves its destination.
+ *
+ * Two observers of one pointer-up cannot both answer this. The gesture recogniser publishes first —
+ * before the controller has been told the pointer went up at all — so an answer formed there is
+ * formed from a deck that has not decided yet, and it is the answer that stands, because a
+ * lifecycle already open is no longer a hold that can be opened again. A committed exchange read
+ * that way becomes a return whose proportion never falls, which leaves the released shell sitting
+ * exactly where the hand left it while the deck travels on underneath it.
+ *
+ * Both outcomes and both physical directions, because covering only the one that happens to agree
+ * with the premature answer is how this shipped.
+ */
+for (const direction of [1, -1] as const) {
+  const way = direction > 0 ? "forward" : "backward";
+
+  test(`Direct classifies a returning release once, travelling ${way}`, async ({ page }) => {
+    const stage = await prepareDirect(page, 2);
+    const before = (await stage.getAttribute("data-active-id"))!;
+    const report = await realMouseRelease(page, stage, "return", direction);
+
+    expect(report.openedPhase, "the release was not opened as a return").toBe("returning");
+    expect(report.phases, "a card that never left was released into the deck").not.toContain(
+      "parking",
+    );
+    expect(report.maxLandings, "a return put a shell in the air").toBe(0);
+    expect(report.stuckOnReleaseVector, "the shell stayed where the hand left it").toBe(0);
+    expect(report.settlementWithoutTravel, "the return ran on a clock the deck was not on").toBe(0);
+    // The presentation and the controller agree about where this went.
+    expect(report.controllerTarget, "the controller kept a different card").toBe(before);
+    expect(report.settledId).toBe(before);
+    expect(report.finalSource, "the card did not come all the way home").toBeLessThan(0.5);
+    await expectCarouselAt(stage, before);
+  });
+
+  test(`Direct classifies a committed release once, travelling ${way}`, async ({ page }) => {
+    const stage = await prepareDirect(page, 2);
+    const before = (await stage.getAttribute("data-active-id"))!;
+    const neighbour =
+      STACKED_DECK_IDS[
+        (STACKED_DECK_IDS.indexOf(before as (typeof STACKED_DECK_IDS)[number]) +
+          direction +
+          STACKED_DECK_IDS.length) %
+          STACKED_DECK_IDS.length
+      ]!;
+    const report = await realMouseRelease(page, stage, "commit", direction);
+
+    expect(report.openedPhase, "the release was not opened as a parking exchange").toBe("parking");
+    expect(report.phases, "a released card was treated as one that came back").not.toContain(
+      "returning",
+    );
+    // The one the manual run found: a frozen shell over a deck that kept moving.
+    expect(report.stuckOnReleaseVector, "the released shell froze at pointer-up").toBe(0);
+    expect(report.sourceMoved, "the released shell never travelled").toBeGreaterThan(50);
+    expect(report.maxSettlement, "the release never settled").toBeGreaterThan(0.99);
+    // The presentation and the controller agree about where this went.
+    expect(report.controllerTarget, "the controller went somewhere else").toBe(neighbour);
+    expect(report.settledId).toBe(neighbour);
+    await expectCarouselAt(stage, neighbour);
+  });
+}

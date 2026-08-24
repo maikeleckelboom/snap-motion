@@ -345,7 +345,15 @@ export function useStackedDeckComponentMotion<Id extends string>(
     const { snapshot, velocity } = context;
     const originIndex = model.state.interactionOriginIndex;
     const direction = model.state.interactionDirection;
-    if (!isDirect() || originIndex === null || direction === 0) return undefined;
+    if (!isDirect()) return undefined;
+    if (originIndex === null || direction === 0) {
+      // No exchange was ever named, so there is only one place the shell this hand is holding can
+      // go: back where it was picked up. Decided here rather than left to a later observer, because
+      // this is still the frame the release happens on — and the controller keeps whatever its own
+      // policy would choose for a deck that never named a neighbour.
+      openDirectRelease(true);
+      return undefined;
+    }
     const originId = model.idAt(originIndex)!;
     const chosen = resolveSnapReleaseTarget({
       anchors: snapshot.anchors,
@@ -358,11 +366,12 @@ export function useStackedDeckComponentMotion<Id extends string>(
       chosen === model.idAt(resolveStackedDeckNeighbor(originIndex, direction, model.itemCount))
         ? chosen
         : originId;
-    // The presentation opens here, on the frame the decision is made, because there is nowhere
-    // later to ask. A browser drains microtasks between two listeners for one event, so the
-    // gesture this surface tracks publishes its result before the controller has even been told
-    // the pointer went up: asked then, the deck still reports no destination at all, and a release
-    // that kept its own card reads as one that gave it up.
+    // The presentation opens here and only here, on the frame the destination is decided, because
+    // this is the only place that knows it. A browser drains microtasks between two listeners for
+    // one event, so the gesture this surface tracks publishes its result before the controller has
+    // even been told the pointer went up. A second opinion formed there is not merely early — it
+    // is formed from a deck that has not been asked yet, and whichever opinion is written first
+    // wins, because a lifecycle already open is no longer a hold that can be opened again.
     openDirectRelease(target === originId);
     return target;
   }
@@ -1064,14 +1073,17 @@ export function useStackedDeckComponentMotion<Id extends string>(
     },
     onPointerSample: onDirectPointerSample,
     onResolved(resolution, completed) {
-      // The controller opens the release itself, on the frame it resolves one. Reaching here with
-      // a shell still held means it never resolved one for this gesture — the deck named no
-      // exchange at all — so nothing was given up and there is nothing to give back but a vector.
-      openDirectRelease(true);
+      // A completed release is classified where its destination is resolved, and nothing is
+      // classified here. This runs first — before the controller has been told the pointer went up
+      // at all — so any answer formed here would be formed from a deck that has not decided yet,
+      // and would then be the one that stood.
       if (completed.cancelled) {
         // A press this surface refused never took the deck, so a cancellation of it has nothing to
         // undo — and undoing it would abort an exchange that press was never part of.
         if (isDirect() && completed.originIndex === undefined) return;
+        // A cancellation is the one completion that resolves no destination, so it is the one this
+        // callback may open. It is a return by definition: an undone gesture keeps nothing.
+        openDirectRelease(true);
         // A cancelled gesture undoes itself, which means returning to the card it began on. That is
         // the interaction's own origin, not the settled selection: a gesture that took over a
         // running spring began on a card the controller had not committed to yet.
