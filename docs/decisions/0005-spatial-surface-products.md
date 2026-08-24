@@ -12,18 +12,18 @@ policy, direct synchronization, and announcement timing. `@snap-motion/vue/stack
 above one surface composable. An application supplies typed items, stable IDs, controlled state,
 content, and theme.
 
-Keep the generic controller generic. A deck is a deck because its model opens one bounded
-transaction per interaction, not because `SnapController` or `resolveStackedDeckTraversal` was
-narrowed; both keep their full multi-anchor capability for every other surface.
+Keep the generic controller generic. `SnapController` retains its multi-anchor capability. The
+deck-specific traversal resolver maps interaction-local travel to one adjacent ring exchange, while
+the model owns the semantic transaction, command policy, and selection.
 
 ## Rationale
 
 The behaviour was already correct and already certified, but it lived in the lab. That made the lab
 a privileged implementation environment: an application wanting the same deck had to allocate
-mutable traversal and frame storage, compute a physical index, open and close interaction
-transactions, bound the projection to `origin ± 1`, fix `maxAnchorSkip`, distinguish visual from
-authoritative from settled index, and route non-adjacent destinations through a hand-written
-synchronization. Every one of those is a way to get it wrong.
+mutable traversal and frame storage, compute an interaction-local physical position, open and close
+interaction transactions, resolve one directed cyclic neighbour, fix `maxAnchorSkip`, distinguish
+visual from authoritative from settled index, and route non-adjacent destinations through a
+hand-written synchronization. Every one of those is a way to get it wrong.
 
 Splitting the model out of the adapter is what makes the guarantees testable without a DOM, and what
 keeps the Vue layer honest about owning only what genuinely needs a browser: element measurement,

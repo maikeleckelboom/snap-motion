@@ -29,8 +29,9 @@ Above those primitives, core owns two **surface models**. `StackedDeckModel` and
 compose the generic controller's snapshots into a surface's semantics: durable versus visual
 selection, interaction authority, the one-adjacent-card interaction envelope, relative versus
 absolute command policy, direct synchronization, and announcement timing. They are the reason a deck
-is a deck. They issue no controller commands, touch no DOM, and never narrow the generic controller;
-`SnapController` and `resolveStackedDeckTraversal` both keep their full multi-anchor capability.
+is a deck. They issue no controller commands, touch no DOM, and never narrow the generic controller.
+The Stacked Deck traversal resolver deliberately maps one interaction-local coordinate to one
+adjacent ring exchange; the controller retains its generic multi-anchor capability.
 
 Shared deterministic policy lives beside them: settled selection and visual hysteresis, generic
 pagination projection, bounded autonomous spring integration and release-velocity limiting, coverflow kinetics

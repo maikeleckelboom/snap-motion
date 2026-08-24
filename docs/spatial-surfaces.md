@@ -139,17 +139,18 @@ edge gestures enter an ordinary adjacent exchange before that same one-card over
 Keyboard, wheel, and programmatic Direct navigation use the same scalar projection without a
 fictional cursor.
 
-On commit, the released shell immediately belongs to its destination hidden layer below the new top.
-Its transform continues from the actual release X/Y into the exact destination pile pose while
-opacity remains `1`; the opaque top supplies the natural occlusion. Cancel keeps the shell above the
-stack and returns X and Y continuously to the exact source top. New input and controlled or
-collection authority never wait for presentation settlement. Immediate reversal promotes a
-still-parking item from its current resolved pose rather than rebasing it first.
+On commit, the released shell keeps its release paint order until its path is physically clear,
+passes behind the new top there, and continues from the actual release X/Y into its exact destination
+pose on the parking clock. Opacity remains `1`. A return creates no landing and remains coupled to
+the controller's scalar path home; cancellation and vertical-only release return to exact source
+rest. New input and controlled or collection authority never wait for presentation settlement.
 
-Direct drag preserves one scalar physical position. Re-grab starts from the rendered state rather
-than a stale logical anchor. Rapid commands chain from the pending mechanical target without
-promoting it to semantic state. Reduced motion preserves the same authority protocol while
-completing mechanics without a spring-duration dependency.
+An interrupted committed release remains visible and lands independently, but it is noninteractive
+and cannot become a new origin while airborne. A later exchange targeting that shell resolves the
+target and landing through the same persistent pose rather than rebasing it. Every fresh accepted
+gesture begins a local scalar transaction on a shell the deck is actually offering. Rapid commands
+chain from the pending mechanical target without promoting it to durable semantic state. Reduced
+motion preserves the same authority and material protocol.
 
 Only the settled inspectable card is interactive. Hidden and pile-only cards stay inert. Focus is
 preserved before semantic collection changes, status announcements happen once at settlement, and

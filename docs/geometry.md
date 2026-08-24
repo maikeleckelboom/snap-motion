@@ -316,53 +316,49 @@ raw overdrag remains literal. There is no outer deck boundary: before the first 
 local coordinate is oriented so the requested ring neighbour occupies that direction. Resistance
 begins only after the adjacent-card transaction envelope has been consumed.
 
-For each adjacent exchange, Direct constructs two complete endpoint frames with the accepted
-`setPilePose` and `setTopPose` geometry: the interaction origin at rest and the adjacent destination
-at rest. The held shell is excluded. Every other shell interpolates between its two endpoint poses
-with one smooth scalar reveal; raw Y cannot enter that interpolation. Moving frames use the
-destination deck's discrete hidden layers rather than interpolating z-index, so hidden same-side
-order remains invariant while the target rises monotonically to the exact top pose.
+For each adjacent exchange, Direct derives source and destination ring poses but does not hide an
+invalid deck behind the held shell. Scalar travel alone moves the target and pile. The canonical
+under-card recedes without disappearing, travels physically clear of the complete pile before its
+depth changes, and returns beneath the target; every other subordinate shell changes depth only
+inside the target's physical occlusion. Raw Y cannot select or perturb any of those poses or layers.
 
-A committed raw shell can be far from its compact destination. It immediately takes its destination
-hidden layer, below the opaque new top, while its transform remains continuous from the release
-frame. Core normalizes the controller's remaining travel from that captured release distance and
-moves the same shell directly from release X/Y, identity scale, and zero rotation into its exact
-destination pile pose. Opacity remains `1`; there is no duplicate shell, invisible rebase, material
-phase, or independent timer. A cancel keeps the shell above the stack and returns X and Y
-continuously to the exact source top.
+A committed raw shell can be far from its compact destination. Parking owns one bounded
+presentation settlement from the exact release X/Y into the exact destination pose. The shell keeps
+the paint order it was released with until its path has carried the relevant bodies physically
+clear, then passes behind the new top and continues into the pile. Opacity remains `1`; there is no
+duplicate shell or invisible rebase. A return creates no landing and stays coupled to the
+controller's scalar path back to interaction-local zero. A zero-direction release and a cancellation
+return to the same exact source rest without naming an exchange.
 
-New ownership replaces the prior presentation rather than queueing it. When input interrupts
-parking, the adapter captures the resolved frame once and uses it as the new exchange's continuity
-anchor; a still-parking target is therefore promoted from its current pose. Autonomous Direct uses
-a restrained synthetic outgoing slide over the same endpoint decks without inventing pointer
-coordinates. Reduced motion keeps literal held movement, uses reduced pile tuning, and shortens only
-the presentation settlement.
+New ownership does not cancel or replace a committed release. An interrupted parking shell becomes
+an independent landing record with its own elapsed settlement under the shared presentation RAF;
+several releases may therefore remain airborne at once, ordered by release chronology. They remain
+visible but noninteractive. If a live exchange targets an airborne shell, that landing and the
+target resolve through one persistent pose, and settlement `1` is paint- and pose-identical to
+retiring the record. Autonomous Direct uses the same endpoint deck without inventing pointer
+coordinates. Reduced motion preserves the same ownership, paint, and exact-rest contracts with its
+reduced pile tuning.
 
 ### Segment handoff and reversal
 
-`visualTopIndex` is history-bearing presentation state. While physical index stays within one pitch
-of it, the same card remains on top and the signed residual chooses the adjacent target underneath.
-At a complete pitch the target is already at exact top-card rest geometry and the former top is
-removed from the active frame. Visual ownership then advances one anchor, and any residual physical
-distance immediately opens the next adjacent segment — or, once the interaction envelope is reached,
-becomes elastic overdrag instead. A controller animation that legitimately spans several anchors is
-still rendered as a sequence of adjacent handoffs without intermediate `moveTo()` calls or idle
-states; the stacked deck simply never issues one from a user interaction.
+`visualTopIndex` is history-bearing presentation state. Inside the one-pitch transaction the origin
+remains the visual top and the signed local distance names its directed ring neighbour. At a
+complete pitch that neighbour is already at exact top-card rest geometry and becomes the visual top;
+any remaining interaction travel is elastic overdrag, never a second exchange.
 
-Reversal uses the same signed residual. Before a handoff, progress simply retraces to zero. After a
-handoff, movement first retraces the new top toward the previously crossed anchor; crossing that
-pitch transfers visual ownership back. Direction can change only through an exact neutral state at
-the current visual anchor. Re-grabbing, wheel input, fast flicks, and programmatic movement all use
-the same controller position and traversal resolver.
+A held hand may reverse through interaction-local zero and immediately name the neighbour on the
+other physical side, including when two physical directions identify the same item in a two-card
+deck. Once release chooses a destination, that direction belongs to the released transaction and a
+spring crossing zero cannot reinterpret it. Returns unwind the same scalar exchange; each later
+pointer, wheel, or relative command opens a fresh local coordinate around a reachable deck card.
 
 ### Visual and accessibility invariants
 
-At rest only one semantic card is current and interactive. Parked physical shells are hidden from
-the accessibility tree and expose only small translated edges; only the exchanging pair crosses the
-stage. During motion, visible caption, counter, pagination emphasis, and `aria-current`
-follow the visual top only after a completed handoff. Durable selection remains unchanged until
-controller idle, inspection stays disabled, and the live region announces only the final settled
-card. At idle the visual top and settled index must agree exactly.
+At rest only one semantic card is current and interactive. Pile and airborne presentation shells
+stay inert and accessibility-hidden. During motion, the visible caption and `aria-current` follow
+visual authority, durable selection remains unchanged until controller idle, inspection stays
+disabled, and the live region announces only the final settled card. At idle the visual top and
+settled index must agree exactly.
 
 The clipped decorative backdrop is a sibling of the card stage, never an ancestor. The viewport and
 stage allow intentional render bleed, while page-level horizontal containment prevents document

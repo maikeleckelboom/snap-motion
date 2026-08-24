@@ -146,10 +146,9 @@ export interface StackedDeckInspectContext {
  * command policy, and direct synchronization, resolved from controller snapshots without touching
  * a controller.
  *
- * It composes the deck traversal primitive rather than replacing it. The primitive keeps its
- * generic multi-anchor capability; the model is what makes a *deck* out of it by opening one
- * bounded transaction per interaction and refusing to let a single command become a multi-card
- * throw.
+ * It composes the deck-specific traversal primitive rather than replacing it. The primitive maps a
+ * local physical coordinate to one adjacent cyclic exchange; the model makes that transaction
+ * semantic by owning its origin, direction, commands, and durable selection.
  *
  * The model owns its item collection, so a deck that gains, loses, or reorders screens is one
  * {@link StackedDeckModel.reconfigure} away from being correct rather than a surface holding
