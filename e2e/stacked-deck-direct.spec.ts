@@ -45,6 +45,7 @@ interface DirectRafTraceShell {
   readonly top: number;
   readonly translateX: number;
   readonly translateY: number;
+  readonly updatedAt: number;
   readonly visible: boolean;
 }
 
@@ -80,6 +81,7 @@ interface RapidDirectChainSnapshot {
         readonly landingOrder: number;
         readonly landingElapsed: number;
         readonly landingSettlement: number;
+        readonly landingUpdatedAt: number;
         readonly layer: number;
         readonly x: number;
         readonly y: number;
@@ -125,6 +127,7 @@ async function runRapidDirectChain(
               settlement: number;
               translateX: number;
               translateY: number;
+              updatedAt: number;
             }[];
             projection?: {
               originIndex: number;
@@ -151,6 +154,7 @@ async function runRapidDirectChain(
           landingElapsed: landing?.elapsed ?? Number.NaN,
           landingOrder: landing?.releaseOrder ?? Number.NaN,
           landingSettlement: landing?.settlement ?? Number.NaN,
+          landingUpdatedAt: landing?.updatedAt ?? Number.NaN,
           layer: Number(item.dataset.deckLayer),
           rotate: Number(surface.dataset.rotate),
           scale: Number(surface.dataset.scale),
@@ -267,6 +271,7 @@ async function runRapidDirectChain(
                   landingElapsed: pose.landingElapsed,
                   landingOrder: pose.landingOrder,
                   landingSettlement: pose.landingSettlement,
+                  landingUpdatedAt: pose.landingUpdatedAt,
                   layer: pose.layer,
                   x: pose.x,
                   y: pose.y,
@@ -296,7 +301,6 @@ function expectRapidChainLandingContinuity(snapshots: readonly RapidDirectChainS
     );
     if (index === 0) continue;
     const previous = snapshots[index - 1]!;
-    const elapsedMs = current.timestamp - previous.timestamp;
     for (const prior of Object.values(previous.shells).filter((shell) =>
       Number.isFinite(shell.landingSettlement),
     )) {
@@ -308,9 +312,10 @@ function expectRapidChainLandingContinuity(snapshots: readonly RapidDirectChainS
         continue;
       }
       // Physical arrival is now the only way a release leaves this collection. Nothing absorbs one,
-      // so a record that is gone has to have had the flight time to get where it was going.
+      // so a record that is gone has to have had the flight time to get where it was going. Charge
+      // that time from this landing's own last update, not the recorder's unrelated sample cadence.
       expect(
-        prior.landingElapsed + elapsedMs / 230,
+        prior.landingElapsed + Math.max(0, current.timestamp - prior.landingUpdatedAt) / 230,
         `landing ${prior.landingOrder} disappeared at ${prior.landingSettlement}`,
       ).toBeGreaterThanOrEqual(1);
     }
@@ -327,7 +332,7 @@ async function startDirectRafTrace(page: Page): Promise<void> {
     const frames: DirectRafTraceFrame[] = [];
     tracedWindow.snapMotionDirectRafTrace = frames;
     tracedWindow.snapMotionDirectRafTraceActive = true;
-    const record = (timestamp: number) => {
+    const sample = (timestamp: number) => {
       const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
       const directDebug = (
         root as HTMLElement & {
@@ -339,6 +344,7 @@ async function startDirectRafTrace(page: Page): Promise<void> {
               settlement: number;
               translateX: number;
               translateY: number;
+              updatedAt: number;
             }[];
             projection?: {
               originIndex: number;
@@ -386,6 +392,7 @@ async function startDirectRafTrace(page: Page): Promise<void> {
           top: box.top,
           translateX: Number(surface.dataset.translateX),
           translateY: Number(surface.dataset.translateY),
+          updatedAt: landing?.updatedAt ?? Number.NaN,
           visible: card.dataset.deckVisible === "true",
         };
       });
@@ -414,7 +421,15 @@ async function startDirectRafTrace(page: Page): Promise<void> {
         shells,
         timestamp,
       });
+    };
+    const record = (timestamp: number) => {
       if (tracedWindow.snapMotionDirectRafTraceActive) requestAnimationFrame(record);
+      // Vue batches the frame ref's DOM update into a microtask. The landing RAF may run on either
+      // side of this recorder under parallel browser load, so reading its mutable diagnostic array
+      // inside the RAF can otherwise combine the new landing state with the preceding rendered
+      // geometry. A second microtask runs after a Vue flush queued by any callback in this RAF,
+      // keeping lifecycle, pose and paint evidence on one rendered frame.
+      queueMicrotask(() => queueMicrotask(() => sample(timestamp)));
     };
     requestAnimationFrame(record);
   });
@@ -458,7 +473,6 @@ function expectDirectRafTraceSafe(frames: readonly DirectRafTraceFrame[]): numbe
     ).toBe(landings.length);
     if (frameIndex === 0) continue;
     const previous = frames[frameIndex - 1]!;
-    const elapsedMs = frame.timestamp - previous.timestamp;
     for (const priorLanding of previous.shells.filter((shell) =>
       Number.isFinite(shell.settlement),
     )) {
@@ -473,14 +487,14 @@ function expectDirectRafTraceSafe(frames: readonly DirectRafTraceFrame[]): numbe
         continue;
       }
       // A completed record remains present for its exact-arrival frame. A recorder that observed
-      // every RAF therefore sees one before ownership ends; if WebKit skipped that intermediate
-      // sample, its own elapsed timestamp must still prove that the 230 ms flight could complete.
+      // every RAF therefore sees one before ownership ends. A landing RAF can resume between trace
+      // samples, so its own last-update timestamp — rather than recorder cadence — must prove that
+      // the 230 ms flight could complete before an absent record is accepted.
       const physicallyCompleted =
-        priorLanding.elapsed >= 1 || priorLanding.elapsed + elapsedMs / 230 >= 1;
-      const absorbedByHand =
-        frame.directPhase !== "" && frame.directOriginIndex === priorLanding.index;
+        priorLanding.elapsed >= 1 ||
+        priorLanding.elapsed + Math.max(0, frame.timestamp - priorLanding.updatedAt) / 230 >= 1;
       expect(
-        physicallyCompleted || absorbedByHand,
+        physicallyCompleted,
         `${priorLanding.id} lost landing ${priorLanding.landingOrder} at ${priorLanding.settlement} between frames ${previous.frame} and ${frame.frame}`,
       ).toBe(true);
     }
@@ -1343,7 +1357,7 @@ test("Direct deterministic heavy abuse retains every concurrent release and safe
   await mkdir(artifactDirectory, { recursive: true });
   const artifactPath = join(
     artifactDirectory,
-    `deterministic-stress-${testInfo.project.name}.json`,
+    `deterministic-stress-${testInfo.project.name}-${testInfo.repeatEachIndex}.json`,
   );
   // Persist the raw evidence before evaluating it so a failed invariant still leaves the two
   // offending frames available for diagnosis.
