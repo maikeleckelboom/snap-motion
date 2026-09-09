@@ -1240,6 +1240,21 @@ function setDirectExchange(
           ),
         );
   const pileProgress = reveal * targetAvailability;
+  // Crossing behind the target does not yet put a departing source beneath the old pile. A
+  // target still landing can delay that pile's transfer until long after this source's parking
+  // crossover. Keep the source above subordinate material until their coordinated depth exchange:
+  // the neutral cover then remains below it on both sides, while other changing ranks are covered
+  // by the target. This rank depends on pile progress, never on the released hand's raw axes.
+  // With three cards the neutral shell keeps the same folded depth, so it never crosses the
+  // source's rank and needs no intermediate ordering.
+  if (
+    itemCount > 3 &&
+    targetNeedsClearCrossover &&
+    pileProgress < AUTHORITY_MIDPOINT &&
+    outgoing.layer < TARGET_LAYER
+  ) {
+    outgoing.layer = TARGET_LAYER;
+  }
   for (let index = 0; index < itemCount; index += 1) {
     if (index === projection.originIndex || index === targetIndex) continue;
     const pose = output.poses[index]!;

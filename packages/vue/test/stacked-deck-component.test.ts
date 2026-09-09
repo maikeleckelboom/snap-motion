@@ -1,5 +1,5 @@
-import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { flushPromises, mount } from "@vue/test-utils";
+import { describe, expect, it, vi } from "vitest";
 import { h, nextTick } from "vue";
 
 import StackedDeck from "../src/stacked-deck/components/StackedDeck.vue";
@@ -59,6 +59,194 @@ function mountDeck(props: Record<string, unknown> = {}) {
 }
 
 describe("StackedDeck", () => {
+  it.each(["shuffle", "direct"] as const)(
+    "preserves adjacent navigation and shells across collection sizes (%s)",
+    async (exchange) => {
+      for (const count of [0, 1, 2, 3, 7]) {
+        const items = Array.from({ length: count }, (_, index) => ({
+          id: `item-${index}`,
+          title: `Item ${index}`,
+        }));
+        const wrapper = mountDeck({
+          exchange,
+          items,
+          itemLabel: (item: { title: string }) => item.title,
+        });
+        await nextTick();
+        const deck = wrapper.vm as unknown as {
+          activeId: string | undefined;
+          settledId: string | undefined;
+          next: () => boolean;
+          previous: () => boolean;
+        };
+        const shells = wrapper
+          .findAll(".snap-motion-stacked-deck-card")
+          .map((card) => card.element);
+        let index = Math.floor(count / 2);
+        expect(deck.activeId).toBe(items[index]?.id);
+        for (const direction of [1, -1]) {
+          for (let step = 0; step < Math.max(1, count * 2); step += 1) {
+            expect(direction === 1 ? deck.next() : deck.previous()).toBe(count > 1);
+            if (count > 1) index = (index + direction + count) % count;
+            await flushPromises();
+            await nextTick();
+            expect(deck.activeId).toBe(items[index]?.id);
+            expect(deck.settledId).toBe(items[index]?.id);
+            expect(
+              wrapper.findAll(".snap-motion-stacked-deck-card").map((card) => card.element),
+            ).toEqual(shells);
+            expect(wrapper.findAll(".snap-motion-stacked-deck-card:not([inert])")).toHaveLength(
+              count === 0 ? 0 : 1,
+            );
+          }
+        }
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it.each(["shuffle", "direct"] as const)(
+    "refuses stale synchronization without mutation (%s)",
+    async (exchange) => {
+      const wrapper = mountDeck({ exchange, items: screens.slice(0, 2) });
+      await nextTick();
+      const deck = wrapper.vm as unknown as DeckInstance;
+      const before = wrapper.html();
+      expect(deck.synchronizeTo("outcome")).toBe(false);
+      expect(deck.activeId).toBe("system");
+      await nextTick();
+      expect(wrapper.html()).toBe(before);
+      expect(wrapper.emitted("settled")).toBeUndefined();
+      wrapper.unmount();
+    },
+  );
+
+  it.each(["shuffle", "direct"] as const)(
+    "discards queued settlement after newer navigation (%s)",
+    async (exchange) => {
+      const wrapper = mountDeck({ exchange });
+      await nextTick();
+      const deck = wrapper.vm as unknown as DeckInstance;
+      expect(deck.next()).toBe(true);
+      // The controller's Vue watcher has queued publication; that callback has not run yet.
+      await Promise.resolve();
+      expect(deck.next()).toBe(true);
+      await nextTick();
+      await Promise.resolve();
+      expect(wrapper.emitted("settled")).toEqual([["overview", { reason: "next" }]]);
+      await nextTick();
+      expect(wrapper.get('[role="status"]').text()).toBe("Overview, 1 of 3");
+      wrapper.unmount();
+    },
+  );
+
+  it.each(["shuffle", "direct"] as const)(
+    "does not announce navigation superseded by exact synchronization (%s)",
+    async (exchange) => {
+      const wrapper = mountDeck({ exchange });
+      await nextTick();
+      const deck = wrapper.vm as unknown as DeckInstance;
+      deck.next();
+      await Promise.resolve();
+      expect(deck.synchronizeTo("overview")).toBe(true);
+      await nextTick();
+      await Promise.resolve();
+      expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["outcome", { reason: "next" }]);
+      expect(wrapper.get('[role="status"]').text()).toBe("");
+      wrapper.unmount();
+    },
+  );
+
+  it("does not publish queued settlement after unmount", async () => {
+    const settled = vi.fn<(id: ScreenId) => void>();
+    const wrapper = mountDeck({ onSettled: settled });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+    deck.next();
+    await Promise.resolve();
+    wrapper.unmount();
+    await nextTick();
+    await Promise.resolve();
+    expect(settled).not.toHaveBeenCalled();
+  });
+
+  it.each(["shuffle", "direct"] as const)(
+    "invalidates queued speech when authoritative props supersede it (%s)",
+    async (exchange) => {
+      const wrapper = mountDeck({ exchange });
+      await nextTick();
+      const deck = wrapper.vm as unknown as DeckInstance;
+      deck.next();
+      await Promise.resolve();
+      await wrapper.setProps({ activeId: "overview" });
+      await nextTick();
+      await nextTick();
+      expect(deck.activeId).toBe("overview");
+      expect(deck.settledId).toBe("overview");
+      expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["outcome", { reason: "next" }]);
+      expect(wrapper.get('[role="status"]').text()).toBe("");
+      wrapper.unmount();
+    },
+  );
+
+  it.each(["shuffle", "direct"] as const)(
+    "does not reuse a queued index after collection reorder (%s)",
+    async (exchange) => {
+      const wrapper = mountDeck({ exchange });
+      await nextTick();
+      const deck = wrapper.vm as unknown as DeckInstance;
+      deck.next();
+      await Promise.resolve();
+      await wrapper.setProps({ items: [screens[2], screens[0], screens[1]] });
+      await nextTick();
+      await nextTick();
+      expect(deck.activeId).toBe("outcome");
+      expect(deck.settledId).toBe("outcome");
+      expect(wrapper.emitted("settled")).toBeUndefined();
+      expect(wrapper.get('[role="status"]').text()).toBe("");
+      expect(wrapper.get('[data-item-id="outcome"]').attributes("aria-label")).toBe(
+        "Outcome, 1 of 3",
+      );
+      wrapper.unmount();
+    },
+  );
+
+  it("keeps a valid pending settlement when a stale synchronization is refused", async () => {
+    const wrapper = mountDeck({ items: screens.slice(0, 2) });
+    await nextTick();
+    const deck = wrapper.vm as unknown as DeckInstance;
+    deck.next();
+    await Promise.resolve();
+    expect(deck.synchronizeTo("outcome")).toBe(false);
+    await nextTick();
+    await nextTick();
+    expect(deck.activeId).toBe("overview");
+    expect(wrapper.emitted("settled")).toEqual([["overview", { reason: "next" }]]);
+    await nextTick();
+    expect(wrapper.get('[role="status"]').text()).toBe("Overview, 1 of 2");
+    wrapper.unmount();
+  });
+
+  it.each(["shuffle", "direct"] as const)(
+    "still reconciles refusal when newer authority is unavailable (%s)",
+    async (exchange) => {
+      const wrapper = mountDeck({ exchange, activeId: "system" });
+      await nextTick();
+      const deck = wrapper.vm as unknown as DeckInstance;
+      deck.next();
+      await Promise.resolve();
+      // @ts-expect-error Runtime guard: an external owner can supply an ID outside the typed collection.
+      await wrapper.setProps({ activeId: "future", items: [screens[2], screens[0], screens[1]] });
+      await flushPromises();
+      await nextTick();
+      expect(deck.activeId).toBe("future");
+      expect(deck.settledId).toBe("system");
+      expect(wrapper.emitted("settled")).toBeUndefined();
+      expect(wrapper.get('[role="status"]').text()).toBe("");
+      wrapper.unmount();
+    },
+  );
+
   it("renders one accessible card per item and starts on the middle screen", async () => {
     const wrapper = mountDeck();
     await nextTick();
@@ -164,7 +352,7 @@ describe("StackedDeck", () => {
     const deck = wrapper.vm as unknown as DeckInstance;
 
     expect(deck.next()).toBe(true);
-    await Promise.resolve();
+    await flushPromises();
     await nextTick();
 
     expect(wrapper.emitted("activeIdRequest")).toEqual([["outcome", { reason: "next" }]]);
@@ -194,14 +382,14 @@ describe("StackedDeck", () => {
     const deck = wrapper.vm as unknown as DeckInstance;
 
     expect(deck.next()).toBe(true);
-    await Promise.resolve();
+    await flushPromises();
     await nextTick();
     expect(deck.settledId).toBe("system");
 
     expect(deck.next()).toBe(true);
-    await Promise.resolve();
+    await flushPromises();
     await nextTick();
-    await Promise.resolve();
+    await flushPromises();
     await nextTick();
 
     expect(deck.activeId).toBe("overview");
@@ -220,10 +408,10 @@ describe("StackedDeck", () => {
     const deck = wrapper.vm as unknown as DeckInstance;
 
     expect(deck.next()).toBe(true);
-    await Promise.resolve();
+    await flushPromises();
     await nextTick();
     expect(deck.next()).toBe(true);
-    await Promise.resolve();
+    await flushPromises();
     await nextTick();
 
     expect(wrapper.emitted("activeIdRequest")).toEqual([
@@ -282,7 +470,7 @@ describe("StackedDeck", () => {
     origin.dispatchEvent(pointerDrag("pointerdown", 0));
     window.dispatchEvent(pointerDrag("pointermove", -deck.pitch * 0.4));
     // Raw Direct publication intentionally waits one microtask so touch ownership resolves first.
-    await Promise.resolve();
+    await flushPromises();
     await nextTick();
     expect(wrapper.get(".snap-motion-stacked-deck").attributes("data-owned")).toBe("true");
     expect(wrapper.get("[data-item-id='system']").attributes("data-deck-role")).toBe("top");
@@ -299,7 +487,7 @@ describe("StackedDeck", () => {
     const reorderedOrigin = wrapper.get("[data-item-id='system']").element as HTMLElement;
     reorderedOrigin.dispatchEvent(pointerDrag("pointerdown", 0));
     window.dispatchEvent(pointerDrag("pointermove", deck.pitch * 0.35));
-    await Promise.resolve();
+    await flushPromises();
     await nextTick();
     await expect(wrapper.setProps({ items: [screens[2], screens[0]] })).resolves.toBeUndefined();
     await nextTick();
@@ -370,6 +558,7 @@ describe("StackedDeck", () => {
     expect(deck.settledId).toBe("outcome");
     expect(wrapper.emitted("update:activeId")).toEqual([["outcome"]]);
     expect(wrapper.emitted("settled")).toEqual([["outcome", { reason: "next" }]]);
+    await nextTick();
     expect(wrapper.get('[data-testid="snap-motion-stacked-deck-status"]').text()).toBe(
       "Outcome, 3 of 3",
     );

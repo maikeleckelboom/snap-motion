@@ -9,7 +9,7 @@ import type {
 } from "@snap-motion/core";
 import type { SnapMotionMessages } from "@snap-motion/vue/localization";
 import type { NavigationReason } from "@snap-motion/vue/motion";
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 
 import { preserveFocusBeforeSemanticChange } from "../../internal/accessibility/focus";
 import { createEnglishSnapMotionMessages } from "../../localization/messages";
@@ -46,12 +46,13 @@ const props = withDefaults(
      * because a page full of landmarks is harder to navigate than one with none.
      */
     landmark?: boolean;
-    /** Fallback stage width, used before the deck has been measured. */
+    /** Root width cap in CSS pixels (at most 1280), also used before measurement. */
     fallbackStageWidth?: number;
     elasticity?: ElasticityOptions;
     messages?: Partial<SnapMotionMessages>;
     programmaticImpulse?: number;
-    reducedMotionOverride?: boolean;
+    /** Omitted follows the system preference; true reduces motion and false forces full motion. */
+    reducedMotionOverride?: boolean | undefined;
     /** Release policy, minus the anchor skip the deck fixes at one adjacent card. */
     releasePolicy?: StackedDeckReleasePolicy;
     spring?: SpringConfiguration;
@@ -61,6 +62,7 @@ const props = withDefaults(
     exchange: "shuffle",
     landmark: false,
     fallbackStageWidth: 1_120,
+    reducedMotionOverride: undefined,
   },
 );
 
@@ -80,6 +82,18 @@ const ids = computed<TId[]>(() => props.items.map((item) => item.id));
 const reducedMotionOverride = computed(() => props.reducedMotionOverride);
 const statusText = ref("");
 let rollbackSettlementId: TId | undefined;
+let pendingSettlement: { readonly id: TId } | undefined;
+let unmounted = false;
+
+function invalidateSettlement() {
+  pendingSettlement = undefined;
+  rollbackSettlementId = undefined;
+}
+
+onBeforeUnmount(() => {
+  unmounted = true;
+  invalidateSettlement();
+});
 const initialMechanicalId =
   props.activeId !== undefined && ids.value.includes(props.activeId)
     ? props.activeId
@@ -103,23 +117,35 @@ function resolveRollbackId(): TId | undefined {
     : ids.value[Math.floor(ids.value.length / 2)];
 }
 
-watch(
-  [ids, () => props.activeId] as const,
-  ([nextIds, controlledId], previousState) => {
-    if (controlledId !== undefined && nextIds.includes(controlledId)) {
-      latestValidAuthorityId.value = controlledId;
-      mechanicalAnchorId.value = controlledId;
-    } else if (controlledId === undefined && previousState?.[1] !== undefined) {
-      const releasedId = resolveRollbackId();
-      internalActiveId.value = releasedId;
-      if (releasedId !== undefined) deck.synchronizeTo(releasedId);
-      // The released authority may seed uncontrolled state, but it belongs to the completed
-      // controlled ownership epoch and must never outrank later uncontrolled navigation.
-      latestValidAuthorityId.value = undefined;
-    }
-  },
-  { flush: "sync" },
-);
+// Observe the complete prop patch: a synchronous watcher can see new IDs with the old authority
+// halfway through one parent update and invalidate a settlement that still owes reconciliation.
+watch([ids, () => props.activeId] as const, ([nextIds, controlledId], previousState) => {
+  const collectionChanged =
+    previousState !== undefined &&
+    (nextIds.length !== previousState[0].length ||
+      nextIds.some((id, index) => id !== previousState[0][index]));
+  // An unavailable authority cannot adopt a replacement destination. Its pending refusal must
+  // still reconcile to the last valid anchor; it can never publish speech for that unknown ID.
+  const needsRefusalReconciliation = controlledId !== undefined && !nextIds.includes(controlledId);
+  if (
+    !needsRefusalReconciliation &&
+    (collectionChanged ||
+      (controlledId !== previousState?.[1] && controlledId !== pendingSettlement?.id))
+  ) {
+    invalidateSettlement();
+  }
+  if (controlledId !== undefined && nextIds.includes(controlledId)) {
+    latestValidAuthorityId.value = controlledId;
+    mechanicalAnchorId.value = controlledId;
+  } else if (controlledId === undefined && previousState?.[1] !== undefined) {
+    const releasedId = resolveRollbackId();
+    internalActiveId.value = releasedId;
+    if (releasedId !== undefined) deck.synchronizeTo(releasedId);
+    // The released authority may seed uncontrolled state, but it belongs to the completed
+    // controlled ownership epoch and must never outrank later uncontrolled navigation.
+    latestValidAuthorityId.value = undefined;
+  }
+});
 
 watch(ids, (nextIds, previousIds) => {
   if (props.activeId !== undefined || nextIds.includes(internalActiveId.value as TId)) return;
@@ -138,10 +164,14 @@ function labelFor(item: TItem, index: number): string {
 /** Exact application-authoritative adoption; the high-level surface always keeps it silent. */
 function synchronizeTo(id: TId) {
   if (props.activeId !== undefined && id !== props.activeId) return false;
+  const previousSettlement = pendingSettlement;
+  if (!deck.synchronizeTo(id)) return false;
+  // An already exact adoption need not publish again, but it still supersedes queued speech.
+  if (pendingSettlement === previousSettlement) invalidateSettlement();
   if (props.activeId === undefined) internalActiveId.value = id;
   mechanicalAnchorId.value = id;
   if (id === props.activeId) latestValidAuthorityId.value = id;
-  return deck.synchronizeTo(id);
+  return true;
 }
 
 function positionLabel(index: number): string {
@@ -153,36 +183,50 @@ function positionLabel(index: number): string {
   });
 }
 
-function publishSettlement(id: TId, index: number, reason: NavigationReason) {
-  // Reduced motion and direct synchronization can settle in the same stack as the request. Vue
-  // still needs its already-scheduled prop flush before strict authority can be evaluated.
-  queueMicrotask(() => {
-    if (reason === "external" && rollbackSettlementId === id) {
-      rollbackSettlementId = undefined;
-      return;
-    }
-    if (props.activeId !== undefined && id !== props.activeId) {
-      if (reason === "reconcile" && ids.value.includes(id) && !ids.value.includes(props.activeId)) {
-        mechanicalAnchorId.value = id;
-        return;
-      }
-      const authoritativeId = resolveRollbackId();
-      if (authoritativeId !== undefined) {
-        rollbackSettlementId = authoritativeId;
-        const synchronized = deck.synchronizeTo(authoritativeId);
-        if (!synchronized) rollbackSettlementId = undefined;
-        else {
-          queueMicrotask(() => {
-            if (rollbackSettlementId === authoritativeId) rollbackSettlementId = undefined;
-          });
+function publishSettlement(id: TId, _index: number, reason: NavigationReason) {
+  // Settlement can be queued by a Vue watcher. At the microtask checkpoint, join the latest
+  // pending Vue flush, including an owner update queued after that watcher completed. This is a
+  // prop/DOM boundary, not an end-of-frame or paint boundary.
+  const settlement = { id };
+  pendingSettlement = settlement;
+  queueMicrotask(
+    () =>
+      void nextTick(() => {
+        if (
+          unmounted ||
+          pendingSettlement !== settlement ||
+          !deck.atRest.value ||
+          deck.settledId.value !== id
+        )
+          return;
+        const index = ids.value.indexOf(id);
+        if (index < 0) return;
+        if (reason === "external" && rollbackSettlementId === id) {
+          rollbackSettlementId = undefined;
+          return;
         }
-      }
-      return;
-    }
-    mechanicalAnchorId.value = id;
-    if (reason !== "external") statusText.value = positionLabel(index);
-    emit("settled", id, { reason });
-  });
+        if (props.activeId !== undefined && id !== props.activeId) {
+          if (
+            reason === "reconcile" &&
+            ids.value.includes(id) &&
+            !ids.value.includes(props.activeId)
+          ) {
+            mechanicalAnchorId.value = id;
+            return;
+          }
+          const authoritativeId = resolveRollbackId();
+          if (authoritativeId !== undefined) {
+            rollbackSettlementId = authoritativeId;
+            const synchronized = deck.synchronizeTo(authoritativeId);
+            if (!synchronized || pendingSettlement === settlement) rollbackSettlementId = undefined;
+          }
+          return;
+        }
+        mechanicalAnchorId.value = id;
+        if (reason !== "external") statusText.value = positionLabel(index);
+        emit("settled", id, { reason });
+      }),
+  );
 }
 
 const directDebug = import.meta.env.DEV ? ({} satisfies StackedDeckDirectDebug) : undefined;
@@ -207,6 +251,7 @@ const deck = useStackedDeckComponentMotion<TId>(
       if (item) emit("activate", item, index);
     },
     onActiveIdRequest(id, _index, reason) {
+      invalidateSettlement();
       if (id === semanticActiveId.value) return;
       if (props.activeId === undefined) {
         internalActiveId.value = id;

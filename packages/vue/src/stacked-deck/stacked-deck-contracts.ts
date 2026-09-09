@@ -11,10 +11,7 @@ export interface StackedDeckCardState<TItem, TId extends string> {
   readonly item: TItem;
   readonly id: TId;
   readonly index: number;
-  /**
-   * True for the card the deck currently names — the one a caption and a new gesture
-   * all mean. Inside a handoff that is the incoming card, before ownership has formally moved.
-   */
+  /** True for the application-authoritative semantic selection, independent of visual authority. */
   readonly active: boolean;
   /** True for the card currently dominant in the physical projection. */
   readonly visual: boolean;

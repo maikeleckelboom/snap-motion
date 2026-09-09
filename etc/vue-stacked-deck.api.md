@@ -49,7 +49,7 @@ export const StackedDeck: <TItem extends {
         elasticity?: ElasticityOptions;
         messages?: Partial<SnapMotionMessages>;
         programmaticImpulse?: number;
-        reducedMotionOverride?: boolean;
+        reducedMotionOverride?: boolean | undefined;
         releasePolicy?: StackedDeckReleasePolicy;
         spring?: SpringConfiguration;
     } & {

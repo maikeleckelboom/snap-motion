@@ -78,6 +78,10 @@ exactly instead of animating through intermediate cards. `Coverflow` can target 
 position directly. `synchronizeTo` cancels conflicting motion and never replays request events. On
 controlled high-level handles it accepts only the current prop; `navigateTo` is the route for asking
 the owner to change state.
+`StackedDeck` refuses an unknown or stale ID without changing selection, the rollback anchor, or
+pending settlement. Its settlement publication waits for the current Vue prop flush and is discarded when newer
+navigation, exact adoption, a changed collection, or unmount supersedes it. Status labels are resolved
+from the surviving semantic ID, never from an index captured before a collection change.
 
 ```ts
 function onGalleryClosed(finalId: string | undefined) {
@@ -98,7 +102,13 @@ Both components accept `items`, optional `activeId`, `label` / `labelledBy`, `it
 local point grabbed on the outgoing card attached to the pointer after horizontal intent is owned,
 including raw vertical movement, while the scalar controller still owns adjacent target, authority,
 release, and pile reflow. It does not change card content, dimensions, pile geometry, or semantics.
-`fallbackStageWidth` is only the pre-measurement fallback; the component measures the real stage.
+The high-level `fallbackStageWidth` prop also caps the root's CSS width at that value (at most 1280
+CSS pixels). It supplies geometry before measurement; afterward mechanics use the measured root.
+Choose the allocated width with ordinary host CSS. The advanced composable's `stageWidth` option is
+only a pre-measurement fallback and does not style its host.
+Omitting `reducedMotionOverride` on `StackedDeck` follows the system preference, including changes
+while mounted. Explicit `true` reduces motion; explicit `false` forces full motion. Ordinary
+consumers do not need to read a media query or forward an override.
 The measured public root may be narrower than the compact mechanics profile. At a 280 CSS-pixel
 allocation, the compact Deck keeps its 192 CSS-pixel card, slotted content, and settled pile inside
 that root in either navigation direction. The package stylesheet applies layout containment to the
@@ -151,6 +161,14 @@ target and landing through the same persistent pose rather than rebasing it. Eve
 gesture begins a local scalar transaction on a shell the deck is actually offering. Rapid commands
 chain from the pending mechanical target without promoting it to durable semantic state. Reduced
 motion preserves the same authority and material protocol.
+Calls made synchronously before Vue acknowledges the first command share its origin and coalesce;
+distinct inputs after that acknowledgement chain from the pending target.
+
+Changing `disabled` during input ends pointer recognition and wheel coalescing. An owned exchange
+returns to its interaction origin without a new selection request; a touch still awaiting intent
+preserves the previously accepted destination. Older committed Direct landings continue independently.
+Explicit cancellation also retires queued gesture samples and actions, so they cannot be delivered
+for a replaced contact, collection, or component lifetime.
 
 Only the settled inspectable card is interactive. Hidden and pile-only cards stay inert. Focus is
 preserved before semantic collection changes, status announcements happen once at settlement, and

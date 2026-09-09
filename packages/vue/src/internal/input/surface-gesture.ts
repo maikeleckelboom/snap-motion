@@ -68,6 +68,7 @@ function resolutionFor(tracked: TrackedGesture, onOrigin: boolean): DirectManipu
 }
 
 interface TrackedGesture {
+  readonly generation: number;
   readonly focusWasOutside: boolean;
   readonly openEligibleAtStart: boolean;
   readonly originElement: HTMLElement | undefined;
@@ -103,6 +104,7 @@ interface ArmedClickSuppression {
 export function useSurfaceGesture(options: SurfaceGestureOptions) {
   const activePointers = new Set<number>();
   let gesture: TrackedGesture | undefined;
+  let generation = 0;
   let disposed = false;
   /** Evidence tying one compatibility click to the swipe that armed its suppression. */
   let clickSuppression: ArmedClickSuppression | undefined;
@@ -115,7 +117,10 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
       Math.hypot(tracked.deltaX, tracked.deltaY),
     );
     if (tracked.originIndex !== undefined) {
-      queueMicrotask(() => options.onPointerSample?.(tracked.deltaX, tracked.deltaY));
+      queueMicrotask(() => {
+        if (disposed || tracked.generation !== generation) return;
+        options.onPointerSample?.(tracked.deltaX, tracked.deltaY);
+      });
     }
   }
 
@@ -173,7 +178,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
   }
 
   function publish(tracked: TrackedGesture, resolution: DirectManipulationResolution) {
-    if (disposed) return;
+    if (disposed || tracked.generation !== generation) return;
     options.onResolved(resolution, {
       cancelled: tracked.cancelled,
       focusWasOutside: tracked.focusWasOutside,
@@ -242,7 +247,9 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     if (event.pointerType === "mouse" && originIndex >= 0 && event.cancelable) {
       event.preventDefault();
     }
+    generation += 1;
     gesture = {
+      generation,
       focusWasOutside: Boolean(root && (!activeElement || !root.contains(activeElement))),
       openEligibleAtStart: originIndex >= 0 && options.isOpenEligible(originIndex),
       originElement,
@@ -308,6 +315,9 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
    * what keeps the high- and low-level recognizers in agreement after takeover.
    */
   function cancel() {
+    // A release or movement sample may already be queued after the live gesture was cleared.
+    // Retire that work too, so it cannot speak for a newer authority or pointer sequence.
+    generation += 1;
     gesture = undefined;
     activePointers.clear();
     clearClickSuppression();

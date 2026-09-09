@@ -200,6 +200,14 @@ export interface StackedDeckDirectLandingTelemetry extends StackedDeckDirectLand
 export interface StackedDeckDirectDebug {
   landings?: readonly StackedDeckDirectLandingTelemetry[];
   projection?: StackedDeckDirectProjection;
+  /** Immutable evidence for one completed Vue DOM publication; this is not a paint timestamp. */
+  rendered?: {
+    readonly revision: number;
+    readonly timestamp: number;
+    readonly landings: readonly StackedDeckDirectLandingTelemetry[];
+    readonly projection: StackedDeckDirectProjection;
+    readonly poses: StackedDeckFrame["poses"];
+  };
 }
 
 type MutableStackedDeckDirectLanding = {
@@ -846,6 +854,27 @@ export function useStackedDeckComponentMotion<Id extends string>(
     triggerRef(frame);
   });
 
+  if (import.meta.env.DEV && directDebug !== undefined) {
+    let revision = 0;
+    watch(
+      frame,
+      (publishedFrame) => {
+        directDebug.rendered = Object.freeze({
+          revision: ++revision,
+          timestamp: performance.now(),
+          landings: Object.freeze(directLandings.map((landing) => Object.freeze({ ...landing }))),
+          projection: Object.freeze({ ...directProjection }),
+          poses: Object.freeze(publishedFrame.poses.map((pose) => Object.freeze({ ...pose }))),
+        });
+        // A synchronous observer can independently sample computed CSS and geometry for every DOM
+        // publication, even when its RAF recorder skips the exact-arrival frame. No production log
+        // or public event is added. Vue's post-flush boundary does not certify browser paint.
+        options.viewport.value?.dispatchEvent(new Event("snap-motion-direct-frame"));
+      },
+      { flush: "post" },
+    );
+  }
+
   const diagnostics = computed<SurfaceMotionDiagnostics<Id>>(() =>
     resolveSurfaceDiagnostics({
       snapshot: motion.snapshot.value,
@@ -856,7 +885,8 @@ export function useStackedDeckComponentMotion<Id extends string>(
   );
 
   function isInspectEligible(index: number): boolean {
-    if (disabled() || index < 0 || index >= ids.value.length) return false;
+    if (disabled() || index < 0 || index >= ids.value.length || isReleaseInFlight(index))
+      return false;
     return isStackedDeckInspectEligible(state.value, {
       index,
       // Wheel settlement is not physical ownership: nothing is being held.
@@ -1128,6 +1158,35 @@ export function useStackedDeckComponentMotion<Id extends string>(
     selectionFrame = undefined;
     motion.interrupt();
   }
+
+  watch(
+    disabled,
+    (isDisabled) => {
+      if (!isDisabled) return;
+      gesture.cancel();
+      if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+      selectionFrame = undefined;
+      if (!owned.value && !motion.pointerInteractionActive.value) return;
+
+      // Disabling ends device ownership, including a touch that has not acquired horizontal
+      // intent and a wheel burst whose destination timer has not fired. An owned exchange returns
+      // to its origin without asking for selection; mere recognition preserves the navigation
+      // already in flight. Neither case cancels independent committed landing bodies.
+      const wasOwned = owned.value;
+      const snapshot = motion.snapshot.value;
+      const destination = wasOwned
+        ? model.idAt(state.value.interactionOriginIndex ?? state.value.settledIndex)
+        : (snapshot.target?.id ?? snapshot.active?.id);
+      motion.interrupt();
+      if (wasOwned) openDirectRelease(true);
+      if (destination !== undefined) {
+        motion.moveTo(destination, { initialVelocity: wasOwned ? 0 : snapshot.velocity });
+      }
+      // Reduced motion can return synchronously while interruption already reports idle.
+      if (atRest.value && !releaseSettlement.isActive.value) clearDirectExchange();
+    },
+    { flush: "sync" },
+  );
 
   watch(isDirect, cancelInteractionRecords);
 
