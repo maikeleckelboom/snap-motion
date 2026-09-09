@@ -123,9 +123,12 @@ test.describe("zero-configuration surfaces", () => {
     await input.press("ArrowRight");
     await expect(page.locator(DECK)).toHaveAttribute("data-settled-id", "map");
 
-    // A gesture over the card is a gesture, not an activation.
-    await dragMouseBy(page, page.locator(DECK), -400, 0);
+    // Ordinary content starts a gesture; the deck centre may contain the consumer's text field.
+    await dragMouseBy(page, liveCard.locator("h4"), -400, 0, {
+      beforeRelease: () => expect(page.locator(DECK)).toHaveAttribute("data-owned", "true"),
+    });
     await expect(page.locator(DECK)).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+    await expect(page.locator(DECK)).toHaveAttribute("data-settled-id", "team");
     await expect(activations).toHaveText("2");
   });
 
@@ -139,8 +142,12 @@ test.describe("zero-configuration surfaces", () => {
     await expect(page.locator(DECK)).toHaveAttribute("data-settled-id", "team");
     await expect(reason).toHaveText("keyboard");
 
-    await dragMouseBy(page, page.locator(DECK), 400, 0);
+    const title = page.locator(`${DECK} .snap-motion-stacked-deck-card:not([inert]) h4`);
+    await dragMouseBy(page, title, 400, 0, {
+      beforeRelease: () => expect(page.locator(DECK)).toHaveAttribute("data-owned", "true"),
+    });
     await expect(page.locator(DECK)).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+    await expect(page.locator(DECK)).toHaveAttribute("data-settled-id", "map");
     await expect(reason).toHaveText("drag");
   });
 

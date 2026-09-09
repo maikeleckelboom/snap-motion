@@ -20,49 +20,14 @@ import {
   waitForAuthority,
   waitForOfferedCard,
 } from "./stackedDeckHarness";
+import {
+  expectDirectTraceCoherent,
+  startDirectRafTrace,
+  stopDirectRafTrace,
+} from "./stackedDeckTrace";
 
 async function nextFrame(page: Page): Promise<void> {
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-}
-
-interface DirectRafTraceShell {
-  readonly bottom: number;
-  readonly elapsed: number;
-  readonly id: string;
-  readonly index: number;
-  readonly interactive: boolean;
-  readonly landingOrder: number;
-  readonly layer: number;
-  readonly left: number;
-  readonly opacity: number;
-  readonly releaseX: number;
-  readonly releaseY: number;
-  readonly right: number;
-  readonly role: string;
-  readonly rotate: number;
-  readonly scale: number;
-  readonly settlement: number;
-  readonly top: number;
-  readonly translateX: number;
-  readonly translateY: number;
-  readonly updatedAt: number;
-  readonly visible: boolean;
-}
-
-interface DirectRafTraceFrame {
-  readonly authoritativeIndex: number;
-  readonly directOriginIndex: number;
-  readonly directPhase: string;
-  readonly directSettlement: number;
-  readonly directSignedTravel: number;
-  readonly directTargetIndex: number;
-  readonly frame: number;
-  readonly landingCount: number;
-  readonly painted: { readonly center: string; readonly left: string; readonly right: string };
-  readonly paintedX: { readonly center: number; readonly left: number; readonly right: number };
-  readonly paintedY: number;
-  readonly shells: readonly DirectRafTraceShell[];
-  readonly timestamp: number;
 }
 
 interface RapidDirectChainSnapshot {
@@ -114,7 +79,13 @@ async function runRapidDirectChain(
     readonly fraction?: number;
   }[],
 ): Promise<RapidDirectChainResult> {
-  return page.evaluate(
+  const ownsTrace = await page.evaluate(
+    () =>
+      !(window as typeof window & { snapMotionDirectRafTraceStop?: () => void })
+        .snapMotionDirectRafTraceStop,
+  );
+  if (ownsTrace) await startDirectRafTrace(page);
+  const result = await page.evaluate(
     async ({ ids, initialIndex, rapidSteps }) => {
       const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
       const directDebug = (
@@ -286,9 +257,32 @@ async function runRapidDirectChain(
     },
     { ids: itemIds, initialIndex: startIndex, rapidSteps: steps },
   );
+  if (ownsTrace) {
+    const trace = await stopDirectRafTrace(page);
+    const testInfo = test.info();
+    const directory = resolvePath(
+      import.meta.dirname,
+      "..",
+      ".artifacts",
+      "stacked-deck-rapid-chain",
+    );
+    await mkdir(directory, { recursive: true });
+    const artifact = join(
+      directory,
+      `${testInfo.project.name}-${testInfo.title.replaceAll(/[^a-z\d]+/gi, "-").slice(0, 80)}-${testInfo.repeatEachIndex}-${trace[0]?.revision ?? 0}.json`,
+    );
+    await writeFile(artifact, `${JSON.stringify({ result, trace }, null, 2)}\n`);
+    const review = expectDirectTraceCoherent(trace);
+    await writeFile(artifact, `${JSON.stringify({ result, review, trace }, null, 2)}\n`);
+    await testInfo.attach("rapid-chain-dom-publications", {
+      path: artifact,
+      contentType: "application/json",
+    });
+  }
+  return result;
 }
 
-function expectRapidChainLandingContinuity(snapshots: readonly RapidDirectChainSnapshot[]): number {
+function expectRapidChainLandingProgress(snapshots: readonly RapidDirectChainSnapshot[]): number {
   let maximumLandingCount = 0;
   for (let index = 0; index < snapshots.length; index += 1) {
     const current = snapshots[index]!;
@@ -311,225 +305,8 @@ function expectRapidChainLandingContinuity(snapshots: readonly RapidDirectChainS
         expect(stillLanding.landingSettlement).toBeGreaterThanOrEqual(prior.landingSettlement);
         continue;
       }
-      // Physical arrival is now the only way a release leaves this collection. Nothing absorbs one,
-      // so a record that is gone has to have had the flight time to get where it was going. Charge
-      // that time from this landing's own last update, not the recorder's unrelated sample cadence.
-      expect(
-        prior.landingElapsed + Math.max(0, current.timestamp - prior.landingUpdatedAt) / 230,
-        `landing ${prior.landingOrder} disappeared at ${prior.landingSettlement}`,
-      ).toBeGreaterThanOrEqual(1);
-    }
-  }
-  return maximumLandingCount;
-}
-
-async function startDirectRafTrace(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const tracedWindow = window as typeof window & {
-      snapMotionDirectRafTrace?: DirectRafTraceFrame[];
-      snapMotionDirectRafTraceActive?: boolean;
-    };
-    const frames: DirectRafTraceFrame[] = [];
-    tracedWindow.snapMotionDirectRafTrace = frames;
-    tracedWindow.snapMotionDirectRafTraceActive = true;
-    const sample = (timestamp: number) => {
-      const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
-      const directDebug = (
-        root as HTMLElement & {
-          snapMotionDirectDebug?: {
-            landings?: readonly {
-              elapsed: number;
-              itemIndex: number;
-              releaseOrder: number;
-              settlement: number;
-              translateX: number;
-              translateY: number;
-              updatedAt: number;
-            }[];
-            projection?: {
-              originIndex: number;
-              phase?: string;
-              settlement: number;
-              signedTravel: number;
-              targetIndex: number | null;
-            };
-          };
-        }
-      ).snapMotionDirectDebug;
-      const landings = directDebug?.landings ?? [];
-      const projection = directDebug?.projection;
-      const rootBox = root.getBoundingClientRect();
-      const cards = [...root.querySelectorAll<HTMLElement>("[data-snap-motion-stacked-deck-card]")];
-      const cardWidth = Number(root.dataset.cardWidth);
-      const ownerAt = (x: number, y: number) => {
-        for (const element of document.elementsFromPoint(x, y)) {
-          const card = element.closest<HTMLElement>("[data-snap-motion-stacked-deck-card]");
-          if (card && root.contains(card)) return card.dataset.itemId ?? "";
-        }
-        return "";
-      };
-      const shells = cards.map((card, index) => {
-        const landing = landings.find((candidate) => candidate.itemIndex === index);
-        const surface = card.querySelector<HTMLElement>(".screen-chrome")!;
-        const box = surface.getBoundingClientRect();
-        return {
-          bottom: box.bottom,
-          elapsed: landing?.elapsed ?? Number.NaN,
-          id: card.dataset.itemId ?? "",
-          index,
-          interactive: card.dataset.deckInteractive === "true",
-          landingOrder: landing?.releaseOrder ?? Number.NaN,
-          layer: Number(card.dataset.deckLayer),
-          left: box.left,
-          opacity: Number(getComputedStyle(card).opacity),
-          releaseX: landing?.translateX ?? Number.NaN,
-          releaseY: landing?.translateY ?? Number.NaN,
-          right: box.right,
-          role: card.dataset.deckRole ?? "",
-          rotate: Number(surface.dataset.rotate),
-          scale: Number(surface.dataset.scale),
-          settlement: landing?.settlement ?? Number.NaN,
-          top: box.top,
-          translateX: Number(surface.dataset.translateX),
-          translateY: Number(surface.dataset.translateY),
-          updatedAt: landing?.updatedAt ?? Number.NaN,
-          visible: card.dataset.deckVisible === "true",
-        };
-      });
-      const centerX = rootBox.left + rootBox.width / 2;
-      const centerY = rootBox.top + rootBox.height / 2;
-      frames.push({
-        authoritativeIndex: Number(root.dataset.authoritativeIndex),
-        directOriginIndex: projection?.originIndex ?? Number.NaN,
-        directPhase: projection?.phase ?? "",
-        directSettlement: projection?.settlement ?? Number.NaN,
-        directSignedTravel: projection?.signedTravel ?? Number.NaN,
-        directTargetIndex: projection?.targetIndex ?? Number.NaN,
-        frame: frames.length,
-        landingCount: landings.length,
-        painted: {
-          center: ownerAt(centerX, centerY),
-          left: ownerAt(centerX - cardWidth * 0.46, centerY),
-          right: ownerAt(centerX + cardWidth * 0.46, centerY),
-        },
-        paintedX: {
-          center: centerX,
-          left: centerX - cardWidth * 0.46,
-          right: centerX + cardWidth * 0.46,
-        },
-        paintedY: centerY,
-        shells,
-        timestamp,
-      });
-    };
-    const record = (timestamp: number) => {
-      if (tracedWindow.snapMotionDirectRafTraceActive) requestAnimationFrame(record);
-      // Vue batches the frame ref's DOM update into a microtask. The landing RAF may run on either
-      // side of this recorder under parallel browser load, so reading its mutable diagnostic array
-      // inside the RAF can otherwise combine the new landing state with the preceding rendered
-      // geometry. A second microtask runs after a Vue flush queued by any callback in this RAF,
-      // keeping lifecycle, pose and paint evidence on one rendered frame.
-      queueMicrotask(() => queueMicrotask(() => sample(timestamp)));
-    };
-    requestAnimationFrame(record);
-  });
-}
-
-async function stopDirectRafTrace(page: Page): Promise<readonly DirectRafTraceFrame[]> {
-  await page.evaluate(() => {
-    (
-      window as typeof window & { snapMotionDirectRafTraceActive?: boolean }
-    ).snapMotionDirectRafTraceActive = false;
-  });
-  await nextFrame(page);
-  return page.evaluate(
-    () =>
-      (window as typeof window & { snapMotionDirectRafTrace?: readonly DirectRafTraceFrame[] })
-        .snapMotionDirectRafTrace ?? [],
-  );
-}
-
-function containsPaintSample(shell: DirectRafTraceShell, x: number, y: number): boolean {
-  return (
-    x >= shell.left - 0.5 &&
-    x <= shell.right + 0.5 &&
-    y >= shell.top - 0.5 &&
-    y <= shell.bottom + 0.5
-  );
-}
-
-function expectDirectRafTraceSafe(frames: readonly DirectRafTraceFrame[]): number {
-  let maximumLandingCount = 0;
-  for (let frameIndex = 0; frameIndex < frames.length; frameIndex += 1) {
-    const frame = frames[frameIndex]!;
-    const landings = frame.shells.filter((shell) => Number.isFinite(shell.settlement));
-    maximumLandingCount = Math.max(maximumLandingCount, landings.length);
-    expect(new Set(landings.map((landing) => landing.id)).size, `frame ${frame.frame}`).toBe(
-      landings.length,
-    );
-    expect(
-      new Set(landings.map((landing) => landing.landingOrder)).size,
-      `frame ${frame.frame}`,
-    ).toBe(landings.length);
-    if (frameIndex === 0) continue;
-    const previous = frames[frameIndex - 1]!;
-    for (const priorLanding of previous.shells.filter((shell) =>
-      Number.isFinite(shell.settlement),
-    )) {
-      const current = landings.find(
-        (landing) => landing.landingOrder === priorLanding.landingOrder,
-      );
-      if (current !== undefined) {
-        expect(
-          current.settlement,
-          `${priorLanding.id} settlement at frame ${frame.frame}`,
-        ).toBeGreaterThanOrEqual(priorLanding.settlement);
-        continue;
-      }
-      // A completed record remains present for its exact-arrival frame. A recorder that observed
-      // every RAF therefore sees one before ownership ends. A landing RAF can resume between trace
-      // samples, so its own last-update timestamp — rather than recorder cadence — must prove that
-      // the 230 ms flight could complete before an absent record is accepted.
-      const physicallyCompleted =
-        priorLanding.elapsed >= 1 ||
-        priorLanding.elapsed + Math.max(0, frame.timestamp - priorLanding.updatedAt) / 230 >= 1;
-      expect(
-        physicallyCompleted,
-        `${priorLanding.id} lost landing ${priorLanding.landingOrder} at ${priorLanding.settlement} between frames ${previous.frame} and ${frame.frame}`,
-      ).toBe(true);
-    }
-
-    for (const region of ["center", "left", "right"] as const) {
-      const beforeOwner = previous.painted[region];
-      const afterOwner = frame.painted[region];
-      if (beforeOwner === afterOwner || beforeOwner === "" || afterOwner === "") continue;
-      const beforeShell = previous.shells.find((shell) => shell.id === beforeOwner)!;
-      const afterShell = frame.shells.find((shell) => shell.id === afterOwner)!;
-      const beforeAfter = frame.shells.find((shell) => shell.id === beforeOwner)!;
-      const afterBefore = previous.shells.find((shell) => shell.id === afterOwner)!;
-      const edgeMotion = Math.max(
-        Math.abs(beforeAfter.left - beforeShell.left),
-        Math.abs(beforeAfter.right - beforeShell.right),
-        Math.abs(afterShell.left - afterBefore.left),
-        Math.abs(afterShell.right - afterBefore.right),
-      );
-      const horizontalOverlap =
-        Math.min(beforeAfter.right, afterShell.right) - Math.max(beforeAfter.left, afterShell.left);
-      const verticalOverlap =
-        Math.min(beforeAfter.bottom, afterShell.bottom) - Math.max(beforeAfter.top, afterShell.top);
-      const orderBefore = Math.sign(beforeShell.layer - afterBefore.layer);
-      const orderAfter = Math.sign(beforeAfter.layer - afterShell.layer);
-      const safeDepthCrossover =
-        orderBefore !== orderAfter && (horizontalOverlap <= 0 || verticalOverlap <= 0);
-      const bodyEdgeCrossing =
-        containsPaintSample(beforeShell, previous.paintedX[region], previous.paintedY) !==
-          containsPaintSample(beforeAfter, frame.paintedX[region], frame.paintedY) ||
-        containsPaintSample(afterBefore, previous.paintedX[region], previous.paintedY) !==
-          containsPaintSample(afterShell, frame.paintedX[region], frame.paintedY);
-      expect(
-        bodyEdgeCrossing || safeDepthCrossover,
-        `${region} paint changed ${beforeOwner} -> ${afterOwner} at frame ${frame.frame} without a body-edge crossing; ${edgeMotion.toFixed(2)}px edge motion and ${horizontalOverlap.toFixed(2)}px × ${verticalOverlap.toFixed(2)}px overlap`,
-      ).toBe(true);
+      // These gesture checkpoints deliberately skip frames. They cannot prove a retired landing
+      // arrived; the publication trace below requires an observed exact-arrival frame instead.
     }
   }
   return maximumLandingCount;
@@ -880,7 +657,7 @@ test("Direct chains interior and wrap exchanges for two revolutions without scal
   const stage = await prepareDirect(page, 0);
   const initial = await beginFreshHand(page, 0);
   let held: OwnedCard = { index: 0, origin: initial.origin, pitch: initial.pitch, zero: 0 };
-  const itinerary = [STACKED_DECK_IDS[0]];
+  const itinerary: Array<(typeof STACKED_DECK_IDS)[number]> = [STACKED_DECK_IDS[0]];
 
   for (let exchange = 0; exchange < STACKED_DECK_IDS.length * 2; exchange += 1) {
     const result = await releaseAndTakeOver(page, held, 1);
@@ -1134,7 +911,7 @@ test("Direct preserves every unfinished shell through a third immediate same-dir
   const thirdHand = chain.snapshots[1]!;
   const fourthHand = chain.snapshots[2]!;
   const trace = JSON.stringify(chain.snapshots, null, 2);
-  const maximumLandingCount = expectRapidChainLandingContinuity(chain.snapshots);
+  const maximumLandingCount = expectRapidChainLandingProgress(chain.snapshots);
   if (testInfo.project.name === "chromium") {
     expect(thirdHand.landingCount, trace).toBe(2);
     expect(Number.isFinite(thirdHand.shells.settings!.landingSettlement), trace).toBe(true);
@@ -1166,7 +943,7 @@ test("Direct preserves three inverse releases while repeatedly crossing the sema
     { direction: -1 },
   ]);
   const final = chain.snapshots.at(-1)!;
-  const maximumLandingCount = expectRapidChainLandingContinuity(chain.snapshots);
+  const maximumLandingCount = expectRapidChainLandingProgress(chain.snapshots);
   if (testInfo.project.name === "chromium") {
     expect(final.landingCount).toBe(3);
     expect(final.landingIds.toSorted()).toEqual(["settings", "team", "templates"]);
@@ -1225,7 +1002,7 @@ test("Direct never absorbs an airborne reversal target into the next hand", asyn
     alternatingTrace,
   ).toEqual([]);
   expect(alternating.snapshots.every((snapshot) => snapshot.captureDistance < 2)).toBe(true);
-  expectRapidChainLandingContinuity(alternating.snapshots);
+  expectRapidChainLandingProgress(alternating.snapshots);
   expect(alternating.snapshots.every((snapshot) => snapshot.landingCount <= 1)).toBe(true);
   await finishPointer(page, alternating.hand, 0, 16, "pointercancel");
 });
@@ -1255,7 +1032,7 @@ test("Direct two-item machine-gun reuse keeps one record per persistent shell", 
   await finishPointer(page, chain.hand, 0, 16, "pointercancel");
 });
 
-test("Direct deterministic heavy abuse retains every concurrent release and safe paint owner", async ({
+test("Direct deterministic heavy abuse retains every concurrent release and records paint handoffs", async ({
   page,
 }, testInfo) => {
   test.setTimeout(120_000);
@@ -1317,7 +1094,7 @@ test("Direct deterministic heavy abuse retains every concurrent release and safe
     { diagonalY: -90, direction: 1, fraction: 0.501 },
     { diagonalY: 70, direction: 1 },
   ]);
-  const guaranteedMaximum = expectRapidChainLandingContinuity(guaranteedOverlap.snapshots);
+  const guaranteedMaximum = expectRapidChainLandingProgress(guaranteedOverlap.snapshots);
   expect(guaranteedMaximum).toBeGreaterThanOrEqual(testInfo.project.name === "chromium" ? 3 : 1);
   await expect
     .poll(() =>
@@ -1335,8 +1112,8 @@ test("Direct deterministic heavy abuse retains every concurrent release and safe
   const started = await page.evaluate(() => performance.now());
   let cycle = 0;
   while ((await page.evaluate(() => performance.now())) - started < 12_000) {
-    // Four releases inside their 230ms lifetimes guarantee the multi-body state rather than hoping
-    // a random gesture cadence happens to reach it.
+    // Repeat the same gesture itinerary. Protocol and engine timing determine actual overlap;
+    // the startup chain and complete publication trace assert the observed concurrent bodies.
     await commit(1, 1, 0, "machine-gun");
     await commit(1, 1.35, 120, "machine-gun-overdrag");
     await commit(1, 0.501, -90, "machine-gun-threshold");
@@ -1362,15 +1139,17 @@ test("Direct deterministic heavy abuse retains every concurrent release and safe
   // Persist the raw evidence before evaluating it so a failed invariant still leaves the two
   // offending frames available for diagnosis.
   await writeFile(artifactPath, `${JSON.stringify({ gestures, trace }, null, 2)}\n`);
-  const maximumLandingCount = expectDirectRafTraceSafe(trace);
+  const { maximumLandingCount, unobservedPaintHandoffs } = expectDirectTraceCoherent(trace);
   expect(maximumLandingCount).toBeGreaterThanOrEqual(testInfo.project.name === "chromium" ? 3 : 1);
   expect(trace.at(-1)!.timestamp - trace[0]!.timestamp).toBeGreaterThanOrEqual(10_000);
   await writeFile(
     artifactPath,
-    `${JSON.stringify({ gestures, maximumLandingCount, trace }, null, 2)}\n`,
+    `${JSON.stringify({ gestures, maximumLandingCount, unobservedPaintHandoffs, trace }, null, 2)}\n`,
   );
   await testInfo.attach("direct-multi-landing-timeline", {
-    body: Buffer.from(JSON.stringify({ gestures, maximumLandingCount, trace }, null, 2)),
+    body: Buffer.from(
+      JSON.stringify({ gestures, maximumLandingCount, unobservedPaintHandoffs, trace }, null, 2),
+    ),
     contentType: "application/json",
   });
 });
@@ -1733,7 +1512,12 @@ interface ReleaseReview {
  */
 function reviewRelease(trace: ReleaseTrace, restX: number, from: number): ReleaseReview {
   const frames = trace.frames.slice(from);
-  const crossovers: { frame: number; overlap: number; overlapBefore: number }[] = [];
+  const crossovers: {
+    frame: number;
+    intervalMs: number;
+    overlap: number;
+    overlapBefore: number;
+  }[] = [];
   let maximumStep = 0;
   let minimumOpacity = 1;
   let overlappedWhileInFront = 0;
@@ -2640,9 +2424,11 @@ interface DirectReleaseFrame {
 async function recordDirectReleaseFrames(page: Page): Promise<void> {
   await page.evaluate(() => {
     const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
-    const traced = window as typeof window & { snapMotionReleaseTrace?: DirectReleaseFrame[] };
+    const traced = window as typeof window & {
+      snapMotionDirectReleaseFrames?: DirectReleaseFrame[];
+    };
     const frames: DirectReleaseFrame[] = [];
-    traced.snapMotionReleaseTrace = frames;
+    traced.snapMotionDirectReleaseFrames = frames;
     const record = () => {
       const debug = (
         root as HTMLElement & {
@@ -2724,8 +2510,9 @@ async function realMouseRelease(
   await page.waitForTimeout(160);
 
   return page.evaluate(() => {
-    const frames = (window as typeof window & { snapMotionReleaseTrace?: DirectReleaseFrame[] })
-      .snapMotionReleaseTrace!;
+    const frames = (
+      window as typeof window & { snapMotionDirectReleaseFrames?: DirectReleaseFrame[] }
+    ).snapMotionDirectReleaseFrames!;
     const held = frames.findIndex((frame) => frame.phase === "held");
     const after = frames.slice(held < 0 ? 0 : held);
     const live = after.filter((frame) => frame.phase !== "none");

@@ -324,7 +324,8 @@ test("records the Direct candidate exchange", async ({ context, page }) => {
 
   phases.push("autonomous keyboard Direct");
   await stage.press("ArrowLeft");
-  await expectCarouselAt(stage, "team");
+  // Templates is semantic index zero: one backward interaction wraps to Settings, not Team.
+  await expectCarouselAt(stage, "settings");
   await page.waitForTimeout(420);
 
   phases.push("manual acceptance pass");

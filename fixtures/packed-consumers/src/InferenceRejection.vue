@@ -63,6 +63,17 @@ function chapterTitle(chapter: Chapter): string {
     <!-- @vue-expect-error an item without a semantic ID is not an item -->
     <StackedDeck :items="[{ title: 'No ID' }]" />
 
+    <!-- @vue-expect-error the Deck label receives the mutable domain item, not any -->
+    <StackedDeck :items="chapters" :item-label="(chapter) => chapter.missingProperty" />
+
+    <StackedDeck :items="chapters">
+      <template #card="{ item }">
+        <p>{{ chapterTitle(item) }}</p>
+        <!-- @vue-expect-error mutable Deck slot inference must reject unknown domain members -->
+        <p :data-missing="item.missingProperty" />
+      </template>
+    </StackedDeck>
+
     <!-- @vue-expect-error the label accessor receives this collection's item, not another's -->
     <Coverflow :items="chapters" :item-label="(chapter) => chapter.missingProperty" />
 

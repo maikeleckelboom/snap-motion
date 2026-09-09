@@ -45,6 +45,20 @@ browser keyboard tests cannot establish assistive-technology interoperability.
 
 Axe passing is a regression gate, not a conformance claim.
 
+StackedDeck's Direct trace pairs immutable snapshots after Vue's DOM flush with computed CSS
+matrices, transformed body geometry, explicit paint ranks, and persistent DOM identity. A separate
+publication observer retains exact landing arrival and retirement even when the RAF recorder skips
+samples. Retirement requires an observed completed landing; elapsed time that merely permits
+completion is insufficient. Negative controls reject premature retirement, inconsistent snapshots,
+and stationary overlapping depth swaps. When a moving body may have crossed and returned between
+samples, the stress trace records an unobserved paint handoff rather than certifying its clearance;
+exact-boundary core regressions separately exercise the continuous projection. Browser callback-order
+tests exercise both recorder-before-update and
+recorder-after-update scheduling. Neither nested microtasks nor Vue's DOM flush establishes a
+post-paint boundary. Inert shells are excluded from ordinary hit testing, so rectangular-body paint
+ordering is checked from computed geometry and depth; compositor pixels, rounded corners, shadows,
+and physical display cadence still need visual/device review.
+
 ## Manual assistive-technology release gate
 
 > Prepared for manual assistive-technology certification

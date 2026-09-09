@@ -99,11 +99,13 @@ function navigateAsRoute(id: ShowcaseScreenId) {
       class="defaults-surface"
       data-testid="defaults-deck"
       :disabled="deckCovered"
-      v-bind="deckExchange === undefined ? {} : { exchange: deckExchange }"
+      v-bind="{
+        ...(deckExchange === undefined ? {} : { exchange: deckExchange }),
+        ...(reducedMotionOverride === undefined ? {} : { reducedMotionOverride }),
+      }"
       :items="screens"
       :item-label="(screen) => screen.title"
       label="Default stacked deck"
-      :reduced-motion-override="reducedMotionOverride"
       @active-id-request="onDeckRequest"
     >
       <template #card="card">
@@ -127,7 +129,12 @@ function navigateAsRoute(id: ShowcaseScreenId) {
             >
               Act
             </button>
-            <input aria-label="Note" data-testid="defaults-card-input" type="text" />
+            <input
+              aria-label="Note"
+              class="defaults-card-input"
+              data-testid="defaults-card-input"
+              type="text"
+            />
           </p>
         </article>
       </template>
@@ -208,12 +215,16 @@ function navigateAsRoute(id: ShowcaseScreenId) {
 }
 
 .defaults-card {
+  box-sizing: border-box;
   display: grid;
-  align-content: center;
+  align-content: safe center;
   gap: 0.6rem;
   inline-size: 100%;
+  min-inline-size: 0;
   block-size: 100%;
-  padding: 1.2rem;
+  padding: min(1.2rem, 10%);
+  overflow: auto;
+  overflow-wrap: anywhere;
   border: 1px solid rgb(15 23 42 / 0.16);
   border-radius: 0.8rem;
   background: #fff;
@@ -222,11 +233,12 @@ function navigateAsRoute(id: ShowcaseScreenId) {
 
 .defaults-card h4 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.05em;
 }
 
 .defaults-card-actions {
   display: flex;
+  min-inline-size: 0;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.6rem;
@@ -237,5 +249,11 @@ function navigateAsRoute(id: ShowcaseScreenId) {
 .defaults-card-button,
 .defaults-card-link {
   min-block-size: 2.25rem;
+  font: inherit;
+}
+
+.defaults-card-input {
+  min-inline-size: 0;
+  max-inline-size: 100%;
 }
 </style>
