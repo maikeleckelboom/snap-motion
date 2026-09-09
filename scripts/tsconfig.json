@@ -7,6 +7,7 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "sheetContentVisual.ts",
     "browser-change-classifier.test.ts",
     "browser-change-classifier.ts",
     "browser-ci-workflow.test.ts",

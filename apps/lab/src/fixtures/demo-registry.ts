@@ -10,6 +10,7 @@ import OverlayLifecycleFixture from "@/demos/OverlayLifecycleFixture.vue";
 import PagedGridDemo from "@/demos/PagedGridDemo.vue";
 import RealmOverlayFixture from "@/demos/realm-overlay-fixture.vue";
 import RenderWindowFixture from "@/demos/RenderWindowFixture.vue";
+import SheetContentFixture from "@/demos/sheetContentFixture.vue";
 import SheetDemo from "@/demos/SheetDemo.vue";
 import StackedDeckOverflowFixture from "@/demos/stacked-deck-overflow-fixture.vue";
 import StackedDeckDemo from "@/demos/StackedDeckDemo.vue";
@@ -45,6 +46,15 @@ export interface LabDemo {
 }
 
 export const demos = [
+  {
+    id: "sheet-content",
+    label: "Sheet Content",
+    description: "Controlled menu, form, text and media presentation comparison.",
+    group: "Certification",
+    audience: "fixture",
+    component: SheetContentFixture,
+    capabilities: { motionPreference: false, physics: false, stageWidth: false },
+  },
   {
     id: "coverflow",
     label: "Coverflow",

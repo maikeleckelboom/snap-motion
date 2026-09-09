@@ -75,3 +75,20 @@ Changes to a publishable package need a Changeset unless they are documentation-
 changes must include the reviewed API report diff. Browser-visible changes require Chromium,
 Firefox, and WebKit evidence. Never claim physical assistive-technology certification from automated
 tests.
+
+## Sheet presentation comparison
+
+Open `?demo=sheet-content&view=fixtures` in the lab. Compare Control, Soft reveal (140ms opacity
+only), and Soft reveal + 8px with the same content, side, open snap and hidden-travel setting. The
+package default keeps Control. The two decorative treatments are lab experiments, not public API or
+recommended consumer wiring. Menus, forms, long text, media and short bodies share the fixture.
+
+Run `node scripts/sheetContentVisual.ts` against `pnpm dev` for normal-speed WebM recordings, raw
+RAF geometry/opacity/scroll samples, and frame strips. Options include `--browser=chromium|firefox|webkit`,
+`--height=480`, `--content=form|prose|media|short`, `--travel=baseline|responsive`,
+`--motion=reduce`, and `--treatments=control,reveal,offset`. Output under `.artifacts/sheet-content/`
+records the exact source fingerprint, browser version, viewport and configuration. The hidden-travel
+comparison remounts Sheet because viewport policy is initialization configuration. A 20px corner
+marker identifies the interaction in the recording's own timeline. Measurements are diagnostics,
+not a perceptual score or physical-display certification. `?checks=1` adds ordinary in-modal fixture
+controls for interruption tests; leave it absent when judging the visual candidates.

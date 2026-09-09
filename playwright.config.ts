@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const mediaPreviewSpec = "media-preview.spec.ts";
 const showcaseSmokeSpec = "showcase-smoke.spec.ts";
 const stackedDeckAuditSpecs = ["stackedDeckConsumer.spec.ts", "stackedDeckTrace.spec.ts"];
+const sheetSpecs = ["sheet.spec.ts", "sheetContent.spec.ts"];
 const stackedDeckSpec = "stacked-deck.spec.ts";
 const stackedDeckDirectSpec = "stacked-deck-direct.spec.ts";
 const stackedDeckPileSpec = "stacked-deck-pile.spec.ts";
@@ -30,12 +31,12 @@ export default defineConfig({
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     {
       name: "firefox",
-      testMatch: [showcaseSmokeSpec, ...stackedDeckAuditSpecs],
+      testMatch: [showcaseSmokeSpec, ...stackedDeckAuditSpecs, ...sheetSpecs],
       use: { ...devices["Desktop Firefox"] },
     },
     {
       name: "webkit",
-      testMatch: [showcaseSmokeSpec, ...stackedDeckAuditSpecs],
+      testMatch: [showcaseSmokeSpec, ...stackedDeckAuditSpecs, ...sheetSpecs],
       use: { ...devices["Desktop Safari"] },
     },
     {

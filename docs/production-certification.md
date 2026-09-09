@@ -59,6 +59,161 @@ post-paint boundary. Inert shells are excluded from ordinary hit testing, so rec
 ordering is checked from computed geometry and depth; compositor pixels, rounded corners, shadows,
 and physical display cadence still need visual/device review.
 
+## Sheet responsiveness and content comparison
+
+The Sheet work starts from clean `7876641d4de5b723962c02389c4c245e0580ea8c` on
+`feat/stacked-deck-cyclic-topology`; local and freshly fetched remote matched with no intervening
+delta. Work is isolated on `feat/sheet-content-motion`. The audit's
+[GitHub run](https://github.com/maikeleckelboom/snap-motion/actions/runs/34407279897) was cancelled:
+admission, Linux/Windows package checks, browser integration and Chromium shard 1 passed; shard 2
+was cancelled, and cross-browser tests passed before post-job cancellation. Browser certification
+correctly failed. Check-run annotations establish that Chromium shard 2 and cross-browser both
+exceeded the six-minute job limit; this is not an unexplained cancellation or a green remote
+baseline. Chromium stopped at test 65/85. Cross-browser needed 5.1 minutes for tests plus about 52
+seconds of setup, then timed out during cleanup. The focused workflow correction gives Chromium
+12 minutes and cross-browser 15 minutes, accommodating the expanded 101-test cross-browser job.
+Per-test deadlines, retries, project selection and required-check behavior are unchanged.
+
+The exact clean baseline passed its first local `CI=true SNAP_MOTION_TEST_PORT=4273 pnpm verify`
+with the pinned Node 24.16.0/pnpm 11.13.1 toolchain: 786 unit tests, 253 E2E tests, one preview test,
+six framework fixture tests, and all package/API/size/SSR/hydration gates. There were no retries.
+Its 219 ResizeObserver-loop diagnostic entries in existing Coverflow/StackedDeck scenarios remain
+baseline observations, not Sheet regressions or proof of harmlessness. The original dirty `21cbc01`
+visual manifest cannot prove the captured source; the 29 later final-input hashes match the audit
+tree, and a small clean Direct recapture replaces that uncertain comparison input.
+
+### Diagnosis and decision
+
+On the real top Menu, the negative panel translation and positive inner viewport offset cancel.
+Header/body screen coordinates stay stable while clipping exposes a growing viewport. The previous
+160px hidden overshoot makes the spring travel invisibly before exposing content and after hiding
+it. The default now uses 1px beyond the physical edge. Spring parameters and open anchors are
+unchanged; dismissal midpoint and scrim normalization use the new hidden anchor. Explicit custom
+overshoot remains supported. No second counter-transform, text scaling, blur or opacity masking is
+introduced.
+
+Other baseline-failing regressions confirmed omitted Boolean preference coercion, interrupted
+reopening resetting native body scroll, and focus entering a zero-height opening body. The fix
+preserves the preference tri-state and current spring velocity, removes duplicate initial
+remeasurement, preserves scroll while the same native dialog remains open, and completes the
+semantic snap when body focus requires it. Focused descendants scroll only within the native body;
+layout reads happen on focus reconciliation, not each animation frame.
+
+The retained lab route is `?demo=sheet-content&view=fixtures`. Compare the same menu, viewport,
+panel spring and interaction with Control, a 140ms body-opacity reveal from .55 to 1, and that reveal
+with an 8px side-appropriate offset. Menus, forms, long text, media and short bodies are selectable.
+The experiments use one body participant and are lab-only. The recommended package presentation is
+Control: readable content immediately has full contrast, the top header/body remain stable, and
+the simpler body reveal mostly finishes before clipping exposes the first complete navigation
+link. Adding an offset introduces text movement without a demonstrated readability or response
+benefit. A group stagger was not justified. There is no new presentation prop, escape hatch,
+per-descendant controller or required application wiring. Human approval of feel is still pending.
+
+The actual maikel.site review uses detached site revision
+`ed3431b23c5af6f2269975c3f4862caefd572d57`, with unchanged top-origin compact Menu, inline desktop
+navigation, local visibility, route dismissal and responsive focus policy. A uses its committed
+beta.9 artifact from `9b43d3d8aa2c5e87b127c8ab89bf9951f7e4213b`; B substitutes the exact audit
+artifact; C substitutes the candidate tarballs. Only those two archive references/integrities change
+in the detached consumer lockfile. All other dependency resolutions and committed vendor artifacts
+stay fixed. The active site checkout is not edited or pushed.
+
+In three quiet Chromium runs per artifact at 390×844/no-preference, B→final C median first visible
+area was 87.0→19.5ms, first fully exposed navigation link 105.5→78.2ms, and open settlement
+553.8→494.9ms. Closing is a tradeoff: the visible height crossed 48px at 145.0→218.3ms, 8px at
+156.6→319.8ms, and 1px at 160.8→402.2ms. Native dismissal/focus return was 528.3→523.0ms,
+roughly unchanged. The invisible interval after the last pixel shrinks, while the visible collapse is less
+abrupt. Leave spring tuning unchanged pending normal-speed human review of this tradeoff. Chromium
+RAF p95 stayed around 18ms; one B recording had a long task. This is measured response/geometry,
+not proof of better perceived closing or physical display performance.
+
+The final capture source identity is `7876641-dirty-6b299e546cff`. All 15 lab recordings (three
+treatments in tall/short Chromium menus, a Chromium form, Firefox and WebKit menus) have stable
+start/end fingerprints, per-file source hashes, and zero captured errors. The final normal-speed
+consumer series is `C-final-quiet{1,2,3}` plus Firefox/WebKit; earlier `C-quiet` recordings are
+superseded by the lifecycle correction. No public/private application content is copied into the lab.
+
+All artifacts retain the existing `0.1.0-beta.9` manifest version; SHA-256 identifies the actual bytes:
+
+| Artifact          | Vue SHA-256                                                        | Core SHA-256                                                       |
+| ----------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| A installed       | `028aa178f691fae36d2c9b37f68094c846e4fa2fe514a1303e2e32a961566e7c` | `9b28baf94c1036fe5a2dc01c8fda48edc13ff9a4422e7c14308fb41568daa222` |
+| B audit baseline  | `f71e236bf0eabad14b55a43303996dfa65c0d0f7798e1072eeb594fddb1c147d` | `95f275f3ab4c0b8e68436c2b87ccdbe5880e4f58a64422eb7feb20b1d99c2d9d` |
+| C final candidate | `07e5a014b15a2c4bd49beeead24ff2719fb36a25ae8997c7ee0371480a2f9db3` | `95f275f3ab4c0b8e68436c2b87ccdbe5880e4f58a64422eb7feb20b1d99c2d9d` |
+
+### Correctness evidence and limitations
+
+The high-level preference tests first failed four cases on the audit source, then passed all nine
+with the tri-state fix. Mechanical tests first failed eight cases and passed after the hidden-anchor
+and momentum fixes. Early keyboard focus, custom initial focus and reopening-scroll tests also
+failed before their focused fixes. Tests cover omitted preferences, explicit overrides, changes
+while open/during motion, all four sides, full/partial/content snaps, overflow and nested controls,
+native tab order, Escape, route close, resize, side changes, dynamic content, zoom, drag takeover,
+dismissal, cancellation and reversal. Existing multi-snap/SSR/responsive-host tests remain in place.
+
+An intermediate three-browser Sheet matrix was **78 passed / 3 failed**. The failures were a
+fractional rectangle versus integer scroll-height comparison and two assumptions that WebKit's
+native Tab sequence includes links. The assertions now account for integer scroll measurement and
+compare traversal with an independent native-controls probe. These are test-oracle corrections,
+not suppressed product failures. A separate interim empty-style sample overlapped fixture editing;
+it did not recur after source freeze. Final focused revalidation passed 54 focus/reopen cases
+(three repeats in all three browsers), 12 affected geometry/preference/drag cases and three repeated
+Firefox geometry cases. Preserve these results separately from the earlier failed aggregate.
+
+The first final-gate attempt stopped at recording-script lint errors, corrected with focused lint
+and tooling type checks. A later run passed 804 unit tests and packed SSR/hydration before the agent
+stopped it during E2E: final review reproduced an introduced focus-reconciliation defect that
+suppressed pending `settled` events. Focus now completes through the existing motion callback,
+retaining pending reasons, authority rollback and stale-callback rejection. These interrupted
+attempts are preserved; neither is a successful aggregate.
+
+The next aggregate recorded 809 unit passes and one unchanged StackedDeck revision-identity harness
+timeout (5.227 seconds against its 5-second deadline). The exact test then passed, followed by three
+complete 16-test file passes with the same deadline and unchanged implementation. This is an
+isolated harness timeout with no established precise cause; no product assertion failed. The failed
+aggregate remains recorded separately from focused recovery and subsequent verification.
+
+The final `CI=true SNAP_MOTION_TEST_PORT=4373 pnpm verify` ran on source fingerprint
+`7876641-dirty-582caaf60482`. Formatting, lint, architecture, builds, types, API reports, size,
+packed consumer inference, SSR/hydration and all 810 unit tests passed. The browser aggregate was
+**326 passed / 1 flaky**, so the fail-on-flaky gate correctly returned exit 1. All 84 Sheet cases
+passed across Chromium, Firefox and WebKit. This is a failed aggregate, not an all-green result.
+
+The unchanged WebKit Direct test at `e2e/stacked-deck-direct.spec.ts:795` admitted a position sample
+with about 0.100902px remaining travel, then required less than 0.05px. Its 0.999 fractional readiness
+threshold permits about 0.197427px in this fixture. The test, harness, Core geometry and StackedDeck
+motion files match the clean audit source byte-for-byte: this is a baseline test-readiness defect.
+Its configured retry passed, followed by three unchanged focused repetitions with retries disabled.
+No StackedDeck source/test, per-test deadline or assertion tolerance was changed. A future bounded
+repair should wait for the existing matching rendered Direct projection at parking settlement 1,
+then capture controller phase and DOM position together while preserving the current assertions.
+
+Because the aggregate stopped before its tail, `pnpm build:preview:prepared`,
+`pnpm test:preview:prepared` and `pnpm test:fixtures:prepared` ran separately on the same source:
+preview build, one preview test and six framework tests passed. Final actual-site validation passed
+all nine configured browser tests, interaction probes in all three engines, and resting/active
+preference probes in all three engines against the final C bytes above. The 15 final lab recordings
+still match the tested source files; only this results documentation is added afterward.
+
+The final aggregate logged 220 ResizeObserver-loop entries in existing Coverflow/StackedDeck and
+lab scenarios, including the extra retry; none occurred in either Sheet test file. Preserve these
+baseline diagnostics without treating them as harmless or broadening this task into their audit.
+
+A sole small horizontal snap retains the existing full-width physical surface. At a 280px left
+snap in a 390px viewport, a 200px-wide input inset 28px can rest at screen x=-58..142; the same
+clipping reproduces on the exact audit baseline. Native vertical focus reveal cannot fix this
+horizontal geometry. This remains a baseline limitation, not a claim that every target fits every
+partial snap. Full-snap near/deep custom focus was verified on all four sides; top/deep focus now
+reveals the input within the visible body instead of leaving it clipped below it.
+
+Normal-speed videos, diagnostic strips and raw geometry traces use the source identity, browser
+version, viewport and preference in each capture manifest. Run the command in
+[Contributing](../CONTRIBUTING.md#sheet-presentation-comparison), open Menu, wait for rest, close,
+then repeat at a short viewport and with early Tab/Escape and interrupted reopening. The
+`--travel=baseline` lab option changes only hidden travel on the candidate source; the real
+consumer's A/B recordings are the actual installed/audit package comparison. RAF gaps and
+time-to-first-fully-exposed-link are diagnostics, not physical refresh-rate, compositor, reading
+speed or assistive-technology certification.
+
 ## Manual assistive-technology release gate
 
 > Prepared for manual assistive-technology certification
