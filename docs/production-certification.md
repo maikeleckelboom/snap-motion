@@ -198,6 +198,27 @@ The final aggregate logged 220 ResizeObserver-loop entries in existing Coverflow
 lab scenarios, including the extra retry; none occurred in either Sheet test file. Preserve these
 baseline diagnostics without treating them as harmless or broadening this task into their audit.
 
+The [pushed verification run](https://github.com/maikeleckelboom/snap-motion/actions/runs/34416586484)
+at `7c18043713b841545a0a2ce2c48cfb09c0995774` passed admission, Linux, Windows, packed browser
+integration, Chromium shard 1 and cross-browser interoperability. Chromium shard 2 completed with
+**93 passed / 1 flaky**, so Browser certification correctly failed. The extended job budgets let
+both previously interrupted jobs finish; they did not make their assertions less strict.
+
+This separate flaky case is `e2e/stacked-deck-pile.spec.ts:79`: a screenshot classified 4423 exposed
+pixels against an endpoint envelope plus tolerance of 4421. Five relevant test, harness and runtime
+files match the audit baseline byte-for-byte. Its retry and three unchanged local repetitions passed,
+but the two-pixel excess remains unexplained. The oracle applies its default unreleased bound after
+a flick release, and reads DOM poses after taking/decoding the screenshot; these limit causal
+interpretation without proving an explanation. No tolerance, deadline or StackedDeck code was
+changed. Preserve the remote failure artifact separately from the successful repetitions.
+
+The final-source custom-focus probe passed all eight full-snap near/deep cases on two runs. Its
+first RAF callback repeatedly arrived around 1.4 seconds after opening. A bounded diagnostic found
+the focused region already visibly reconciled by 5.6ms and a timer executing at 5.9ms, before the
+first RAF at 1472.6ms. This is an unexplained standalone-probe RAF scheduling observation, not
+evidence that Sheet reconciliation took 1.4 seconds or a performance acceptance result. The warmed
+actual-menu recordings remain the response comparison.
+
 A sole small horizontal snap retains the existing full-width physical surface. At a 280px left
 snap in a 390px viewport, a 200px-wide input inset 28px can rest at screen x=-58..142; the same
 clipping reproduces on the exact audit baseline. Native vertical focus reveal cannot fix this
