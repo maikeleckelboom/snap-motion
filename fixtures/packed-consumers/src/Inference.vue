@@ -27,6 +27,8 @@ import {
 } from "@snap-motion/vue/stacked-deck";
 import { ref } from "vue";
 
+const sheetPreference = ref<boolean | undefined>();
+
 // A readonly `as const` collection: the shape a consumer writes when the items are static.
 const screens = [
   { id: "overview", title: "Overview" },
@@ -243,7 +245,7 @@ void driveHandles;
       <template #title>Modal inference</template>
     </ModalDialog>
 
-    <Sheet ref="sheet" :open="false">
+    <Sheet ref="sheet" :open="false" :reduced-motion-override="sheetPreference">
       <template #title>Sheet inference</template>
     </Sheet>
 

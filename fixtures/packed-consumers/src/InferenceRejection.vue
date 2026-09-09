@@ -9,6 +9,7 @@
  */
 import { Coverflow } from "@snap-motion/vue/coverflow";
 import { MediaGalleryDialog, type MediaGalleryItem } from "@snap-motion/vue/media-gallery";
+import { Sheet } from "@snap-motion/vue/sheet";
 import { StackedDeck } from "@snap-motion/vue/stacked-deck";
 import { ref } from "vue";
 
@@ -54,6 +55,8 @@ function chapterTitle(chapter: Chapter): string {
 
 <template>
   <main>
+    <!-- @vue-expect-error Sheet preference is a tri-state Boolean, not a string mode -->
+    <Sheet :open="false" reduced-motion-override="system" />
     <!-- @vue-expect-error a semantic ID from another domain is not one of these items -->
     <StackedDeck :items="screens" active-id="nope" />
 

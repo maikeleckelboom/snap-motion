@@ -65,7 +65,8 @@ const props = withDefaults(
     messages?: Partial<SnapMotionMessages>;
     open: boolean;
     programmaticImpulse?: number;
-    reducedMotionOverride?: boolean;
+    /** Omitted follows the system preference; true reduces motion and false forces full motion. */
+    reducedMotionOverride?: boolean | undefined;
     releasePolicy?: Partial<ReleaseTargetPolicy>;
     showSnapPicker?: boolean;
     side?: SheetSide;
@@ -78,6 +79,7 @@ const props = withDefaults(
   {
     initialFocus: "title",
     maximumScrimOpacity: 0.56,
+    reducedMotionOverride: undefined,
     showSnapPicker: true,
     side: "bottom",
   },
