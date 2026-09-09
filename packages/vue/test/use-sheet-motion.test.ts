@@ -16,6 +16,153 @@ function fixedViewport(inlineSize = 400, blockSize = 800) {
 }
 
 describe("useSheetMotion", () => {
+  it.each(["top", "bottom", "left", "right"] as const)(
+    "starts %s at the physical edge and closes without a hidden travel segment",
+    async (side) => {
+      const driver = new ManualAnimationDriver();
+      const panel = ref<HTMLElement>();
+      const onHidden = vi.fn<() => void>();
+      let motion: ReturnType<typeof useSheetMotion> | undefined;
+      const wrapper = mount(
+        defineComponent({
+          setup() {
+            motion = useSheetMotion({
+              driver,
+              getMeasureContext: () => fixedViewport(),
+              onHidden,
+              panel,
+              side,
+            });
+            return () => h("section", { ref: panel });
+          },
+        }),
+      );
+      try {
+        await nextTick();
+        const surface = motion!.primarySurfaceExtent.value;
+        expect(motion!.position.value).toBeGreaterThan(surface);
+        expect(motion!.position.value - surface).toBeLessThanOrEqual(1);
+        expect(motion!.visiblePrimaryExtent.value).toBe(0);
+
+        motion!.open();
+        const opening = driver.latest!;
+        // Even a small first physical movement must expose the surface, not traverse dead space.
+        opening.update(opening.request.from - 2, -120);
+        expect(motion!.visiblePrimaryExtent.value).toBeGreaterThan(0);
+        opening.complete();
+        expect(motion!.sheetState.value).toBe("open");
+
+        motion!.close();
+        const closing = driver.latest!;
+        expect(closing.request.to - surface).toBeGreaterThan(0);
+        expect(closing.request.to - surface).toBeLessThanOrEqual(1);
+        closing.update(surface, 120);
+        expect(motion!.visiblePrimaryExtent.value).toBe(0);
+        expect(onHidden).not.toHaveBeenCalled();
+        closing.complete();
+        expect(motion!.sheetState.value).toBe("closed");
+        expect(onHidden).toHaveBeenCalledOnce();
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it("retains an explicit hidden overshoot without changing open snaps", async () => {
+    const driver = new ManualAnimationDriver();
+    const panel = ref<HTMLElement>();
+    let motion: ReturnType<typeof useSheetMotion> | undefined;
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          motion = useSheetMotion({
+            driver,
+            getMeasureContext: () => fixedViewport(),
+            panel,
+            viewportPolicy: { hiddenOvershoot: 160 },
+          });
+          return () => h("section", { ref: panel });
+        },
+      }),
+    );
+    try {
+      await nextTick();
+      expect(motion!.position.value).toBe(960);
+      expect(
+        motion!.resolvedSnapPoints.value.map(({ id, position }) => ({ id, position })),
+      ).toEqual([
+        { id: "full", position: 24 },
+        { id: "comfortable", position: 180 },
+        { id: "compact", position: 440 },
+      ]);
+      motion!.open();
+      driver.latest!.complete();
+      motion!.close();
+      expect(driver.latest!.request.to).toBe(960);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it.each(["top", "bottom", "left", "right"] as const)(
+    "retargets %s open/close/reopen from the current rendered position and velocity",
+    async (side) => {
+      const driver = new ManualAnimationDriver();
+      const panel = ref<HTMLElement>();
+      const onHidden = vi.fn<() => void>();
+      let motion: ReturnType<typeof useSheetMotion> | undefined;
+      const wrapper = mount(
+        defineComponent({
+          setup() {
+            motion = useSheetMotion({
+              driver,
+              getMeasureContext: () => fixedViewport(),
+              onHidden,
+              panel,
+              side,
+            });
+            return () => h("section", { ref: panel });
+          },
+        }),
+      );
+      try {
+        await nextTick();
+        motion!.open();
+        const opening = driver.latest!;
+        const openingPosition = (opening.request.from + opening.request.to) / 2;
+        opening.update(openingPosition, -250);
+
+        motion!.close();
+        const closing = driver.latest!;
+        expect(opening.stopped).toBe(true);
+        expect(closing.request.from).toBe(openingPosition);
+        expect(closing.request.initialVelocity).toBe(-250);
+        expect(motion!.position.value).toBe(openingPosition);
+        expect(motion!.sheetState.value).toBe("closing");
+
+        const closingPosition = (closing.request.from + closing.request.to) / 2;
+        closing.update(closingPosition, 180);
+        motion!.open();
+        const reopening = driver.latest!;
+        expect(closing.stopped).toBe(true);
+        expect(reopening.request.from).toBe(closingPosition);
+        expect(reopening.request.initialVelocity).toBe(180);
+        expect(motion!.position.value).toBe(closingPosition);
+        expect(motion!.sheetState.value).toBe("opening");
+
+        opening.complete();
+        closing.complete();
+        expect(onHidden).not.toHaveBeenCalled();
+        expect(motion!.sheetState.value).toBe("opening");
+        reopening.complete();
+        expect(motion!.sheetState.value).toBe("open");
+        expect(motion!.position.value).toBe(reopening.request.to);
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
   it("opens with velocity and preserves its semantic snap on resize", async () => {
     const driver = new ManualAnimationDriver();
     const panel = ref<HTMLElement>();

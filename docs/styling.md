@@ -49,6 +49,11 @@ translate that surface during drag; partial snaps never animate its width. Safe-
 mapped independently for all four physical edges, including RTL where `left` and `right` remain
 physical sides.
 
+Sheet does not fade, stagger, translate or recursively inspect slot descendants. Content is readable
+as soon as physical clipping exposes it. The top viewport already offsets the panel's negative
+translation; a consumer counter-transform would move otherwise stable content. Keep any optional
+domain-specific sequencing outside the package's geometry owners.
+
 ```css
 .article-sheet {
   --snap-motion-sheet-content-max-inline-size: 48rem;
