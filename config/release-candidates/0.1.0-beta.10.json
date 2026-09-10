@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-09-10T23:09:19+02:00",
+  "source": {
+    "repository": "https://github.com/maikeleckelboom/snap-motion",
+    "visibility": "public",
+    "branch": "main",
+    "commit": "3a21db7ccaebe9b4ac769cd9c4104aa53a10fd4d"
+  },
+  "verification": {
+    "command": "pnpm release:check",
+    "passed": true
+  },
+  "packages": [
+    {
+      "name": "@snap-motion/core",
+      "version": "0.1.0-beta.10",
+      "file": "snap-motion-core-0.1.0-beta.10.tgz",
+      "bytes": 35206,
+      "sha256": "541b2f4a4fa4cb2fcb581306598395c7d40e3b6bceed19ba8373ea1ccb363851",
+      "private": true,
+      "sideEffects": false,
+      "exports": ["."],
+      "dependencies": {},
+      "peerDependencies": {}
+    },
+    {
+      "name": "@snap-motion/vue",
+      "version": "0.1.0-beta.10",
+      "file": "snap-motion-vue-0.1.0-beta.10.tgz",
+      "bytes": 82111,
+      "sha256": "05e9e94ce23a5a6e2e5a42f574ebaab4550262267afc5d5632ae2f07e3fa41be",
+      "private": true,
+      "sideEffects": ["**/*.css"],
+      "exports": [
+        ".",
+        "./carousel",
+        "./coverflow",
+        "./dialog",
+        "./localization",
+        "./media-gallery",
+        "./motion",
+        "./sheet",
+        "./stacked-deck",
+        "./style.css"
+      ],
+      "dependencies": {
+        "@vueuse/core": "14.4.0",
+        "motion": "12.42.2",
+        "@snap-motion/core": "^0.1.0-beta.10"
+      },
+      "peerDependencies": {
+        "vue": ">=3.5.0 <4"
+      }
+    }
+  ],
+  "private": true,
+  "published": false,
+  "intendedDistTag": "beta",
+  "blockers": [
+    {
+      "id": "npm-name-ownership",
+      "status": "unverified",
+      "detail": "Both public registry lookups return 404; that does not prove account or scope ownership."
+    },
+    {
+      "id": "manual-assistive-technology",
+      "status": "not-executed",
+      "detail": "The physical screen-reader, forced-colors, zoom, and mobile AT matrix remains open."
+    },
+    {
+      "id": "manual-publication-approval",
+      "status": "not-granted",
+      "detail": "No release publication is authorized by candidate generation."
+    }
+  ]
+}
