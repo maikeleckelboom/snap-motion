@@ -46,3 +46,15 @@ is offering no longer starts an exchange at all.
 
 Remove Stacked-Deck-specific pagination state and presentation. Generic pagination and finite
 ordinal accessibility announcements remain available to the surfaces that own them.
+
+For custom renderers, replace traversal `physicalIndex` with interaction-local `physicalPosition`
+and an explicit `originIndex`; `StackedDeckSnapshotInput` also uses `physicalPosition`.
+`StackedDeckTraversalBounds` and the model's `traversalBounds` are removed. Supply direction to
+`StackedDeckModel.openInteraction(originIndex, direction)` and traversal commands. The model exposes
+`interactionDirection`, while `resolveStackedDeckNeighbor`, `resolveStackedDeckOrder`, and
+`resolveStackedDeckDepth` expose ring identity; pile poses and Vue pile layers also expose `depth`.
+
+The generic controller adds opt-in `ControllerMeasurement.rebaseFromId` and
+`ControllerDragOptions.resetPositionToOrigin` for explicit coordinate changes. Vue exposes
+`useSnapMotion`'s `onPointerTravelDirection` and `resetDragPositionToOrigin`, plus
+`useCarouselMotion`'s `onInteractionDirection`. Omitted options preserve existing generic behavior.
