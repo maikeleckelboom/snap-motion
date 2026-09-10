@@ -31,6 +31,7 @@ import { ShallowUnwrapRef } from 'vue';
 import { SnapAnchor } from '@snap-motion/core';
 import type { SnapMotionMessages as SnapMotionMessages_2 } from '@snap-motion/vue/localization';
 import type { SpringConfiguration } from '@snap-motion/core';
+import { StackedDeckExchange } from '@snap-motion/core';
 import { StackedDeckFrame } from '@snap-motion/core';
 import { StackedDeckModelState } from '@snap-motion/core';
 import { StackedDeckPose } from '@snap-motion/core';
@@ -386,7 +387,7 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
         messages?: Partial<SnapMotionMessages_2>;
         open: boolean;
         programmaticImpulse?: number;
-        reducedMotionOverride?: boolean;
+        reducedMotionOverride?: boolean | undefined;
         releasePolicy?: Partial<ReleaseTargetPolicy>;
         showSnapPicker?: boolean;
         side?: SheetSide;
@@ -645,6 +646,7 @@ export const StackedDeck: <TItem extends {
 }>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal_5<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_exposed?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
     props: PublicProps & __VLS_PrettifyLocal_5<{
         items: readonly TItem[];
+        exchange?: StackedDeckExchange;
         activeId?: TItem["id"];
         label?: string;
         labelledBy?: string;
@@ -656,7 +658,7 @@ export const StackedDeck: <TItem extends {
         elasticity?: ElasticityOptions;
         messages?: Partial<SnapMotionMessages_2>;
         programmaticImpulse?: number;
-        reducedMotionOverride?: boolean;
+        reducedMotionOverride?: boolean | undefined;
         releasePolicy?: StackedDeckReleasePolicy;
         spring?: SpringConfiguration;
     } & {
@@ -679,7 +681,6 @@ export const StackedDeck: <TItem extends {
     next: () => boolean;
     onKeyDown: (event: KeyboardEvent) => void;
     owned: ComputedRef<boolean>;
-    paginationIndicator: ComputedRef<PaginationIndicatorState>;
     physicalIndex: ComputedRef<number>;
     pitch: ComputedRef<number>;
     previous: () => boolean;
@@ -695,14 +696,6 @@ export const StackedDeck: <TItem extends {
     attrs: any;
     slots: {
         backdrop?: (props: {}) => any;
-    } & {
-        'pile-layer'?: (props: {
-            item: TItem;
-            id: TItem["id"];
-            index: number;
-            side: 1 | -1;
-            slot: number;
-        }) => any;
     } & {
         card?: (props: {
             item: TItem;
@@ -743,6 +736,8 @@ export interface StackedDeckCardState<TItem, TId extends string> {
     readonly visual: boolean;
 }
 
+export { StackedDeckExchange }
+
 // @public
 export interface StackedDeckHandle<Id extends string> {
     readonly activeId: Id | undefined;
@@ -762,8 +757,6 @@ export interface StackedDeckHandle<Id extends string> {
     // (undocumented)
     readonly owned: boolean;
     // (undocumented)
-    readonly paginationIndicator: PaginationIndicatorState;
-    // (undocumented)
     readonly physicalIndex: number;
     // (undocumented)
     readonly pitch: number;
@@ -780,20 +773,6 @@ export interface StackedDeckHandle<Id extends string> {
     // (undocumented)
     readonly tuningProfile: StackedDeckProfile;
     readonly visualId: Id | undefined;
-}
-
-// @public
-export interface StackedDeckPileLayerSlotState<TItem extends {
-    id: string;
-}> {
-    readonly id: TItem["id"];
-    readonly index: number;
-    // (undocumented)
-    readonly item: TItem;
-    // (undocumented)
-    readonly side: -1 | 1;
-    // (undocumented)
-    readonly slot: number;
 }
 
 // @public

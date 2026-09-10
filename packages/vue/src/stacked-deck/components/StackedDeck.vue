@@ -4,22 +4,28 @@ import type {
   ElasticityOptions,
   SettlementDetails,
   SpringConfiguration,
+  StackedDeckExchange,
   StackedDeckReleasePolicy,
 } from "@snap-motion/core";
 import type { SnapMotionMessages } from "@snap-motion/vue/localization";
 import type { NavigationReason } from "@snap-motion/vue/motion";
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 
 import { preserveFocusBeforeSemanticChange } from "../../internal/accessibility/focus";
 import { createEnglishSnapMotionMessages } from "../../localization/messages";
-import type { StackedDeckCardState, StackedDeckPileLayer } from "../stacked-deck-contracts";
-import { useStackedDeckMotion } from "../use-stacked-deck-motion";
+import { stackedDeckTransform, type StackedDeckCardState } from "../stacked-deck-contracts";
+import {
+  useStackedDeckComponentMotion,
+  type StackedDeckDirectDebug,
+} from "../use-stacked-deck-motion";
 
 type TId = TItem["id"];
 
 const props = withDefaults(
   defineProps<{
     items: readonly TItem[];
+    /** Physical exchange presentation. */
+    exchange?: StackedDeckExchange;
     /** Application-authoritative semantic selection. Controlled when supplied. */
     activeId?: TId;
     label?: string;
@@ -40,20 +46,23 @@ const props = withDefaults(
      * because a page full of landmarks is harder to navigate than one with none.
      */
     landmark?: boolean;
-    /** Fallback stage width, used before the deck has been measured. */
+    /** Root width cap in CSS pixels (at most 1280), also used before measurement. */
     fallbackStageWidth?: number;
     elasticity?: ElasticityOptions;
     messages?: Partial<SnapMotionMessages>;
     programmaticImpulse?: number;
-    reducedMotionOverride?: boolean;
+    /** Omitted follows the system preference; true reduces motion and false forces full motion. */
+    reducedMotionOverride?: boolean | undefined;
     /** Release policy, minus the anchor skip the deck fixes at one adjacent card. */
     releasePolicy?: StackedDeckReleasePolicy;
     spring?: SpringConfiguration;
   }>(),
   {
     disabled: false,
+    exchange: "shuffle",
     landmark: false,
     fallbackStageWidth: 1_120,
+    reducedMotionOverride: undefined,
   },
 );
 
@@ -73,6 +82,18 @@ const ids = computed<TId[]>(() => props.items.map((item) => item.id));
 const reducedMotionOverride = computed(() => props.reducedMotionOverride);
 const statusText = ref("");
 let rollbackSettlementId: TId | undefined;
+let pendingSettlement: { readonly id: TId } | undefined;
+let unmounted = false;
+
+function invalidateSettlement() {
+  pendingSettlement = undefined;
+  rollbackSettlementId = undefined;
+}
+
+onBeforeUnmount(() => {
+  unmounted = true;
+  invalidateSettlement();
+});
 const initialMechanicalId =
   props.activeId !== undefined && ids.value.includes(props.activeId)
     ? props.activeId
@@ -96,23 +117,35 @@ function resolveRollbackId(): TId | undefined {
     : ids.value[Math.floor(ids.value.length / 2)];
 }
 
-watch(
-  [ids, () => props.activeId] as const,
-  ([nextIds, controlledId], previousState) => {
-    if (controlledId !== undefined && nextIds.includes(controlledId)) {
-      latestValidAuthorityId.value = controlledId;
-      mechanicalAnchorId.value = controlledId;
-    } else if (controlledId === undefined && previousState?.[1] !== undefined) {
-      const releasedId = resolveRollbackId();
-      internalActiveId.value = releasedId;
-      if (releasedId !== undefined) deck.synchronizeTo(releasedId);
-      // The released authority may seed uncontrolled state, but it belongs to the completed
-      // controlled ownership epoch and must never outrank later uncontrolled navigation.
-      latestValidAuthorityId.value = undefined;
-    }
-  },
-  { flush: "sync" },
-);
+// Observe the complete prop patch: a synchronous watcher can see new IDs with the old authority
+// halfway through one parent update and invalidate a settlement that still owes reconciliation.
+watch([ids, () => props.activeId] as const, ([nextIds, controlledId], previousState) => {
+  const collectionChanged =
+    previousState !== undefined &&
+    (nextIds.length !== previousState[0].length ||
+      nextIds.some((id, index) => id !== previousState[0][index]));
+  // An unavailable authority cannot adopt a replacement destination. Its pending refusal must
+  // still reconcile to the last valid anchor; it can never publish speech for that unknown ID.
+  const needsRefusalReconciliation = controlledId !== undefined && !nextIds.includes(controlledId);
+  if (
+    !needsRefusalReconciliation &&
+    (collectionChanged ||
+      (controlledId !== previousState?.[1] && controlledId !== pendingSettlement?.id))
+  ) {
+    invalidateSettlement();
+  }
+  if (controlledId !== undefined && nextIds.includes(controlledId)) {
+    latestValidAuthorityId.value = controlledId;
+    mechanicalAnchorId.value = controlledId;
+  } else if (controlledId === undefined && previousState?.[1] !== undefined) {
+    const releasedId = resolveRollbackId();
+    internalActiveId.value = releasedId;
+    if (releasedId !== undefined) deck.synchronizeTo(releasedId);
+    // The released authority may seed uncontrolled state, but it belongs to the completed
+    // controlled ownership epoch and must never outrank later uncontrolled navigation.
+    latestValidAuthorityId.value = undefined;
+  }
+});
 
 watch(ids, (nextIds, previousIds) => {
   if (props.activeId !== undefined || nextIds.includes(internalActiveId.value as TId)) return;
@@ -131,10 +164,14 @@ function labelFor(item: TItem, index: number): string {
 /** Exact application-authoritative adoption; the high-level surface always keeps it silent. */
 function synchronizeTo(id: TId) {
   if (props.activeId !== undefined && id !== props.activeId) return false;
+  const previousSettlement = pendingSettlement;
+  if (!deck.synchronizeTo(id)) return false;
+  // An already exact adoption need not publish again, but it still supersedes queued speech.
+  if (pendingSettlement === previousSettlement) invalidateSettlement();
   if (props.activeId === undefined) internalActiveId.value = id;
   mechanicalAnchorId.value = id;
   if (id === props.activeId) latestValidAuthorityId.value = id;
-  return deck.synchronizeTo(id);
+  return true;
 }
 
 function positionLabel(index: number): string {
@@ -146,69 +183,108 @@ function positionLabel(index: number): string {
   });
 }
 
-function publishSettlement(id: TId, index: number, reason: NavigationReason) {
-  // Reduced motion and direct synchronization can settle in the same stack as the request. Vue
-  // still needs its already-scheduled prop flush before strict authority can be evaluated.
-  queueMicrotask(() => {
-    if (reason === "external" && rollbackSettlementId === id) {
-      rollbackSettlementId = undefined;
-      return;
-    }
-    if (props.activeId !== undefined && id !== props.activeId) {
-      if (reason === "reconcile" && ids.value.includes(id) && !ids.value.includes(props.activeId)) {
-        mechanicalAnchorId.value = id;
-        return;
-      }
-      const authoritativeId = resolveRollbackId();
-      if (authoritativeId !== undefined) {
-        rollbackSettlementId = authoritativeId;
-        const synchronized = deck.synchronizeTo(authoritativeId);
-        if (!synchronized) rollbackSettlementId = undefined;
-        else {
-          queueMicrotask(() => {
-            if (rollbackSettlementId === authoritativeId) rollbackSettlementId = undefined;
-          });
+function publishSettlement(id: TId, _index: number, reason: NavigationReason) {
+  // Settlement can be queued by a Vue watcher. At the microtask checkpoint, join the latest
+  // pending Vue flush, including an owner update queued after that watcher completed. This is a
+  // prop/DOM boundary, not an end-of-frame or paint boundary.
+  const settlement = { id };
+  pendingSettlement = settlement;
+  queueMicrotask(
+    () =>
+      void nextTick(() => {
+        if (
+          unmounted ||
+          pendingSettlement !== settlement ||
+          !deck.atRest.value ||
+          deck.settledId.value !== id
+        )
+          return;
+        const index = ids.value.indexOf(id);
+        if (index < 0) return;
+        if (reason === "external" && rollbackSettlementId === id) {
+          rollbackSettlementId = undefined;
+          return;
         }
-      }
-      return;
-    }
-    mechanicalAnchorId.value = id;
-    if (reason !== "external") statusText.value = positionLabel(index);
-    emit("settled", id, { reason });
-  });
+        if (props.activeId !== undefined && id !== props.activeId) {
+          if (
+            reason === "reconcile" &&
+            ids.value.includes(id) &&
+            !ids.value.includes(props.activeId)
+          ) {
+            mechanicalAnchorId.value = id;
+            return;
+          }
+          const authoritativeId = resolveRollbackId();
+          if (authoritativeId !== undefined) {
+            rollbackSettlementId = authoritativeId;
+            const synchronized = deck.synchronizeTo(authoritativeId);
+            if (!synchronized || pendingSettlement === settlement) rollbackSettlementId = undefined;
+          }
+          return;
+        }
+        mechanicalAnchorId.value = id;
+        if (reason !== "external") statusText.value = positionLabel(index);
+        emit("settled", id, { reason });
+      }),
+  );
 }
 
-const deck = useStackedDeckMotion<TId>({
-  ids,
-  controlledId: () => props.activeId,
-  disabled: () => props.disabled,
-  initialId: props.items[Math.floor(props.items.length / 2)]?.id,
-  reducedMotionOverride,
-  root: focusScope,
-  stageWidth: () => props.fallbackStageWidth,
-  track,
-  viewport: root,
-  elasticity: () => props.elasticity,
-  programmaticImpulse: () => props.programmaticImpulse,
-  releasePolicy: () => props.releasePolicy,
-  spring: () => props.spring,
-  onActivate(_id, index) {
-    const item = props.items[index];
-    if (item) emit("activate", item, index);
+const directDebug = import.meta.env.DEV ? ({} satisfies StackedDeckDirectDebug) : undefined;
+const deck = useStackedDeckComponentMotion<TId>(
+  {
+    ids,
+    exchange: () => props.exchange,
+    controlledId: () => props.activeId,
+    disabled: () => props.disabled,
+    initialId: props.items[Math.floor(props.items.length / 2)]?.id,
+    reducedMotionOverride,
+    root: focusScope,
+    stageWidth: () => props.fallbackStageWidth,
+    track,
+    viewport: root,
+    elasticity: () => props.elasticity,
+    programmaticImpulse: () => props.programmaticImpulse,
+    releasePolicy: () => props.releasePolicy,
+    spring: () => props.spring,
+    onActivate(_id, index) {
+      const item = props.items[index];
+      if (item) emit("activate", item, index);
+    },
+    onActiveIdRequest(id, _index, reason) {
+      invalidateSettlement();
+      if (id === semanticActiveId.value) return;
+      if (props.activeId === undefined) {
+        internalActiveId.value = id;
+        // Accepted uncontrolled semantics immediately become this epoch's valid mechanical anchor,
+        // even while the spring that will settle there is still in flight.
+        mechanicalAnchorId.value = id;
+      }
+      emit("update:activeId", id);
+      emit("activeIdRequest", id, { reason });
+    },
+    onSettled: publishSettlement,
   },
-  onActiveIdRequest(id, _index, reason) {
-    if (id === semanticActiveId.value) return;
-    if (props.activeId === undefined) {
-      internalActiveId.value = id;
-      // Accepted uncontrolled semantics immediately become this epoch's valid mechanical anchor,
-      // even while the spring that will settle there is still in flight.
-      mechanicalAnchorId.value = id;
-    }
-    emit("update:activeId", id);
-    emit("activeIdRequest", id, { reason });
-  },
-  onSettled: publishSettlement,
-});
+  undefined,
+  directDebug,
+);
+
+if (import.meta.env.DEV) {
+  watch(
+    root,
+    (element, previous) => {
+      if (previous != null) {
+        delete (previous as HTMLElement & { snapMotionDirectDebug?: unknown })
+          .snapMotionDirectDebug;
+      }
+      if (element != null) {
+        (
+          element as HTMLElement & { snapMotionDirectDebug?: StackedDeckDirectDebug }
+        ).snapMotionDirectDebug = directDebug!;
+      }
+    },
+    { flush: "post" },
+  );
+}
 
 const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {
   const frame = deck.frame.value;
@@ -229,27 +305,18 @@ const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {
   });
 });
 
-function pileItem(projection: StackedDeckPileLayer<TId>): TItem {
-  const item = props.items[projection.index];
-  if (item?.id !== projection.id) {
-    throw new Error("Stacked Deck pile projection does not match the current item collection");
-  }
-  return item;
-}
-
 watch(
-  () =>
-    deck.frame.value.poses
-      .map((pose, index) => (pose.interactive ? deck.model.idAt(index) : undefined))
-      .filter((id): id is TId => id !== undefined),
-  (semanticIds) => {
-    const semantic = new Set(semanticIds);
+  [() => deck.diagnostics.value.phase, () => deck.state.value.currentIndex] as const,
+  ([phase, currentIndex], previous) => {
+    if (phase === "idle" && currentIndex === previous?.[1]) return;
     preserveFocusBeforeSemanticChange(root.value, (activeElement) => {
       const card = activeElement.closest<HTMLElement>("[data-snap-motion-stacked-deck-card]");
-      return card !== null && semantic.has((card.dataset.itemId ?? "") as TId);
+      if (!card) return true;
+      const index = props.items.findIndex((item) => item.id === card.dataset.itemId);
+      return index >= 0 && deck.isInspectEligible(index);
     });
   },
-  { deep: true, flush: "sync" },
+  { flush: "sync" },
 );
 
 const stageStyle = computed(() => ({
@@ -266,43 +333,18 @@ function cardStyle(card: StackedDeckCardState<TItem, TId>) {
   };
 }
 
-function halfStageInset(offset: number): string {
-  const operation = offset < 0 ? "-" : "+";
-  return `calc(50% ${operation} ${Math.abs(offset).toFixed(3)}px)`;
-}
-
-/**
- * Clips in the stationary stage coordinate space while the child keeps its rigid transform. The
- * visible strip retreats toward the direction the outgoing card is already travelling, so reversal
- * retraces the same aperture instead of selecting another presentation branch.
- */
-function cardApertureStyle(card: StackedDeckCardState<TItem, TId>) {
-  const pose = card.pose;
-  const frame = deck.frame.value;
-  if (pose.role !== "top" || frame.phase !== "traversing" || pose.contentExposure >= 1) {
-    return { clipPath: "none" };
-  }
-
-  const scaledWidth = deck.tuning.value.cardWidth * pose.scale;
-  const exposedWidth = scaledWidth * pose.contentExposure;
-  if (frame.direction > 0) {
-    const boundaryFromCentre = pose.translateX - scaledWidth / 2 + exposedWidth;
-    return { clipPath: `inset(0 ${halfStageInset(-boundaryFromCentre)} 0 0)` };
-  }
-
-  const boundaryFromCentre = pose.translateX + scaledWidth / 2 - exposedWidth;
-  return { clipPath: `inset(0 0 0 ${halfStageInset(boundaryFromCentre)})` };
-}
-
 function cardMotionStyle(card: StackedDeckCardState<TItem, TId>) {
   const pose = card.pose;
   return {
     pointerEvents: pose.interactive ? ("auto" as const) : ("none" as const),
-    transform: `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`,
+    transform: stackedDeckTransform(pose),
     transformOrigin: "center center",
-    // A layer hint is only worth its memory while something is actually moving. An idle deck
-    // returns every card to `auto` rather than holding the compositor hostage.
-    willChange: deck.compositing.value && pose.visible ? ("transform" as const) : ("auto" as const),
+    // Bound explicit GPU promotion to the exchanging pair. Every persistent shell still follows its
+    // physical pose, but a larger deck must not allocate one promoted layer per item.
+    willChange:
+      deck.compositing.value && (pose.role === "top" || pose.role === "target")
+        ? ("transform" as const)
+        : ("auto" as const),
     "--snap-motion-deck-shadow-strength": pose.shadowStrength.toFixed(4),
   };
 }
@@ -319,7 +361,6 @@ defineExpose({
   next: deck.next,
   onKeyDown: deck.onKeyDown,
   owned: deck.owned,
-  paginationIndicator: deck.paginationIndicator,
   physicalIndex: deck.physicalIndex,
   pitch: deck.pitch,
   previous: deck.previous,
@@ -361,33 +402,6 @@ defineExpose({
   >
     <slot name="backdrop" />
     <div ref="track" class="snap-motion-stacked-deck-stage">
-      <template v-for="projection in deck.pileLayers.value" :key="projection.key">
-        <div
-          v-if="items[projection.index]?.id === projection.id"
-          aria-hidden="true"
-          class="snap-motion-stacked-deck-pile-layer"
-          :data-pile-item-id="projection.id"
-          :data-pile-item-index="projection.index"
-          :data-pile-side="projection.side"
-          :data-pile-slot="projection.slot"
-          inert
-          :style="{
-            opacity: projection.opacity,
-            transform: projection.transform,
-            zIndex: projection.layer,
-            '--snap-motion-deck-shadow-strength': projection.shadowStrength.toFixed(4),
-          }"
-        >
-          <slot
-            name="pile-layer"
-            :item="pileItem(projection)"
-            :id="projection.id"
-            :index="projection.index"
-            :side="projection.side"
-            :slot="projection.slot"
-          />
-        </div>
-      </template>
       <div
         v-for="card in cards"
         :key="card.id"
@@ -399,7 +413,6 @@ defineExpose({
         data-snap-motion-item
         data-snap-motion-stacked-deck-card
         :data-deck-interactive="card.pose.interactive ? 'true' : 'false'"
-        :data-deck-content-exposure="card.pose.contentExposure"
         :data-deck-layer="card.pose.layer"
         :data-deck-role="card.role"
         :data-deck-visible="card.pose.visible ? 'true' : 'false'"
@@ -408,8 +421,8 @@ defineExpose({
         role="group"
         :style="cardStyle(card)"
       >
-        <div class="snap-motion-stacked-deck-card-aperture" :style="cardApertureStyle(card)">
-          <div class="snap-motion-stacked-deck-card-motion" :style="cardMotionStyle(card)">
+        <div class="snap-motion-stacked-deck-card-motion" :style="cardMotionStyle(card)">
+          <div class="snap-motion-stacked-deck-card-content">
             <slot name="card" v-bind="card" />
           </div>
         </div>

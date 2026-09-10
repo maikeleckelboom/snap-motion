@@ -98,6 +98,7 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<SnapContro
     driver?: AnimationDriver;
     // (undocumented)
     onChange?: (snapshot: ControllerSnapshot<Id>) => void;
+    onPointerTravelDirection?: (direction: -1 | 1) => void;
     // (undocumented)
     onReleaseTargetSelected?: (id: Id | undefined) => void;
     // (undocumented)
@@ -106,6 +107,7 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<SnapContro
     pointerIntent?: "horizontal" | "immediate";
     // (undocumented)
     reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
+    resetDragPositionToOrigin?: () => boolean;
     resolveDragOrigin?: () => Id | undefined;
     // (undocumented)
     resolveReleaseTarget?: (context: {

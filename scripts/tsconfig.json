@@ -7,9 +7,11 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "sheetContentVisual.ts",
     "browser-change-classifier.test.ts",
     "browser-change-classifier.ts",
     "browser-ci-workflow.test.ts",
+    "compareStackedDeckVisual.ts",
     "check-release-candidate-history.ts",
     "classify-browser-change.ts",
     "pack-packages.ts",
@@ -27,6 +29,12 @@
     "release-candidate.ts",
     "release-package-assembly.test.ts",
     "release-package-assembly.ts",
+    "runStackedDeckVisual.ts",
+    "stackedDeckDirectStrips.ts",
+    "stackedDeckVisualArtifacts.test.ts",
+    "stackedDeckVisualArtifacts.ts",
+    "stackedDeckVisualRevision.ts",
+    "stackedDeckVisualScenario.ts",
     "verify-release-candidate.ts",
     "verify-packages.ts",
     "verifyPackagesBrowser.ts"

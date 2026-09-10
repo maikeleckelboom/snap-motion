@@ -36,7 +36,8 @@ test.describe("showcase product path", () => {
     const viewport = page.getByTestId("stacked-deck-viewport");
     await page.getByTestId("stacked-deck-next").click();
     await expectCarouselAt(viewport, "team");
-    await expect(page.getByTestId("stacked-deck-counter")).toHaveText("4");
+    await expect(page.getByTestId("stacked-deck-caption")).toHaveText("Team & rollen");
+    await expect(page.locator(".snap-motion-stacked-deck-pagination")).toHaveCount(0);
   });
 
   test("Paged Grid keeps default keyboard paging operational", async ({ page }) => {

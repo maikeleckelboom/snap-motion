@@ -17,6 +17,7 @@ import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fix
 
 interface LabParams {
   demo?: string;
+  exchange?: string;
   view?: string;
 }
 
@@ -27,6 +28,9 @@ const preset = ref<LabPresetName>("balanced");
 const settings = shallowRef<LabPhysicsSettings>(settingsFromPreset(preset.value));
 const stageWidth = ref(1_120);
 const reducedMotionMode = ref<ReducedMotionMode>("system");
+const stackedDeckExchange = computed(() =>
+  labParams.exchange === "direct" ? "direct" : "shuffle",
+);
 
 const labLocation = computed(() => resolveLabLocation(labParams.demo, labParams.view));
 const activeDemoId = computed(() => labLocation.value.demo);
@@ -61,6 +65,13 @@ const activeComponentProps = computed<Record<string, unknown>>(() => {
   if (capabilities.physics) props.settings = settings.value;
   if (capabilities.stageWidth) props.stageWidth = stageWidth.value;
   if (inspectionPresentation.value) props.inspectionMode = workbench.value;
+  if (activeDemoId.value === "stacked-deck") {
+    props.exchange = stackedDeckExchange.value;
+    props.onExchangeChange = (exchange: "shuffle" | "direct") => {
+      if (exchange === "shuffle") delete labParams.exchange;
+      else labParams.exchange = exchange;
+    };
+  }
 
   return props;
 });

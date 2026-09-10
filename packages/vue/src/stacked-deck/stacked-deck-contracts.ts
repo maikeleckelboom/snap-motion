@@ -1,14 +1,17 @@
 import type { StackedDeckPose, StackedDeckRole } from "@snap-motion/core";
 
+export function stackedDeckTransform(
+  pose: Pick<StackedDeckPose, "translateX" | "translateY" | "scale" | "rotate">,
+): string {
+  return `translate3d(-50%, -50%, 0) translate3d(${pose.translateX.toFixed(3)}px, ${pose.translateY.toFixed(3)}px, 0) scale(${pose.scale.toFixed(5)}) rotate(${pose.rotate.toFixed(3)}deg)`;
+}
+
 /** Slot state for one deck card. */
 export interface StackedDeckCardState<TItem, TId extends string> {
   readonly item: TItem;
   readonly id: TId;
   readonly index: number;
-  /**
-   * True for the card the deck currently names — the one a caption, a counter, and a new gesture
-   * all mean. Inside a handoff that is the incoming card, before ownership has formally moved.
-   */
+  /** True for the application-authoritative semantic selection, independent of visual authority. */
   readonly active: boolean;
   /** True for the card currently dominant in the physical projection. */
   readonly visual: boolean;
@@ -22,9 +25,9 @@ export interface StackedDeckCardState<TItem, TId extends string> {
 }
 
 /**
- * Full physical projection for one decorative depth layer from {@link useStackedDeckMotion}.
- * Custom renderers receive the compositor geometry here; the higher-level `StackedDeck`
- * `#pile-layer` slot deliberately exposes only {@link StackedDeckPileLayerSlotState}.
+ * Full physical projection for one non-dominant card from {@link useStackedDeckMotion}. Custom
+ * renderers and diagnostics receive the same geometry as the persistent card pose; the high-level
+ * `StackedDeck` component renders that card through its single `#card` shell.
  *
  * The ordered item association grants no item semantics, interaction, selection, focus, or
  * accessibility ownership.
@@ -32,6 +35,8 @@ export interface StackedDeckCardState<TItem, TId extends string> {
 export interface StackedDeckPileLayer<Id extends string = string> {
   readonly id: Id;
   readonly index: number;
+  /** Forward physical depth behind the current top. */
+  readonly depth: number;
   /** Stable physical-card key. Follows item identity while the resolved slot owns placement. */
   readonly key: string;
   readonly side: -1 | 1;
@@ -40,21 +45,6 @@ export interface StackedDeckPileLayer<Id extends string = string> {
   readonly opacity: number;
   readonly shadowStrength: number;
   readonly transform: string;
-}
-
-/**
- * Decorative visual state supplied to the `StackedDeck` `#pile-layer` slot. Snap Motion retains
- * ownership of the outer layer's physical key, transform, compositing, opacity, and shadow.
- * Consumers can name this contract when writing slot render helpers; SFC templates infer it.
- */
-export interface StackedDeckPileLayerSlotState<TItem extends { id: string }> {
-  readonly item: TItem;
-  /** The ID carried by `item`. */
-  readonly id: TItem["id"];
-  /** Position of this same item in the component's current `items` collection. */
-  readonly index: number;
-  readonly side: -1 | 1;
-  readonly slot: number;
 }
 
 export type { StackedDeckPose, StackedDeckRole };

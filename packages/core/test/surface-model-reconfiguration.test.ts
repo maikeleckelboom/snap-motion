@@ -16,7 +16,7 @@ function rail(initialId: Id = "c") {
 
 /** Rest exactly on one card, which is the only thing that publishes a durable selection. */
 function restAt(index: number) {
-  return { phase: "idle", physicalIndex: index, targetIndex: index, nearestIndex: index } as const;
+  return { phase: "idle", physicalPosition: 0, targetIndex: index, nearestIndex: index } as const;
 }
 
 describe("stacked deck item reconfiguration", () => {
@@ -50,7 +50,7 @@ describe("stacked deck item reconfiguration", () => {
 
     expect(model.reconfigure(["c", "a", "b", "d", "e"])).toBe(0);
     expect(model.idAt(model.state.settledIndex)).toBe("c");
-    expect(model.state.canPrevious).toBe(false);
+    expect(model.state.canPrevious).toBe(true);
     expect(model.state.canNext).toBe(true);
   });
 
@@ -78,7 +78,6 @@ describe("stacked deck item reconfiguration", () => {
     expect(model.itemCount).toBe(0);
     expect(model.state.canPrevious).toBe(false);
     expect(model.state.canNext).toBe(false);
-    expect(model.traversalBounds).toBeUndefined();
     expect(model.resolveAbsoluteCommand(0, { owned: false, atRest: true })).toEqual({
       kind: "none",
     });
@@ -89,12 +88,12 @@ describe("stacked deck item reconfiguration", () => {
     expect(model.update(restAt(1)).settledIndex).toBe(1);
   });
 
-  it("discards an interaction envelope opened against the old ordering", () => {
+  it("discards an interaction origin opened against the old ordering", () => {
     const model = deck();
-    model.openInteraction(2);
-    expect(model.traversalBounds).toEqual({ minIndex: 1, maxIndex: 3 });
+    model.openInteraction(2, 1);
+    expect(model.state).toMatchObject({ interactionDirection: 1, interactionOriginIndex: 2 });
     model.reconfigure(["a", "b", "c"]);
-    expect(model.traversalBounds).toBeUndefined();
+    expect(model.state).toMatchObject({ interactionDirection: 0, interactionOriginIndex: null });
     expect(model.state.pendingTargetIndex).toBeNull();
   });
 

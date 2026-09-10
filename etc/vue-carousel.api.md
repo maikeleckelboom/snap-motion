@@ -313,6 +313,7 @@ export interface UseCarouselMotionOptions<Id extends string> extends Omit<UseSna
     direction?: SnapMotionDirection | Readonly<Ref<SnapMotionDirection>>;
     // (undocumented)
     measure: () => ControllerMeasurement<Id>;
+    onInteractionDirection?: (direction: -1 | 1) => void;
     // (undocumented)
     onTargetSelected?: (id: Id, reason: "drag" | "wheel") => void;
     // (undocumented)

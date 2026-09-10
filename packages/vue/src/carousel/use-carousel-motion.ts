@@ -19,6 +19,8 @@ export interface UseCarouselMotionOptions<Id extends string> extends Omit<
   measure: () => ControllerMeasurement<Id>;
   direction?: SnapMotionDirection | Readonly<Ref<SnapMotionDirection>>;
   onTargetSelected?: (id: Id, reason: "drag" | "wheel") => void;
+  /** Called before an accepted pointer direction or wheel burst writes its first scalar delta. */
+  onInteractionDirection?: (direction: -1 | 1) => void;
   track?: Ref<HTMLElement | undefined>;
   viewport: Ref<HTMLElement | undefined>;
   wheelSettleDelay?: number;
@@ -30,6 +32,7 @@ export function useCarouselMotion<Id extends string>(
   const {
     direction = "auto",
     measure,
+    onInteractionDirection,
     onTargetSelected,
     track,
     viewport,
@@ -51,6 +54,9 @@ export function useCarouselMotion<Id extends string>(
     axis: "x",
     pointerIntent: "horizontal",
     pointerDeltaMultiplier: () => (resolvedDirection() === "rtl" ? -1 : 1),
+    onPointerTravelDirection(travelDirection) {
+      onInteractionDirection?.(-travelDirection as -1 | 1);
+    },
     onReleaseTargetSelected(id) {
       if (id !== undefined) onTargetSelected?.(id, "drag");
     },
@@ -94,6 +100,8 @@ export function useCarouselMotion<Id extends string>(
           motion.snapshot.value.target?.id ??
           motion.snapshot.value.active?.id;
         motion.controller.beginDrag(wheelOriginId === undefined ? {} : { originId: wheelOriginId });
+        const logicalDirection = Math.sign(delta) * (resolvedDirection() === "rtl" ? -1 : 1);
+        if (logicalDirection !== 0) onInteractionDirection?.(logicalDirection as -1 | 1);
         wheelActive = true;
         wheelRawPosition = motion.position.value;
       }

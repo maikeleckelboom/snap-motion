@@ -162,63 +162,59 @@ and cannot make incoherent geometry look like anything.
 
 ## Stacked deck
 
-The deck is a physical pile with one authoritative card at its centre and one restrained decorative
-layer for every screen it is not drawing, fanned to the side that screen's index lies on. It reuses
-`createCoverflowGeometry` and `useCarouselMotion` only for generic scalar gesture,
-constraint, velocity, and settlement mechanics. It does not reuse the rail renderer. No card is
-assigned a horizontal slot from its index.
+The deck is a cyclic physical pile with one authoritative card at its centre and one persistent
+shell for every item. The consumer's finite ordered IDs define a canonical ring; resting order is
+that ring rotated so the current item is first. It reuses `createCoverflowGeometry` and
+`useCarouselMotion` only for generic scalar gesture, constraint, velocity, and settlement
+mechanics. It does not reuse the rail renderer, and semantic ordinal is never treated as physical
+distance.
 
 `resolveStackedDeckTuning` owns responsive card size, motion pitch, compact pile offsets, and the
-one-anchor exchange geometry. `resolveStackedDeckTraversal` consumes the controller phase, settled
-index, continuous physical index, and an optional `traversalBounds` envelope. It retains the current
-visual top, completes every crossed anchor in order inside that envelope, and exposes only the
-residual adjacent segment. `resolveStackedDeckFrame` projects that segment into `top`, `target`, or
-`hidden` roles. No active segment can have a non-adjacent target.
+one-anchor exchange geometry. `resolveStackedDeckTraversal` consumes the controller phase, semantic
+origin, settled ordinal, and an interaction-local physical position. Its sign is first-class
+direction; it resolves exactly one directed cyclic neighbour, then exposes any remaining travel as
+elastic overdrag. `resolveStackedDeckFrame` projects that exchange into `top`, `target`, or `hidden`
+roles. No active segment can have a non-adjacent ring target.
 
 The public Deck root owns layout containment without paint containment. It keeps `overflow: visible`,
-so transformed cards and pile layers stay visually intact throughout an exchange without
+so transformed card shells stay visually intact throughout an exchange without
 contributing transient width to the document. This boundary belongs to the package because the
 package owns those transforms; a consumer must not need to clip the surface or contain its host.
 
 ### Deck thickness
 
-`resolveStackedDeckPile` draws one decorative layer for every screen the frame does not already draw,
-on the side of the current card that screen sits on. The deck is therefore exactly as thick as what
-is left, and its shape says where you are:
+Every item keeps one persistent physical shell. At rest, forward ring distance from the current item
+owns physical depth. Compact signed visual slots fold the far half of the pile to the other side,
+but never own identity or layer order:
 
 ```text
-index 0 of 5    │▐▐▐▐        four ahead, none behind
-index 2 of 5  ▌▌│▐▐          an even split
-index 4 of 5  ▌▌▌▌│          none ahead, four behind
+current A: [A, B, C, D, E]
+current C: [C, D, E, A, B]
+current E: [E, A, B, C, D]
 ```
 
-Every layer is placed from `index - centre` alone, where `centre` is the continuous position of the
-card at the middle of the deck. The topology is therefore item ordering, not gesture direction: a
-reversal retraces the same slots rather than mirroring the deck, and travelling either way from one
-position lays out an exact mirror of the other.
+The layout therefore has no first-card or last-card shape. `E → A` uses the same depth rotation as
+`D → E`; only semantic identities differ. Forward followed by backward restores every depth and
+resting pose exactly.
 
-An exchange is one physical event. The adjacent target rises to centre out of the nearest slot on
-its own side. The outgoing screenshot stays opaque while a direction-aware aperture occludes it;
-only after its content is fully concealed does its decorative material appear in the nearest slot on
-the far side. A `Next` therefore moves one card from the right stack to the left, and `Previous`
-mirrors it because the ordering genuinely is reversed. Because `centre` is continuous, the whole
-deck slides across by one slot rather than snapping, and a reversal part-way through an exchange
-retraces it.
+An exchange is one physical event. Shuffle cycles the exposed card through the pile in the forward
+direction; backward evaluates the same path from the opposite endpoint, bringing the rear card to
+the front. Both bodies remain opaque and retain their own material throughout. Their transformed
+bodies clear one another at the discrete depth crossover; the two cast-shadow elevations reach zero
+there so the paint-order swap cannot project one card's shadow across the other card's edge. Direct
+uses the same ring endpoints while retaining its separate hand-owned outside path and release
+parking. Direction reversal retraces the corresponding choreography without rebinding a shell.
 
 Slots are a geometric series rather than a straight multiple of one step: the nearest slot is
 exactly one step out — where every target rises from — while the total spread converges, so a deck
 of any length shows exposed edges and depth rather than widening into a horizontal rail.
 
-Each layer retains the ordered source index it came from as `StackedDeckPilePose.itemIndex`, so a
-renderer can associate the same ordered item with the topology that resolved its slot. That
-structural provenance does not name a semantic card, expose application metadata from core, or grant
-activation, selection, focus, hit testing, or accessibility ownership.
-
-The Vue projection uses that associated item's stable ID for decorative node lifetime and keeps the
-continuous slot as placement state. When a target leaves the pile, every remaining item's existing
-node therefore moves into its newly resolved slot; a physical rank is never repainted with another
-item's material. The target still changes from decorative to content-bearing representation at the
-same physical pose, without adding a second semantic card.
+`resolveStackedDeckPile` remains an advanced, read-only projection of the non-dominant shells. Each
+pose retains the ordered source index as `StackedDeckPilePose.itemIndex`, so a custom renderer can
+associate the same item with the topology that resolved its slot; `depth` reports its forward ring
+distance behind the current top. The Vue composable adds that item's stable ID and data. Neither
+layer creates a second representation or grants activation, selection, focus, hit testing, or
+accessibility ownership; the high-level component renders only the persistent `#card` shell.
 
 ### One card per interaction
 
@@ -236,11 +232,13 @@ envelope at three levels that must agree:
 - `SnapController.beginDrag({ originId })` measures the temporary drag envelope and the release cap
   from the declared origin instead of the nearest anchor, so a re-grab between the midpoint and the
   handoff boundary cannot let controller state run ahead of the card the user can see.
-- `releasePolicy.maxAnchorSkip = 1` bounds both the rendered drag and `resolveReleaseTarget`, so
-  `abs(releaseTargetIndex - originIndex) <= 1` regardless of release velocity.
-- `traversalBounds` stops the projection promoting past the envelope. Remaining physical travel
-  renders as the existing `elastic` phase: the top card keeps translating with bounded resistance,
-  no second target appears, and no second visual top is promoted.
+- The Vue adapter rotates a finite local coordinate around that semantic origin. The directed ring
+  neighbour is always exactly one controller pitch away, including `last → first`, and remeasurement
+  preserves the mass's scalar offset from the origin atomically.
+- `releasePolicy.maxAnchorSkip = 1` and the transaction-local traversal both cap the operation at
+  one physical pitch. Remaining travel renders as the existing `elastic` phase: the top card keeps
+  translating with bounded resistance, no second target appears, and no second visual top is
+  promoted.
 
 Overdrag past the adjacent anchor is resisted rather than clamped. `dragEnvelopeElasticity` applies
 the deck's own elasticity at the interior envelope limits, so a two-thousand-pixel drag still feels
@@ -263,7 +261,7 @@ one card from its own origin. Commands issued inside a single event-loop turn �
 published an answer to the first — share an origin and coalesce, which is the correct reading of
 input that arrived before the deck could respond.
 
-Absolute navigation names a destination and is not a throw at all — a non-adjacent pagination,
+Absolute navigation names a destination and is not a throw at all — a non-adjacent named request,
 `Home`, `End`, or gallery synchronization request selects its destination directly and announces it
 truthfully instead of animating through every intermediate card. Adjacent absolute destinations
 still use the normal one-card interaction.
@@ -281,10 +279,10 @@ Three concepts the deck deliberately keeps apart:
 
 A spring can still have residual motion long after the card the user is looking at has changed.
 `authoritativeIndex` is the deck's single answer to "which card is current" during that window, and
-it is what the caption, counter, pagination state, `aria-current`, the re-grab origin, the relative
+it is what the caption, `aria-current`, the re-grab origin, the relative
 navigation origin, and inspection all read. It moves to the incoming card once the segment passes
-its midpoint — the point at which that card is nearer the top slot and the compositor begins
-occluding the outgoing face — and is latched across a small dead band, so a crossing renames the
+its midpoint — the point at which that card is nearer the top slot and the outgoing face begins
+leaving — and is latched across a small dead band, so a crossing renames the
 deck exactly once and jitter on the boundary cannot rename it at all.
 
 Only two things still wait for mechanical rest, because only they are about durability rather than
@@ -297,54 +295,70 @@ contestable. That threshold is read off the rendered frame rather than re-derive
 it is reached the promotion curve has already parked the incoming card within a fraction of a pixel
 of rest, so synchronizing exactly cannot move anything the eye can follow.
 
-### Direct screen-space mapping
+### Exchange presentations
 
-Carousel anchors use `position = -index * pitch`, while an LTR pointer drag writes its screen-space
-delta directly into controller position. The deck therefore derives:
+`resolveStackedDeckFrame` owns both presentations over the same traversal, pile slots, and mutable
+frame storage. Omitted exchange and `exchange: "shuffle"` select the accepted opaque physical
+transfer described above. `exchange: "direct"` changes only the exchange projection.
+
+Direct separates the hand vector from logical traversal:
 
 ```text
-physicalIndex = -controllerPosition / pitch
-signedLocalDistance = physicalIndex - segmentOriginIndex
-topCardX = -signedLocalDistance * motionPitch
+raw hand vector = pointer screen position - original local grab point - stage centre
+scalar traversal = -controllerPosition / pitch - localOriginOrder
 ```
 
-For this deck `motionPitch` is the same pitch used by the controller, so away from elastic bounds
-`topCardX` equals pointer delta exactly. A left drag produces negative card X from the first
-meaningful movement; a right drag produces positive card X. At an outer bound, the controller's
-existing nonlinear elasticity reduces the physical delta and the same equation projects that
-reduced movement without inventing a target.
+Once horizontal intent is accepted, only the outgoing shell reads raw X and Y. It stays at identity
+scale and rotation so the exact local grab point remains under the pointer. The adjacent target and
+all pile shells read scalar traversal plus the accepted pile geometry; raw Y can neither navigate
+nor shift the stack. Scalar progress is limited to the interaction's one adjacent destination while
+raw overdrag remains literal. There is no outer deck boundary: before the first scalar delta, the
+local coordinate is oriented so the requested ring neighbour occupies that direction. Resistance
+begins only after the adjacent-card transaction envelope has been consumed.
 
-The two directions share this equation and one restrained secondary arc. Rotation, vertical lift,
-scale recession, and shadow attenuation are deterministic functions of local progress. The top
-card remains opaque and above the target until the handoff, so visible metadata cannot lag behind a
-visually dominant target. Reduced motion preserves direct translation and removes the secondary
-arc.
+For each adjacent exchange, Direct derives source and destination ring poses but does not hide an
+invalid deck behind the held shell. Scalar travel alone moves the target and pile. The canonical
+under-card recedes without disappearing, travels physically clear of the complete pile before its
+depth changes, and returns beneath the target; every other subordinate shell changes depth only
+inside the target's physical occlusion. Raw Y cannot select or perturb any of those poses or layers.
+
+A committed raw shell can be far from its compact destination. Parking owns one bounded
+presentation settlement from the exact release X/Y into the exact destination pose. The shell keeps
+the paint order it was released with until its path has carried the relevant bodies physically
+clear, then passes behind the new top and continues into the pile. Opacity remains `1`; there is no
+duplicate shell or invisible rebase. A return creates no landing and stays coupled to the
+controller's scalar path back to interaction-local zero. A zero-direction release and a cancellation
+return to the same exact source rest without naming an exchange.
+
+New ownership does not cancel or replace a committed release. An interrupted parking shell becomes
+an independent landing record with its own elapsed settlement under the shared presentation RAF;
+several releases may therefore remain airborne at once, ordered by release chronology. They remain
+visible but noninteractive. If a live exchange targets an airborne shell, that landing and the
+target resolve through one persistent pose, and settlement `1` is paint- and pose-identical to
+retiring the record. Autonomous Direct uses the same endpoint deck without inventing pointer
+coordinates. Reduced motion preserves the same ownership, paint, and exact-rest contracts with its
+reduced pile tuning.
 
 ### Segment handoff and reversal
 
-`visualTopIndex` is history-bearing presentation state. While physical index stays within one pitch
-of it, the same card remains on top and the signed residual chooses the adjacent target underneath.
-At a complete pitch the target is already at exact top-card rest geometry and the former top is
-removed from the active frame. Visual ownership then advances one anchor, and any residual physical
-distance immediately opens the next adjacent segment — or, once the interaction envelope is reached,
-becomes elastic overdrag instead. A controller animation that legitimately spans several anchors is
-still rendered as a sequence of adjacent handoffs without intermediate `moveTo()` calls or idle
-states; the stacked deck simply never issues one from a user interaction.
+`visualTopIndex` is history-bearing presentation state. Inside the one-pitch transaction the origin
+remains the visual top and the signed local distance names its directed ring neighbour. At a
+complete pitch that neighbour is already at exact top-card rest geometry and becomes the visual top;
+any remaining interaction travel is elastic overdrag, never a second exchange.
 
-Reversal uses the same signed residual. Before a handoff, progress simply retraces to zero. After a
-handoff, movement first retraces the new top toward the previously crossed anchor; crossing that
-pitch transfers visual ownership back. Direction can change only through an exact neutral state at
-the current visual anchor. Re-grabbing, wheel input, fast flicks, and programmatic movement all use
-the same controller position and traversal resolver.
+A held hand may reverse through interaction-local zero and immediately name the neighbour on the
+other physical side, including when two physical directions identify the same item in a two-card
+deck. Once release chooses a destination, that direction belongs to the released transaction and a
+spring crossing zero cannot reinterpret it. Returns unwind the same scalar exchange; each later
+pointer, wheel, or relative command opens a fresh local coordinate around a reachable deck card.
 
 ### Visual and accessibility invariants
 
-At rest only one semantic card is current and interactive. Decorative pile layers are hidden from
-the accessibility tree and expose only small translated edges; non-participating content cards never
-cross the stage. During motion, visible caption, counter, pagination emphasis, and `aria-current`
-follow the visual top only after a completed handoff. Durable selection remains unchanged until
-controller idle, inspection stays disabled, and the live region announces only the final settled
-card. At idle the visual top and settled index must agree exactly.
+At rest only one semantic card is current and interactive. Pile and airborne presentation shells
+stay inert and accessibility-hidden. During motion, the visible caption and `aria-current` follow
+visual authority, durable selection remains unchanged until controller idle, inspection stays
+disabled, and the live region announces only the final settled card. At idle the visual top and
+settled index must agree exactly.
 
 The clipped decorative backdrop is a sibling of the card stage, never an ancestor. The viewport and
 stage allow intentional render bleed, while page-level horizontal containment prevents document

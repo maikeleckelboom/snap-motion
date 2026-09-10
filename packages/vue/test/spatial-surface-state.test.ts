@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { h, nextTick } from "vue";
 
@@ -223,6 +223,7 @@ describe("navigation reasons cannot be forged", () => {
     // Something the user did is in flight, and then authoritative state arrives.
     deck.next();
     expect(deck.synchronizeTo("a")).toBe(true);
+    await flushPromises();
     await nextTick();
 
     // Mechanical settlement is published by the adoption itself, without a live announcement.

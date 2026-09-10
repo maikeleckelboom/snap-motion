@@ -21,7 +21,11 @@ export interface UseSnapMotionOptions<Id extends string> extends Omit<
   onChange?: (snapshot: ControllerSnapshot<Id>) => void;
   pointerIntent?: "horizontal" | "immediate";
   pointerDeltaMultiplier?: () => number;
+  /** Called before the first scalar write in either direction of one pointer interaction. */
+  onPointerTravelDirection?: (direction: -1 | 1) => void;
   onReleaseTargetSelected?: (id: Id | undefined) => void;
+  /** Whether a new pointer transaction resets the scalar mass to its resolved origin anchor. */
+  resetDragPositionToOrigin?: () => boolean;
   reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
   /**
    * Resolves the anchor a new drag is measured from. It is called once when the controller takes
@@ -43,7 +47,9 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     onChange,
     pointerIntent = "immediate",
     pointerDeltaMultiplier,
+    onPointerTravelDirection,
     onReleaseTargetSelected,
+    resetDragPositionToOrigin,
     reducedMotionOverride,
     resolveDragOrigin,
     resolveReleaseTarget,
@@ -73,8 +79,8 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
   };
 
   const velocityTracker = new VelocityTracker();
-  let dragOrigin = snapshot.value.position;
   let dragOriginId: Id | undefined;
+  let pointerTravelDirection: -1 | 0 | 1 = 0;
 
   const pointer = usePointerDrag({
     axis,
@@ -82,14 +88,28 @@ export function useSnapMotion<Id extends string>(options: UseSnapMotionOptions<I
     onBegin(sample) {
       const current = controller.getSnapshot();
       dragOriginId = resolveDragOrigin?.() ?? current.target?.id ?? current.active?.id;
-      controller.beginDrag(dragOriginId === undefined ? {} : { originId: dragOriginId });
-      dragOrigin = controller.getSnapshot().position;
+      controller.beginDrag({
+        ...(dragOriginId === undefined ? {} : { originId: dragOriginId }),
+        ...(resetDragPositionToOrigin?.() === true ? { resetPositionToOrigin: true } : {}),
+      });
+      pointerTravelDirection = 0;
       velocityTracker.reset();
       velocityTracker.add(sample.position, sample.time);
     },
     onMove(sample) {
       velocityTracker.add(sample.position, sample.time);
-      controller.dragTo(dragOrigin + sample.delta * (pointerDeltaMultiplier?.() ?? 1));
+      const nextDelta = sample.delta * (pointerDeltaMultiplier?.() ?? 1);
+      const nextDirection = Math.sign(nextDelta) as -1 | 0 | 1;
+      if (nextDirection !== 0 && nextDirection !== pointerTravelDirection) {
+        // A consumer may rebase the controller's coordinate system from here. Whether it does is
+        // its business: the drag origin the hand is measured from belongs to the controller, which
+        // moves it by exactly the coordinate displacement a rebase applied and by nothing else.
+        // Reconstructing an origin here instead would read it back off a *constrained* position,
+        // and so fold one sample of elastic resistance into the origin permanently.
+        onPointerTravelDirection?.(nextDirection);
+        pointerTravelDirection = nextDirection;
+      }
+      controller.dragBy(nextDelta);
     },
     onEnd(sample) {
       velocityTracker.add(sample.position, sample.time);

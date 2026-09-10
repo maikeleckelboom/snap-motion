@@ -86,7 +86,8 @@ jobs:
     if: ${{ needs.repository-admission.result == 'success' && needs.repository-admission.outputs.browser_required == 'true' }}
     needs: repository-admission
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    # Includes runner setup; the completed audit baseline exhausted six minutes mid-shard.
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
@@ -122,7 +123,9 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright:v1.61.1-noble
       options: --user 1001
-    timeout-minutes: 6
+    # Full Sheet coverage shares this serial job with Stacked Deck interoperability.
+    # The smaller audit baseline already exhausted six minutes during cleanup.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6

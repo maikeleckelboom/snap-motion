@@ -27,6 +27,8 @@ import {
 } from "@snap-motion/vue/stacked-deck";
 import { ref } from "vue";
 
+const sheetPreference = ref<boolean | undefined>();
+
 // A readonly `as const` collection: the shape a consumer writes when the items are static.
 const screens = [
   { id: "overview", title: "Overview" },
@@ -43,14 +45,16 @@ interface Chapter {
   words: number;
 }
 type ChapterId = Chapter["id"];
-const chapters: Chapter[] = [
+const chapters = ref<Chapter[]>([
   { id: "intro", title: "Intro", words: 120 },
   { id: "body", title: "Body", words: 900 },
   { id: "outro", title: "Outro", words: 80 },
-];
+]);
 
 const activeScreen = ref<ScreenId>("system");
 const activeChapter = ref<ChapterId>("body");
+const guardedChapter = ref<ChapterId>("body");
+const chapterEditsAllowed = ref(false);
 
 const galleryItems = [
   {
@@ -121,6 +125,9 @@ function onScreenSelected(id: ScreenId): void {
 function onChapterSelected(id: ChapterId | undefined): void {
   if (id !== undefined) activeChapter.value = id;
 }
+function requestChapter(id: ChapterId | undefined): void {
+  if (chapterEditsAllowed.value && id !== undefined) guardedChapter.value = id;
+}
 function onGalleryRequested(id: GalleryId | undefined): void {
   if (id !== undefined) activeGalleryItem.value = id;
 }
@@ -183,6 +190,28 @@ void driveHandles;
       </template>
     </StackedDeck>
 
+    <!-- Guarded mutable-domain owner: publish accepted state once, without model or handle wiring. -->
+    <StackedDeck
+      :active-id="guardedChapter"
+      :items="chapters"
+      :item-label="(chapter) => chapterSummary(chapter)"
+      label="Editable chapters"
+      @active-id-request="requestChapter"
+    >
+      <template #card="{ item, active, visual, settled, inspectable }">
+        <article
+          :data-active="active"
+          :data-visual="visual"
+          :data-settled="settled"
+          :data-inspectable="inspectable"
+        >
+          <h2>{{ chapterSummary(item) }}</h2>
+          <input v-model="item.title" aria-label="Chapter title" />
+          <button type="button">Open {{ item.title }}</button>
+        </article>
+      </template>
+    </StackedDeck>
+
     <Coverflow
       ref="rail"
       v-model:active-id="activeChapter"
@@ -216,7 +245,7 @@ void driveHandles;
       <template #title>Modal inference</template>
     </ModalDialog>
 
-    <Sheet ref="sheet" :open="false">
+    <Sheet ref="sheet" :open="false" :reduced-motion-override="sheetPreference">
       <template #title>Sheet inference</template>
     </Sheet>
 

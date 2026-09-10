@@ -19,8 +19,16 @@ export interface SurfaceGestureOptions {
   /** Whether a tap on this item would open it rather than select it. */
   readonly isOpenEligible: (index: number) => boolean;
   readonly disabled?: () => boolean;
-  /** Forwards a pointer that has been accepted, so the controller can take ownership. */
-  readonly forwardPointerDown: (event: PointerEvent) => void;
+  /**
+   * Forwards a pointer that has been accepted, so the controller can take ownership.
+   *
+   * The item this sequence began on is stated rather than left to be inferred: `-1` is a press the
+   * surface's own items did not claim. A surface whose transaction has to begin from a specific
+   * physical item refuses that press; one that drags its whole track does not care.
+   */
+  readonly forwardPointerDown: (event: PointerEvent, originIndex: number) => void;
+  /** Optional non-reactive raw movement for the tracked pointer, once it began on an item. */
+  readonly onPointerSample?: (deltaX: number, deltaY: number) => void;
   readonly onResolved: (
     resolution: DirectManipulationResolution,
     gesture: CompletedSurfaceGesture,
@@ -59,16 +67,8 @@ function resolutionFor(tracked: TrackedGesture, onOrigin: boolean): DirectManipu
   });
 }
 
-function trackMovement(tracked: TrackedGesture, event: PointerEvent) {
-  tracked.deltaX = event.clientX - tracked.startX;
-  tracked.deltaY = event.clientY - tracked.startY;
-  tracked.maximumDisplacement = Math.max(
-    tracked.maximumDisplacement,
-    Math.hypot(tracked.deltaX, tracked.deltaY),
-  );
-}
-
 interface TrackedGesture {
+  readonly generation: number;
   readonly focusWasOutside: boolean;
   readonly openEligibleAtStart: boolean;
   readonly originElement: HTMLElement | undefined;
@@ -104,9 +104,25 @@ interface ArmedClickSuppression {
 export function useSurfaceGesture(options: SurfaceGestureOptions) {
   const activePointers = new Set<number>();
   let gesture: TrackedGesture | undefined;
+  let generation = 0;
   let disposed = false;
   /** Evidence tying one compatibility click to the swipe that armed its suppression. */
   let clickSuppression: ArmedClickSuppression | undefined;
+
+  function trackMovement(tracked: TrackedGesture, event: PointerEvent) {
+    tracked.deltaX = event.clientX - tracked.startX;
+    tracked.deltaY = event.clientY - tracked.startY;
+    tracked.maximumDisplacement = Math.max(
+      tracked.maximumDisplacement,
+      Math.hypot(tracked.deltaX, tracked.deltaY),
+    );
+    if (tracked.originIndex !== undefined) {
+      queueMicrotask(() => {
+        if (disposed || tracked.generation !== generation) return;
+        options.onPointerSample?.(tracked.deltaX, tracked.deltaY);
+      });
+    }
+  }
 
   // Resolution is deferred by a microtask so a release and the controller's answer to it cannot
   // interleave. A scope torn down inside that window must not be spoken for afterwards.
@@ -162,7 +178,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
   }
 
   function publish(tracked: TrackedGesture, resolution: DirectManipulationResolution) {
-    if (disposed) return;
+    if (disposed || tracked.generation !== generation) return;
     options.onResolved(resolution, {
       cancelled: tracked.cancelled,
       focusWasOutside: tracked.focusWasOutside,
@@ -212,7 +228,10 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     if (gesture && !activePointers.has(event.pointerId)) {
       gesture.involvedMultiplePointers = true;
       activePointers.add(event.pointerId);
-      options.forwardPointerDown(event);
+      // A second contact joins the sequence already in progress, so it is forwarded on that
+      // sequence's origin rather than on its own: whether this surface owns the gesture at all was
+      // settled by the first press.
+      options.forwardPointerDown(event, gesture.originIndex ?? -1);
       return;
     }
     if (!isSupportedPrimaryPointerStart(event)) return;
@@ -228,7 +247,9 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     if (event.pointerType === "mouse" && originIndex >= 0 && event.cancelable) {
       event.preventDefault();
     }
+    generation += 1;
     gesture = {
+      generation,
       focusWasOutside: Boolean(root && (!activeElement || !root.contains(activeElement))),
       openEligibleAtStart: originIndex >= 0 && options.isOpenEligible(originIndex),
       originElement,
@@ -244,13 +265,14 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
       maximumDisplacement: 0,
     };
     activePointers.add(event.pointerId);
-    options.forwardPointerDown(event);
+    options.forwardPointerDown(event, originIndex);
   }
 
   function abandon(event: PointerEvent) {
     const tracked = gesture;
     if (!tracked || event.pointerId !== tracked.pointerId) return;
     activePointers.delete(event.pointerId);
+    trackMovement(tracked, event);
     tracked.cancelled = true;
     gesture = undefined;
     // A gesture that undid itself consumed nothing, so it leaves no suppression behind.
@@ -293,6 +315,9 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
    * what keeps the high- and low-level recognizers in agreement after takeover.
    */
   function cancel() {
+    // A release or movement sample may already be queued after the live gesture was cleared.
+    // Retire that work too, so it cannot speak for a newer authority or pointer sequence.
+    generation += 1;
     gesture = undefined;
     activePointers.clear();
     clearClickSuppression();

@@ -294,6 +294,31 @@ describe("SnapController", () => {
     });
   });
 
+  it("atomically rebases settling position by the named anchor displacement", () => {
+    const { controller, driver } = createController();
+    controller.moveTo("b");
+    driver.update(-40, -123);
+
+    controller.remeasure({
+      bounds: { min: -600, max: 0 },
+      anchors: [
+        { id: "c", order: 0, position: 0 },
+        { id: "a", order: 1, position: -200 },
+        { id: "b", order: 2, position: -400 },
+      ],
+      rebaseFromId: "b",
+    });
+
+    // B moved from -100 to -400, so the rendered mass moves by the same coordinate delta while
+    // retaining its -60px physical offset from B and its in-flight velocity.
+    expect(driver.latest.request).toMatchObject({ from: -340, to: -400, initialVelocity: -123 });
+    expect(controller.snapshot).toMatchObject({
+      phase: "settling",
+      position: -340,
+      target: { id: "b" },
+    });
+  });
+
   it("preserves semantic drag displacement and rebases subsequent pointer deltas", () => {
     const { controller } = createController({ initialTargetId: "b" });
     controller.beginDrag();

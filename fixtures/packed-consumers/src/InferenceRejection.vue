@@ -9,6 +9,7 @@
  */
 import { Coverflow } from "@snap-motion/vue/coverflow";
 import { MediaGalleryDialog, type MediaGalleryItem } from "@snap-motion/vue/media-gallery";
+import { Sheet } from "@snap-motion/vue/sheet";
 import { StackedDeck } from "@snap-motion/vue/stacked-deck";
 import { ref } from "vue";
 
@@ -54,6 +55,8 @@ function chapterTitle(chapter: Chapter): string {
 
 <template>
   <main>
+    <!-- @vue-expect-error Sheet preference is a tri-state Boolean, not a string mode -->
+    <Sheet :open="false" reduced-motion-override="system" />
     <!-- @vue-expect-error a semantic ID from another domain is not one of these items -->
     <StackedDeck :items="screens" active-id="nope" />
 
@@ -62,6 +65,17 @@ function chapterTitle(chapter: Chapter): string {
 
     <!-- @vue-expect-error an item without a semantic ID is not an item -->
     <StackedDeck :items="[{ title: 'No ID' }]" />
+
+    <!-- @vue-expect-error the Deck label receives the mutable domain item, not any -->
+    <StackedDeck :items="chapters" :item-label="(chapter) => chapter.missingProperty" />
+
+    <StackedDeck :items="chapters">
+      <template #card="{ item }">
+        <p>{{ chapterTitle(item) }}</p>
+        <!-- @vue-expect-error mutable Deck slot inference must reject unknown domain members -->
+        <p :data-missing="item.missingProperty" />
+      </template>
+    </StackedDeck>
 
     <!-- @vue-expect-error the label accessor receives this collection's item, not another's -->
     <Coverflow :items="chapters" :item-label="(chapter) => chapter.missingProperty" />

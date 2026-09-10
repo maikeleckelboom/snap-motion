@@ -210,7 +210,7 @@ export function defaultSheetOpenSnapId(side: SheetSide): SheetOpenSnapId {
 export const defaultSheetViewportPolicy: Readonly<SheetViewportPolicy> = {
   comfortableExtent: 620,
   compactExtent: 360,
-  hiddenOvershoot: 160,
+  hiddenOvershoot: 1,
   minimumViewportExtent: 25,
   oppositeEdgeGap: 24,
 };

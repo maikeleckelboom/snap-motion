@@ -78,6 +78,10 @@ exactly instead of animating through intermediate cards. `Coverflow` can target 
 position directly. `synchronizeTo` cancels conflicting motion and never replays request events. On
 controlled high-level handles it accepts only the current prop; `navigateTo` is the route for asking
 the owner to change state.
+`StackedDeck` refuses an unknown or stale ID without changing selection, the rollback anchor, or
+pending settlement. Its settlement publication waits for the current Vue prop flush and is discarded when newer
+navigation, exact adoption, a changed collection, or unmount supersedes it. Status labels are resolved
+from the surviving semantic ID, never from an index captured before a collection change.
 
 ```ts
 function onGalleryClosed(finalId: string | undefined) {
@@ -93,7 +97,18 @@ ambiguous card.
 
 Both components accept `items`, optional `activeId`, `label` / `labelledBy`, `itemLabel`,
 `focusScope`, `disabled`, `landmark`, `fallbackStageWidth`, reduced-motion and physics overrides.
-`fallbackStageWidth` is only the pre-measurement fallback; the component measures the real stage.
+`StackedDeck` additionally accepts `exchange="shuffle" | "direct"`; omitted exchange is exactly
+`"shuffle"`. Shuffle is the opaque physical transfer between pile sides. Direct keeps the exact
+local point grabbed on the outgoing card attached to the pointer after horizontal intent is owned,
+including raw vertical movement, while the scalar controller still owns adjacent target, authority,
+release, and pile reflow. It does not change card content, dimensions, pile geometry, or semantics.
+The high-level `fallbackStageWidth` prop also caps the root's CSS width at that value (at most 1280
+CSS pixels). It supplies geometry before measurement; afterward mechanics use the measured root.
+Choose the allocated width with ordinary host CSS. The advanced composable's `stageWidth` option is
+only a pre-measurement fallback and does not style its host.
+Omitting `reducedMotionOverride` on `StackedDeck` follows the system preference, including changes
+while mounted. Explicit `true` reduces motion; explicit `false` forces full motion. Ordinary
+consumers do not need to read a media query or forward an override.
 The measured public root may be narrower than the compact mechanics profile. At a 280 CSS-pixel
 allocation, the compact Deck keeps its 192 CSS-pixel card, slotted content, and settled pile inside
 that root in either navigation direction. The package stylesheet applies layout containment to the
@@ -107,10 +122,11 @@ the domain `item`, stable `id`, collection `index`, semantic/visual/settled/insp
 surface-specific presentation. These projections are read-only render data, not alternate sources
 of truth.
 
-Stacked Deck's optional `#pile-layer` receives only item-associated decorative state:
-`{ item, id, index, side, slot }`. Snap Motion keeps ownership of the inert outer layer and keys its
-lifetime to the item while continuously updating its slot, transform, compositing, opacity, and
-shadow. Consumer material therefore follows a physical card through pile compaction.
+Each Stacked Deck item is rendered once through `#card`, inside one persistent physical shell that
+owns transform, depth, opacity, and shadow for the item's lifetime. There is no second high-level
+pile-material slot. Custom renderers and diagnostics that need the read-only non-dominant projection
+can use `useStackedDeckMotion().pileLayers`; those values mirror the same card poses and do not grant
+semantic, interaction, focus, or accessibility ownership.
 
 `labelledBy` follows the JavaScript/DOM property spelling while rendering `aria-labelledby`.
 `focusScope` identifies a surrounding region that already owns focus; it is not a focus trap.
@@ -125,10 +141,34 @@ leaves vertical page scrolling alone. Descendant controls, right-click, and regi
 `data-snap-motion-ignore-drag` do not begin surface drag. Accepted navigation prevents its key or
 wheel default; refused navigation does not.
 
-Direct drag preserves one scalar physical position. Re-grab starts from the rendered state rather
-than a stale logical anchor. Rapid commands chain from the pending mechanical target without
-promoting it to semantic state. Reduced motion preserves the same authority protocol while
-completing mechanics without a spring-duration dependency.
+Direct applies the full movement accumulated since pointer-down on the first owned touch frame. From
+the next frame through release, the grabbed local point follows the pointer literally. Interior
+overdrag keeps that hand-owned vector while the existing one-card envelope resists scalar progress.
+Every semantic item has both cyclic neighbours, including across ordinal zero, so former outward
+edge gestures enter an ordinary adjacent exchange before that same one-card overdrag applies.
+Keyboard, wheel, and programmatic Direct navigation use the same scalar projection without a
+fictional cursor.
+
+On commit, the released shell keeps its release paint order until its path is physically clear,
+passes behind the new top there, and continues from the actual release X/Y into its exact destination
+pose on the parking clock. Opacity remains `1`. A return creates no landing and remains coupled to
+the controller's scalar path home; cancellation and vertical-only release return to exact source
+rest. New input and controlled or collection authority never wait for presentation settlement.
+
+An interrupted committed release remains visible and lands independently, but it is noninteractive
+and cannot become a new origin while airborne. A later exchange targeting that shell resolves the
+target and landing through the same persistent pose rather than rebasing it. Every fresh accepted
+gesture begins a local scalar transaction on a shell the deck is actually offering. Rapid commands
+chain from the pending mechanical target without promoting it to durable semantic state. Reduced
+motion preserves the same authority and material protocol.
+Calls made synchronously before Vue acknowledges the first command share its origin and coalesce;
+distinct inputs after that acknowledgement chain from the pending target.
+
+Changing `disabled` during input ends pointer recognition and wheel coalescing. An owned exchange
+returns to its interaction origin without a new selection request; a touch still awaiting intent
+preserves the previously accepted destination. Older committed Direct landings continue independently.
+Explicit cancellation also retires queued gesture samples and actions, so they cannot be delivered
+for a replaced contact, collection, or component lifetime.
 
 Only the settled inspectable card is interactive. Hidden and pile-only cards stay inert. Focus is
 preserved before semantic collection changes, status announcements happen once at settlement, and

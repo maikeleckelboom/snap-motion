@@ -71,6 +71,15 @@ export interface ControllerMeasurement<Id extends SemanticId = SemanticId> {
   readonly bounds: ScalarBounds;
   readonly anchors: readonly SnapAnchor<Id>[];
   readonly activeId?: Id;
+  /**
+   * Preserve the scalar offset from this anchor while replacing the coordinate system.
+   *
+   * Ordinary layout remeasurement leaves a settling mass at its rendered pixel position. A local
+   * physical topology may instead rotate its finite anchors around the same semantic item. In
+   * that case the item's anchor displacement is a coordinate-system change, not visible travel,
+   * and the mass must move by the same displacement atomically.
+   */
+  readonly rebaseFromId?: Id;
 }
 
 export interface ControllerDragOptions<Id extends SemanticId = SemanticId> {
@@ -81,6 +90,17 @@ export interface ControllerDragOptions<Id extends SemanticId = SemanticId> {
    * one pass it explicitly so rendered and controller position cannot diverge.
    */
   readonly originId?: Id;
+  /**
+   * Establish the origin anchor itself as scalar displacement zero.
+   *
+   * The default preserves the mass's current scalar position, which is what ordinary interruption
+   * wants. A press, though, is not a physical event: a hand that takes hold of the card a surface
+   * is already presenting should not inherit whatever an unfinished release still owed, and pay it
+   * off before its own travel counts. A renderer that keeps the interrupted frame visually
+   * continuous by its own means can start a genuinely new transaction here. This resets position
+   * and velocity; it never preserves prior travel as new input.
+   */
+  readonly resetPositionToOrigin?: boolean;
 }
 
 export interface ControllerMoveOptions {

@@ -97,6 +97,35 @@ vertical scrollport. Dynamic `side` changes interrupt current motion, retain the
 snap ID when the new point set contains it, remeasure, and atomically remap the scalar. Otherwise
 the side default, then the first configured point, is used.
 
+Sheet content is fully opaque and has no decorative transform at every usable open snap. Its
+presentation needs no additional consumer prop, ref, watcher, grouping or animation. Top-origin
+content remains fixed on screen: the negative panel translation and positive viewport offset cancel
+while the visible scrollport expands. Do not add another counter-transform. Bottom and horizontal
+content follow their established physical surface. Content changes and open-snap navigation do not
+replay an entrance, alter wrapping, or change hit-target dimensions.
+
+The default hidden anchor is 1 CSS pixel beyond the physical surface. Previously it was 160 pixels
+beyond it, producing invisible travel before opening and after closing. `viewportPolicy.hiddenOvershoot`
+still accepts an explicit custom distance, for example when a consumer adds an external shadow.
+The smaller default also moves the nearest-anchor dismissal midpoint and scrim normalization;
+semantic open anchors, safe areas, handle ownership and release velocity thresholds are unchanged.
+Retargeting an active Sheet spring retains its current position and velocity. Fresh commands at rest
+still use the configured programmatic impulse.
+
+Reopening before native dismissal preserves the body's scroll position. A fresh native opening
+starts at the beginning. Moving focus into the body during opening completes the current semantic
+snap so keyboard or custom initial focus cannot remain in a zero-height opening scrollport. A
+focused descendant is revealed within the native body, including wrapped Shift+Tab targets. Focus
+completion uses the existing settlement callback, preserving pending event reasons and controlled
+authority. Focus is never delayed for animation; Escape and close requests still take effect immediately. `opened`
+continues to report the opening lifecycle after measurement and focus (not spring settlement),
+`closed` native dismissal, and `settled` confirmed semantic rest. These events are not
+content-animation hooks.
+
+Omitting `reducedMotionOverride` follows the system; `true` requests reduced motion and `false`
+explicitly requests animation. Live preference changes resolve the current destination through the
+existing motion driver. No content opacity or translation delay remains under reduced motion.
+
 A valid externally controlled snap received while closed is stored semantically without hidden
 motion. The next open begins at that snap. An unknown ID remains pending and is adopted if a later
 snap-point configuration introduces it. External changes during opening, dragging, settlement, or

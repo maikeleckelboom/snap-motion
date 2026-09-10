@@ -83,7 +83,7 @@ export const Sheet: <Id extends string = SheetOpenSnapId>(__VLS_props: NonNullab
         messages?: Partial<SnapMotionMessages>;
         open: boolean;
         programmaticImpulse?: number;
-        reducedMotionOverride?: boolean;
+        reducedMotionOverride?: boolean | undefined;
         releasePolicy?: Partial<ReleaseTargetPolicy>;
         showSnapPicker?: boolean;
         side?: SheetSide;

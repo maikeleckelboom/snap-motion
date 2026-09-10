@@ -32,6 +32,7 @@ function* dragTraffic(hz: number, itemCount: number) {
     yield {
       phase: "dragging" as const,
       physicalIndex,
+      physicalPosition: physicalIndex,
       targetIndex: null,
       nearestIndex: Math.round(physicalIndex),
     };

@@ -9,6 +9,7 @@ import {
 } from "@snap-motion/vue";
 import { Coverflow } from "@snap-motion/vue/coverflow";
 import { MediaGalleryDialog } from "@snap-motion/vue/media-gallery";
+import type { SheetDiagnostics } from "@snap-motion/vue/sheet";
 import { StackedDeck } from "@snap-motion/vue/stacked-deck";
 
 const screens = [
@@ -16,6 +17,8 @@ const screens = [
   { id: "outcome", title: "Outcome" },
 ] as const;
 const activeCarouselId = ref<"one" | "two">("two");
+const sheetOpen = ref(false);
+const sheet = ref<{ readonly diagnostics: SheetDiagnostics }>();
 
 const galleryItems = [
   {
@@ -53,7 +56,23 @@ const galleryItems = [
       <template #card="{ item }">{{ item.title }}</template>
     </Coverflow>
     <ModalDialog :open="false" />
-    <Sheet :open="false" />
+    <button data-packed-sheet-trigger type="button" @click="sheetOpen = true">Menu</button>
+    <Sheet
+      ref="sheet"
+      v-model:open="sheetOpen"
+      side="top"
+      initial-focus="close"
+      :show-snap-picker="false"
+      data-packed-sheet
+      :data-reduced-motion="sheet?.diagnostics.reducedMotion"
+    >
+      <template #title>Packed menu</template>
+      <nav aria-label="Packed navigation">
+        <a href="#overview" @click.prevent="sheetOpen = false">Overview</a
+        ><a href="#projects" @click.prevent="sheetOpen = false">Projects</a>
+      </nav>
+      <label>Display name<input autocomplete="name" /></label>
+    </Sheet>
     <MediaGalleryDialog :items="galleryItems" :open="false" />
   </main>
 </template>

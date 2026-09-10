@@ -65,7 +65,8 @@ const props = withDefaults(
     messages?: Partial<SnapMotionMessages>;
     open: boolean;
     programmaticImpulse?: number;
-    reducedMotionOverride?: boolean;
+    /** Omitted follows the system preference; true reduces motion and false forces full motion. */
+    reducedMotionOverride?: boolean | undefined;
     releasePolicy?: Partial<ReleaseTargetPolicy>;
     showSnapPicker?: boolean;
     side?: SheetSide;
@@ -78,6 +79,7 @@ const props = withDefaults(
   {
     initialFocus: "title",
     maximumScrimOpacity: 0.56,
+    reducedMotionOverride: undefined,
     showSnapPicker: true,
     side: "bottom",
   },
@@ -315,17 +317,20 @@ async function show(generation: number) {
   focusRestoreVerification = undefined;
   closingGeneration = undefined;
   captureLifecycleOpener(target, generation);
-  if (!target.open) target.showModal();
+  const alreadyVisible = target.open;
+  if (!alreadyVisible) target.showModal();
   await nextTick();
   if (!mounted || !props.open || generation !== lifecycleGeneration || !target.open) return;
-  body.value?.scrollTo(0, 0);
-  motion.remeasure(intendedId.value);
+  if (!alreadyVisible) body.value?.scrollTo(0, 0);
   motion.open(intendedId.value);
   focusInitial(props.initialFocus, {
     close: closeButton.value,
     container: panel.value,
     title: title.value,
   });
+  // showModal can already have focused an autofocus target, so applying the policy need not fire
+  // another focusin event. Reconcile the actual body focus after opening geometry exists as well.
+  void revealBodyFocus();
   if (openedGeneration === generation) return;
   openedGeneration = generation;
   emit("opened");
@@ -389,6 +394,45 @@ function closeForPresentationChange() {
 function onCancel(event: Event) {
   event.preventDefault();
   requestClose("escape");
+}
+
+function onKeydown(event: KeyboardEvent) {
+  if (!event.defaultPrevented) maintainModalTabOrder(event, dialog.value);
+}
+
+async function revealBodyFocus() {
+  const scrollport = body.value;
+  const focused = scrollport?.ownerDocument.activeElement;
+  if (!props.open || !scrollport || !focused || !scrollport.contains(focused)) return;
+  // Focus is the ownership signal, whether it came from native Tab, a wrapped boundary, an
+  // initial-focus resolver or application code. Make its semantic snap available immediately.
+  if (motion.sheetState.value === "opening") {
+    motion.interrupt();
+    motion.remeasure(intendedId.value);
+    // Exact-distance completion uses the existing settlement/authority callback without a new
+    // animation, preserving the pending generation and reason instead of silently acknowledging it.
+    motion.snapTo(intendedId.value);
+  }
+  if (focused === scrollport) return;
+  const generation = lifecycleGeneration;
+  await nextTick();
+  if (
+    !mounted ||
+    !props.open ||
+    generation !== lifecycleGeneration ||
+    scrollport !== body.value ||
+    !scrollport.contains(focused) ||
+    scrollport.ownerDocument.activeElement !== focused
+  )
+    return;
+  // Reveal only within the native body after the opening geometry has reached the DOM.
+  const region = scrollport.getBoundingClientRect();
+  const target = focused.getBoundingClientRect();
+  // Leave room for the focus indicator, and round outward because native scroll offsets can be
+  // integral even when line layout and the focused target have fractional CSS-pixel coordinates.
+  if (target.top < region.top + 2) scrollport.scrollTop += Math.floor(target.top - region.top - 2);
+  else if (target.bottom > region.bottom - 2)
+    scrollport.scrollTop += Math.ceil(target.bottom - region.bottom + 2);
 }
 
 async function onClose() {
@@ -637,7 +681,7 @@ defineExpose({
     v-bind="descriptionId ? { 'aria-describedby': descriptionId } : {}"
     @cancel="onCancel"
     @close="onClose"
-    @keydown="maintainModalTabOrder($event, dialog)"
+    @keydown="onKeydown"
   >
     <div
       aria-hidden="true"
@@ -688,7 +732,7 @@ defineExpose({
             </div>
           </div>
         </div>
-        <div ref="body" class="snap-motion-sheet-body" tabindex="0">
+        <div ref="body" class="snap-motion-sheet-body" tabindex="0" @focusin="revealBodyFocus">
           <div ref="intrinsicBodyContent" class="snap-motion-sheet-body-content">
             <div class="snap-motion-sheet-content-shell">
               <slot />

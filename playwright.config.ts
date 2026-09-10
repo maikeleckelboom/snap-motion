@@ -2,9 +2,13 @@ import { defineConfig, devices } from "@playwright/test";
 
 const mediaPreviewSpec = "media-preview.spec.ts";
 const showcaseSmokeSpec = "showcase-smoke.spec.ts";
+const stackedDeckAuditSpecs = ["stackedDeckConsumer.spec.ts", "stackedDeckTrace.spec.ts"];
+const sheetSpecs = ["sheet.spec.ts", "sheetContent.spec.ts"];
 const stackedDeckSpec = "stacked-deck.spec.ts";
+const stackedDeckDirectSpec = "stacked-deck-direct.spec.ts";
+const stackedDeckPileSpec = "stacked-deck-pile.spec.ts";
 const stackedDeckWebKitSmoke =
-  /real pointer movement maps|one held gesture cannot discard|a re-grab during settlement rebases|cancel, lost capture, edge elasticity|inspection, visual semantics, and accessibility|successive rendered frames exchange opaque content through the aperture/;
+  /real pointer movement maps|high-contrast exchange changes depth|successive rendered frames preserve the physical exchange shells|interior and semantic-wrap exchanges|pointer, wheel, and keyboard cross former ordinal edges|repeated revolutions without drift|two-item deck preserves|one held gesture cannot discard|a re-grab during settlement rebases|an accepted arrow from the inspection control|cancel, lost capture, cyclic former edges|inspection, visual semantics, and accessibility/;
 const testPort = process.env.SNAP_MOTION_TEST_PORT ?? "4173";
 const testUrl = `http://127.0.0.1:${testPort}`;
 
@@ -27,12 +31,12 @@ export default defineConfig({
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     {
       name: "firefox",
-      testMatch: showcaseSmokeSpec,
+      testMatch: [showcaseSmokeSpec, ...stackedDeckAuditSpecs, ...sheetSpecs],
       use: { ...devices["Desktop Firefox"] },
     },
     {
       name: "webkit",
-      testMatch: showcaseSmokeSpec,
+      testMatch: [showcaseSmokeSpec, ...stackedDeckAuditSpecs, ...sheetSpecs],
       use: { ...devices["Desktop Safari"] },
     },
     {
@@ -40,6 +44,18 @@ export default defineConfig({
       grep: stackedDeckWebKitSmoke,
       testMatch: stackedDeckSpec,
       workers: process.env.CI ? 1 : 2,
+      use: { ...devices["Desktop Safari"] },
+    },
+    {
+      name: "webkit-stacked-deck-direct",
+      testMatch: stackedDeckDirectSpec,
+      workers: 1,
+      use: { ...devices["Desktop Safari"] },
+    },
+    {
+      name: "webkit-stacked-deck-pile",
+      testMatch: stackedDeckPileSpec,
+      workers: 1,
       use: { ...devices["Desktop Safari"] },
     },
   ],

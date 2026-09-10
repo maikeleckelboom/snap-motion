@@ -5,7 +5,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 
 import { resolveRepositoryPnpm, runPnpmSync } from "./pnpm-cli.ts";
 
@@ -106,6 +106,31 @@ async function certifyNuxtHydration(cwd: string): Promise<void> {
       await page.evaluate(
         () => new Promise<void>((resolveFrame) => requestAnimationFrame(() => resolveFrame())),
       );
+      // This ordinary packed top menu omits the Boolean preference prop. Prove the runtime boundary,
+      // then full-motion keyboard entry and native focus return without application animation code.
+      const sheet = page.locator("[data-packed-sheet]");
+      const trigger = page.locator("[data-packed-sheet-trigger]");
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await expect(sheet).toHaveAttribute("data-reduced-motion", "true");
+      await trigger.click();
+      if ((await sheet.getAttribute("data-sheet-state")) !== "open") {
+        throw new Error("Packed Sheet ignored the omitted system reduced-motion preference.");
+      }
+      await expect(sheet.locator(".snap-motion-sheet-close")).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(sheet).not.toBeVisible();
+      await expect(trigger).toBeFocused();
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      await expect(sheet).toHaveAttribute("data-reduced-motion", "false");
+      await trigger.click();
+      await page.keyboard.press("Tab");
+      await expect(sheet.locator(".snap-motion-sheet-body")).toBeFocused();
+      await expect(sheet).toHaveAttribute("data-sheet-state", "open");
+      await page.keyboard.press("Tab");
+      await expect(sheet.getByRole("link", { name: "Overview" })).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(sheet).not.toBeVisible();
+      await expect(trigger).toBeFocused();
       if (runtimeFailures.length > 0) {
         throw new Error(`Packed Nuxt hydration failed:\n${runtimeFailures.join("\n")}`);
       }

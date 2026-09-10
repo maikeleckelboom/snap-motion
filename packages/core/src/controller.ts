@@ -240,14 +240,16 @@ export class SnapController<Id extends SemanticId = SemanticId> {
   beginDrag(options: ControllerDragOptions<Id> = {}): void {
     this.#assertUsable();
     this.#stopPlayback();
+    const requestedOrigin = findAnchorById(this.#anchors, options.originId);
+    const dragAnchor = requestedOrigin ?? this.#active ?? this.#target;
+    if (options.resetPositionToOrigin === true && requestedOrigin !== null) {
+      this.#position = requestedOrigin.position;
+      this.#active = requestedOrigin;
+    }
     this.#phase = "dragging";
     this.#velocity = 0;
     this.#dragStartPosition = this.#position;
-    this.#dragAnchorId =
-      findAnchorById(this.#anchors, options.originId)?.id ??
-      this.#active?.id ??
-      this.#target?.id ??
-      null;
+    this.#dragAnchorId = dragAnchor?.id ?? null;
     this.#target = null;
     this.#emit();
   }
@@ -376,6 +378,13 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     const previousAnchor =
       findAnchorById(this.#anchors, semanticId) ??
       nearestAnchor<Id>(this.#anchors, previousPosition, { activeId: semanticId });
+    const previousRebaseAnchor = findAnchorById(this.#anchors, measurement.rebaseFromId);
+    const nextRebaseAnchor = findAnchorById(nextAnchors, measurement.rebaseFromId);
+    const coordinateDelta =
+      previousRebaseAnchor === null || nextRebaseAnchor === null
+        ? 0
+        : nextRebaseAnchor.position - previousRebaseAnchor.position;
+    const rebasedPosition = previousPosition + coordinateDelta;
 
     this.#stopPlayback();
     this.#bounds = nextBounds;
@@ -384,8 +393,11 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     if (previousPhase === "dragging") {
       const nextAnchor =
         findAnchorById(nextAnchors, semanticId) ??
-        nearestAnchor<Id>(nextAnchors, clampToBounds(previousPosition, nextBounds));
-      const anchorDelta = (nextAnchor?.position ?? 0) - (previousAnchor?.position ?? 0);
+        nearestAnchor<Id>(nextAnchors, clampToBounds(rebasedPosition, nextBounds));
+      const anchorDelta =
+        measurement.rebaseFromId === undefined
+          ? (nextAnchor?.position ?? 0) - (previousAnchor?.position ?? 0)
+          : coordinateDelta;
       this.#dragStartPosition += anchorDelta;
       this.#dragAnchorId = nextAnchor?.id ?? null;
       this.#position = this.#constrainDragPosition(previousPosition + anchorDelta);
@@ -404,13 +416,13 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     const desiredId = measurement.activeId ?? previousTargetId ?? semanticId;
     const nextTarget =
       findAnchorById(nextAnchors, desiredId) ??
-      nearestAnchor<Id>(nextAnchors, clampToBounds(previousPosition, nextBounds), {
+      nearestAnchor<Id>(nextAnchors, clampToBounds(rebasedPosition, nextBounds), {
         activeId: desiredId,
       });
 
     if (nextTarget === null) {
       this.#phase = "idle";
-      this.#position = clampToBounds(previousPosition, nextBounds);
+      this.#position = clampToBounds(rebasedPosition, nextBounds);
       this.#velocity = 0;
       this.#target = null;
       this.#active = null;
@@ -419,8 +431,8 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     }
 
     if (previousPhase === "settling") {
-      this.#position = previousPosition;
-      this.#active = nearestAnchor<Id>(nextAnchors, previousPosition, { activeId: semanticId });
+      this.#position = rebasedPosition;
+      this.#active = nearestAnchor<Id>(nextAnchors, rebasedPosition, { activeId: semanticId });
       this.#startSettlement(nextTarget, previousVelocity);
     } else {
       this.#phase = "idle";

@@ -34,7 +34,61 @@ It deliberately analyses with its own bundled TypeScript rather than the workspa
 `messageCallback` hook so the runner states it once instead of once per entrypoint, and every real
 extractor, compiler, TSDoc, and API-report diagnostic keeps its normal reporting.
 
+## Stacked Deck visual review
+
+Use one of these workflows:
+
+```bash
+# Frozen full review: mouse chapters, keyboard springs, traces, and checkpoints
+pnpm visual:stacked-deck
+
+# Short team -> settings held-gesture curve review
+pnpm visual:stacked-deck -- --scenario curve
+
+# Compare two existing capture roots
+pnpm visual:stacked-deck:compare <artifact-a> <artifact-b>
+```
+
+The no-argument full review is the only canonical run. Scenario selection or supported overrides
+(`--pair`, `--viewport`, `--slow-duration`, `--slow-cadence`, `--slow-max-progress`,
+`--normal-duration`, `--normal-cadence`, and `--repetitions`) are exploratory and serialize their
+resolved configuration into `manifest.json`. Run `pnpm visual:stacked-deck -- --help` for syntax.
+
+Artifacts live under
+`.artifacts/stacked-deck-visual-review/<revision>/<scenario-id>-v<scenario-version>/`. A clean
+revision uses its short SHA. A dirty revision adds a fingerprint of staged and unstaged binary Git
+patches plus every non-ignored untracked path and its bytes; ignored `.artifacts/` output is not
+hashed. Custom parameter sets add a resolved-configuration fingerprint, so they cannot overwrite
+the canonical capture.
+
+The WebM recordings are for human perception. Checkpoint PNGs replay exact named physical states,
+dense mouse stimulus traces record requested versus actual progress, and rAF traces record what the
+browser presented independently of input cadence. Raw traces are authoritative; derived metrics and
+comparison reports are concise navigation aids. The comparison command checks experiment
+compatibility before comparing direct manipulation by physical progress and keyboard springs by
+relative time.
+
+This remains a deterministic human-review instrument, not a screenshot baseline, pixel-diff
+framework, perceptual score, CI visual gate, or replacement for product E2E correctness tests.
+
 Changes to a publishable package need a Changeset unless they are documentation-only. Public API
 changes must include the reviewed API report diff. Browser-visible changes require Chromium,
 Firefox, and WebKit evidence. Never claim physical assistive-technology certification from automated
 tests.
+
+## Sheet presentation comparison
+
+Open `?demo=sheet-content&view=fixtures` in the lab. Compare Control, Soft reveal (140ms opacity
+only), and Soft reveal + 8px with the same content, side, open snap and hidden-travel setting. The
+package default keeps Control. The two decorative treatments are lab experiments, not public API or
+recommended consumer wiring. Menus, forms, long text, media and short bodies share the fixture.
+
+Run `node scripts/sheetContentVisual.ts` against `pnpm dev` for normal-speed WebM recordings, raw
+RAF geometry/opacity/scroll samples, and frame strips. Options include `--browser=chromium|firefox|webkit`,
+`--height=480`, `--content=form|prose|media|short`, `--travel=baseline|responsive`,
+`--motion=reduce`, and `--treatments=control,reveal,offset`. Output under `.artifacts/sheet-content/`
+records the exact source fingerprint, browser version, viewport and configuration. The hidden-travel
+comparison remounts Sheet because viewport policy is initialization configuration. A 20px corner
+marker identifies the interaction in the recording's own timeline. Measurements are diagnostics,
+not a perceptual score or physical-display certification. `?checks=1` adds ordinary in-modal fixture
+controls for interruption tests; leave it absent when judging the visual candidates.

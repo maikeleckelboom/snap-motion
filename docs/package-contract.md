@@ -65,6 +65,21 @@ pulls an unrelated high-level feature; media-gallery isolation remains a dedicat
 require evidence from the emitted graph and an explanation tied to consumer value; documentation
 does not duplicate volatile numeric thresholds.
 
+The StackedDeck authority/lifecycle audit rebuilds the reference and candidate with the same pinned
+toolchain. Its budget adjustment covers settlement invalidation, system motion preference handling,
+disabled-input cancellation, and shared gesture lifetime guards. Only the root and StackedDeck limits
+change, preserving their previous measured headroom. The emitted graph retains the same feature
+boundaries; development-only frame recording does not ship. The shared gesture guard also changes
+Coverflow's existing dependency chunk, within its unchanged budget.
+
+The Sheet responsiveness fix adds 842 raw bytes to the root and Sheet graphs, with 230 and 231
+additional gzip bytes respectively, against the clean `7876641` build on the same toolchain. Only
+their limits increase by those deltas, preserving measured headroom. The extra code owns early body
+focus, native scroll preservation and continuous spring retargeting. Only the Sheet implementation
+chunk changes; the StackedDeck graph, shared motion, core and CSS bytes remain unchanged. The lab's
+opacity/offset comparison does not ship. Packed Nuxt checks exercise omitted system preference,
+early keyboard entry and native focus return through the actual tarball.
+
 Those fixtures also run `vue-tsc` over single-file components that use the generic surface
 components the way an application does: no explicit generic arguments, no casts, readonly `as const`
 items and ordinary mutable arrays, `v-model:active-id`, `itemLabel` inference, `#card` slot state,

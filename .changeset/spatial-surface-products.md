@@ -41,10 +41,10 @@ shared deterministic policy becomes public: `SettledSelection`, `resolveHysteret
 `resolveSnapKeyboardAction`, `isStackedDeckAuthorityStable`, `isStackedDeckInspectEligible`,
 `isSettledOnAnchor`, and their tunings.
 
-The generic controller stays generic. `SnapController` and `resolveStackedDeckTraversal` keep their
-full multi-anchor capability; a deck is a deck because its model opens one bounded transaction per
-interaction, not because anything underneath was narrowed. Every lower-level primitive stays public
-for custom renderers.
+The generic controller stays generic: `SnapController` keeps its full multi-anchor capability. The
+deck-specific `resolveStackedDeckTraversal` maps one interaction-local coordinate to exactly one
+adjacent cyclic transaction, while the model owns semantic selection and command policy. Every
+lower-level primitive stays public for custom renderers.
 
 `@snap-motion/vue/motion` also gains `useBoundedSpringDriver`, the frame-scheduled driver that
 integrates a settle under acceleration and velocity limits expressed in cards, and

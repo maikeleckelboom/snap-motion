@@ -62,6 +62,7 @@ describe("Verify browser CI contracts", () => {
     )?.[1];
 
     expect(playwrightVersion).toBeDefined();
+    expect(chromium).toContain("timeout-minutes: 12");
     expect(chromium).toContain("shard: [1, 2]");
     expect(chromium).toContain("playwright install --with-deps chromium");
     expect(chromium).toContain("--project=chromium");
@@ -71,6 +72,7 @@ describe("Verify browser CI contracts", () => {
       `image: mcr.microsoft.com/playwright:v${playwrightVersion}-noble`,
     );
     expect(crossBrowser).toContain("options: --user 1001");
+    expect(crossBrowser).toContain("timeout-minutes: 15");
     expect(crossBrowser).not.toMatch(/playwright\s+install(?:-deps)?\b/);
     for (const project of ["firefox", "webkit", "webkit-stacked-deck"]) {
       expect(crossBrowser).toContain(`--project=${project}`);

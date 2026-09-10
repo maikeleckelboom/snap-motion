@@ -453,8 +453,7 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
     },
   });
 
-  function remeasure(preferredId?: Id) {
-    const context = readContext();
+  function remeasure(preferredId?: Id, context = readContext()) {
     const anchors = createAnchors(context);
     const semanticId = motion.snapshot.value.target?.id ?? motion.snapshot.value.active?.id;
     const closed = sheetState.value === "closed" || sheetState.value === "closing";
@@ -507,20 +506,29 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
   function open(id?: Id) {
     const context = readContext();
     const requested = id ?? enabledDefaultId(context);
-    remeasure(requested);
+    remeasure(requested, context);
     sheetState.value = "opening";
-    return motion.moveTo(requested);
+    return moveToTarget(requested);
+  }
+
+  function moveToTarget(id: InternalSheetSnapId<Id>) {
+    // Retarget the existing spring from its rendered momentum. A new rest-state command retains
+    // the configured impulse, while open/close/reopen does not replace velocity at the boundary.
+    return motion.moveTo(
+      id,
+      motion.isAnimating.value ? { initialVelocity: motion.velocity.value } : {},
+    );
   }
 
   function close() {
     sheetState.value = "closing";
-    return motion.moveTo(HIDDEN_SNAP_ID);
+    return moveToTarget(HIDDEN_SNAP_ID);
   }
 
   function snapTo(id: Id) {
     if (resolvedSnapPoints.value.find((point) => point.id === id)?.disabled) return null;
     sheetState.value = "settling";
-    return motion.moveTo(id);
+    return moveToTarget(id);
   }
 
   function snapToNearest() {
@@ -538,7 +546,7 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
     );
     if (!nearest || nearest.id === HIDDEN_SNAP_ID) return null;
     sheetState.value = "settling";
-    return motion.moveTo(nearest.id);
+    return moveToTarget(nearest.id);
   }
 
   const activeSnapId = computed<Id | undefined>(() => {
