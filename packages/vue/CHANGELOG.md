@@ -1,5 +1,143 @@
 # @snap-motion/vue
 
+## 0.1.0-beta.10
+
+### Minor Changes
+
+- 419fcbc: Keep core and Vue candidate provenance aligned. Vue Coverflow pointer activation now preserves the
+  surface's focus ownership when the pointer originates outside a nested interactive control, while
+  nested controls keep their own focus behavior.
+
+  The shared native-dialog focus-return verifier also yields to a subsequent pointer interaction,
+  including one that intentionally leaves focus on the document body, instead of reclaiming the opener.
+
+- def6407: Make Stacked Deck a cyclic physical ring. Relative pointer, wheel, keyboard, and imperative
+  navigation now exchange exactly one directed neighbour across every semantic ordinal, while named
+  non-adjacent destinations continue to synchronize directly. Direct and Shuffle retain distinct
+  choreography over the same canonical ring order, including explicit two-item direction and atomic
+  local-coordinate rebasing.
+
+  The ring decides which card is adjacent and nothing else. Physical pile depth is the folded slot's
+  own distance from the centre of the deck, so the nearest neighbour on either side is the nearest to
+  the eye on that side and the exchange a hand performs is the same one a bounded collection performs.
+  The only physical behaviour the ring adds is that one shell per exchange crosses from one folded
+  side of the pile to the other; it passes behind the deck and paints nothing between the two rests it
+  is exact at.
+
+  A press does not catch a card a release is still carrying. Every unfinished release keeps its own
+  path and clock while later hands continue immediately, so several persistent shells may be in
+  flight together and each lands in whichever slot the deck is drawing for it by the time it arrives.
+  Release chronology determines relative airborne paint order, and depth changes only after the
+  involved bodies are physically clear.
+
+  Held Direct reversal also keeps physical paint authority continuous when raw vertical pointer travel
+  has carried the source clear of the deck. Semantic direction and target may still change immediately,
+  but the exposed under-card continuously recedes without losing opacity, travels clear of the complete
+  pile, and changes depth there; subordinate shells change depth only under physical occlusion. Scalar
+  neutral no longer assumes the source is covering that handoff.
+
+  Direct now uses one scalar-driven clear/contained choreography that is physically safe even when the
+  held source does not cover the pile. Raw vertical travel moves only that source and never changes a
+  target or pile pose. A directed target that is still landing is projected first on its own continuous
+  clock; the target's actual physical coverage continuously admits the same scalar pile path as it
+  approaches the deck, and settlement `1` is exactly the record-free pose. Retiring that record
+  therefore cannot switch the deck between two pose fields.
+
+  A shell that is still in the air is a presentation until it lands. It stays visible and keeps
+  travelling, but the deck does not offer it: an exchange is measured from a card that is physically
+  covering the pile it hands depth to, and a released shell is covering nothing. So it can be neither
+  pressed nor named as the source of a pointer, wheel, keyboard, or imperative exchange while its own
+  release still has it — and the frame it arrives, it is an ordinary deck top again and the same
+  gesture is accepted. Nothing is queued, delayed, or cut short by this; it is the deck having no card
+  to exchange yet rather than a cooldown. A pointer that goes down anywhere other than a card the deck
+  is offering no longer starts an exchange at all.
+
+  Remove Stacked-Deck-specific pagination state and presentation. Generic pagination and finite
+  ordinal accessibility announcements remain available to the surfaces that own them.
+
+  For custom renderers, replace traversal `physicalIndex` with interaction-local `physicalPosition`
+  and an explicit `originIndex`; `StackedDeckSnapshotInput` also uses `physicalPosition`.
+  `StackedDeckTraversalBounds` and the model's `traversalBounds` are removed. Supply direction to
+  `StackedDeckModel.openInteraction(originIndex, direction)` and traversal commands. The model exposes
+  `interactionDirection`, while `resolveStackedDeckNeighbor`, `resolveStackedDeckOrder`, and
+  `resolveStackedDeckDepth` expose ring identity; pile poses and Vue pile layers also expose `depth`.
+
+  The generic controller adds opt-in `ControllerMeasurement.rebaseFromId` and
+  `ControllerDragOptions.resetPositionToOrigin` for explicit coordinate changes. Vue exposes
+  `useSnapMotion`'s `onPointerTravelDirection` and `resetDragPositionToOrigin`, plus
+  `useCarouselMotion`'s `onInteractionDirection`. Omitted options preserve existing generic behavior.
+
+- 425bdab: Render Stacked Deck with one persistent physical shell and one `#card` subtree per item. Each card
+  keeps its material through parked, exchanging, interrupted, and reversed states. Shuffle transfers
+  depth under physical occlusion instead of dissolving card content. The high-level `#pile-layer`
+  slot and `StackedDeckPileLayerSlotState` are removed; render material through `#card` instead.
+  Advanced renderers retain `useStackedDeckMotion().pileLayers` and `resolveStackedDeckPile`, which
+  describe non-dominant physical poses without granting semantic or interaction ownership.
+- 760682e: Add the opt-in `exchange="direct"` Stacked Deck presentation while preserving Shuffle as the exact
+  default. Direct keeps the originally grabbed local card point attached to the pointer after existing
+  horizontal gesture arbitration, separates raw two-axis hand motion from scalar one-card traversal,
+  and uses the same persistent shells, semantic model, pile geometry, release policy, and authoritative
+  core frame as Shuffle.
+
+  Every non-held shell interpolates between exact source-rest and destination-rest deck poses with
+  stable hidden ordering. A released shell parks along its own bounded presentation settlement — never
+  along remaining scalar travel, which can already be finished at the moment the hand lets go — from
+  the exact frame it was released on into its exact pile slot, without fading, rebasing, or
+  duplication. It keeps the paint order the hand released it with until the two card bodies are
+  laterally clear of each other, and passes behind the new top there, so the depth change repaints
+  nothing. Mechanical rest no longer takes that path away from it. Cancellation, held reversal,
+  controlled takeover, and collection changes remain immediately interruptible. A release still in
+  the air stays visible and keeps landing independently, but cannot be recaptured as a new origin.
+  Cyclic overdrag remains bounded to the one adjacent transaction rather than fabricating additional
+  travel. Autonomous and reduced-motion Direct navigation use the same endpoint model without
+  inventing a cursor.
+
+  Ordinary pointer release is classified exactly once where the release resolver chooses between the
+  interaction origin and its directed neighbour. A committed release opens parking and owns its
+  presentation clock; a return opens no landing and remains coupled to the controller's way back to
+  interaction-local zero. Zero-direction and cancelled gestures explicitly return to their origin.
+
+  A hand takes ownership of the shell it presses on in the same statement that binds the presentation
+  to its interaction. Those were two steps — the origin moved when the drag opened, the lifecycle
+  arrived with the first movement sample a microtask later — and a frame rendered between them showed
+  a presentation carrying a new origin with no owner, which the projection reads as an autonomous
+  exchange: nothing is being held, so the incoming card takes the top of the deck immediately. At the
+  frame a hand presses, the two bodies overlap almost exactly, so every shared pixel changed material
+  for that one frame. It was reachable only by pressing before the previous exchange had finished
+  travelling, which is what alternating flicks do. A press that never moves the shell now also ends
+  its presentation instead of settling a vector of nothing.
+
+### Patch Changes
+
+- 74448bc: Honor the system reduced-motion preference when Coverflow's override prop is omitted, including
+  changes during navigation. An active target settles immediately when system reduction is enabled.
+  Explicit true and false remain authoritative, and removing the override resumes system ownership.
+- 26f61f2: Honor the system reduced-motion preference when Sheet's override prop is omitted, including live
+  preference changes during motion. Explicit true and false remain authoritative.
+- 591d8a3: Make Sheet respond at the physical edge by reducing default hidden overshoot from 160px to 1px,
+  and preserve rendered momentum when an active opening, closing or snap animation is retargeted.
+  Existing custom hidden overshoot remains supported. This also moves the default dismissal midpoint
+  and scrim normalization to the new hidden anchor; open snaps and intrinsic geometry are unchanged.
+
+  Preserve native body scrolling when reopening during dismissal. Make the current snap available
+  when focus enters the body, including early keyboard traversal and custom initial focus, and reveal
+  the focused control within the native body scrollport without consumer animation or scroll repair.
+
+- f316436: Make StackedDeck refuse stale synchronization without changing semantic state, discard superseded
+  settlement and announcements after Vue's current prop flush, and cancel active pointer/wheel input
+  when disabled while preserving independent committed landings. An omitted reduced-motion override
+  now follows the system preference. Keep airborne shells non-inspectable through public handles and
+  card slots until landing retirement. Clarify the existing stage-width cap and semantic slot contracts.
+  Cancel queued gesture callbacks when their pointer sequence, authority, or component lifetime ends.
+  Keep a departing Direct source above subordinate pile material until an airborne target's delayed
+  pile transfer can hand depth over safely, without changing scalar geometry or release timing.
+- Updated dependencies [419fcbc]
+- Updated dependencies [def6407]
+- Updated dependencies [425bdab]
+- Updated dependencies [760682e]
+- Updated dependencies [f316436]
+  - @snap-motion/core@0.1.0-beta.10
+
 ## 0.1.0-beta.9
 
 ### Minor Changes
