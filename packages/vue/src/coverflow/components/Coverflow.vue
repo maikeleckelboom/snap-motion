@@ -45,7 +45,8 @@ const props = withDefaults(
     elasticity?: ElasticityOptions;
     messages?: Partial<SnapMotionMessages>;
     programmaticImpulse?: number;
-    reducedMotionOverride?: boolean;
+    /** Omitted follows the system preference; explicit true and false remain authoritative. */
+    reducedMotionOverride?: boolean | undefined;
     releasePolicy?: Partial<ReleaseTargetPolicy>;
     spring?: SpringConfiguration;
   }>(),
@@ -53,6 +54,7 @@ const props = withDefaults(
     disabled: false,
     landmark: false,
     fallbackStageWidth: 1_120,
+    reducedMotionOverride: undefined,
   },
 );
 

@@ -52,7 +52,7 @@ const galleryItems = [
     <StackedDeck :items="screens" active-id="outcome" reduced-motion-override>
       <template #card="{ item }">{{ item.title }}</template>
     </StackedDeck>
-    <Coverflow :items="screens" active-id="outcome" reduced-motion-override>
+    <Coverflow :items="screens" active-id="outcome">
       <template #card="{ item }">{{ item.title }}</template>
     </Coverflow>
     <ModalDialog :open="false" />

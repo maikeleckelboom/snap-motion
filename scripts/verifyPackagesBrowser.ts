@@ -110,7 +110,9 @@ async function certifyNuxtHydration(cwd: string): Promise<void> {
       // then full-motion keyboard entry and native focus return without application animation code.
       const sheet = page.locator("[data-packed-sheet]");
       const trigger = page.locator("[data-packed-sheet-trigger]");
+      const coverflow = page.locator(".snap-motion-coverflow");
       await page.emulateMedia({ reducedMotion: "reduce" });
+      await expect(coverflow).toHaveAttribute("data-reduced-motion", "true");
       await expect(sheet).toHaveAttribute("data-reduced-motion", "true");
       await trigger.click();
       if ((await sheet.getAttribute("data-sheet-state")) !== "open") {
@@ -121,6 +123,7 @@ async function certifyNuxtHydration(cwd: string): Promise<void> {
       await expect(sheet).not.toBeVisible();
       await expect(trigger).toBeFocused();
       await page.emulateMedia({ reducedMotion: "no-preference" });
+      await expect(coverflow).toHaveAttribute("data-reduced-motion", "false");
       await expect(sheet).toHaveAttribute("data-reduced-motion", "false");
       await trigger.click();
       await page.keyboard.press("Tab");
