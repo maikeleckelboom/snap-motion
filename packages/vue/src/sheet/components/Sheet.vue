@@ -323,6 +323,10 @@ async function show(generation: number) {
   if (!mounted || !props.open || generation !== lifecycleGeneration || !target.open) return;
   if (!alreadyVisible) body.value?.scrollTo(0, 0);
   motion.open(intendedId.value);
+  // The closed surface is hidden even when its SSR fallback differs from this viewport. Flush
+  // measured opening geometry before focusing a descendant; no paint or timer delay is needed.
+  await nextTick();
+  if (!mounted || !props.open || generation !== lifecycleGeneration || !target.open) return;
   focusInitial(props.initialFocus, {
     close: closeButton.value,
     container: panel.value,
@@ -674,6 +678,7 @@ defineExpose({
     ref="dialog"
     :aria-labelledby="resolvedTitleId"
     class="snap-motion-sheet"
+    :data-reduced-motion="motion.reducedMotion.value ? 'true' : 'false'"
     :data-sheet-axis="motion.axis.value"
     :data-sheet-side="motion.side.value"
     :data-sheet-snap="intendedId"
@@ -686,7 +691,14 @@ defineExpose({
     <div
       aria-hidden="true"
       class="snap-motion-sheet-scrim"
-      :style="{ opacity: motion.scrimOpacity.value }"
+      :style="{
+        opacity:
+          motion.sheetState.value === 'closed' || motion.sheetState.value === 'closing'
+            ? 0
+            : Number.isFinite(maximumScrimOpacity)
+              ? Math.max(0, maximumScrimOpacity)
+              : 0,
+      }"
       @click="requestClose('scrim')"
     />
     <section

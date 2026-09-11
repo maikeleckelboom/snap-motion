@@ -61,6 +61,10 @@ and physical display cadence still need visual/device review.
 
 ## Sheet responsiveness and content comparison
 
+The comparison below records the earlier content-motion decision. The subsequent
+[Sheet presentation and durable card state](sheet-touch-hardening.md) pass deliberately updates the
+top-side spring and high-level scrim lifecycle; its report contains the current contract and evidence.
+
 The Sheet work starts from clean `7876641d4de5b723962c02389c4c245e0580ea8c` on
 `feat/stacked-deck-cyclic-topology`; local and freshly fetched remote matched with no intervening
 delta. Work is isolated on `feat/sheet-content-motion`. The audit's

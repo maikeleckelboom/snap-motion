@@ -1,3 +1,4 @@
+import { tightPreset } from "@snap-motion/core";
 import type {
   AnimationDriver,
   ControllerConfigurationUpdate,
@@ -46,6 +47,16 @@ import { getSheetSideDescriptor, sheetTransform, toPhysicalSheetPosition } from 
 
 const HIDDEN_SNAP_ID = "__snap_motion_hidden__" as const;
 type InternalSheetSnapId<Id extends string> = Id | typeof HIDDEN_SNAP_ID;
+
+// A top surface enters the reading area. Give it a calmer, non-overshooting response without
+// adding a delayed start or another transform owner. Other sides retain the existing preset.
+const topSheetSpring: SpringConfiguration = {
+  stiffness: 360,
+  damping: 38,
+  mass: 0.9,
+  restSpeed: 12,
+  restDistance: 0.5,
+};
 
 export interface SheetViewportDimensions {
   readonly blockSize: number;
@@ -274,6 +285,8 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
   options: UseSheetMotionOptions<Id>,
 ): UseSheetMotionReturn<Id> {
   const currentSide = ref<SheetSide>(options.side ?? "bottom");
+  let configuredSpring = options.spring;
+  const defaultSpring = () => (currentSide.value === "top" ? topSheetSpring : tightPreset.spring);
   const policy = { ...defaultSheetViewportPolicy, ...options.viewportPolicy };
   const initialViewportDimensions: SheetViewportDimensions = {
     blockSize: options.initialViewportDimensions?.blockSize ?? 800,
@@ -394,6 +407,7 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
 
   const motion = useSnapMotion<InternalSheetSnapId<Id>>({
     ...options,
+    spring: configuredSpring ?? defaultSpring(),
     anchors: initialAnchors,
     axis: () => getSheetSideDescriptor(currentSide.value).axis,
     bounds: {
@@ -456,6 +470,13 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
     },
   });
 
+  function configure(update: ControllerConfigurationUpdate) {
+    motion.configure(update);
+    if (update.spring !== undefined) {
+      configuredSpring = { ...(configuredSpring ?? defaultSpring()), ...update.spring };
+    }
+  }
+
   function remeasure(preferredId?: Id, context = readContext()) {
     const anchors = createAnchors(context);
     const semanticId = motion.snapshot.value.target?.id ?? motion.snapshot.value.active?.id;
@@ -485,6 +506,7 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
     }
     motion.interrupt();
     currentSide.value = side;
+    motion.configure({ spring: configuredSpring ?? defaultSpring() });
     const target = remeasure(preferredId);
     if (sheetState.value !== "closed" && sheetState.value !== "closing") {
       sheetState.value = "open";
@@ -637,7 +659,7 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
     close: () => {
       close();
     },
-    configure: motion.configure,
+    configure,
     geometry,
     interrupt: motion.interrupt,
     intrinsicBodyContentBlockExtent,

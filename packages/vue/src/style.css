@@ -86,10 +86,23 @@
 }
 
 .snap-motion-sheet-scrim {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: #000;
   pointer-events: auto;
+  transition: opacity 240ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.snap-motion-sheet[data-sheet-state="closing"] > .snap-motion-sheet-scrim {
+  transition-duration: 180ms;
+}
+
+.snap-motion-sheet[data-reduced-motion="true"] > .snap-motion-sheet-scrim {
+  transition: none;
+}
+
+.snap-motion-sheet[data-sheet-state="closed"] > .snap-motion-sheet-panel {
+  visibility: hidden;
 }
 
 .snap-motion-sheet-panel {

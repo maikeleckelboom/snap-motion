@@ -16,6 +16,50 @@ function fixedViewport(inlineSize = 400, blockSize = 800) {
 }
 
 describe("useSheetMotion", () => {
+  it("uses a calmer top spring, preserves overrides, and restores other sides", async () => {
+    const driver = new ManualAnimationDriver();
+    const panel = ref<HTMLElement>();
+    let motion: ReturnType<typeof useSheetMotion> | undefined;
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          motion = useSheetMotion({
+            driver,
+            panel,
+            side: "top",
+            getMeasureContext: () => fixedViewport(),
+          });
+          return () => h("section", { ref: panel });
+        },
+      }),
+    );
+    try {
+      await nextTick();
+      motion!.open();
+      expect(driver.latest!.request.spring).toEqual({
+        stiffness: 360,
+        damping: 38,
+        mass: 0.9,
+        restSpeed: 12,
+        restDistance: 0.5,
+      });
+      driver.latest!.complete();
+      motion!.close();
+      expect(driver.latest!.request.spring.stiffness).toBe(360);
+      driver.latest!.complete();
+      motion!.setSide("bottom");
+      motion!.open();
+      expect(driver.latest!.request.spring.stiffness).toBe(520);
+      const custom = { stiffness: 480, damping: 40, mass: 1, restSpeed: 10, restDistance: 0.6 };
+      motion!.configure({ spring: custom });
+      motion!.setSide("top");
+      motion!.close();
+      expect(driver.latest!.request.spring).toEqual(custom);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it("uses deterministic initial viewport geometry and adopts the browser only on measurement", () => {
     vi.spyOn(window, "innerHeight", "get").mockReturnValue(1000);
     let firstPosition = 0;

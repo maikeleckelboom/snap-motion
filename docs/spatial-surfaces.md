@@ -133,6 +133,36 @@ semantic, interaction, focus, or accessibility ownership.
 `landmark` upgrades the default labelled group to a region only when the surface is a major page
 section.
 
+## Persistent selection and transient interaction
+
+Both Coverflow and StackedDeck physical card shells publish `data-active`, `data-visual` and
+`data-settled` as `"true"` / `"false"`, mirroring the existing card slot state. Both roots publish
+`data-settled-id`. These are read-only projections: canonical `activeId` belongs to the accepted
+application selection, `visual` follows the physical handoff, and `settled` changes at mechanical
+rest. They remain present after touch release, pointer departure and blur. A controlled host that
+rejects a request still owns its canonical selection.
+
+Consumer emphasis should use the appropriate durable state, not `:active`, `:hover` or
+`:focus-visible`. For example, a consumer that mutes inactive screenshots can write:
+
+```css
+.product-panel {
+  filter: grayscale(1);
+}
+[data-snap-motion-item][data-active="true"] .product-panel {
+  filter: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .product-panel:hover {
+    filter: none;
+  }
+}
+```
+
+Use `data-settled` instead when emphasis must wait for rest. Press feedback may add a temporary
+accent with `:active`; keyboard `:focus-visible` remains an independent accessibility indicator.
+The package does not impose a filter, border, shadow or selected material on consumer content.
+
 ## Coverflow panel material
 
 The card slot can be the visual panel itself. Coverflow places it directly inside one physical

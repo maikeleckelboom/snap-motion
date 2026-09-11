@@ -21,6 +21,11 @@ async function expectSelection(page: Page, id: string) {
   await expect(rail).toHaveAttribute("data-visual-id", id);
   await expect(rail).toHaveAttribute("data-settled-id", id);
   await expect(rail).toHaveAttribute("data-phase", "idle");
+  const current = rail.locator('[data-snap-motion-item][data-active="true"]');
+  await expect(current).toHaveCount(1);
+  await expect(current).toHaveAttribute("data-item-id", id);
+  await expect(current).toHaveAttribute("data-visual", "true");
+  await expect(current).toHaveAttribute("data-settled", "true");
 }
 
 /** A direct image slot occupies the physical panel without package or fixture chrome. */

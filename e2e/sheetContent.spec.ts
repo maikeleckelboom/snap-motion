@@ -12,6 +12,120 @@ const panel = (page: Page) => dialog(page).locator(".snap-motion-sheet-panel");
 const close = (page: Page) => dialog(page).locator(".snap-motion-sheet-close");
 const opener = (page: Page) => page.getByTestId("content-open");
 
+test("top opening starts concealed and fades a viewport scrim independently of panel travel", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "no-preference", colorScheme: "dark" });
+  await fixture(page);
+  await page.getByTestId("content-snap").selectOption("partial");
+  const trace = await page.evaluate(async () => {
+    const target = document.querySelector<HTMLDialogElement>('[data-testid="content-sheet"]')!;
+    const surface = target.querySelector<HTMLElement>(".snap-motion-sheet-panel")!;
+    const scrim = target.querySelector<HTMLElement>(".snap-motion-sheet-scrim")!;
+    const start = performance.now();
+    function sample() {
+      const rect = scrim.getBoundingClientRect();
+      const style = getComputedStyle(scrim);
+      return {
+        time: performance.now() - start,
+        state: target.dataset.sheetState,
+        visibility: getComputedStyle(surface).visibility,
+        position: new DOMMatrixReadOnly(getComputedStyle(surface).transform).m42,
+        opacity: Number(style.opacity),
+        color: style.backgroundColor,
+        transform: style.transform,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      };
+    }
+    const original = target.showModal;
+    let first: ReturnType<typeof sample> | undefined;
+    target.showModal = function () {
+      original.call(this);
+      first = sample();
+    };
+    const frames: ReturnType<typeof sample>[] = [];
+    document.querySelector<HTMLButtonElement>('[data-testid="content-open"]')!.click();
+    await new Promise<void>((resolve) => {
+      function frame() {
+        frames.push(sample());
+        if (target.dataset.sheetState === "open" || performance.now() - start > 5000) resolve();
+        else requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    });
+    target.showModal = original;
+    return { first, frames };
+  });
+  expect(trace.first?.visibility).toBe("hidden");
+  expect(trace.first?.opacity).toBe(0);
+  expect(trace.frames.at(-1)?.state).toBe("open");
+  expect(trace.frames.at(-1)?.opacity).toBeCloseTo(0.56, 3);
+  expect(trace.frames.some((frame) => frame.opacity > 0 && frame.opacity < 0.56)).toBe(true);
+  expect(trace.frames.some((frame) => frame.state === "opening" && frame.opacity >= 0.559)).toBe(
+    true,
+  );
+  for (const frame of trace.frames) {
+    expect(frame.rect).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+    expect(frame.transform).toBe("none");
+    expect(frame.color).toBe("rgb(0, 0, 0)");
+  }
+  await testInfo.attach("top-sheet-opening.json", {
+    body: JSON.stringify(trace, null, 2),
+    contentType: "application/json",
+  });
+  await testInfo.attach("top-sheet-open.png", {
+    body: await page.screenshot(),
+    contentType: "image/png",
+  });
+  // Touch/drag geometry must not take over the lifecycle fade after it has completed.
+  const start = await grabHandle(page);
+  await moveHandle(page, start, -80, 200);
+  await expect
+    .poll(() =>
+      dialog(page)
+        .locator(".snap-motion-sheet-scrim")
+        .evaluate((element) => Number(getComputedStyle(element).opacity)),
+    )
+    .toBe(0.56);
+  await moveHandle(page, start, -80, 220, "pointercancel");
+  await close(page).click();
+  await expect(dialog(page).locator(".snap-motion-sheet-scrim")).toHaveCSS(
+    "transition-duration",
+    "0.18s",
+  );
+  await expect(dialog(page)).not.toBeVisible();
+  await page.emulateMedia({ colorScheme: "light" });
+  await openSheet(page, "partial");
+  await expect
+    .poll(() =>
+      dialog(page)
+        .locator(".snap-motion-sheet-scrim")
+        .evaluate((element) => getComputedStyle(element).backgroundColor),
+    )
+    .toBe("rgb(0, 0, 0)");
+});
+
+test("Sheet scrim obeys live system preference and explicit motion overrides", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await fixture(page);
+  await openSheet(page, "partial");
+  const scrim = dialog(page).locator(".snap-motion-sheet-scrim");
+  await expect(scrim).toHaveCSS("transition-duration", "0s");
+  await expect(scrim).toHaveCSS("opacity", "0.56");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect(scrim).toHaveCSS("transition-duration", "0.24s");
+  await page.getByTestId("content-live-preference").selectOption("reduce");
+  await expect(scrim).toHaveCSS("transition-duration", "0s");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByTestId("content-live-preference").selectOption("animate");
+  await expect(scrim).toHaveCSS("transition-duration", "0.24s");
+  await page.getByTestId("content-live-preference").selectOption("system");
+  await expect(scrim).toHaveCSS("transition-duration", "0s");
+  await close(page).click();
+  await expect(dialog(page)).not.toBeVisible();
+  await expect(opener(page)).toBeFocused();
+});
+
 test.beforeEach(async ({ page }) => {
   const messages: string[] = [];
   errors.set(page, messages);

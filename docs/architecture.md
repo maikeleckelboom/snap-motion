@@ -99,8 +99,10 @@ feature barrels so dependency direction stays visible.
 
 Each interaction surface has exactly one authoritative scalar position. The track or sheet transform
 is derived from it. CSS transitions, smooth scrolling, native scroll snap, and parallel animation
-systems are not allowed to animate the same value. Sheet scrim opacity is also derived from the
-sheet scalar rather than animated independently.
+systems are not allowed to animate the same value. The high-level Sheet scrim is a separate,
+viewport-fixed participant: CSS owns its lifecycle opacity fade while the scalar owns panel
+geometry. Snap height and hand movement do not change modal dimming. The advanced composable's
+`scrimOpacity` remains a scalar projection for custom renderers that deliberately need it.
 
 Every sheet side is adapted onto the same canonical scalar: the scalar increases toward closed.
 Bottom and right use a positive physical transform; top and left mirror it. Pointer deltas and

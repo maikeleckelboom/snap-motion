@@ -321,6 +321,7 @@ defineExpose({
     :data-phase="coverflow.diagnostics.value.phase"
     :data-reduced-motion="coverflow.diagnostics.value.reducedMotion ? 'true' : 'false'"
     :data-visual-id="coverflow.visualId.value"
+    :data-settled-id="coverflow.settledId.value"
     :role="landmark ? 'region' : 'group'"
     :style="[stageStyle, coverflow.motion.surfaceStyle]"
     tabindex="0"
@@ -342,6 +343,9 @@ defineExpose({
         data-snap-motion-item
         data-snap-motion-coverflow-card
         :data-item-id="card.id"
+        :data-active="card.active ? 'true' : 'false'"
+        :data-visual="card.visual ? 'true' : 'false'"
+        :data-settled="card.settled ? 'true' : 'false'"
         :data-visible="card.presentation.visible ? 'true' : 'false'"
         :data-semantic="card.presentation.interactive ? 'true' : 'false'"
         :inert="!card.presentation.interactive"
