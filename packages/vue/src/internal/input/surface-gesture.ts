@@ -7,7 +7,11 @@ import { useEventListener } from "@vueuse/core";
 import { onScopeDispose, type Ref } from "vue";
 
 import { isElement } from "../dom/realm";
-import { elementOwnsSnapMotionDrag, isSupportedPrimaryPointerStart } from "./pointer-policy";
+import {
+  elementOwnsSnapMotionDrag,
+  isAuthoritativeCaptureLoss,
+  isSupportedPrimaryPointerStart,
+} from "./pointer-policy";
 
 export interface SurfaceGestureOptions {
   /** The element that owns the surface, used to decide whether focus began outside it. */
@@ -51,23 +55,8 @@ export interface CompletedSurfaceGesture {
  */
 const CLICK_SUPPRESSION_LIFETIME_MS = 300;
 
-/** What a completed gesture asked for. The decision itself stays in core. */
-function resolutionFor(tracked: TrackedGesture, onOrigin: boolean): DirectManipulationResolution {
-  const horizontalIntent =
-    Math.abs(tracked.deltaX) >=
-    Math.abs(tracked.deltaY) * DIRECT_MANIPULATION_TUNING.horizontalIntentRatio;
-  return resolveDirectManipulationGesture({
-    cancelled: tracked.cancelled,
-    crossedDragThreshold:
-      tracked.maximumDisplacement >= DIRECT_MANIPULATION_TUNING.activationThreshold,
-    horizontalIntent,
-    involvedMultiplePointers: tracked.involvedMultiplePointers,
-    openEligibleAtStart: tracked.openEligibleAtStart,
-    releasedOnOrigin: onOrigin,
-  });
-}
-
 interface TrackedGesture {
+  readonly captureOwner: EventTarget | null;
   readonly generation: number;
   readonly focusWasOutside: boolean;
   readonly openEligibleAtStart: boolean;
@@ -77,7 +66,6 @@ interface TrackedGesture {
   readonly pointerId: number;
   readonly startX: number;
   readonly startY: number;
-  cancelled: boolean;
   deltaX: number;
   deltaY: number;
   involvedMultiplePointers: boolean;
@@ -177,15 +165,6 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     );
   }
 
-  function publish(tracked: TrackedGesture, resolution: DirectManipulationResolution) {
-    if (disposed || tracked.generation !== generation) return;
-    options.onResolved(resolution, {
-      cancelled: tracked.cancelled,
-      focusWasOutside: tracked.focusWasOutside,
-      originIndex: tracked.originIndex,
-    });
-  }
-
   /**
    * Arms — or immediately disarms — the one-click suppression.
    *
@@ -249,6 +228,7 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     }
     generation += 1;
     gesture = {
+      captureOwner: event.currentTarget,
       generation,
       focusWasOutside: Boolean(root && (!activeElement || !root.contains(activeElement))),
       openEligibleAtStart: originIndex >= 0 && options.isOpenEligible(originIndex),
@@ -258,7 +238,6 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      cancelled: false,
       deltaX: 0,
       deltaY: 0,
       involvedMultiplePointers: false,
@@ -268,17 +247,40 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     options.forwardPointerDown(event, originIndex);
   }
 
-  function abandon(event: PointerEvent) {
+  function finish(event: PointerEvent, cancelled: boolean) {
+    // A secondary contact ends independently; retaining its ID would hide a later contact.
+    activePointers.delete(event.pointerId);
     const tracked = gesture;
     if (!tracked || event.pointerId !== tracked.pointerId) return;
-    activePointers.delete(event.pointerId);
     trackMovement(tracked, event);
-    tracked.cancelled = true;
+    const resolution = resolveDirectManipulationGesture({
+      cancelled,
+      crossedDragThreshold:
+        tracked.maximumDisplacement >= DIRECT_MANIPULATION_TUNING.activationThreshold,
+      horizontalIntent:
+        Math.abs(tracked.deltaX) >=
+        Math.abs(tracked.deltaY) * DIRECT_MANIPULATION_TUNING.horizontalIntentRatio,
+      involvedMultiplePointers: tracked.involvedMultiplePointers,
+      openEligibleAtStart: tracked.openEligibleAtStart,
+      releasedOnOrigin: !cancelled && releasedOnOrigin(tracked, event),
+    });
+    // Decide before the browser's compatibility click and before deferred publication. Cancelled
+    // gestures resolve to none, clearing suppression through the same completion path as releases.
+    armClickSuppression(tracked, resolution, event);
     gesture = undefined;
-    // A gesture that undid itself consumed nothing, so it leaves no suppression behind.
-    clearClickSuppression();
-    const resolution = resolutionFor(tracked, false);
-    queueMicrotask(() => publish(tracked, resolution));
+    queueMicrotask(() => {
+      if (disposed || tracked.generation !== generation) return;
+      options.onResolved(resolution, {
+        cancelled,
+        focusWasOutside: tracked.focusWasOutside,
+        originIndex: tracked.originIndex,
+      });
+    });
+  }
+
+  function onLostPointerCapture(event: PointerEvent) {
+    if (!isAuthoritativeCaptureLoss(event, gesture?.captureOwner, gesture?.pointerId)) return;
+    finish(event, true);
   }
 
   useEventListener(
@@ -291,21 +293,8 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     { passive: true },
   );
 
-  useEventListener("pointerup", (event: PointerEvent) => {
-    activePointers.delete(event.pointerId);
-    const tracked = gesture;
-    if (!tracked || event.pointerId !== tracked.pointerId) return;
-    trackMovement(tracked, event);
-    const resolution = resolutionFor(tracked, releasedOnOrigin(tracked, event));
-    // Decided synchronously, because the browser's click follows this release before the deferred
-    // publication runs — but decided from the same resolution the surface is about to act on, so
-    // what suppresses a click is exactly what moved the surface.
-    armClickSuppression(tracked, resolution, event);
-    gesture = undefined;
-    queueMicrotask(() => publish(tracked, resolution));
-  });
-
-  useEventListener("pointercancel", abandon);
+  useEventListener("pointerup", (event: PointerEvent) => finish(event, false));
+  useEventListener("pointercancel", (event: PointerEvent) => finish(event, true));
 
   /**
    * Aborts the browser-side record without publishing a gesture result.
@@ -359,6 +348,6 @@ export function useSurfaceGesture(options: SurfaceGestureOptions) {
     cancel,
     onClick,
     onPointerDown,
-    onLostPointerCapture: abandon,
+    onLostPointerCapture,
   };
 }

@@ -12,6 +12,24 @@ export function isSupportedPrimaryPointerStart(
   return event.isPrimary && (event.pointerType !== "mouse" || event.button === 0);
 }
 
+/**
+ * Capture loss terminates only the pointerdown owner's own capture, for the tracked pointer.
+ * A descendant's implicit capture can be transferred to this owner without ending the gesture.
+ * `hasPointerCapture` includes pending capture, so a stale loss after recapture cannot end it either.
+ */
+export function isAuthoritativeCaptureLoss(
+  event: PointerEvent,
+  owner: EventTarget | null | undefined,
+  pointerId: number | undefined,
+) {
+  return (
+    isElement(owner) &&
+    event.pointerId === pointerId &&
+    event.target === owner &&
+    !owner.hasPointerCapture(event.pointerId)
+  );
+}
+
 export function resolvePointerIntent(
   deltaX: number,
   deltaY: number,

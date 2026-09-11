@@ -12,6 +12,13 @@ Only the primary pointer participates. Mouse input requires the left button. The
 uses pointer capture, handles cancellation and lost capture, releases capture safely, and removes
 every listener on completion or unmount.
 
+The element that receives the accepted `pointerdown` as its listener target is the gesture's
+capture owner for that sequence. Claiming drag intent transfers any descendant implicit capture
+to that owner. A bubbling `lostpointercapture` from the former descendant owner does not cancel
+the gesture. Capture loss cancels only when it names the tracked pointer, originates on the stored
+owner, and that owner no longer has pending/current capture. Actual `pointerup`, `pointercancel`,
+and existing teardown or authority-takeover paths keep their terminal behavior.
+
 Movement is one-to-one inside legal bounds and passes through nonlinear resistance outside them.
 Selection suppression exists only during an active drag. Images disable native drag.
 
