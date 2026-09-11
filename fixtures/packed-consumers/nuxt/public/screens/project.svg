@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000">
+  <rect width="1600" height="1000" fill="#f1f5f9"/>
+  <rect width="1600" height="142" fill="#ffffff"/>
+  <path d="M0 142h1600" stroke="#dbe2ea" stroke-width="4"/>
+  <rect x="54" y="44" width="58" height="58" rx="16" fill="#1f9d7a"/>
+  <text x="83" y="84" fill="#fff" font-family="Arial,sans-serif" font-size="32" font-weight="700" text-anchor="middle">Y</text>
+  <text x="142" y="64" fill="#64748b" font-family="Arial,sans-serif" font-size="21" font-weight="700">PROJECTDETAIL</text>
+  <text x="142" y="101" fill="#0f172a" font-family="Arial,sans-serif" font-size="34" font-weight="700">Project 24031 — Horizon</text>
+  <rect x="0" y="142" width="250" height="858" fill="#e8eef3"/>
+  <rect x="42" y="220" width="166" height="38" rx="19" fill="#1f9d7a"/>
+  <g fill="#cbd5e1">
+    <rect x="42" y="302" width="128" height="22" rx="11"/>
+    <rect x="42" y="356" width="148" height="22" rx="11"/>
+    <rect x="42" y="410" width="112" height="22" rx="11"/>
+  </g>
+  <rect x="298" y="200" width="1210" height="202" rx="28" fill="#ffffff" stroke="#dbe2ea" stroke-width="4"/>
+  <rect x="340" y="244" width="90" height="90" rx="24" fill="#1f9d7a"/>
+  <rect x="472" y="238" width="480" height="34" rx="17" fill="#1e293b"/>
+  <rect x="472" y="294" width="710" height="24" rx="12" fill="#94a3b8"/>
+  <rect x="298" y="450" width="588" height="500" rx="28" fill="#ffffff" stroke="#dbe2ea" stroke-width="4"/>
+  <rect x="922" y="450" width="586" height="500" rx="28" fill="#ffffff" stroke="#dbe2ea" stroke-width="4"/>
+  <g fill="#d8e5e0">
+    <rect x="346" y="504" width="492" height="58" rx="18"/>
+    <rect x="346" y="594" width="492" height="58" rx="18"/>
+    <rect x="346" y="684" width="492" height="58" rx="18"/>
+    <rect x="346" y="774" width="492" height="58" rx="18"/>
+  </g>
+  <circle cx="1215" cy="674" r="152" fill="#e6f5f0"/>
+  <circle cx="1215" cy="674" r="96" fill="none" stroke="#1f9d7a" stroke-width="34" stroke-dasharray="430 180"/>
+</svg>

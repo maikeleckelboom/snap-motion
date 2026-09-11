@@ -12,6 +12,7 @@ import type { NavigationReason } from "@snap-motion/vue/motion";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 
 import { preserveFocusBeforeSemanticChange } from "../../internal/accessibility/focus";
+import { useSurfaceFocus } from "../../internal/accessibility/surfaceFocus";
 import { createEnglishSnapMotionMessages } from "../../localization/messages";
 import { stackedDeckTransform, type StackedDeckCardState } from "../stacked-deck-contracts";
 import {
@@ -75,6 +76,7 @@ const emit = defineEmits<{
 }>();
 
 const root = ref<HTMLElement>();
+useSurfaceFocus(root);
 const focusScope = computed(() => props.focusScope ?? root.value);
 const track = ref<HTMLElement>();
 const messages = computed(() => createEnglishSnapMotionMessages(props.messages));

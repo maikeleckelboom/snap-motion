@@ -226,7 +226,7 @@ void driveHandles;
       </template>
     </Coverflow>
 
-    <Coverflow :items="chapters">
+    <Coverflow :items="chapters" :card-width="720">
       <template #card="card">
         <p>{{ chapterSummary(card.item) }}</p>
       </template>

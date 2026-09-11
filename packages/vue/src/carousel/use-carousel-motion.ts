@@ -83,6 +83,9 @@ export function useCarouselMotion<Id extends string>(
 
   useRemeasurement({
     target: viewport,
+    // Surface measurement can update responsive card height. Publish outside observer delivery
+    // so the resulting stage resize is delivered in the next frame instead of forming a loop.
+    deferResizeObserver: true,
     measure: remeasure,
     ...(track ? { additionalTargets: [track] } : {}),
   });

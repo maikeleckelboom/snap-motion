@@ -194,51 +194,48 @@ export interface CoverflowTuning {
 
 export interface ResolveCoverflowTuningOptions {
   readonly stageWidth: number;
+  /** Preferred focused card width in CSS pixels, bounded by the allocated stage. */
+  readonly cardWidth?: number | undefined;
 }
 
-const COVERFLOW_PROPORTIONS = {
-  cardWidthRatio: 0.4,
-  cardWidthMin: 280,
-  cardWidthMax: 420,
-  cardAspectRatio: 0.7,
-  /**
-   * The first side slot has to clear a *foreshortened* card, not a flat one. Set below this and the
-   * panels tile the stage edge to edge — each one ending exactly where the next begins — which
-   * reads as a concertina no matter how the individual panels are shaded.
-   */
-  sidePeakRatio: 0.8,
-  stackGapRatio: 0.34,
-} as const;
-
-const COVERFLOW_RAIL = {
-  perspective: 900,
-  /** Steep enough that a parked card foreshortens to a sliver; a shallow wall lets panels tile. */
-  maxRotateY: 62,
-  sideDepth: -300,
-  hideAfter: 3.05,
-} as const;
+const COVERFLOW_DEFAULT_CARD_WIDTH = 420;
 
 /** Pure responsive proportions for a coverflow stage of a given width. */
 export function resolveCoverflowTuning(options: ResolveCoverflowTuningOptions): CoverflowTuning {
+  const preferredWidth = options.cardWidth ?? COVERFLOW_DEFAULT_CARD_WIDTH;
   assertFiniteNumber(options.stageWidth, "stageWidth");
-  if (options.stageWidth <= 0) {
-    throw new RangeError("coverflow stage must be positive");
+  assertFiniteNumber(preferredWidth, "cardWidth");
+  if (options.stageWidth <= 0 || preferredWidth <= 0) {
+    throw new RangeError("coverflow dimensions must be positive");
   }
-  const cardWidth = Math.round(
+  const responsiveWidth = Math.round(
     clamp(
-      options.stageWidth * COVERFLOW_PROPORTIONS.cardWidthRatio,
-      COVERFLOW_PROPORTIONS.cardWidthMin,
-      COVERFLOW_PROPORTIONS.cardWidthMax,
+      // An explicit evidence size may use three fifths of the allocation. The remaining stage
+      // keeps the neighbouring rails visible; callers never need to tune their projections.
+      options.stageWidth * (options.cardWidth === undefined ? 0.4 : 0.6),
+      Math.min(280, preferredWidth),
+      preferredWidth,
     ),
   );
-  const sidePeakX = Math.round(cardWidth * COVERFLOW_PROPORTIONS.sidePeakRatio);
+  // Preserve a focus gutter even below the historical 320px compact mechanics floor.
+  const cardWidth = Math.max(1, Math.min(responsiveWidth, options.stageWidth - 32));
+  const cameraScale = Math.max(1, cardWidth / COVERFLOW_DEFAULT_CARD_WIDTH);
+  // The first side slot must clear a foreshortened card. Below this proportion the panels tile
+  // edge to edge and read as a concertina, regardless of how the individual panels are shaded.
+  const sidePeakX = Math.max(1, Math.round(cardWidth * 0.8));
   return {
     cardWidth,
-    cardHeight: Math.round(cardWidth * COVERFLOW_PROPORTIONS.cardAspectRatio),
+    cardHeight: Math.max(1, Math.round(cardWidth * 0.7)),
     pitch: sidePeakX,
     sidePeakX,
-    stackGap: Math.round(cardWidth * COVERFLOW_PROPORTIONS.stackGapRatio),
-    ...COVERFLOW_RAIL,
+    stackGap: Math.max(1, Math.round(cardWidth * 0.34)),
+    // Scale physical lengths together above the established default size. Yaw, foreshortening,
+    // rail-normal spacing and the pitch/side-slot identity retain the same interpretation.
+    perspective: 900 * cameraScale,
+    sideDepth: -300 * cameraScale,
+    // Steep enough to foreshorten the parked cards; a shallow wall lets panels tile.
+    maxRotateY: 62,
+    hideAfter: 3.05,
   };
 }
 

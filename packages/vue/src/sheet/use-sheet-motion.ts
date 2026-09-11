@@ -158,9 +158,9 @@ function browserMeasureContext(
   chrome: HTMLElement | undefined,
   intrinsicBodyContent: HTMLElement | undefined,
   policy: SheetViewportPolicy,
-  overrides: Partial<SheetMeasureContext> = {},
+  overrides: Partial<SheetMeasureContext>,
+  browser: Window | undefined,
 ): BrowserSheetMeasurements {
-  const browser = typeof window === "undefined" ? undefined : window;
   const panelRect = measuredRect(panel);
   const chromeRect = measuredRect(chrome);
   const bodyContentRect = measuredRect(intrinsicBodyContent);
@@ -338,6 +338,7 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
       options.intrinsicBodyContent?.value,
       policy,
       options.getMeasureContext?.() ?? {},
+      typeof window === "undefined" ? undefined : window,
     );
     viewportInlineSize.value = measurements.context.visualViewportInlineSize;
     viewportBlockSize.value = measurements.context.visualViewportBlockSize;
@@ -377,6 +378,8 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
     undefined,
     policy,
     options.getMeasureContext?.() ?? {},
+    // Match SSR through hydration. Real viewport measurement belongs to the mounted lifecycle.
+    undefined,
   ).context;
   measuredPrimarySurfaceExtent.value = sheetPrimarySurfaceExtent(initialContext);
   const initialAnchors = createAnchors(initialContext);

@@ -49,6 +49,67 @@ function mountCoverflow(props: Record<string, unknown> = {}) {
 }
 
 describe("Coverflow", () => {
+  it("adopts narrow allocation and anchors together without changing selection", async () => {
+    const wrapper = mountCoverflow({ cardWidth: 720 });
+    try {
+      await nextTick();
+      const root = wrapper.get<HTMLElement>(".snap-motion-coverflow");
+      let allocation = 280;
+      Object.defineProperty(root.element, "clientWidth", {
+        configurable: true,
+        get: () => allocation,
+      });
+      for (const [width, expected] of [
+        [280, "248px"],
+        [1120, "672px"],
+      ] as const) {
+        allocation = width;
+        window.dispatchEvent(new Event("resize"));
+        await nextTick();
+        expect(root.element.style.getPropertyValue("--snap-motion-coverflow-card-width")).toBe(
+          expected,
+        );
+        for (const attribute of ["data-active-id", "data-visual-id"]) {
+          expect(root.attributes(attribute)).toBe("system");
+        }
+        expect((wrapper.vm as unknown as CoverflowInstance).settledId).toBe("system");
+        expect(
+          wrapper.get<HTMLElement>('[data-item-id="system"]').element.style.transform,
+        ).toContain("translate3d(0.000px, 0, 0)");
+      }
+      expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("forwards reactive preferred card size without changing semantic selection", async () => {
+    const wrapper = mountCoverflow({ cardWidth: 720 });
+    try {
+      await nextTick();
+      const root = wrapper.get<HTMLElement>(".snap-motion-coverflow");
+      expect(
+        Number.parseFloat(
+          root.element.style.getPropertyValue("--snap-motion-coverflow-card-width"),
+        ),
+      ).toBeGreaterThan(600);
+      await wrapper.setProps({ cardWidth: 360 });
+      expect(root.element.style.getPropertyValue("--snap-motion-coverflow-card-width")).toBe(
+        "360px",
+      );
+      await wrapper.setProps({ cardWidth: undefined });
+      expect(root.element.style.getPropertyValue("--snap-motion-coverflow-card-width")).toBe(
+        "420px",
+      );
+      expect(root.attributes("data-active-id")).toBe("system");
+      expect(wrapper.emitted("activeIdRequest")).toBeUndefined();
+    } finally {
+      wrapper.unmount();
+    }
+    // A pending size remeasurement must not write to the disposed controller.
+    await nextTick();
+  });
+
   it("renders every item on one rail with accessible position labels", async () => {
     const wrapper = mountCoverflow();
     await nextTick();
@@ -57,6 +118,7 @@ describe("Coverflow", () => {
     const cards = wrapper.findAll(".snap-motion-coverflow-card");
     expect(cards).toHaveLength(screens.length);
     expect(root.attributes("aria-roledescription")).toBe("carousel");
+    expect(root.attributes("tabindex")).toBe("0");
     expect(root.attributes("data-active-id")).toBe("system");
     expect(root.attributes("data-visual-id")).toBe("system");
     expect(cards[1]!.attributes("aria-current")).toBe("true");

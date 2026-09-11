@@ -21,10 +21,8 @@ import {
 } from "@snap-motion/core";
 import type { CarouselMotion } from "@snap-motion/vue/carousel";
 import type { NavigationReason, SurfaceMotionDiagnostics } from "@snap-motion/vue/motion";
-import { useElementSize } from "@vueuse/core";
 import {
   computed,
-  nextTick,
   onBeforeUnmount,
   ref,
   shallowRef,
@@ -39,6 +37,7 @@ import {
 import { useCarouselMotion } from "../carousel/use-carousel-motion";
 import { resolveDirectionalSnapKeyboardAction } from "../internal/input/keyboard-policy";
 import { useSurfaceGesture } from "../internal/input/surface-gesture";
+import { measureSurfaceWidth } from "../internal/layout/measureSurfaceWidth";
 import {
   resolveSurfaceConfiguration,
   surfaceConfigurationKey,
@@ -70,6 +69,8 @@ export interface UseCoverflowMotionOptions<Id extends string> {
   readonly initialId?: Id | undefined;
   /** Fallback stage width used before the viewport has been measured. */
   readonly stageWidth?: MaybeRefOrGetter<number>;
+  /** Preferred focused card width in CSS pixels; measured allocation remains authoritative. */
+  readonly cardWidth?: MaybeRefOrGetter<number | undefined>;
   /** Refuses every input while true. A surface covered by an overlay is the usual reason. */
   readonly disabled?: () => boolean;
   readonly reducedMotionOverride?: Readonly<Ref<boolean | undefined>>;
@@ -181,12 +182,15 @@ export function useCoverflowMotion<Id extends string>(
 ): UseCoverflowMotionReturn<Id> {
   const ids = computed(() => toValue(options.ids));
   const root = options.root ?? options.viewport;
-  const { width: measuredWidth } = useElementSize(options.viewport);
-  const stageWidth = computed(() =>
-    Math.max(320, measuredWidth.value || Math.min(toValue(options.stageWidth) ?? 1_120, 1_280)),
+  // Geometry and rendered sizing adopt one measurement together. A separate element-size watcher
+  // can reset to its SSR fallback while the controller already uses measured anchors.
+  const measuredWidth = ref(0);
+  const stageWidth = computed(
+    () =>
+      measuredWidth.value || Math.max(320, Math.min(toValue(options.stageWidth) ?? 1_120, 1_280)),
   );
   const tuning = computed<CoverflowTuning>(() =>
-    resolveCoverflowTuning({ stageWidth: stageWidth.value }),
+    resolveCoverflowTuning({ stageWidth: stageWidth.value, cardWidth: toValue(options.cardWidth) }),
   );
   const pitch = computed(() => tuning.value.pitch);
   const initialIds = ids.value;
@@ -227,6 +231,8 @@ export function useCoverflowMotion<Id extends string>(
   }
 
   function measure() {
+    const width = measureSurfaceWidth(options.viewport.value);
+    if (width !== undefined) measuredWidth.value = width;
     return createCoverflowGeometry({
       itemIds: ids.value,
       pitch: pitch.value,
@@ -657,7 +663,7 @@ export function useCoverflowMotion<Id extends string>(
     { deep: true },
   );
 
-  watch([pitch, () => toValue(options.stageWidth)], () => void nextTick(motion.remeasure));
+  watch([pitch, () => toValue(options.stageWidth)], () => motion.remeasure());
 
   const diagnostics = computed<SurfaceMotionDiagnostics<Id>>(() =>
     resolveSurfaceDiagnostics({

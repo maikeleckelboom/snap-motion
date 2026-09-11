@@ -1,12 +1,13 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { chromium, expect } from "@playwright/test";
+import { chromium, firefox, webkit, expect } from "@playwright/test";
 
+import { certifySurfacePreferences } from "./certifySurfacePreferences.ts";
 import { resolveRepositoryPnpm, runPnpmSync } from "./pnpm-cli.ts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
@@ -91,6 +92,14 @@ async function certifyNuxtHydration(cwd: string): Promise<void> {
       }
     }
 
+    for (const engine of [chromium, firefox, webkit]) {
+      const probeBrowser = await engine.launch({ headless: true });
+      try {
+        await certifySurfacePreferences(probeBrowser, url);
+      } finally {
+        await probeBrowser.close();
+      }
+    }
     const browser = await chromium.launch({ headless: true });
     try {
       const page = await browser.newPage();
@@ -169,6 +178,12 @@ if (!coreArtifact || !vueArtifact) {
 const consumer = await mkdtemp(join(tmpdir(), "snap-motion-current-"));
 try {
   await cp(fixtureDirectory, consumer, { recursive: true });
+  const componentDirectory = resolve(consumer, "nuxt/app/components");
+  await mkdir(componentDirectory, { recursive: true });
+  await cp(
+    resolve(repoRoot, "apps/nuxt-fixture/app/components/SurfacePreferences.vue"),
+    resolve(componentDirectory, "SurfacePreferences.vue"),
+  );
   const coreTarball = resolve(artifactsDirectory, coreArtifact).replaceAll("\\", "/");
   const vueTarball = resolve(artifactsDirectory, vueArtifact).replaceAll("\\", "/");
   const packageTemplate = await readFile(resolve(consumer, "package.template.json"), "utf8");
@@ -199,4 +214,6 @@ try {
   await removeConsumer(consumer);
 }
 
-process.stdout.write("Packed Nuxt build, SSR, and Chromium hydration certification passed.\n");
+process.stdout.write(
+  "Packed Nuxt build, SSR, 48 Chromium/Firefox/WebKit preference cells, surface focus, and composition certification passed.\n",
+);

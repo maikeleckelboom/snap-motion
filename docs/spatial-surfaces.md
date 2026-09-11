@@ -133,6 +133,37 @@ semantic, interaction, focus, or accessibility ownership.
 `landmark` upgrades the default labelled group to a region only when the surface is a major page
 section.
 
+## Coverflow evidence sizing
+
+`Coverflow` accepts an optional `cardWidth` in CSS pixels: the preferred width of its focused
+card. Omission retains the existing 40%-of-stage sizing, 280px compact card and 420px desktop
+ceiling. An explicit size may use up to 60% of the measured allocation, with the same compact
+280px floor (or the smaller requested width). Both modes leave a 16px focus gutter on each side
+when the host is narrower than the compact card. A positive finite number is required.
+
+```vue
+<Coverflow :items="screens" :card-width="720" label="Application screenshots">
+  <template #card="{ item }">
+    <img :src="item.src" :alt="item.alt" />
+  </template>
+</Coverflow>
+```
+
+At a 1,120px allocation, that request gives a 672 × 470px card; at 1,280px it reaches 720 × 504px.
+At a 342px mobile allocation it remains 280 × 196px, and at 280px it shrinks to 248 × 174px.
+Use ordinary host CSS for allocation; the existing `fallbackStageWidth` also limits the component
+root unless host CSS supplies its width. Actual measurement remains authoritative after mount.
+The advanced `useCoverflowMotion` accepts the same reactive `cardWidth` option.
+
+The package preserves the card's 0.7 height/width ratio, pitch equal to first-side-slot travel,
+rail-normal spacing, yaw and visibility policy. Above 420px, camera distance and side depth scale
+with card width, retaining the established foreshortening. Consumers supply content and desired
+evidence size; they do not calculate transforms, perspective or side-card spacing.
+
+This is a preferred size rather than a guaranteed fixed width. A larger maximum alone would only
+raise the default 1,120px stage's card from 420 to 448px. The single preferred-size contract lets
+the package reserve coherent neighbour space without exposing a second ratio or physics controls.
+
 ## Input, interruption, and accessibility
 
 Keyboard input is accepted only while the surface owns the relevant focus scope. Pointer input

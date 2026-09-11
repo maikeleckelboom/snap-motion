@@ -16,6 +16,29 @@ function fixedViewport(inlineSize = 400, blockSize = 800) {
 }
 
 describe("useSheetMotion", () => {
+  it("uses deterministic initial viewport geometry and adopts the browser only on measurement", () => {
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(1000);
+    let firstPosition = 0;
+    let motion: ReturnType<typeof useSheetMotion> | undefined;
+    const panel = ref<HTMLElement>();
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          motion = useSheetMotion({ panel, driver: new ManualAnimationDriver() });
+          firstPosition = motion.position.value;
+          return () => h("section", { ref: panel });
+        },
+      }),
+    );
+    try {
+      expect(firstPosition).toBe(801);
+      motion!.remeasure();
+      expect(motion!.primarySurfaceExtent.value).toBe(1000);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it.each(["top", "bottom", "left", "right"] as const)(
     "starts %s at the physical edge and closes without a hidden travel segment",
     async (side) => {

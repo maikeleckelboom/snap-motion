@@ -1,10 +1,57 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
-import { defineComponent, h, nextTick, ref } from "vue";
+import { defineComponent, effectScope, h, nextTick, ref } from "vue";
 
 import { useReducedMotionPreference } from "../src/motion/reduced-motion";
 
 describe("reduced-motion preference", () => {
+  it.each([
+    [false, undefined],
+    [true, undefined],
+    [false, true],
+    [true, true],
+    [false, false],
+    [true, false],
+  ] as const)(
+    "keeps first render deterministic with system=%s override=%s",
+    async (system, override) => {
+      const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+      Object.defineProperty(media, "matches", { value: system });
+      vi.spyOn(window, "matchMedia").mockReturnValue(media);
+      const renders: boolean[] = [];
+      const wrapper = mount(
+        defineComponent({
+          setup() {
+            const reduced = useReducedMotionPreference({ override: ref(override) });
+            return () => {
+              renders.push(reduced.value);
+              return h("output", String(reduced.value));
+            };
+          },
+        }),
+      );
+      try {
+        expect(renders[0]).toBe(override ?? false);
+        await nextTick();
+        expect(wrapper.text()).toBe(String(override ?? system));
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it("adopts the system immediately in a standalone scope without a component lifecycle", () => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    Object.defineProperty(media, "matches", { value: true });
+    vi.spyOn(window, "matchMedia").mockReturnValue(media);
+    const scope = effectScope();
+    try {
+      expect(scope.run(() => useReducedMotionPreference().value)).toBe(true);
+    } finally {
+      scope.stop();
+    }
+  });
+
   it("reacts to media-query changes and supports a deterministic override", async () => {
     let matches = false;
     let changeListener: ((event: MediaQueryListEvent) => void) | undefined;

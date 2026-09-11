@@ -163,8 +163,8 @@ jobs:
           cache: pnpm
           node-version-file: .node-version
       - run: pnpm install --frozen-lockfile
-      - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Install integration browsers
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
       - name: Build package authority
         run: pnpm build:packages
       - name: Build production preview
@@ -195,6 +195,14 @@ jobs:
           retention-days: 7
       - name: Certify packed Nuxt build and hydration
         run: pnpm verify:packages:browser:prepared
+      - name: Upload packed surface evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: packed-surfaces-attempt-${{ github.run_attempt }}
+          path: .artifacts/surface-preferences
+          if-no-files-found: ignore
+          retention-days: 7
 
   browser-certification:
     name: Browser certification

@@ -201,6 +201,7 @@ export const Coverflow: <TItem extends {
         disabled?: boolean;
         landmark?: boolean;
         fallbackStageWidth?: number;
+        cardWidth?: number | undefined;
         elasticity?: ElasticityOptions;
         messages?: Partial<SnapMotionMessages_2>;
         programmaticImpulse?: number;

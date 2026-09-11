@@ -80,6 +80,9 @@ function chapterTitle(chapter: Chapter): string {
     <!-- @vue-expect-error the label accessor receives this collection's item, not another's -->
     <Coverflow :items="chapters" :item-label="(chapter) => chapter.missingProperty" />
 
+    <!-- @vue-expect-error preferred card width is a CSS-pixel number -->
+    <Coverflow :items="chapters" card-width="wide" />
+
     <Coverflow :items="chapters">
       <template #card="card">
         <p>{{ chapterTitle(card.item) }}</p>
