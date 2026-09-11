@@ -56,10 +56,12 @@ lifecycle scripts. One TypeScript 7 consumer compiles Bundler, Node16, and NodeN
 minimum-Vue consumer owns SFC inference, Vite, Router, SSR, and CSS.
 
 `pnpm verify:packages:browser` is the separate browser-specific packed boundary. Its current-Vue
-consumer builds through Nuxt, proves SSR, starts the production server, and certifies Chromium
-hydration without `ClientOnly`. The weaker minimum-consumer Chromium smoke is intentionally absent;
-product interaction behavior remains owned by the source/component and browser suites rather than
-being repeated through packed bytes. The generated chunk graph fails when a capability entrypoint
+consumer builds through Nuxt, proves SSR, starts the production server, and certifies hydration
+without `ClientOnly` in Chromium, Firefox and WebKit. Its 48-cell surface matrix covers motion
+preferences and overrides, default/wide/narrow allocation, neutral Coverflow panels, focus and
+representative keyboard, pointer and wheel interactions through packed bytes. The source/component
+and browser suites retain the broader interaction and semantic coverage. The weaker minimum-consumer
+Chromium smoke is intentionally absent. The generated chunk graph fails when a capability entrypoint
 pulls an unrelated high-level feature; media-gallery isolation remains a dedicated hard assertion.
 `config/size-budgets.json` is the sole authority for current raw and gzip limits. Budget changes
 require evidence from the emitted graph and an explanation tied to consumer value; documentation

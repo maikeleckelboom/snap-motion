@@ -1,7 +1,7 @@
 # Coverflow SSR and evidence sizing correction
 
 The integration base is `main` at `10ad963540bc16e79625baa6a7c9d7ca0be4907c`.
-Work belongs to `fix/coverflow-ssr-sizing`, targeting `main` in a draft PR. There is no `dev` branch.
+Work was initially isolated on `fix/coverflow-ssr-sizing`, targeting `main` in PR #18.
 The immutable private beta.10 record retains source authority
 `3a21db7ccaebe9b4ac769cd9c4104aa53a10fd4d`; this source correction is not a new candidate.
 
