@@ -7,6 +7,11 @@ Add a preferred `cardWidth` to high-level Coverflow and its geometry/composable 
 default sizing, reserve responsive neighbour space, and scale the camera and depth coherently for
 larger evidence cards. Measured narrow hosts retain a focus gutter.
 
+Document and certify the existing neutral physical shell: direct image slots can fill the panel
+without a package border, background, padding, radius, shadow or inner chassis. The representative
+image fixture demonstrates edge-to-edge planes at default, narrow and wide allocations without
+material overrides or a new prop.
+
 Keep shared reduced-motion state deterministic through SSR and the first hydration render, then
 adopt the live browser preference on mount. Explicit overrides remain authoritative. This fixes
 Coverflow and Stacked Deck hydration styles. Keep Sheet's initial viewport measurement deterministic

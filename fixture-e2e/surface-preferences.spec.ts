@@ -1,6 +1,22 @@
 import { expect, test } from "@playwright/test";
 
-import { certifySurfaceFocus } from "../scripts/certifySurfacePreferences.ts";
+import {
+  certifyCoverflowImagePanels,
+  certifySurfaceFocus,
+} from "../scripts/certifySurfacePreferences.ts";
+
+for (const [name, viewportWidth, query] of [
+  ["default", 1440, ""],
+  ["narrow", 390, "?width=720"],
+  ["wide", 1440, "?width=720"],
+] as const) {
+  test(`Coverflow image is the complete neutral panel at ${name} allocation`, async ({ page }) => {
+    await page.setViewportSize({ width: viewportWidth, height: 1000 });
+    await page.goto(`http://127.0.0.1:4175/surfaces${query}`);
+    await page.locator("[data-preference-ready]").waitFor();
+    await certifyCoverflowImagePanels(page);
+  });
+}
 
 test("spatial surfaces distinguish pointer, keyboard and forced-colors focus", async ({ page }) => {
   await page.goto("http://127.0.0.1:4175/surfaces");

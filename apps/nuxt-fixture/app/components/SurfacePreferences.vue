@@ -98,8 +98,8 @@ function request(id: string | undefined) {
           <img
             :src="`/screens/${item.id}.svg`"
             :alt="item.title"
-            width="1440"
-            height="1008"
+            width="1600"
+            height="1120"
             :data-card-active="active"
             :data-card-visual="visual"
             :data-card-settled="settled"
@@ -190,9 +190,6 @@ img {
   inline-size: 100%;
   block-size: 100%;
   object-fit: contain;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px #18263a20;
 }
 nav {
   display: flex;

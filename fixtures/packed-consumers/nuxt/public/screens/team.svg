@@ -1,12 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000">
-  <rect width="1600" height="1000" fill="#f1f5f9"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120">
+  <rect width="1600" height="1120" fill="#f1f5f9"/>
   <rect width="1600" height="142" fill="#ffffff"/>
   <path d="M0 142h1600" stroke="#dbe2ea" stroke-width="4"/>
   <rect x="54" y="44" width="58" height="58" rx="16" fill="#7048e8"/>
   <text x="83" y="84" fill="#fff" font-family="Arial,sans-serif" font-size="32" font-weight="700" text-anchor="middle">Y</text>
   <text x="142" y="64" fill="#64748b" font-family="Arial,sans-serif" font-size="21" font-weight="700">ORGANISATIE</text>
   <text x="142" y="101" fill="#0f172a" font-family="Arial,sans-serif" font-size="34" font-weight="700">Team &amp; rollen</text>
-  <rect x="0" y="142" width="250" height="858" fill="#e8eef3"/>
+  <rect x="0" y="142" width="250" height="978" fill="#e8eef3"/>
   <rect x="42" y="220" width="166" height="38" rx="19" fill="#7048e8"/>
   <g fill="#fff" stroke="#dbe2ea" stroke-width="4">
     <rect x="298" y="204" width="382" height="324" rx="26"/>

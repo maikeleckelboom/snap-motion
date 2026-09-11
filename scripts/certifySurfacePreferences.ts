@@ -23,6 +23,100 @@ async function expectSelection(page: Page, id: string) {
   await expect(rail).toHaveAttribute("data-phase", "idle");
 }
 
+/** A direct image slot occupies the physical panel without package or fixture chrome. */
+export async function certifyCoverflowImagePanels(page: Page) {
+  const cards = page.locator(".snap-motion-coverflow-card");
+  await expect(cards).toHaveCount(3);
+  await expect
+    .poll(() =>
+      cards
+        .locator("img")
+        .evaluateAll((images) =>
+          images.every(
+            (image) =>
+              (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0,
+          ),
+        ),
+    )
+    .toBe(true);
+  const panels = await cards.evaluateAll((elements) => {
+    const view = elements[0]!.ownerDocument.defaultView!;
+    function material(element: Element) {
+      const style = view.getComputedStyle(element);
+      return {
+        background: style.backgroundColor,
+        backgroundImage: style.backgroundImage,
+        border: [
+          style.borderTopWidth,
+          style.borderRightWidth,
+          style.borderBottomWidth,
+          style.borderLeftWidth,
+        ],
+        padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft],
+        radius: [
+          style.borderTopLeftRadius,
+          style.borderTopRightRadius,
+          style.borderBottomRightRadius,
+          style.borderBottomLeftRadius,
+        ],
+        shadow: style.boxShadow,
+        clip: style.clipPath,
+      };
+    }
+    return elements.map((element) => {
+      const card = element as HTMLElement;
+      const image = card.querySelector("img")!;
+      const fitScale = Math.min(
+        image.clientWidth / image.naturalWidth,
+        image.clientHeight / image.naturalHeight,
+      );
+      return {
+        id: card.dataset.itemId,
+        children: [...card.children].map((child) => child.tagName),
+        shellMaterial: material(card),
+        imageMaterial: material(image),
+        shellOverflow: getComputedStyle(card).overflow,
+        shellTransform: getComputedStyle(card).transform,
+        imageTransform: getComputedStyle(image).transform,
+        shellSize: [card.clientWidth, card.clientHeight],
+        imageSize: [image.clientWidth, image.clientHeight],
+        imageOffset: [image.offsetLeft, image.offsetTop],
+        paintedInset: [
+          (image.clientWidth - image.naturalWidth * fitScale) / 2,
+          (image.clientHeight - image.naturalHeight * fitScale) / 2,
+        ],
+        pseudoContent: [
+          getComputedStyle(card, "::before").content,
+          getComputedStyle(card, "::after").content,
+        ],
+      };
+    });
+  });
+  const neutral = {
+    background: "rgba(0, 0, 0, 0)",
+    backgroundImage: "none",
+    border: ["0px", "0px", "0px", "0px"],
+    padding: ["0px", "0px", "0px", "0px"],
+    radius: ["0px", "0px", "0px", "0px"],
+    shadow: "none",
+    clip: "none",
+  };
+  for (const panel of panels) {
+    expect(panel.children).toEqual(["IMG"]);
+    expect(panel.shellMaterial).toEqual(neutral);
+    expect(panel.imageMaterial).toEqual(neutral);
+    expect(panel.shellOverflow).toBe("visible");
+    expect(panel.shellTransform).not.toBe("none");
+    expect(panel.imageTransform).toBe("none");
+    expect(panel.imageSize).toEqual(panel.shellSize);
+    expect(panel.imageOffset).toEqual([0, 0]);
+    // The package rounds card height to CSS pixels; matching artwork must not add a visible mat.
+    for (const inset of panel.paintedInset) expect(inset).toBeLessThanOrEqual(0.5);
+    for (const content of panel.pseudoContent) expect(["none", "normal"]).toContain(content);
+  }
+  return panels;
+}
+
 export async function certifySurfaceFocus(page: Page, directory?: string): Promise<void> {
   for (const selector of [
     ".snap-motion-coverflow",
@@ -244,6 +338,11 @@ export async function certifySurfacePreferences(browser: Browser, url: string): 
           await writeFile(
             resolve(directory, `${name}.json`),
             JSON.stringify({ system, override, diagnostics, probes, after, geometry }, null, 2),
+          );
+          const panels = await certifyCoverflowImagePanels(page);
+          await writeFile(
+            resolve(directory, `${name}-panels.json`),
+            JSON.stringify(panels, null, 2),
           );
           await page.locator(".evidence").screenshot({ path: resolve(directory, `${name}.png`) });
 

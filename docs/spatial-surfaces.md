@@ -133,6 +133,31 @@ semantic, interaction, focus, or accessibility ownership.
 `landmark` upgrades the default labelled group to a region only when the surface is a major page
 section.
 
+## Coverflow panel material
+
+The card slot can be the visual panel itself. Coverflow places it directly inside one physical
+transform shell, with no inner chassis, border, background, padding, radius or generic card shadow.
+The shell has visible overflow; the outer stage clips the receding rail at its allocation boundary
+to prevent document overflow. The camera and transforms act on that same panel box.
+
+For an edge-to-edge screenshot, use ordinary image layout on the slotted image:
+
+```css
+.product-screen {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+```
+
+Artwork matching the panel's 10:7 width/height ratio fills the face without cropping or distortion.
+Other aspect ratios need a consumer content-fit decision: `contain` preserves the entire image and
+may leave transparent space; `cover` fills the face by cropping. Neither needs a package-material
+reset or a frameless prop. Borders, rounding, backgrounds, contact shadows and other authored
+material belong to the consumer. The existing physical presentation signals remain available.
+The `surfaces` Nuxt fixture demonstrates direct image panels at default, narrow and wide allocations.
+
 ## Coverflow evidence sizing
 
 `Coverflow` accepts an optional `cardWidth` in CSS pixels: the preferred width of its focused

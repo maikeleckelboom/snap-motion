@@ -49,6 +49,24 @@ function mountCoverflow(props: Record<string, unknown> = {}) {
 }
 
 describe("Coverflow", () => {
+  it("places a raw image slot directly in the physical transform shell", () => {
+    const wrapper = mount(TypedCoverflow, {
+      props: { items: screens },
+      slots: {
+        card: ({ item }: CoverflowCardState<Screen, ScreenId>) =>
+          h("img", { src: `${item.id}.png`, alt: item.title }),
+      },
+    });
+    try {
+      for (const card of wrapper.findAll<HTMLElement>(".snap-motion-coverflow-card")) {
+        expect([...card.element.children].map((child) => child.tagName)).toEqual(["IMG"]);
+        expect(card.element.style.transform).toContain("translate3d");
+      }
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it("adopts narrow allocation and anchors together without changing selection", async () => {
     const wrapper = mountCoverflow({ cardWidth: 720 });
     try {

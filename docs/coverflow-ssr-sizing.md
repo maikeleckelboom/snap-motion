@@ -164,7 +164,7 @@ caps and the package-size gate remain unchanged.
 Transient tarballs measure 35,245 bytes for Core (+39) and 82,621 for Vue (+510), compared with
 the preserved beta.10 archives; they are verification output, not replacement candidate artifacts.
 
-## Final verification
+## Initial fix verification
 
 `pnpm verify` passed with exit code 0 on the source recorded in `verify-inputs-4.json`:
 
@@ -189,3 +189,77 @@ final successful gate; no assertions, tolerances, timeouts or browser coverage w
 Only this evidence document changed after the final runtime snapshot, and its formatting was
 checked separately. No source blocker remains from local verification; remote CI status belongs
 to the delivery PR.
+
+## Neutral image-panel follow-up
+
+External review required the screenshot itself to read as the physical panel. Inspection at
+`b58f85e` confirmed that the package already has the correct structural default: one transformed
+DIV directly contains the slot, with transparent background, zero border and padding, no radius
+or shadow, and visible card overflow. The root owns the shared camera and clips the receding rail
+at the stage allocation, preventing document overflow. There is no decorative inner wrapper.
+
+The earlier representative probe, however, styled its IMG with a white background, 8px radius and
+generic shadow. Its 16:10 SVGs were contained in 10:7 boxes, adding a visible mat. Those fixture
+choices are removed. The artwork now has an explicit 1600×1120 canvas, extending its application
+background and sidebar without distorting or cropping its content. A direct IMG uses only block
+layout, 100% dimensions and `object-fit: contain`; it does not override package material or transforms.
+Lab's separate authored `.screen-chrome` remains an example of consumer material, not a requirement
+of the high-level component.
+
+No production source, CSS, public API, package size or size cap changes in this follow-up, and no
+frameless prop is added. The pending Changeset and spatial-surface documentation make the existing
+ownership explicit. Focus behavior from the initial fix remains intact.
+
+The new browser contract rejects package or fixture backgrounds, borders, padding, radii, generic
+shadows, clipping paths and decorative pseudo-content. It checks that a single direct image shares
+the complete physical box with zero offset, that the shell owns the transform, and that matching
+artwork leaves at most the subpixel inset caused by the existing integer card-height rounding.
+The same check runs through all 48 packed preference/allocation cells, plus three additional
+workspace Nuxt cases. A component test protects the direct slot/physical-shell DOM relationship.
+
+The old fixture fails this new assertion, recorded in `panel-before-test.log` and
+`panel-before-material.json`. Focused checks pass in Chromium, Firefox and Linux WebKit at default,
+mobile, wide and 280px host allocations, including pointer, keyboard and forced-colors focus.
+Updated review screenshots and computed panel evidence live in
+`image-panels/<browser>/{default,mobile,wide,narrow-host}.{png,json}`. These intentionally supersede
+the earlier probe's material presentation while preserving its geometry.
+
+## Remote CI evidence from the initial fix
+
+The initial push and PR runs (`34549535887`, `34549546433`) both passed package verification,
+Windows portability, browser integration (including packed Nuxt) and cross-browser interoperability.
+Their Chromium 2/2 shards failed the unchanged Stacked Deck fast-alternation pile-envelope case:
+4423 sampled pixels against a 4421 bound; each passed on retry. The gate correctly remains failed.
+
+The same failure is present in [ancestor run 34416586484](https://github.com/maikeleckelboom/snap-motion/actions/runs/34416586484)
+at `7c18043713b841545a0a2ce2c48cfb09c0995774`, before this branch. Five unchanged local repetitions
+passed (`ci-pile-recheck.log`). This is inherited intermittent raster-envelope evidence, not a new
+Coverflow material regression; the two-pixel excess remains unexplained and its tolerance is not
+changed. Historical and current failed logs are retained alongside the local full-gate pass.
+
+## Follow-up verification result
+
+The final follow-up ran `pnpm verify` against `verify-inputs-5.json`. The aggregate **failed**
+because the same inherited Chromium pile-envelope case failed once and passed on retry:
+326 browser tests passed and one was flaky (19.5 minutes). `failOnFlakyTests` remains enabled.
+The failed run is preserved in `pnpm-verify-5.log`, `gate-5-browser-results` and
+`gate-5-browser-blob`; it is not relabelled as a pass.
+
+All preceding gate steps passed: release-history immutability, formatting, lint/architecture,
+package/application builds and types, API reports, size limits, 69 unit files / 849 tests,
+browser-free packed consumers, and all 48 packed Nuxt preference/allocation cells. Every packed
+cell now also certifies neutral shell/image material and edge-to-edge content, with zero captured
+hydration/runtime diagnostics. Those artifacts are in `verified-image-panels/<browser>`.
+
+Five fresh unchanged repetitions of the inherited failure passed afterward
+(`ci-pile-recheck-after.log`), in addition to the five focused repetitions before the aggregate.
+The skipped downstream commands ran separately: production-preview build and its one test passed,
+then all 12 framework-fixture tests passed, including the three new image-panel cases
+(`panel-remaining-verification.log`, exit 0). No additional failure was observed.
+
+Only this evidence report changed after the runtime snapshot; its final formatting was checked
+separately. This follow-up changes no production code, API report or package size. The neutral-panel
+requirement is covered, while the inherited intermittent pile-envelope assertion remains a
+repository certification limitation. No tolerance, retry policy, timeout, assertion or browser
+coverage was weakened to conceal it, and the full aggregate was not repeated just to obtain a
+different exit code.
