@@ -292,7 +292,6 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
     blockSize: options.initialViewportDimensions?.blockSize ?? 800,
     inlineSize: options.initialViewportDimensions?.inlineSize ?? 400,
   };
-  const maximumScrimOpacity = options.maximumScrimOpacity ?? 0.56;
   const viewportInlineSize = ref(initialViewportDimensions.inlineSize);
   const viewportBlockSize = ref(initialViewportDimensions.blockSize);
   const measuredPrimarySurfaceExtent = ref(0);
@@ -598,12 +597,13 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
   );
   const primarySurfaceExtent = computed(() => measuredPrimarySurfaceExtent.value);
   const scrimOpacity = computed(() =>
-    resolveSheetScrimOpacity(
-      motion.snapshot.value.anchors,
-      HIDDEN_SNAP_ID,
-      motion.position.value,
-      maximumScrimOpacity,
-    ),
+    sheetState.value === "closed"
+      ? 0
+      : resolveSheetScrimOpacity(
+          visiblePrimaryExtent.value,
+          primarySurfaceExtent.value - mostOpenPosition.value,
+          options.maximumScrimOpacity ?? 0.56,
+        ),
   );
   const geometry = computed(() =>
     resolveSheetGeometry({

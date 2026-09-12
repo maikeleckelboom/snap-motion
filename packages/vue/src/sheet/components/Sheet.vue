@@ -219,7 +219,9 @@ const motion = useSheetMotion<Id>({
   chrome,
   defaultOpenSnapId: intendedId.value,
   intrinsicBodyContent,
-  maximumScrimOpacity: props.maximumScrimOpacity,
+  get maximumScrimOpacity() {
+    return props.maximumScrimOpacity;
+  },
   onHidden: completeClose,
   onSnap(id) {
     queueMicrotask(() => {
@@ -691,14 +693,7 @@ defineExpose({
     <div
       aria-hidden="true"
       class="snap-motion-sheet-scrim"
-      :style="{
-        opacity:
-          motion.sheetState.value === 'closed' || motion.sheetState.value === 'closing'
-            ? 0
-            : Number.isFinite(maximumScrimOpacity)
-              ? Math.max(0, maximumScrimOpacity)
-              : 0,
-      }"
+      :style="{ opacity: motion.scrimOpacity.value }"
       @click="requestClose('scrim')"
     />
     <section

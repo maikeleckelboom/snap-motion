@@ -1,5 +1,8 @@
 # Sheet presentation and durable card state
 
+Historical hardening evidence follows. The subsequent [progressive scrim pass](sheet-progressive-scrim.md)
+supersedes the lifecycle fade described here, while preserving the accepted panel spring.
+
 This pass starts from clean `dev` at `9501562f4a8205efbbc8ac92e5a306475bf950d8`.
 It changes reusable package behavior and evidence; it does not change maikel.site or release records.
 

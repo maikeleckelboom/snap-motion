@@ -305,17 +305,14 @@ export function resolveSheetReleaseAnchor<Id extends string, HiddenId extends st
   return nearestAnchor(openAnchors, projectedPosition);
 }
 
-export function resolveSheetScrimOpacity<Id extends string, HiddenId extends string>(
-  anchors: readonly SheetSnapAnchor<Id | HiddenId>[],
-  hiddenId: HiddenId,
-  position: number,
+/** Physical exposure, independent of semantic IDs and hidden overshoot travel. */
+export function resolveSheetScrimOpacity(
+  visibleExtent: number,
+  maximumVisibleExtent: number,
   maximumOpacity = 0.56,
 ) {
-  const hidden = anchors.find((anchor) => anchor.id === hiddenId);
-  const openAnchors = anchors.filter((anchor) => anchor.id !== hiddenId);
-  if (!hidden || openAnchors.length === 0) return 0;
-  const mostOpenPosition = Math.min(...openAnchors.map((anchor) => anchor.position));
-  const range = Math.max(1, hidden.position - mostOpenPosition);
-  const progress = 1 - Math.min(1, Math.max(0, (position - mostOpenPosition) / range));
-  return Number((progress * finiteNonNegative(maximumOpacity)).toFixed(3));
+  const extent = finiteNonNegative(maximumVisibleExtent);
+  if (extent === 0) return 0;
+  const progress = Math.min(1, finiteNonNegative(visibleExtent) / extent);
+  return progress * progress * (3 - 2 * progress) * finiteNonNegative(maximumOpacity);
 }
