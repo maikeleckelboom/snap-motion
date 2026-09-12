@@ -10,6 +10,27 @@ semantic and style-light; application markup inside slides remains consumer-owne
 stable IDs, controlled selection, and content, and the surface supplies everything else. See
 [Spatial surfaces](./spatial-surfaces.md).
 
+Coverflow's optional `cardWidth` requests a larger evidence face while the package bounds it to
+the measured allocation and owns the complete rail geometry. Omission preserves default sizing.
+
+Coverflow, Stacked Deck and Carousel's viewport remain keyboard-focusable. Their `:focus-visible`
+ring uses `--snap-motion-focus-width` (default `2px`) and `--snap-motion-focus-color` (default
+`Highlight`), with a `2px` offset. Pointer focus does not paint this ring. The package tracks local
+pointer input because prevented drag gestures can transfer focus by script; keyboard input clears
+that state and retains native `:focus-visible` behavior. Forced colors may replace the theme color
+to preserve contrast. Sheet's existing focus treatment is unchanged.
+
+## Server rendering and motion preferences
+
+Shared motion surfaces use a deterministic non-reduced preference on the server and their first
+hydrating render when `reducedMotionOverride` is omitted. On mount they adopt the browser query;
+subsequent changes remain reactive. Explicit `true` or `false` applies from the first render and
+stays authoritative. This lifecycle needs neither `ClientOnly` nor consumer media-query state.
+Standalone motion effect scopes have no hydration lifecycle and adopt the query immediately.
+Sheet likewise uses its `initialViewportDimensions` through hydration and measures the real
+viewport afterward. Gallery already owns mounted preference adoption; Modal Dialog has no motion
+preference projection. See the [Coverflow correction evidence](coverflow-ssr-sizing.md).
+
 The media gallery is a higher-level, interaction-complete composition. Its public item, lifecycle,
 loading, focus, responsive, message, and theme contracts are documented in
 [Media gallery](./media-gallery.md). Optional item descriptions follow the mechanically settled

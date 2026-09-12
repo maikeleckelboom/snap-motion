@@ -11,6 +11,7 @@ import type { NavigationReason } from "@snap-motion/vue/motion";
 import { computed, ref, watch } from "vue";
 
 import { preserveFocusBeforeSemanticChange } from "../../internal/accessibility/focus";
+import { useSurfaceFocus } from "../../internal/accessibility/surfaceFocus";
 import { createEnglishSnapMotionMessages } from "../../localization/messages";
 import type { CoverflowCardState } from "../coverflow-contracts";
 import { useCoverflowMotion } from "../use-coverflow-motion";
@@ -42,6 +43,8 @@ const props = withDefaults(
     landmark?: boolean;
     /** Fallback stage width, used before the rail has been measured. */
     fallbackStageWidth?: number;
+    /** Preferred focused card width in CSS pixels. The package reserves room for neighbours. */
+    cardWidth?: number | undefined;
     elasticity?: ElasticityOptions;
     messages?: Partial<SnapMotionMessages>;
     programmaticImpulse?: number;
@@ -67,6 +70,7 @@ const emit = defineEmits<{
 }>();
 
 const root = ref<HTMLElement>();
+useSurfaceFocus(root);
 const focusScope = computed(() => props.focusScope ?? root.value);
 const track = ref<HTMLElement>();
 const messages = computed(() => createEnglishSnapMotionMessages(props.messages));
@@ -187,6 +191,7 @@ const coverflow = useCoverflowMotion<TId>({
   reducedMotionOverride,
   root: focusScope,
   stageWidth: () => props.fallbackStageWidth,
+  cardWidth: () => props.cardWidth,
   track,
   viewport: root,
   elasticity: () => props.elasticity,
@@ -316,6 +321,7 @@ defineExpose({
     :data-phase="coverflow.diagnostics.value.phase"
     :data-reduced-motion="coverflow.diagnostics.value.reducedMotion ? 'true' : 'false'"
     :data-visual-id="coverflow.visualId.value"
+    :data-settled-id="coverflow.settledId.value"
     :role="landmark ? 'region' : 'group'"
     :style="[stageStyle, coverflow.motion.surfaceStyle]"
     tabindex="0"
@@ -337,6 +343,9 @@ defineExpose({
         data-snap-motion-item
         data-snap-motion-coverflow-card
         :data-item-id="card.id"
+        :data-active="card.active ? 'true' : 'false'"
+        :data-visual="card.visual ? 'true' : 'false'"
+        :data-settled="card.settled ? 'true' : 'false'"
         :data-visible="card.presentation.visible ? 'true' : 'false'"
         :data-semantic="card.presentation.interactive ? 'true' : 'false'"
         :inert="!card.presentation.interactive"

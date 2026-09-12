@@ -240,7 +240,7 @@ describe("sheet snap policy", () => {
     );
   });
 
-  it("derives direction-independent scrim progress from canonical open to hidden", () => {
+  it("derives direction-independent scrim progress from physical exposure", () => {
     const opacities = sheetSides.map((side) => {
       const anchors = resolveSheetSnapAnchors(
         createDefaultSheetSnapPoints(side),
@@ -248,9 +248,27 @@ describe("sheet snap policy", () => {
         hiddenId,
       );
       const open = Math.min(...anchors.map(({ position }) => position));
-      const hidden = anchors.find(({ id }) => id === hiddenId)!;
-      return resolveSheetScrimOpacity(anchors, hiddenId, open + (hidden.position - open) / 2);
+      const surface =
+        contextFor(side).axis === "y"
+          ? contextFor(side).primaryViewportExtent
+          : contextFor(side).panelPrimaryExtent;
+      return resolveSheetScrimOpacity((surface - open) / 2, surface - open);
     });
     expect(opacities).toEqual([0.28, 0.28, 0.28, 0.28]);
+  });
+
+  it("eases physical expansion without rounding, overshoot, or invalid-geometry dimming", () => {
+    expect([0, 25, 50, 75, 100].map((extent) => resolveSheetScrimOpacity(extent, 100))).toEqual([
+      0, 0.08750000000000001, 0.28, 0.47250000000000003, 0.56,
+    ]);
+    expect(resolveSheetScrimOpacity(-10, 100)).toBe(0);
+    expect(resolveSheetScrimOpacity(120, 100)).toBe(0.56);
+    expect(resolveSheetScrimOpacity(50, 0)).toBe(0);
+    expect(resolveSheetScrimOpacity(NaN, 100)).toBe(0);
+    expect(resolveSheetScrimOpacity(50, Infinity)).toBe(0);
+    expect(resolveSheetScrimOpacity(100, 100, 0.4)).toBe(0.4);
+    expect(resolveSheetScrimOpacity(100, 100, NaN)).toBe(0);
+    expect(resolveSheetScrimOpacity(0.01, 100)).toBeGreaterThan(0);
+    expect(resolveSheetScrimOpacity(99.99, 100)).toBeLessThan(0.56);
   });
 });

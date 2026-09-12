@@ -19,6 +19,9 @@ const screens = [
 const activeCarouselId = ref<"one" | "two">("two");
 const sheetOpen = ref(false);
 const sheet = ref<{ readonly diagnostics: SheetDiagnostics }>();
+const query = useRoute().query;
+const preference =
+  query.preference === "true" ? true : query.preference === "false" ? false : undefined;
 
 const galleryItems = [
   {
@@ -40,7 +43,13 @@ const galleryItems = [
 </script>
 
 <template>
-  <main data-packed-nuxt-ready>
+  <SurfacePreferences
+    v-if="query.probe !== undefined"
+    :preference="preference"
+    :card-width="query.width ? Number(query.width) : undefined"
+    :allocation="query.allocation ? Number(query.allocation) : undefined"
+  />
+  <main v-else data-packed-nuxt-ready>
     <CarouselRoot v-model:active-id="activeCarouselId" :ids="['one', 'two']">
       <CarouselViewport>
         <CarouselTrack>

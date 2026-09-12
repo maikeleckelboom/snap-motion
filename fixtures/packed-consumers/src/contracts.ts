@@ -122,7 +122,7 @@ const railHandle = ref<CoverflowHandle<ScreenId>>();
 // infers the consumer's own item type and semantic ID union is a *template* question, and it is
 // answered by Inference.vue and InferenceRejection.vue under `vue-tsc`.
 void h(StackedDeck, { items: screens, activeId: "system", label: "Project screens" });
-void h(Coverflow, { items: screens, activeId: "system" });
+void h(Coverflow, { items: screens, activeId: "system", cardWidth: 720 });
 void h(StackedDeck, { items: screens });
 void deckHandle.value?.navigateTo("outcome");
 void railHandle.value?.synchronizeTo("overview");

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { inject, onBeforeUnmount, ref, watchEffect } from "vue";
 
+import { useSurfaceFocus } from "../../internal/accessibility/surfaceFocus";
 import { carouselContextKey } from "../carousel-context";
 
 const context = inject(carouselContextKey);
 if (!context) throw new Error("CarouselViewport must be used inside CarouselRoot.");
 const element = ref<HTMLElement>();
+useSurfaceFocus(element);
 watchEffect(() => context.registerViewport(element.value));
 onBeforeUnmount(() => context.registerViewport(undefined));
 </script>

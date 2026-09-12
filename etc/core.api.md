@@ -888,6 +888,7 @@ export function resolveCoverflowTuning(options: ResolveCoverflowTuningOptions): 
 
 // @public (undocumented)
 export interface ResolveCoverflowTuningOptions {
+    readonly cardWidth?: number | undefined;
     // (undocumented)
     readonly stageWidth: number;
 }

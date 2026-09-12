@@ -28,10 +28,9 @@ import {
 } from "@snap-motion/core";
 import type { CarouselMotion } from "@snap-motion/vue/carousel";
 import type { NavigationReason, SurfaceMotionDiagnostics } from "@snap-motion/vue/motion";
-import { useElementSize, useRafFn } from "@vueuse/core";
+import { useRafFn } from "@vueuse/core";
 import {
   computed,
-  nextTick,
   onBeforeUnmount,
   ref,
   shallowRef,
@@ -49,6 +48,7 @@ import { useCarouselMotion } from "../carousel/use-carousel-motion";
 import { isHTMLElement } from "../internal/dom/realm";
 import { resolveDirectionalSnapKeyboardAction } from "../internal/input/keyboard-policy";
 import { useSurfaceGesture } from "../internal/input/surface-gesture";
+import { measureSurfaceWidth } from "../internal/layout/measureSurfaceWidth";
 import {
   resolveSurfaceConfiguration,
   surfaceConfigurationKey,
@@ -263,7 +263,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
   const isDirect = (): boolean => toValue(options.exchange) === "direct";
   const root = options.root ?? options.viewport;
   const track = options.track ?? ref<HTMLElement>();
-  const { width: measuredWidth } = useElementSize(options.viewport);
+  const measuredWidth = ref(0);
   const stageWidth = computed(() =>
     Math.max(320, measuredWidth.value || Math.min(toValue(options.stageWidth) ?? 1_120, 1_280)),
   );
@@ -299,6 +299,8 @@ export function useStackedDeckComponentMotion<Id extends string>(
   let physicalCoordinate = createStackedDeckPhysicalCoordinate(model.ids, model.state.settledIndex);
 
   function measure() {
+    const width = measureSurfaceWidth(options.viewport.value);
+    if (width !== undefined) measuredWidth.value = width;
     return createCoverflowGeometry({
       itemIds: physicalCoordinate.ids,
       pitch: pitch.value,
@@ -1253,7 +1255,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
     { deep: true },
   );
 
-  watch([pitch, () => toValue(options.stageWidth)], () => void nextTick(motion.remeasure));
+  watch([pitch, () => toValue(options.stageWidth)], () => motion.remeasure());
 
   // Teardown is the same thing as a cancelled interaction: nothing pending may still speak for a
   // surface that no longer exists.

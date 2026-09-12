@@ -70,6 +70,82 @@ describe("coverflow kinetic focus", () => {
 });
 
 describe("coverflow responsive tuning", () => {
+  it.each([
+    [320, 280, 196, 224, 95],
+    [850, 340, 238, 272, 116],
+    [1120, 420, 294, 336, 143],
+    [4000, 420, 294, 336, 143],
+  ])("preserves the default geometry at %s", (stageWidth, width, height, pitch, gap) => {
+    expect(resolveCoverflowTuning({ stageWidth })).toEqual({
+      cardWidth: width,
+      cardHeight: height,
+      pitch,
+      sidePeakX: pitch,
+      stackGap: gap,
+      perspective: 900,
+      maxRotateY: 62,
+      sideDepth: -300,
+      hideAfter: 3.05,
+    });
+  });
+
+  it("keeps subpixel requests and tiny allocations mechanically positive", () => {
+    for (const options of [
+      { stageWidth: 1120, cardWidth: 0.1 },
+      { stageWidth: 1, cardWidth: 720 },
+    ]) {
+      const tuning = resolveCoverflowTuning(options);
+      for (const key of ["cardWidth", "cardHeight", "pitch", "stackGap"] as const) {
+        expect(tuning[key]).toBeGreaterThan(0);
+        expect(Number.isFinite(tuning[key])).toBe(true);
+      }
+    }
+  });
+
+  it("allocates a wider face while scaling the camera and rail together", () => {
+    const tuning = resolveCoverflowTuning({ stageWidth: 1120, cardWidth: 720 });
+    expect(tuning.cardWidth).toBeGreaterThan(600);
+    expect(tuning.cardWidth).toBeLessThanOrEqual(720);
+    expect(tuning.pitch).toBe(tuning.sidePeakX);
+    expect(tuning.sidePeakX).toBeGreaterThan(tuning.cardWidth / 2);
+    expect(tuning.perspective / tuning.cardWidth).toBeCloseTo(900 / 420);
+    expect(tuning.sideDepth / tuning.cardWidth).toBeCloseTo(-300 / 420);
+    const side = resolveCoverflowPresentation({ ...tuning, progress: 1 });
+    const next = resolveCoverflowPresentation({ ...tuning, progress: 2 });
+    expect(Math.abs(side.rotateY)).toBe(62);
+    expect(next.translateZ).toBeLessThan(side.translateZ);
+    expect(next.translateX).toBeGreaterThan(side.translateX);
+    // The focused plane tracks exactly one pointer pixel per controller pixel.
+    for (const delta of [-100, 100]) {
+      const pose = resolveCoverflowPresentation({ ...tuning, progress: delta / tuning.pitch });
+      const projectedX =
+        (pose.translateX * tuning.perspective) / (tuning.perspective - pose.translateZ);
+      expect(projectedX).toBeCloseTo(delta);
+    }
+  });
+
+  it.each([160, 280, 320, 390, 700, 1120, 1280, 4000])(
+    "bounds preferred sizing at allocation %s",
+    (stageWidth) => {
+      const tuning = resolveCoverflowTuning({ stageWidth, cardWidth: 720 });
+      expect(tuning.cardWidth).toBeLessThanOrEqual(Math.min(720, stageWidth - 32));
+      for (const key of ["cardWidth", "cardHeight", "pitch", "stackGap", "perspective"] as const) {
+        expect(Number.isFinite(tuning[key])).toBe(true);
+        expect(tuning[key]).toBeGreaterThan(0);
+      }
+    },
+  );
+
+  it.each([320, 390])("retains the compact card with an explicit request at %s", (stageWidth) => {
+    expect(resolveCoverflowTuning({ stageWidth, cardWidth: 720 }).cardWidth).toBe(280);
+  });
+
+  it.each([0, -1, NaN, Infinity])("rejects invalid preferred width %s", (cardWidth) => {
+    expect(() => resolveCoverflowTuning({ stageWidth: 1120, cardWidth })).toThrow(
+      /cardWidth must be a finite number|coverflow dimensions must be positive/,
+    );
+  });
+
   it("keeps drag literal by making the pitch the first side slot", () => {
     const tuning = resolveCoverflowTuning({ stageWidth: 1_120 });
     expect(tuning.pitch).toBe(tuning.sidePeakX);

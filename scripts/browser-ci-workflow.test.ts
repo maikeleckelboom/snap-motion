@@ -86,11 +86,13 @@ describe("Verify browser CI contracts", () => {
     }
   });
 
-  it("shares one Chromium installation and package build across integration contracts", async () => {
+  it("shares browser installation and package build across integration contracts", async () => {
     const workflow = await workflowSource();
     const integration = jobBlock(workflow, "browser-integration");
 
-    expect(occurrences(integration, "playwright install --with-deps chromium")).toBe(1);
+    expect(occurrences(integration, "playwright install --with-deps chromium firefox webkit")).toBe(
+      1,
+    );
     expect(occurrences(integration, "run: pnpm build:packages")).toBe(1);
     expect(integration).toContain("pnpm build:preview:prepared");
     expect(integration).toContain("pnpm build:fixtures:prepared");

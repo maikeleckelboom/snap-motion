@@ -219,7 +219,9 @@ const motion = useSheetMotion<Id>({
   chrome,
   defaultOpenSnapId: intendedId.value,
   intrinsicBodyContent,
-  maximumScrimOpacity: props.maximumScrimOpacity,
+  get maximumScrimOpacity() {
+    return props.maximumScrimOpacity;
+  },
   onHidden: completeClose,
   onSnap(id) {
     queueMicrotask(() => {
@@ -323,6 +325,10 @@ async function show(generation: number) {
   if (!mounted || !props.open || generation !== lifecycleGeneration || !target.open) return;
   if (!alreadyVisible) body.value?.scrollTo(0, 0);
   motion.open(intendedId.value);
+  // The closed surface is hidden even when its SSR fallback differs from this viewport. Flush
+  // measured opening geometry before focusing a descendant; no paint or timer delay is needed.
+  await nextTick();
+  if (!mounted || !props.open || generation !== lifecycleGeneration || !target.open) return;
   focusInitial(props.initialFocus, {
     close: closeButton.value,
     container: panel.value,
@@ -674,6 +680,7 @@ defineExpose({
     ref="dialog"
     :aria-labelledby="resolvedTitleId"
     class="snap-motion-sheet"
+    :data-reduced-motion="motion.reducedMotion.value ? 'true' : 'false'"
     :data-sheet-axis="motion.axis.value"
     :data-sheet-side="motion.side.value"
     :data-sheet-snap="intendedId"

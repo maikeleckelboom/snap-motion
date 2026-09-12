@@ -133,6 +133,92 @@ semantic, interaction, focus, or accessibility ownership.
 `landmark` upgrades the default labelled group to a region only when the surface is a major page
 section.
 
+## Persistent selection and transient interaction
+
+Both Coverflow and StackedDeck physical card shells publish `data-active`, `data-visual` and
+`data-settled` as `"true"` / `"false"`, mirroring the existing card slot state. Both roots publish
+`data-settled-id`. These are read-only projections: canonical `activeId` belongs to the accepted
+application selection, `visual` follows the physical handoff, and `settled` changes at mechanical
+rest. They remain present after touch release, pointer departure and blur. A controlled host that
+rejects a request still owns its canonical selection.
+
+Consumer emphasis should use the appropriate durable state, not `:active`, `:hover` or
+`:focus-visible`. For example, a consumer that mutes inactive screenshots can write:
+
+```css
+.product-panel {
+  filter: grayscale(1);
+}
+[data-snap-motion-item][data-active="true"] .product-panel {
+  filter: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .product-panel:hover {
+    filter: none;
+  }
+}
+```
+
+Use `data-settled` instead when emphasis must wait for rest. Press feedback may add a temporary
+accent with `:active`; keyboard `:focus-visible` remains an independent accessibility indicator.
+The package does not impose a filter, border, shadow or selected material on consumer content.
+
+## Coverflow panel material
+
+The card slot can be the visual panel itself. Coverflow places it directly inside one physical
+transform shell, with no inner chassis, border, background, padding, radius or generic card shadow.
+The shell has visible overflow; the outer stage clips the receding rail at its allocation boundary
+to prevent document overflow. The camera and transforms act on that same panel box.
+
+For an edge-to-edge screenshot, use ordinary image layout on the slotted image:
+
+```css
+.product-screen {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+```
+
+Artwork matching the panel's 10:7 width/height ratio fills the face without cropping or distortion.
+Other aspect ratios need a consumer content-fit decision: `contain` preserves the entire image and
+may leave transparent space; `cover` fills the face by cropping. Neither needs a package-material
+reset or a frameless prop. Borders, rounding, backgrounds, contact shadows and other authored
+material belong to the consumer. The existing physical presentation signals remain available.
+The `surfaces` Nuxt fixture demonstrates direct image panels at default, narrow and wide allocations.
+
+## Coverflow evidence sizing
+
+`Coverflow` accepts an optional `cardWidth` in CSS pixels: the preferred width of its focused
+card. Omission retains the existing 40%-of-stage sizing, 280px compact card and 420px desktop
+ceiling. An explicit size may use up to 60% of the measured allocation, with the same compact
+280px floor (or the smaller requested width). Both modes leave a 16px focus gutter on each side
+when the host is narrower than the compact card. A positive finite number is required.
+
+```vue
+<Coverflow :items="screens" :card-width="720" label="Application screenshots">
+  <template #card="{ item }">
+    <img :src="item.src" :alt="item.alt" />
+  </template>
+</Coverflow>
+```
+
+At a 1,120px allocation, that request gives a 672 × 470px card; at 1,280px it reaches 720 × 504px.
+At a 342px mobile allocation it remains 280 × 196px, and at 280px it shrinks to 248 × 174px.
+Use ordinary host CSS for allocation; the existing `fallbackStageWidth` also limits the component
+root unless host CSS supplies its width. Actual measurement remains authoritative after mount.
+The advanced `useCoverflowMotion` accepts the same reactive `cardWidth` option.
+
+The package preserves the card's 0.7 height/width ratio, pitch equal to first-side-slot travel,
+rail-normal spacing, yaw and visibility policy. Above 420px, camera distance and side depth scale
+with card width, retaining the established foreshortening. Consumers supply content and desired
+evidence size; they do not calculate transforms, perspective or side-card spacing.
+
+This is a preferred size rather than a guaranteed fixed width. A larger maximum alone would only
+raise the default 1,120px stage's card from 420 to 448px. The single preferred-size contract lets
+the package reserve coherent neighbour space without exposing a second ratio or physics controls.
+
 ## Input, interruption, and accessibility
 
 Keyboard input is accepted only while the surface owns the relevant focus scope. Pointer input

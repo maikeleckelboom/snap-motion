@@ -17,6 +17,190 @@ function fixedViewport(inlineSize = 400, blockSize = 800) {
 
 describe("useSheetMotion", () => {
   it.each(["top", "bottom", "left", "right"] as const)(
+    "%s scrim follows physical snaps, reversals and interruptions without a second timeline",
+    async (side) => {
+      const driver = new ManualAnimationDriver();
+      const panel = ref<HTMLElement>();
+      const reducedMotionOverride = ref(false);
+      let motion: ReturnType<typeof useSheetMotion<string>>;
+      const wrapper = mount(
+        defineComponent({
+          setup() {
+            motion = useSheetMotion<string>({
+              panel,
+              driver,
+              side,
+              reducedMotionOverride,
+              getMeasureContext: () => fixedViewport(),
+              viewportPolicy: { hiddenOvershoot: 160 },
+              snapPoints: [
+                {
+                  id: "full",
+                  label: "Full",
+                  resolveVisibleExtent: sheetSnapVisibleExtent.pixels(300),
+                },
+                {
+                  id: "half",
+                  label: "Half",
+                  resolveVisibleExtent: sheetSnapVisibleExtent.pixels(150),
+                },
+                {
+                  id: "content",
+                  label: "Other content",
+                  resolveVisibleExtent: sheetSnapVisibleExtent.pixels(150),
+                },
+              ],
+            });
+            return () => h("section", { ref: panel });
+          },
+        }),
+        { attachTo: document.body },
+      );
+      try {
+        await nextTick();
+        expect(motion!.scrimOpacity.value).toBe(0);
+        motion!.open("full");
+        const surface = motion!.primarySurfaceExtent.value;
+        const opening = driver.latest!;
+        opening.update(surface + 80, -100);
+        expect(motion!.scrimOpacity.value).toBe(0);
+        const opacities = [0, 75, 150, 225, 300].map((visible) => {
+          opening.update(surface - visible, -100);
+          return motion!.scrimOpacity.value;
+        });
+        expect(opacities[0]).toBe(0);
+        expect(opacities.at(-1)).toBe(0.56);
+        for (let i = 1; i < opacities.length; i++)
+          expect(opacities[i]).toBeGreaterThan(opacities[i - 1]!);
+        opening.update(surface - 320, -100);
+        expect(motion!.scrimOpacity.value).toBe(0.56);
+        opening.complete();
+        motion!.snapTo("half");
+        driver.latest!.complete();
+        expect(motion!.scrimOpacity.value).toBe(0.28);
+        motion!.snapTo("content");
+        expect(motion!.scrimOpacity.value).toBe(0.28);
+
+        motion!.close();
+        driver.latest!.update(surface - 75, 100);
+        const interruptedOpacity = motion!.scrimOpacity.value;
+        motion!.open("full");
+        expect(motion!.scrimOpacity.value).toBe(interruptedOpacity);
+        driver.latest!.update(surface - 150, -100);
+        expect(motion!.scrimOpacity.value).toBe(0.28);
+        driver.latest!.complete();
+
+        const down = new PointerEvent("pointerdown", {
+          button: 0,
+          buttons: 1,
+          clientX: 200,
+          clientY: 200,
+          pointerId: 9,
+          pointerType: "mouse",
+          isPrimary: true,
+        });
+        Object.defineProperty(down, "currentTarget", { value: panel.value });
+        Object.defineProperty(down, "target", { value: panel.value });
+        motion!.onPointerDown(down);
+        const sign = side === "top" || side === "left" ? -1 : 1;
+        const move = (delta: number) =>
+          window.dispatchEvent(
+            new PointerEvent("pointermove", {
+              buttons: 1,
+              pointerId: 9,
+              pointerType: "mouse",
+              isPrimary: true,
+              clientX: 200 + (side === "left" || side === "right" ? delta * sign : 0),
+              clientY: 200 + (side === "top" || side === "bottom" ? delta * sign : 0),
+            }),
+          );
+        move(90);
+        const draggedOpacity = motion!.scrimOpacity.value;
+        expect(draggedOpacity).toBeLessThan(0.56);
+        move(40);
+        expect(motion!.scrimOpacity.value).toBeGreaterThan(draggedOpacity);
+        window.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 9 }));
+
+        reducedMotionOverride.value = true;
+        await nextTick();
+        motion!.open("full");
+        expect(motion!.scrimOpacity.value).toBe(0.56);
+        motion!.close();
+        expect(motion!.scrimOpacity.value).toBe(0);
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it("uses a calmer top spring, preserves overrides, and restores other sides", async () => {
+    const driver = new ManualAnimationDriver();
+    const panel = ref<HTMLElement>();
+    let motion: ReturnType<typeof useSheetMotion> | undefined;
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          motion = useSheetMotion({
+            driver,
+            panel,
+            side: "top",
+            getMeasureContext: () => fixedViewport(),
+          });
+          return () => h("section", { ref: panel });
+        },
+      }),
+    );
+    try {
+      await nextTick();
+      motion!.open();
+      expect(driver.latest!.request.spring).toEqual({
+        stiffness: 360,
+        damping: 38,
+        mass: 0.9,
+        restSpeed: 12,
+        restDistance: 0.5,
+      });
+      driver.latest!.complete();
+      motion!.close();
+      expect(driver.latest!.request.spring.stiffness).toBe(360);
+      driver.latest!.complete();
+      motion!.setSide("bottom");
+      motion!.open();
+      expect(driver.latest!.request.spring.stiffness).toBe(520);
+      const custom = { stiffness: 480, damping: 40, mass: 1, restSpeed: 10, restDistance: 0.6 };
+      motion!.configure({ spring: custom });
+      motion!.setSide("top");
+      motion!.close();
+      expect(driver.latest!.request.spring).toEqual(custom);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("uses deterministic initial viewport geometry and adopts the browser only on measurement", () => {
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(1000);
+    let firstPosition = 0;
+    let motion: ReturnType<typeof useSheetMotion> | undefined;
+    const panel = ref<HTMLElement>();
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          motion = useSheetMotion({ panel, driver: new ManualAnimationDriver() });
+          firstPosition = motion.position.value;
+          return () => h("section", { ref: panel });
+        },
+      }),
+    );
+    try {
+      expect(firstPosition).toBe(801);
+      motion!.remeasure();
+      expect(motion!.primarySurfaceExtent.value).toBe(1000);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it.each(["top", "bottom", "left", "right"] as const)(
     "starts %s at the physical edge and closes without a hidden travel segment",
     async (side) => {
       const driver = new ManualAnimationDriver();

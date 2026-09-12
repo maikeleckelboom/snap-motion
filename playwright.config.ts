@@ -31,12 +31,22 @@ export default defineConfig({
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     {
       name: "firefox",
-      testMatch: [showcaseSmokeSpec, ...stackedDeckAuditSpecs, ...sheetSpecs],
+      testMatch: [
+        showcaseSmokeSpec,
+        ...stackedDeckAuditSpecs,
+        ...sheetSpecs,
+        "surfaceState.spec.ts",
+      ],
       use: { ...devices["Desktop Firefox"] },
     },
     {
       name: "webkit",
-      testMatch: [showcaseSmokeSpec, ...stackedDeckAuditSpecs, ...sheetSpecs],
+      testMatch: [
+        showcaseSmokeSpec,
+        ...stackedDeckAuditSpecs,
+        ...sheetSpecs,
+        "surfaceState.spec.ts",
+      ],
       use: { ...devices["Desktop Safari"] },
     },
     {

@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+
 import { expect, test, type Page } from "@playwright/test";
 
 import { dragSyntheticPointerBy, expectSheetOpenAt } from "./helpers";
@@ -11,6 +13,132 @@ const body = (page: Page) => dialog(page).locator(".snap-motion-sheet-body");
 const panel = (page: Page) => dialog(page).locator(".snap-motion-sheet-panel");
 const close = (page: Page) => dialog(page).locator(".snap-motion-sheet-close");
 const opener = (page: Page) => page.getByTestId("content-open");
+
+test("top scrim follows expansion in both directions while remaining viewport-fixed", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "no-preference", colorScheme: "dark" });
+  await page.clock.install();
+  await fixture(page);
+  await page.getByTestId("content-snap").selectOption("full");
+  await page.clock.pauseAt(new Date());
+  const sample = () =>
+    page.evaluate(() => {
+      const target = document.querySelector<HTMLDialogElement>('[data-testid="content-sheet"]')!;
+      const surface = target.querySelector<HTMLElement>(".snap-motion-sheet-panel")!;
+      const scrim = target.querySelector<HTMLElement>(".snap-motion-sheet-scrim")!;
+      const rect = scrim.getBoundingClientRect();
+      const style = getComputedStyle(scrim);
+      return {
+        state: target.dataset.sheetState,
+        extent: Number.parseFloat(
+          surface.style.getPropertyValue("--snap-motion-sheet-visible-primary-extent"),
+        ),
+        opacity: Number(style.opacity),
+        color: style.backgroundColor,
+        transform: style.transform,
+        transition: style.transitionDuration,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      };
+    });
+  for (const action of ["open", "close"] as const) {
+    const first = await page.evaluate(async (direction) => {
+      const target = document.querySelector<HTMLDialogElement>('[data-testid="content-sheet"]')!;
+      const original = target.showModal;
+      let firstPaint: { visibility: string; opacity: string } | undefined;
+      target.showModal = function () {
+        original.call(this);
+        firstPaint = {
+          visibility: getComputedStyle(target.querySelector(".snap-motion-sheet-panel")!)
+            .visibility,
+          opacity: getComputedStyle(target.querySelector(".snap-motion-sheet-scrim")!).opacity,
+        };
+      };
+      (direction === "open"
+        ? document.querySelector<HTMLButtonElement>('[data-testid="content-open"]')!
+        : target.querySelector<HTMLButtonElement>(".snap-motion-sheet-close")!
+      ).click();
+      await Promise.resolve();
+      target.showModal = original;
+      return firstPaint;
+    }, action);
+    const frames: Awaited<ReturnType<typeof sample>>[] = [];
+    for (let frame = 0; frame < 100; frame++) {
+      await page.clock.runFor(16);
+      frames.push(await sample());
+      if (frames.at(-1)?.state === (action === "open" ? "open" : "closed")) break;
+    }
+    const trace = { first, frames };
+    await writeFile(testInfo.outputPath(`scrim-${action}.json`), JSON.stringify(trace, null, 2));
+    await testInfo.attach(`top-sheet-${action}.json`, {
+      body: JSON.stringify(trace, null, 2),
+      contentType: "application/json",
+    });
+    if (action === "open") expect(first).toEqual({ visibility: "hidden", opacity: "0" });
+    expect(frames.at(-1)?.state).toBe(action === "open" ? "open" : "closed");
+    expect(frames.at(-1)?.opacity).toBe(action === "open" ? 0.56 : 0);
+    expect(frames.some((frame) => frame.opacity > 0 && frame.opacity < 0.56)).toBe(true);
+    for (const [index, frame] of frames.entries()) {
+      const p = Math.min(1, Math.max(0, frame.extent / 820));
+      expect(frame.opacity).toBeCloseTo(0.56 * p * p * (3 - 2 * p), 5);
+      if (frame.state !== "closed")
+        expect(frame.rect).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+      expect(frame.color).toBe("rgb(0, 0, 0)");
+      expect(frame.transform).toBe("none");
+      expect(frame.transition).toBe("0s");
+      const previous = frames[index - 1];
+      if (
+        previous &&
+        Math.abs(frame.extent - previous.extent) > 1 &&
+        frame.extent < 820 &&
+        previous.extent < 820
+      )
+        expect(Math.sign(frame.opacity - previous.opacity)).toBe(
+          Math.sign(frame.extent - previous.extent),
+        );
+    }
+  }
+  await page.clock.resume();
+  await page.emulateMedia({ colorScheme: "light" });
+  await openSheet(page, "partial");
+  const scrim = dialog(page).locator(".snap-motion-sheet-scrim");
+  await expect(scrim).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  const opacity = () => scrim.evaluate((el) => Number(getComputedStyle(el).opacity));
+  const initial = await opacity();
+  expect(initial).toBeGreaterThan(0);
+  expect(initial).toBeLessThan(0.56);
+  const start = await grabHandle(page);
+  await moveHandle(page, start, -80, 200);
+  const dragged = await opacity();
+  expect(dragged).toBeLessThan(initial);
+  await moveHandle(page, start, -40, 240);
+  expect(await opacity()).toBeGreaterThan(dragged);
+  await moveHandle(page, start, -40, 260, "pointercancel");
+});
+
+test("Sheet scrim resolves with the authoritative live motion preference", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await fixture(page);
+  await openSheet(page, "full");
+  const scrim = dialog(page).locator(".snap-motion-sheet-scrim");
+  await expect(scrim).toHaveCSS("transition-duration", "0s");
+  await expect(scrim).toHaveCSS("opacity", "0.56");
+  for (const [system, override, expected] of [
+    ["no-preference", "system", "false"],
+    ["no-preference", "reduce", "true"],
+    ["reduce", "animate", "false"],
+    ["reduce", "system", "true"],
+  ] as const) {
+    await page.emulateMedia({ reducedMotion: system });
+    await page.getByTestId("content-live-preference").selectOption(override);
+    await expect(dialog(page)).toHaveAttribute("data-reduced-motion", expected);
+    await expect(scrim).toHaveCSS("opacity", "0.56");
+    await expect(scrim).toHaveCSS("transition-duration", "0s");
+  }
+  await close(page).click();
+  await expect(dialog(page)).not.toBeVisible();
+  await expect(opener(page)).toBeFocused();
+});
 
 test.beforeEach(async ({ page }) => {
   const messages: string[] = [];

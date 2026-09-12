@@ -90,6 +90,43 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("durable card styling is independent of pointer and focus state", () => {
+  it.each(["coverflow", "deck"] as const)(
+    "publishes active, visual and settled hooks on %s",
+    async (surface) => {
+      const wrapper = surface === "coverflow" ? mountRail() : mountDeck();
+      const instance = wrapper.vm as unknown as RailInstance;
+      try {
+        await nextTick();
+        instance.synchronizeTo("c");
+        await nextTick();
+        const current = wrapper.get('[data-item-id="c"]');
+        const expectCurrent = () => {
+          expect(current.attributes("data-active")).toBe("true");
+          expect(current.attributes("data-visual")).toBe("true");
+          expect(current.attributes("data-settled")).toBe("true");
+          expect(wrapper.findAll('[data-snap-motion-item][data-active="true"]')).toHaveLength(1);
+          expect(wrapper.attributes("data-settled-id")).toBe("c");
+        };
+        expectCurrent();
+        wrapper.element.dispatchEvent(
+          pointerEvent("pointerdown", { pointerType: "touch", button: 0, buttons: 1 }),
+        );
+        window.dispatchEvent(
+          pointerEvent("pointerup", { pointerType: "touch", button: 0, buttons: 0 }),
+        );
+        await nextTick();
+        expectCurrent();
+        (wrapper.element as HTMLElement).blur();
+        await nextTick();
+        expectCurrent();
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+});
+
 describe("navigation reasons tell the truth", () => {
   it("reports the exact reason for each way a deck can be moved", async () => {
     const wrapper = mountDeck();

@@ -35,15 +35,26 @@
   min-block-size: var(--snap-motion-control-target-size, 44px);
 }
 
-.snap-motion-dialog-close:focus-visible,
-.snap-motion-sheet-close:focus-visible,
-.snap-motion-carousel-next:focus-visible,
-.snap-motion-carousel-previous:focus-visible,
-.snap-motion-carousel-pagination-item:focus-visible,
-.snap-motion-carousel-viewport:focus-visible,
-.snap-motion-sheet-title:focus-visible {
+:is(
+  .snap-motion-dialog-close,
+  .snap-motion-sheet-close,
+  .snap-motion-carousel-next,
+  .snap-motion-carousel-previous,
+  .snap-motion-carousel-pagination-item,
+  .snap-motion-carousel-viewport,
+  .snap-motion-coverflow,
+  .snap-motion-stacked-deck,
+  .snap-motion-sheet-title
+):focus-visible {
   outline: var(--snap-motion-focus-width, 2px) solid var(--snap-motion-focus-color, Highlight);
   outline-offset: 2px;
+}
+
+:is(.snap-motion-carousel-viewport, .snap-motion-coverflow, .snap-motion-stacked-deck):focus:is(
+  :not(:focus-visible),
+  [data-snap-motion-pointer-focus]
+) {
+  outline: none;
 }
 
 .snap-motion-sheet {
@@ -75,10 +86,14 @@
 }
 
 .snap-motion-sheet-scrim {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: #000;
   pointer-events: auto;
+}
+
+.snap-motion-sheet[data-sheet-state="closed"] > .snap-motion-sheet-panel {
+  visibility: hidden;
 }
 
 .snap-motion-sheet-panel {

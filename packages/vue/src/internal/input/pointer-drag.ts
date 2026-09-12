@@ -1,9 +1,11 @@
+import { useEventListener } from "@vueuse/core";
 import { onScopeDispose, ref } from "vue";
 
 import type { PointerIntent } from "../../contracts/motion-contracts";
 import { isHTMLElement } from "../dom/realm";
 import {
   elementOwnsSnapMotionDrag,
+  isAuthoritativeCaptureLoss,
   isSupportedPrimaryPointerStart,
   resolvePointerIntent,
 } from "./pointer-policy";
@@ -39,11 +41,11 @@ export function usePointerDrag(options: PointerDragOptions) {
 
   let captureTarget: HTMLElement | undefined;
   let pointerId: number | undefined;
-  let startPosition = 0;
   let startX = 0;
   let startY = 0;
   let previousUserSelect: string | undefined;
-  let activeAxis: "x" | "y" = typeof options.axis === "function" ? options.axis() : options.axis;
+  let removeListeners: Array<() => void> = [];
+  let activeAxis = currentAxis();
 
   function currentAxis() {
     return typeof options.axis === "function" ? options.axis() : options.axis;
@@ -52,7 +54,7 @@ export function usePointerDrag(options: PointerDragOptions) {
   function sample(event: PointerEvent): PointerDragSample {
     const position = eventPosition(event, activeAxis);
     return {
-      delta: position - startPosition,
+      delta: position - (activeAxis === "x" ? startX : startY),
       position,
       time: event.timeStamp,
     };
@@ -81,7 +83,7 @@ export function usePointerDrag(options: PointerDragOptions) {
 
     try {
       captureTarget.setPointerCapture(pointerId);
-      captureTarget.addEventListener("lostpointercapture", onLostPointerCapture);
+      removeListeners.push(useEventListener(captureTarget, "lostpointercapture", onPointerEnd));
       pointerOwned.value = true;
     } catch {
       pointerOwned.value = false;
@@ -100,23 +102,11 @@ export function usePointerDrag(options: PointerDragOptions) {
     options.onBegin(sample(event), event);
   }
 
-  function removeWindowListeners() {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onPointerUp);
-    window.removeEventListener("pointercancel", onPointerCancel);
-  }
-
   function cleanup() {
-    removeWindowListeners();
+    for (const remove of removeListeners) remove();
+    removeListeners = [];
     setSelectionSuppressed(false);
 
-    if (captureTarget) {
-      captureTarget.removeEventListener("lostpointercapture", onLostPointerCapture);
-    }
     if (captureTarget && pointerId !== undefined && pointerOwned.value) {
       try {
         captureTarget.releasePointerCapture(pointerId);
@@ -164,36 +154,22 @@ export function usePointerDrag(options: PointerDragOptions) {
     options.onMove(sample(event), event);
   }
 
-  function onPointerUp(event: PointerEvent) {
-    if (event.pointerId !== pointerId) {
+  function onPointerEnd(event: PointerEvent) {
+    if (
+      event.pointerId !== pointerId ||
+      (event.type === "lostpointercapture" &&
+        !isAuthoritativeCaptureLoss(event, captureTarget, pointerId))
+    ) {
       return;
     }
 
     if (isDragging.value) {
-      event.preventDefault();
-      options.onEnd(sample(event), event);
-    }
-    cleanup();
-  }
-
-  function onPointerCancel(event: PointerEvent) {
-    if (event.pointerId !== pointerId) {
-      return;
-    }
-
-    if (isDragging.value) {
-      options.onCancel(sample(event), event);
-    }
-    cleanup();
-  }
-
-  function onLostPointerCapture(event: Event) {
-    if (!(event instanceof PointerEvent) || event.pointerId !== pointerId) {
-      return;
-    }
-
-    if (isDragging.value) {
-      options.onCancel(sample(event), event);
+      if (event.type === "pointerup") {
+        event.preventDefault();
+        options.onEnd(sample(event), event);
+      } else {
+        options.onCancel(sample(event), event);
+      }
     }
     cleanup();
   }
@@ -216,13 +192,13 @@ export function usePointerDrag(options: PointerDragOptions) {
     pointerId = event.pointerId;
     pointerInteractionActive.value = true;
     activeAxis = currentAxis();
-    startPosition = eventPosition(event, activeAxis);
     startX = event.clientX;
     startY = event.clientY;
     pointerIntent.value = "pending";
-    window.addEventListener("pointermove", onPointerMove, { passive: false });
-    window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", onPointerCancel);
+    removeListeners = [
+      useEventListener(window, "pointermove", onPointerMove, { passive: false }),
+      useEventListener(window, ["pointerup", "pointercancel"], onPointerEnd),
+    ];
 
     const shouldDeferTouch = options.intent === "horizontal" && event.pointerType === "touch";
     if (!shouldDeferTouch) {

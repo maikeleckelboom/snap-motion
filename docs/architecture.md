@@ -99,8 +99,12 @@ feature barrels so dependency direction stays visible.
 
 Each interaction surface has exactly one authoritative scalar position. The track or sheet transform
 is derived from it. CSS transitions, smooth scrolling, native scroll snap, and parallel animation
-systems are not allowed to animate the same value. Sheet scrim opacity is also derived from the
-sheet scalar rather than animated independently.
+systems are not allowed to animate the same value. The Sheet scrim is viewport-fixed and outside
+the panel transform. Both high-level Sheet and `useSheetMotion().scrimOpacity` derive its opacity
+from physical visible extent divided by the largest enabled snap's visible extent. Clamped progress
+uses smoothstep (`p * p * (3 - 2 * p)`) times the configured maximum opacity. Hidden overshoot travel,
+semantic IDs and content selection do not contribute. Closing, dragging and interruption follow
+the same position without a separate fade. Reduced motion resolves with the panel.
 
 Every sheet side is adapted onto the same canonical scalar: the scalar increases toward closed.
 Bottom and right use a positive physical transform; top and left mirror it. Pointer deltas and

@@ -41,6 +41,7 @@ export const Coverflow: <TItem extends {
         disabled?: boolean;
         landmark?: boolean;
         fallbackStageWidth?: number;
+        cardWidth?: number | undefined;
         elasticity?: ElasticityOptions;
         messages?: Partial<SnapMotionMessages>;
         programmaticImpulse?: number;
@@ -188,6 +189,7 @@ export function useCoverflowMotion<Id extends string>(options: UseCoverflowMotio
 
 // @public (undocumented)
 export interface UseCoverflowMotionOptions<Id extends string> {
+    readonly cardWidth?: MaybeRefOrGetter<number | undefined>;
     readonly controlledId?: MaybeRefOrGetter<Id | undefined>;
     readonly disabled?: () => boolean;
     // (undocumented)

@@ -21,6 +21,11 @@ The internal scalar always increases toward closed. The hidden anchor is interna
 every open anchor. Pointer delta and velocity are normalized at the DOM adapter boundary; release
 selection and scrim progress therefore have one implementation for all sides.
 
+The advanced scalar scrim projection remains available. High-level Sheet uses a separate
+viewport-fixed lifecycle fade so partial snaps and dragging do not change modal dimming. Its
+current timing, top-side spring and first-frame contract are recorded in
+[Sheet presentation and durable card state](../sheet-touch-hardening.md).
+
 Consumer snap points resolve visible primary-axis extent. Top and bottom default to `full`,
 `comfortable`, and `compact`. Left and right default to one `open` point on a bounded fixed-width
 surface; a custom partial point translates that surface rather than changing its inline size.

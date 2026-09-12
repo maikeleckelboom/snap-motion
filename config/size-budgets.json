@@ -6,8 +6,8 @@
   },
   "vueRoot": {
     "entry": "packages/vue/dist/index.js",
-    "maxBytes": 137485,
-    "maxGzipBytes": 36701
+    "maxBytes": 139512,
+    "maxGzipBytes": 37277
   },
   "vueCarousel": {
     "entry": "packages/vue/dist/carousel.js",
@@ -16,18 +16,18 @@
   },
   "vueCoverflow": {
     "entry": "packages/vue/dist/coverflow.js",
-    "maxBytes": 49750,
-    "maxGzipBytes": 14600
+    "maxBytes": 50672,
+    "maxGzipBytes": 14828
   },
   "vueStackedDeck": {
     "entry": "packages/vue/dist/stacked-deck.js",
-    "maxBytes": 56726,
-    "maxGzipBytes": 16583
+    "maxBytes": 57645,
+    "maxGzipBytes": 16825
   },
   "vueSheet": {
     "entry": "packages/vue/dist/sheet.js",
-    "maxBytes": 51842,
-    "maxGzipBytes": 14731
+    "maxBytes": 52536,
+    "maxGzipBytes": 14938
   },
   "vueDialog": {
     "entry": "packages/vue/dist/dialog.js",
@@ -46,7 +46,7 @@
   },
   "baseCss": {
     "entry": "packages/vue/dist/style.css",
-    "maxBytes": 27000,
+    "maxBytes": 27361,
     "maxGzipBytes": 5000
   }
 }
