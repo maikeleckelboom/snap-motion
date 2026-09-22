@@ -1,12 +1,12 @@
 # Snap Motion
 
-Snap Motion is a private, public-beta release candidate for interruptible Vue carousels, stacked
-decks, coverflow rails, modal galleries, dialogs, and multi-edge sheets. The framework-neutral core
-owns semantic geometry, surface state machines, and one scalar physical position; the Vue package
-owns DOM integration and uses Motion as its imperative spring driver.
+Snap Motion is a public, MIT-licensed source repository for interruptible interactive surfaces. Its
+framework-neutral core owns geometry, semantic surface state, and physical position; the Vue
+integration turns those mechanics into carousels, stacked decks, coverflow rails, galleries,
+dialogs, and sheets, using Motion as its imperative spring driver.
 
-The packages are not published. Their npm names are unverified and both manifests intentionally
-remain `private`.
+The reusable packages are currently beta candidates at `0.1.0-beta.10`. Their manifests
+intentionally remain `private`, and neither package is published to npm.
 
 ## Quick start
 

@@ -1,9 +1,9 @@
 # Contributing
 
-Snap Motion is currently developed in a private repository. Discuss architecture or public-contract
-changes before implementation. Keep the framework-neutral controller independent from Vue and the
-DOM, preserve semantic IDs, and do not add animation libraries or production dependencies without a
-measured need.
+Snap Motion is developed in this public repository; its reusable packages remain private and
+unpublished. Discuss architecture or public-contract changes before implementation. Keep the
+framework-neutral controller independent from Vue and the DOM, preserve semantic IDs, and do not
+add animation libraries or production dependencies without a measured need.
 
 Use Node and pnpm versions pinned by the repository, then run:
 
