@@ -312,6 +312,29 @@ export function resolveGalleryCommitOffset(direction: -1 | 1, viewportWidth: num
   return -direction * Math.max(0, viewportWidth);
 }
 
+export function resolveGalleryVisibleIndex(input: {
+  readonly currentIndex: number;
+  readonly destinationIndex: number | undefined;
+  readonly itemCount: number;
+  readonly offset: number;
+  readonly pitch: number;
+  readonly visibleIndex: number;
+}): number {
+  const { currentIndex, destinationIndex, itemCount, offset, pitch, visibleIndex } = input;
+  if (itemCount <= 0 || pitch <= 0 || offset === 0) return currentIndex;
+
+  const direction = Math.sign(-offset);
+  const candidate =
+    destinationIndex !== undefined && Math.sign(destinationIndex - currentIndex) === direction
+      ? destinationIndex
+      : currentIndex + direction;
+  if (candidate < 0 || candidate >= itemCount) return currentIndex;
+
+  const hysteresis = Math.min(12, pitch * 0.02);
+  const crossing = pitch / 2 + (visibleIndex === candidate ? -hysteresis : hysteresis);
+  return Math.abs(offset) >= crossing ? candidate : currentIndex;
+}
+
 export function shouldTransitionGalleryMedia(
   action: GalleryMediaAction,
   reducedMotion: boolean,

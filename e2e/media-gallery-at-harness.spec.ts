@@ -120,22 +120,13 @@ async function expectVisibleGalleryItem(
 
 async function holdButtonTransitionAtMidpoint(page: Page, direction: "next" | "previous") {
   const control = page.getByTestId(`snap-motion-media-gallery-${direction}`);
-  const track = page.getByTestId("snap-motion-media-gallery-track");
   await control.click();
+  await page.clock.runFor(90);
   await expect(gallery(page)).toHaveAttribute("data-track-state", "settling");
-  await track.evaluate(async () => {
-    await new Promise<void>((finishPaint) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => finishPaint())),
-    );
-  });
 }
 
 async function completeHeldButtonTransition(page: Page) {
-  await page.getByTestId("snap-motion-media-gallery-track").evaluate((element) => {
-    element.dispatchEvent(
-      new TransitionEvent("transitionend", { bubbles: true, propertyName: "transform" }),
-    );
-  });
+  await page.clock.runFor(200);
   await expect(gallery(page)).toHaveAttribute("data-track-state", "idle");
 }
 
@@ -420,7 +411,6 @@ test("visible title, description, and count follow held, reversed, cancelled, an
   await page.getByTestId("reduced-motion-mode").selectOption("no-preference");
   await openScenario(page, "baseline");
   const dialog = gallery(page);
-  const track = page.getByTestId("snap-motion-media-gallery-track");
   const originalDescription =
     "Wide timeline description for the exact mechanically settled Gallery item.";
   const incomingDescription = "Tall document description for the settled final Gallery item.";
@@ -447,35 +437,17 @@ test("visible title, description, and count follow held, reversed, cancelled, an
   await galleryPointer(page, "pointerup", -0.05, 900);
   await expect(dialog).toHaveAttribute("data-track-state", "idle");
 
+  await page.clock.pauseAt(new Date());
+
   await galleryPointer(page, "pointerdown", 0);
   await galleryPointer(page, "pointermove", -0.65, 500);
   await expectVisibleGalleryItem(page, "Tall document", incomingDescription, "3 / 3");
   await galleryPointer(page, "pointercancel", -0.65, 600);
   await expect(dialog).toHaveAttribute("data-track-state", "settling");
-  await track.evaluate(async (element) => {
-    for (let frame = 0; frame < 4; frame += 1) {
-      const animation = element.getAnimations()[0];
-      if (animation) {
-        animation.pause();
-        animation.currentTime = 5;
-        return;
-      }
-      await new Promise<void>((resolveFrame) => {
-        requestAnimationFrame(() => resolveFrame());
-      });
-    }
-    throw new Error("Cancelled drag return animation did not start.");
-  });
   await expectVisibleGalleryItem(page, "Tall document", incomingDescription, "3 / 3");
-  await track.evaluate((element) => {
-    const animation = element.getAnimations()[0];
-    if (!animation) {
-      throw new Error("Cancelled drag return animation is unavailable.");
-    }
-    animation.currentTime = 150;
-  });
+  await page.clock.runFor(150);
   await expectVisibleGalleryItem(page, "Wide timeline", originalDescription, "2 / 3");
-  await track.evaluate((element) => element.getAnimations()[0]?.finish());
+  await page.clock.runFor(60);
   await expect(dialog).toHaveAttribute("data-track-state", "idle");
   await expect(dialog).toHaveAttribute("data-settled-id", "wide-timeline");
 
@@ -484,34 +456,16 @@ test("visible title, description, and count follow held, reversed, cancelled, an
   await expectVisibleGalleryItem(page, "Wide timeline", originalDescription, "2 / 3");
   await galleryPointer(page, "pointerup", -0.1, 50);
   await expect(dialog).toHaveAttribute("data-track-state", "settling");
-  await track.evaluate(async (element) => {
-    for (let frame = 0; frame < 4; frame += 1) {
-      const animation = element.getAnimations()[0];
-      if (animation) {
-        animation.pause();
-        animation.currentTime = 5;
-        return;
-      }
-      await new Promise<void>((resolveFrame) => {
-        requestAnimationFrame(() => resolveFrame());
-      });
-    }
-    throw new Error("Flick settlement animation did not start.");
-  });
   await expectVisibleGalleryItem(page, "Wide timeline", originalDescription, "2 / 3");
-  await track.evaluate((element) => {
-    const animation = element.getAnimations()[0];
-    if (!animation) {
-      throw new Error("Flick settlement animation is unavailable.");
-    }
-    animation.currentTime = 150;
-  });
+  await page.clock.runFor(150);
   await expectVisibleGalleryItem(page, "Tall document", incomingDescription, "3 / 3");
   await expect(dialog).toHaveAttribute("data-settled-id", "wide-timeline");
   await expect(page.getByTestId("snap-motion-media-gallery-status")).toHaveText(originalStatus);
   await expect(dialog.getByRole("img")).toHaveAccessibleName(/wide blue timeline/i);
-  await track.evaluate((element) => element.getAnimations()[0]?.finish());
+  await page.clock.runFor(60);
   await expect(dialog).toHaveAttribute("data-settled-id", "tall-document");
+  await page.clock.runFor(60);
+  await expect(dialog).toHaveAttribute("data-track-state", "idle");
   await expect(page.getByTestId("snap-motion-media-gallery-status")).toHaveText(
     "Tall document, 3 of 3",
   );
@@ -550,10 +504,6 @@ test("mixed-aspect navigation preserves usable geometry through both transition 
   page,
 }) => {
   await page.setViewportSize({ width: 2_560, height: 1_312 });
-  await page.addStyleTag({
-    content:
-      ".snap-motion-media-gallery-track.transitioning { transition-delay: -5s !important; transition-duration: 10s !important; }",
-  });
   await page.getByTestId("reduced-motion-mode").selectOption("no-preference");
   await page.getByTestId("at-open-gallery").click();
   await expect(gallery(page)).toHaveAttribute("data-image-state", "loaded");
@@ -561,6 +511,7 @@ test("mixed-aspect navigation preserves usable geometry through both transition 
   await page.getByTestId("snap-motion-media-gallery-shell").evaluate(async (element) => {
     await Promise.all(element.getAnimations().map((animation) => animation.finished));
   });
+  await page.clock.pauseAt(new Date());
 
   const wideSettled = await captureGalleryGeometry(page, ["wide-timeline"]);
   expect(wideSettled.viewportStyles).toMatchObject({

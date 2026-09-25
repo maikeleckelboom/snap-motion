@@ -1,13 +1,7 @@
 <script setup lang="ts" generic="TItem extends MediaGalleryItem">
 import type { ActiveIdRequestDetails, SettlementDetails } from "@snap-motion/core";
 import type { CloseReason, FocusReturnOptions, InitialFocus } from "@snap-motion/vue/dialog";
-import {
-  useEventListener,
-  useRafFn,
-  useResizeObserver,
-  useScrollLock,
-  useTimeoutFn,
-} from "@vueuse/core";
+import { useEventListener, useResizeObserver, useScrollLock, useTimeoutFn } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from "vue";
 
 import {
@@ -22,7 +16,7 @@ import {
   type FocusHandoffObservation,
   type FocusRestoreVerification,
 } from "../../internal/accessibility/focus-restore";
-import { isElement, isHTMLElement, isHTMLImageElement } from "../../internal/dom/realm";
+import { isElement, isHTMLElement } from "../../internal/dom/realm";
 import {
   fittedMediaTransform,
   type GalleryMediaAction,
@@ -38,7 +32,6 @@ import {
 import {
   canonicalMediaGalleryTransform,
   clampGalleryIndex,
-  hasDistinctMediaGallerySource,
   isRepeatedGalleryTap,
   normalizeMediaGalleryItems,
   panMediaTransform,
@@ -53,9 +46,10 @@ import {
 } from "../media-gallery-math";
 import { createEnglishMediaGalleryMessages } from "../media-gallery-messages";
 import { MEDIA_GALLERY_TUNING } from "../media-gallery-tuning";
+import { useGalleryImages } from "../useGalleryImages";
+import { useGalleryTrack } from "../useGalleryTrack";
 
 type DialogState = "closed" | "closing" | "open" | "opening";
-type ImageLoadState = "failed" | "loaded" | "pending" | "preview";
 type MediaTransitionMode = "direct" | "discrete";
 type PointerMode = "blocked" | "pan" | "pending" | "swipe";
 type TrackNavigationState = "idle" | "recentering" | "settling";
@@ -144,25 +138,15 @@ const latestValidAuthorityId = shallowRef<TId | undefined>(
 );
 const mechanicalAnchorId = shallowRef<TId | undefined>(intendedActiveId.value);
 const galleryIndex = ref(indexForId(intendedActiveId.value));
-const visibleIndex = ref(galleryIndex.value);
 const dialogState = ref<DialogState>("closed");
-const imageLoadStateByItem = ref<Record<string, ImageLoadState>>({});
-const imageRetryAttemptByItem = ref<Record<string, number>>({});
-const imageRetryAuthorityByItem = ref<Record<string, number>>({});
-const imageRetryRequestByItem = ref<Record<string, string>>({});
-const selectedFullSourceByItem = ref<Record<string, string>>({});
-const previewFailedByItem = ref<Record<string, boolean>>({});
 const mounted = ref(false);
 const openCycleGeneration = ref(0);
-const itemCollectionGeneration = ref(0);
 const liveMessage = ref("");
 const pointerMode = ref<PointerMode | "idle">("idle");
 const pointerCount = ref(0);
 const transform = shallowRef<MediaTransform>({ ...fittedMediaTransform });
 const mediaTransitionMode = ref<MediaTransitionMode>("direct");
-const trackOffsetX = ref(0);
 const trackNavigationState = ref<TrackNavigationState>("idle");
-const trackTransitionEnabled = ref(false);
 const trackDestinationIndex = ref<number>();
 const previousFocused = ref(false);
 const nextFocused = ref(false);
@@ -183,15 +167,17 @@ let openingFrame: number | undefined;
 let trackFrame: number | undefined;
 let lockedRoot: HTMLElement | undefined;
 let previousPaddingInlineEnd = "";
-let pendingTrackDestination: number | undefined;
-let pendingTrackDestinationId: TId | undefined;
-let pendingTrackAnnouncement = true;
-let pendingTrackReason: ActiveIdRequestDetails["reason"] | undefined;
-let pendingTrackGeneration: number | undefined;
+let pendingTrack:
+  | {
+      destination: number | undefined;
+      destinationId: TId | undefined;
+      announcement: boolean;
+      reason: ActiveIdRequestDetails["reason"] | undefined;
+      generation: number;
+    }
+  | undefined;
 let navigationGeneration = 0;
 let closeGeneration = 0;
-let activeAuthorityGeneration = 0;
-let retryRequestIdentity = 0;
 let capturedOpener: HTMLElement | undefined;
 let capturedOpenerGeneration = 0;
 let capturedOpenerWasExplicit = false;
@@ -210,6 +196,21 @@ let geometry = {
   top: 0,
   width: 0,
 };
+const {
+  animateTo: animateTrackTo,
+  getOffset: getTrackOffset,
+  reset: resetTrack,
+  setOffset: setTrackOffset,
+  stop: stopTrack,
+  visibleIndex,
+} = useGalleryTrack({
+  currentIndex: () => galleryIndex.value,
+  destinationIndex: () => trackDestinationIndex.value,
+  itemCount: () => items.value.length,
+  pitch: () => geometry.width,
+  reducedMotion,
+  track: trackElement,
+});
 
 function explicitOpenerForCurrentLifecycle() {
   if (capturedOpener) return capturedOpenerWasExplicit ? capturedOpener : undefined;
@@ -226,6 +227,32 @@ function clearPendingCloseHandoffs() {
 }
 
 const activeItem = computed(() => items.value[galleryIndex.value] ?? items.value[0]);
+const {
+  activeImageLoadState,
+  beginOpenCycle: beginImageCycle,
+  canRetryActiveImage,
+  imageLoadState,
+  imageRetryAttempt,
+  imageRetryAuthority,
+  itemCollectionGeneration,
+  onFullImageError,
+  onFullImageLoad,
+  onPreviewImageError,
+  previewFailedByItem,
+  replaceCollection: replaceImageCollection,
+  retryImage,
+  shouldMountFull,
+  visibleFullSrc,
+  visibleFullSrcset,
+} = useGalleryImages({
+  activeItem,
+  dialog,
+  isOpen: () => mounted.value && props.open && dialog.value?.open === true,
+  items,
+  onActiveLoad: measureGeometry,
+  openCycleGeneration,
+  preloadPolicy: () => props.preloadPolicy,
+});
 const visibleGalleryIndex = computed(() =>
   trackNavigationState.value === "idle" && pointerMode.value !== "swipe"
     ? galleryIndex.value
@@ -248,23 +275,10 @@ const isZoomed = computed(() => transform.value.scale > 1.001);
 const canZoomIn = computed(() => transform.value.scale < 4 - 0.001);
 const canZoomOut = computed(() => isZoomed.value);
 const scalePercentage = computed(() => Math.round(transform.value.scale * 100));
-const activeImageLoadState = computed<ImageLoadState>(() => {
-  const item = activeItem.value;
-  return item ? (imageLoadStateByItem.value[item.id] ?? imageLoadDefault(item)) : "preview";
-});
-const canRetryActiveImage = computed(() => {
-  const item = activeItem.value;
-  if (!item) return false;
-  const selectedSource = selectedFullSourceByItem.value[item.id];
-  return selectedSource !== undefined && resolveRetryRequestUrl(selectedSource) !== undefined;
-});
 const transformStyle = computed(() => ({
   "--_gallery-pan-x": `${transform.value.x.toFixed(3)}px`,
   "--_gallery-pan-y": `${transform.value.y.toFixed(3)}px`,
   "--_gallery-scale": transform.value.scale.toFixed(4),
-}));
-const trackStyle = computed(() => ({
-  "--_gallery-track-x": `${trackOffsetX.value.toFixed(3)}px`,
 }));
 const galleryPosition = computed(() =>
   messages.value.position({ index: visibleGalleryIndex.value, count: items.value.length }),
@@ -283,67 +297,26 @@ const { start: startCloseFallback, stop: stopCloseFallback } = useTimeoutFn(
   MEDIA_GALLERY_TUNING.closeDuration + 80,
   { immediate: false },
 );
-const { start: startTrackFallback, stop: stopTrackFallback } = useTimeoutFn(
-  (generation: number) => void completeTrackSettlement(generation),
-  MEDIA_GALLERY_TUNING.trackDuration + 80,
-  { immediate: false },
-);
-const { pause: pauseVisibleTrack, resume: sampleVisibleTrack } = useRafFn(
-  () => {
-    if (pointerMode.value !== "swipe" && trackNavigationState.value !== "settling") {
-      pauseVisibleTrack();
-      return;
-    }
-    const track = trackElement.value;
-    const viewport = imageViewport.value;
-    if (!track || !viewport) return;
-    const viewportRect = viewport.getBoundingClientRect();
-    const width = viewportRect.width;
-    if (width <= 0) return;
-    // Read the painted track, since trackOffsetX is only the CSS transition target.
-    const offset = track.getBoundingClientRect().left - viewportRect.left;
-    const direction = Math.sign(-offset);
-    const destination = trackDestinationIndex.value;
-    const candidate =
-      destination !== undefined && Math.sign(destination - galleryIndex.value) === direction
-        ? destination
-        : galleryIndex.value + direction;
-    const neighbor =
-      candidate >= 0 && candidate < items.value.length ? candidate : galleryIndex.value;
-    const hysteresis = Math.min(12, width * 0.02);
-    const crossing = width / 2 + (visibleIndex.value === neighbor ? -hysteresis : hysteresis);
-    visibleIndex.value = Math.abs(offset) >= crossing ? neighbor : galleryIndex.value;
-  },
-  { immediate: false },
-);
-
 function cancelOpeningWork() {
   if (openingFrame === undefined) return;
   cancelAnimationFrame(openingFrame);
   openingFrame = undefined;
 }
 
-function resetTrackState() {
-  pauseVisibleTrack();
-  visibleIndex.value = galleryIndex.value;
-  pendingTrackDestination = undefined;
-  pendingTrackDestinationId = undefined;
-  pendingTrackAnnouncement = true;
-  pendingTrackReason = undefined;
-  pendingTrackGeneration = undefined;
+function resetTrackState(preserveOffset = false) {
+  if (preserveOffset) stopTrack();
+  else resetTrack();
+  pendingTrack = undefined;
   trackDestinationIndex.value = undefined;
-  trackOffsetX.value = 0;
-  trackTransitionEnabled.value = false;
   trackNavigationState.value = "idle";
 }
 
-function cancelTrackWork() {
-  stopTrackFallback();
+function cancelTrackWork(preserveOffset = false) {
   if (trackFrame !== undefined) {
     cancelAnimationFrame(trackFrame);
     trackFrame = undefined;
   }
-  resetTrackState();
+  resetTrackState(preserveOffset);
 }
 
 function invalidateOpenCycle(): number {
@@ -352,21 +325,10 @@ function invalidateOpenCycle(): number {
   return openCycleGeneration.value;
 }
 
-function invalidateNavigation(): number {
+function invalidateNavigation(preserveOffset = false): number {
   navigationGeneration += 1;
-  cancelTrackWork();
+  cancelTrackWork(preserveOffset);
   return navigationGeneration;
-}
-
-function beginNavigation(preserveTrackOffset = false): number {
-  const currentTrackOffset = trackOffsetX.value;
-  const currentVisibleIndex = visibleIndex.value;
-  const generation = invalidateNavigation();
-  if (preserveTrackOffset) {
-    trackOffsetX.value = currentTrackOffset;
-    visibleIndex.value = currentVisibleIndex;
-  }
-  return generation;
 }
 
 function invalidateClose(): number {
@@ -397,27 +359,6 @@ function isNavigationCurrent(generation: number): boolean {
     props.open &&
     dialog.value?.open === true &&
     (dialogState.value === "open" || dialogState.value === "opening")
-  );
-}
-
-function isMediaOperationCurrent(
-  openGeneration: number,
-  collectionGeneration: number,
-  item: MediaGalleryItem,
-  attempt?: number,
-  retryAuthority?: number,
-): boolean {
-  return (
-    mounted.value &&
-    props.open &&
-    dialog.value?.open === true &&
-    openGeneration === openCycleGeneration.value &&
-    collectionGeneration === itemCollectionGeneration.value &&
-    items.value.some((candidate) => candidate.id === item.id) &&
-    (attempt === undefined || attempt === imageRetryAttempt(item)) &&
-    (attempt === undefined ||
-      attempt === 0 ||
-      (retryAuthority === activeAuthorityGeneration && item.id === activeItem.value?.id))
   );
 }
 
@@ -539,217 +480,6 @@ function announceCurrent() {
   }
 }
 
-function imageLoadDefault(item: MediaGalleryItem): ImageLoadState {
-  return hasDistinctFullSource(item) ? "pending" : "preview";
-}
-
-function hasDistinctFullSource(item: MediaGalleryItem): boolean {
-  return hasDistinctMediaGallerySource(item.full, item.preview);
-}
-
-function shouldMountFull(item: MediaGalleryItem): boolean {
-  return (
-    hasDistinctFullSource(item) &&
-    (props.preloadPolicy === "adjacent-full" || item.id === activeItem.value?.id)
-  );
-}
-
-function ensureImageState(item: MediaGalleryItem | undefined, reset = false) {
-  if (!item || (!reset && imageLoadStateByItem.value[item.id])) return;
-  imageLoadStateByItem.value = {
-    ...imageLoadStateByItem.value,
-    [item.id]: imageLoadDefault(item),
-  };
-}
-
-function ensureTrackImageStates() {
-  for (const slot of trackSlots.value) {
-    ensureImageState(slot.item);
-  }
-}
-
-function imageLoadState(item: MediaGalleryItem): ImageLoadState {
-  return imageLoadStateByItem.value[item.id] ?? imageLoadDefault(item);
-}
-
-function imageRetryAttempt(item: MediaGalleryItem): number {
-  return imageRetryAttemptByItem.value[item.id] ?? 0;
-}
-
-function visibleFullSrc(item: MediaGalleryItem): string {
-  return imageRetryRequestByItem.value[item.id] ?? item.full.src;
-}
-
-function visibleFullSrcset(item: MediaGalleryItem): string | undefined {
-  return imageRetryAttempt(item) === 0 ? item.full.srcset : undefined;
-}
-
-function selectedFullSource(image: HTMLImageElement): string | undefined {
-  const source = image.currentSrc.trim();
-  return source || undefined;
-}
-
-function captureSelectedFullSource(
-  image: HTMLImageElement,
-  item: MediaGalleryItem,
-  attempt: number,
-) {
-  if (attempt !== 0 || selectedFullSourceByItem.value[item.id]) return;
-  const source = selectedFullSource(image);
-  if (!source) return;
-  selectedFullSourceByItem.value = { ...selectedFullSourceByItem.value, [item.id]: source };
-}
-
-function resolveRetryRequestUrl(source: string): URL | undefined {
-  let url: URL;
-  try {
-    url = new URL(source, dialog.value?.ownerDocument.baseURI);
-  } catch {
-    return undefined;
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
-
-  return url;
-}
-
-function createRetryRequestSource(source: string): string | undefined {
-  const url = resolveRetryRequestUrl(source);
-  if (!url) return undefined;
-
-  retryRequestIdentity += 1;
-  url.searchParams.append(
-    "snap-motion-retry",
-    `${openCycleGeneration.value}-${itemCollectionGeneration.value}-${retryRequestIdentity}`,
-  );
-  return url.href;
-}
-
-function clearItemRetry(itemId: string) {
-  imageRetryAttemptByItem.value = withoutKey(imageRetryAttemptByItem.value, itemId);
-  imageRetryAuthorityByItem.value = withoutKey(imageRetryAuthorityByItem.value, itemId);
-  imageRetryRequestByItem.value = withoutKey(imageRetryRequestByItem.value, itemId);
-  selectedFullSourceByItem.value = withoutKey(selectedFullSourceByItem.value, itemId);
-}
-
-function resetMediaSourceState() {
-  imageLoadStateByItem.value = {};
-  imageRetryAttemptByItem.value = {};
-  imageRetryAuthorityByItem.value = {};
-  imageRetryRequestByItem.value = {};
-  selectedFullSourceByItem.value = {};
-  previewFailedByItem.value = {};
-}
-
-function setImageLoadState(item: MediaGalleryItem, state: ImageLoadState) {
-  imageLoadStateByItem.value = { ...imageLoadStateByItem.value, [item.id]: state };
-}
-
-async function onFullImageLoad(event: Event, item: MediaGalleryItem) {
-  const image = event.currentTarget;
-  if (!isHTMLImageElement(image)) {
-    return;
-  }
-  if (!shouldMountFull(item)) return;
-  const attempt = Number(image.dataset.retryAttempt);
-  const retryAuthority = Number(image.dataset.retryAuthority);
-  const openGeneration = Number(image.dataset.openCycle);
-  const collectionGeneration = Number(image.dataset.itemCollection);
-  if (
-    !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority)
-  ) {
-    return;
-  }
-  captureSelectedFullSource(image, item, attempt);
-  try {
-    await image.decode();
-  } catch {
-    if (
-      isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority)
-    ) {
-      setImageLoadState(item, "failed");
-    }
-    return;
-  }
-  if (
-    !shouldMountFull(item) ||
-    !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority) ||
-    !image.complete ||
-    image.naturalWidth <= 0 ||
-    image.naturalHeight <= 0
-  ) {
-    return;
-  }
-  setImageLoadState(item, "loaded");
-  if (item.id === activeItem.value?.id) {
-    await nextTick();
-    if (
-      !isMediaOperationCurrent(openGeneration, collectionGeneration, item, attempt, retryAuthority)
-    ) {
-      return;
-    }
-    measureGeometry();
-  }
-}
-
-function onFullImageError(event: Event, item: MediaGalleryItem) {
-  const image = event.currentTarget;
-  const attempt = isHTMLImageElement(image) ? Number(image.dataset.retryAttempt) : Number.NaN;
-  if (
-    isHTMLImageElement(image) &&
-    shouldMountFull(item) &&
-    isMediaOperationCurrent(
-      Number(image.dataset.openCycle),
-      Number(image.dataset.itemCollection),
-      item,
-      attempt,
-      Number(image.dataset.retryAuthority),
-    )
-  ) {
-    captureSelectedFullSource(image, item, attempt);
-    setImageLoadState(item, "failed");
-  }
-}
-
-function onPreviewImageError(event: Event, item: MediaGalleryItem) {
-  const image = event.currentTarget;
-  if (
-    isHTMLImageElement(image) &&
-    isMediaOperationCurrent(
-      Number(image.dataset.openCycle),
-      Number(image.dataset.itemCollection),
-      item,
-    )
-  ) {
-    previewFailedByItem.value = { ...previewFailedByItem.value, [item.id]: true };
-  }
-}
-
-function retryImage() {
-  const item = activeItem.value;
-  if (!item || !shouldMountFull(item)) return;
-  const selectedSource = selectedFullSourceByItem.value[item.id];
-  if (!selectedSource) return;
-  const retrySource = createRetryRequestSource(selectedSource);
-  if (!retrySource) return;
-  const attempt = imageRetryAttempt(item) + 1;
-  imageRetryRequestByItem.value = { ...imageRetryRequestByItem.value, [item.id]: retrySource };
-  imageRetryAuthorityByItem.value = {
-    ...imageRetryAuthorityByItem.value,
-    [item.id]: activeAuthorityGeneration,
-  };
-  imageRetryAttemptByItem.value = {
-    ...imageRetryAttemptByItem.value,
-    [item.id]: attempt,
-  };
-  setImageLoadState(item, "pending");
-}
-
-function withoutKey<TValue>(record: Record<string, TValue>, key: string): Record<string, TValue> {
-  const remaining = { ...record };
-  delete remaining[key];
-  return remaining;
-}
-
 function setMediaTransformElement(itemId: string, element: Element | null) {
   if (isHTMLElement(element)) mediaTransformElements.set(itemId, element);
   else mediaTransformElements.delete(itemId);
@@ -796,54 +526,31 @@ function beginTrackSettlement(
   destinationId?: TId,
 ) {
   if (!isNavigationCurrent(generation)) return;
-  stopTrackFallback();
-  pendingTrackDestination = destinationIndex;
-  pendingTrackDestinationId = destinationId;
-  pendingTrackAnnouncement = announcement;
-  pendingTrackReason = reason;
-  pendingTrackGeneration = generation;
-  trackTransitionEnabled.value = true;
+  pendingTrack = { destination: destinationIndex, destinationId, announcement, reason, generation };
   trackNavigationState.value = "settling";
-  if (destinationIndex === undefined) {
-    trackOffsetX.value = 0;
-  } else {
-    const direction = Math.sign(destinationIndex - galleryIndex.value) as -1 | 1;
-    trackOffsetX.value = resolveGalleryCommitOffset(direction, geometry.width);
-  }
-  if (reducedMotion.value) {
-    trackTransitionEnabled.value = false;
-    void completeTrackSettlement(generation);
-    return;
-  }
-  sampleVisibleTrack();
-  startTrackFallback(generation);
+  const direction = Math.sign((destinationIndex ?? galleryIndex.value) - galleryIndex.value) as
+    | -1
+    | 0
+    | 1;
+  const offset = direction === 0 ? 0 : resolveGalleryCommitOffset(direction, geometry.width);
+  animateTrackTo(offset, () => void completeTrackSettlement(generation));
 }
 
-async function completeTrackSettlement(generation = pendingTrackGeneration) {
+async function completeTrackSettlement(generation: number) {
+  const settlement = pendingTrack;
   if (
-    generation === undefined ||
     !isNavigationCurrent(generation) ||
-    pendingTrackGeneration !== generation ||
+    settlement?.generation !== generation ||
     trackNavigationState.value !== "settling"
   ) {
     return;
   }
-  stopTrackFallback();
-  const destination = pendingTrackDestination;
-  const destinationId = pendingTrackDestinationId;
-  const announcement = pendingTrackAnnouncement;
-  const reason = pendingTrackReason;
-  pendingTrackDestination = undefined;
-  pendingTrackDestinationId = undefined;
-  pendingTrackAnnouncement = true;
-  pendingTrackReason = undefined;
+  const { destination, destinationId, announcement, reason } = settlement;
 
   if (destination === undefined) {
-    pauseVisibleTrack();
-    visibleIndex.value = galleryIndex.value;
-    trackTransitionEnabled.value = false;
+    resetTrack();
     trackNavigationState.value = "idle";
-    pendingTrackGeneration = undefined;
+    pendingTrack = undefined;
     return;
   }
   if (items.value[destination]?.id !== destinationId) {
@@ -851,25 +558,21 @@ async function completeTrackSettlement(generation = pendingTrackGeneration) {
     return;
   }
 
-  trackTransitionEnabled.value = false;
   trackNavigationState.value = "recentering";
   galleryIndex.value = destination;
-  pauseVisibleTrack();
-  visibleIndex.value = destination;
-  trackOffsetX.value = 0;
+  resetTrack();
   trackDestinationIndex.value = undefined;
   mediaTransitionMode.value = "direct";
   resetTransform();
-  ensureTrackImageStates();
   await nextTick();
-  if (!isNavigationCurrent(generation) || pendingTrackGeneration !== generation) return;
+  if (!isNavigationCurrent(generation) || pendingTrack !== settlement) return;
   measureGeometry();
   if (trackFrame !== undefined) cancelAnimationFrame(trackFrame);
   trackFrame = requestAnimationFrame(() => {
     trackFrame = undefined;
-    if (!isNavigationCurrent(generation) || pendingTrackGeneration !== generation) return;
+    if (!isNavigationCurrent(generation) || pendingTrack !== settlement) return;
     trackNavigationState.value = "idle";
-    pendingTrackGeneration = undefined;
+    pendingTrack = undefined;
     const id = items.value[galleryIndex.value]?.id;
     if (props.activeId !== undefined && id !== props.activeId) {
       const authoritativeId = resolveRollbackId();
@@ -880,12 +583,6 @@ async function completeTrackSettlement(generation = pendingTrackGeneration) {
     if (id && reason) emit("settled", id, { reason });
     if (announcement) announceCurrent();
   });
-}
-
-function onTrackTransitionEnd(event: TransitionEvent) {
-  if (event.currentTarget === event.target && event.propertyName === "transform") {
-    void completeTrackSettlement(pendingTrackGeneration);
-  }
 }
 
 async function changeIndex(
@@ -911,12 +608,11 @@ async function changeIndex(
     return true;
   }
   clearPointerState();
-  const generation = beginNavigation();
+  const generation = invalidateNavigation();
   const destinationId = items.value[nextIndex]?.id;
   if (!destinationId) return false;
   acceptActiveId(destinationId, reason);
   trackDestinationIndex.value = nextIndex;
-  ensureTrackImageStates();
   await nextTick();
   if (
     !isNavigationCurrent(generation) ||
@@ -970,7 +666,6 @@ function synchronizeExact(id: TId, reportSettlement = true): boolean {
   clearPointerState();
   galleryIndex.value = index;
   resetTransform();
-  ensureTrackImageStates();
   if (reportSettlement && dialog.value?.open) emit("settled", id, { reason: "external" });
   return true;
 }
@@ -1001,7 +696,7 @@ function startPinch() {
     pointerIds: [first.id, second.id],
   };
   setMediaTransition("pinch");
-  trackOffsetX.value = 0;
+  setTrackOffset(0);
 }
 
 function updatePinch() {
@@ -1144,13 +839,9 @@ function onWindowPointerMove(event: PointerEvent) {
     }
     if (gesture.mode === "swipe") {
       setMediaTransition("swipe");
-      trackOffsetX.value = resolveGalleryTrackOffset(
-        deltaX,
-        geometry.width,
-        galleryIndex.value,
-        items.value.length,
+      setTrackOffset(
+        resolveGalleryTrackOffset(deltaX, geometry.width, galleryIndex.value, items.value.length),
       );
-      sampleVisibleTrack();
     }
   }
   event.preventDefault();
@@ -1184,7 +875,7 @@ function onWindowPointerUp(event: PointerEvent) {
     if (activePointers.size === 0) {
       gesture = undefined;
       pointerMode.value = "idle";
-      trackOffsetX.value = 0;
+      setTrackOffset(0);
     }
     return;
   }
@@ -1205,16 +896,15 @@ function onWindowPointerUp(event: PointerEvent) {
   const wasTap = Math.hypot(deltaX, deltaY) < MEDIA_GALLERY_TUNING.swipeThreshold;
   if (direction !== 0) {
     const destination = galleryIndex.value + direction;
-    const generation = beginNavigation(true);
+    const generation = invalidateNavigation(true);
     const destinationId = items.value[destination]?.id;
     if (!destinationId) return;
     acceptActiveId(destinationId, "drag");
     trackDestinationIndex.value = destination;
-    ensureTrackImageStates();
     beginTrackSettlement(destination, true, "drag", generation, destinationId);
   } else {
-    if (Math.abs(trackOffsetX.value) > 0.01) {
-      const generation = beginNavigation(true);
+    if (Math.abs(getTrackOffset()) > 0.01) {
+      const generation = invalidateNavigation(true);
       beginTrackSettlement(undefined, true, undefined, generation);
     }
     if (wasTap) handleTouchTap(event);
@@ -1229,7 +919,7 @@ function onWindowPointerCancel(event: PointerEvent) {
   safeReleasePointer(event.pointerId);
   if (gesture) gesture.cancelled = true;
   clearPointerState();
-  const generation = beginNavigation(true);
+  const generation = invalidateNavigation(true);
   beginTrackSettlement(undefined, true, undefined, generation);
 }
 
@@ -1331,8 +1021,7 @@ async function openDialog(lifecycle: number) {
   focusRestoreVerification?.cancel();
   focusRestoreVerification = undefined;
   const generation = invalidateOpenCycle();
-  activeAuthorityGeneration += 1;
-  resetMediaSourceState();
+  beginImageCycle();
   invalidateNavigation();
   invalidateClose();
   closingLifecycleGeneration = undefined;
@@ -1343,16 +1032,11 @@ async function openDialog(lifecycle: number) {
   }
   const requestedIndex = items.value.findIndex((item) => item.id === intendedActiveId.value);
   galleryIndex.value = requestedIndex < 0 ? 0 : requestedIndex;
-  trackDestinationIndex.value = undefined;
-  trackOffsetX.value = 0;
-  trackTransitionEnabled.value = false;
-  trackNavigationState.value = "idle";
   mediaTransitionMode.value = "direct";
   resetTransform();
   dialogState.value = "opening";
   if (!target.open) target.showModal();
   lockDocumentScroll();
-  for (const slot of trackSlots.value) ensureImageState(slot.item, true);
   await nextTick();
   if (!isOpenCycleCurrent(generation, target)) return;
   measureGeometry();
@@ -1575,31 +1259,14 @@ watch(
   { flush: "sync", immediate: true },
 );
 
-watch(
-  () => activeItem.value?.id,
-  (id, previousId) => {
-    if (id === previousId) return;
-    activeAuthorityGeneration += 1;
-    if (!id) return;
-
-    const item = items.value.find((candidate) => candidate.id === id);
-    if (!item || !selectedFullSourceByItem.value[id]) return;
-    clearItemRetry(id);
-    setImageLoadState(item, imageLoadDefault(item));
-  },
-  { flush: "sync" },
-);
-
 watch(items, (nextItems, previousItems) => {
-  itemCollectionGeneration.value += 1;
-  activeAuthorityGeneration += 1;
+  replaceImageCollection();
   const collectionGeneration = itemCollectionGeneration.value;
   const openGeneration = openCycleGeneration.value;
   const navigation = invalidateNavigation();
   const previousId = previousItems[galleryIndex.value]?.id;
   const previousSemanticId = semanticActiveId.value;
   const nextIds = new Set(nextItems.map((item) => item.id));
-  resetMediaSourceState();
   for (const id of mediaTransformElements.keys()) {
     if (!nextIds.has(id)) mediaTransformElements.delete(id);
   }
@@ -1642,7 +1309,6 @@ watch(items, (nextItems, previousItems) => {
     }
   }
   resetTransform();
-  ensureTrackImageStates();
   void (async () => {
     await nextTick();
     if (
@@ -1798,10 +1464,7 @@ defineExpose({
           <div
             ref="trackElement"
             class="snap-motion-media-gallery-track"
-            :class="{ transitioning: trackTransitionEnabled }"
-            :style="trackStyle"
             data-testid="snap-motion-media-gallery-track"
-            @transitionend="onTrackTransitionEnd"
           >
             <div
               v-for="slot in trackSlots"
@@ -1864,7 +1527,7 @@ defineExpose({
                   :data-item-collection="itemCollectionGeneration"
                   :data-open-cycle="openCycleGeneration"
                   :data-retry-attempt="imageRetryAttempt(slot.item)"
-                  :data-retry-authority="imageRetryAuthorityByItem[slot.item.id] ?? 0"
+                  :data-retry-authority="imageRetryAuthority(slot.item)"
                   :sizes="slot.item.full.sizes"
                   :srcset="visibleFullSrcset(slot.item)"
                   :src="visibleFullSrc(slot.item)"

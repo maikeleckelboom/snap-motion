@@ -39,6 +39,7 @@ let originalShowModal: typeof HTMLDialogElement.prototype.showModal;
 let originalClose: typeof HTMLDialogElement.prototype.close;
 let originalDecode: typeof HTMLImageElement.prototype.decode;
 let originalGetClientRects: typeof HTMLElement.prototype.getClientRects;
+let originalGetBoundingClientRect: typeof HTMLElement.prototype.getBoundingClientRect;
 
 function showModalStub(this: HTMLDialogElement) {
   this.setAttribute("open", "");
@@ -61,6 +62,7 @@ function runAnimationFrameImmediately(callback: FrameRequestCallback) {
 
 function useControlledAnimationFrames() {
   let nextFrame = 1;
+  let timestamp = 0;
   const callbacks = new Map<number, FrameRequestCallback>();
   const request = vi.fn<(callback: FrameRequestCallback) => number>((callback) => {
     const frame = nextFrame;
@@ -81,7 +83,8 @@ function useControlledAnimationFrames() {
       const entry = callbacks.entries().next().value as [number, FrameRequestCallback] | undefined;
       if (!entry) return false;
       callbacks.delete(entry[0]);
-      entry[1](0);
+      timestamp += 20;
+      entry[1](timestamp);
       await flushReactiveTasks();
       return true;
     },
@@ -123,12 +126,24 @@ function mountGallery(
   });
 }
 
-async function settleTrack(wrapper: VueWrapper) {
+async function settleTrack(
+  wrapper: VueWrapper,
+  frames?: ReturnType<typeof useControlledAnimationFrames>,
+) {
   await nextTick();
-  await wrapper.get('[data-testid="snap-motion-media-gallery-track"]').trigger("transitionend", {
-    propertyName: "transform",
-  });
+  await frames?.flushAll();
   await nextTick();
+}
+
+async function advanceToRecentering(
+  wrapper: VueWrapper,
+  frames: ReturnType<typeof useControlledAnimationFrames>,
+) {
+  for (let frame = 0; frame < 15; frame += 1) {
+    if (wrapper.get("dialog").attributes("data-track-state") === "recentering") return;
+    if (!(await frames.flushNext())) break;
+  }
+  expect(wrapper.get("dialog").attributes("data-track-state")).toBe("recentering");
 }
 
 async function flushReactiveTasks() {
@@ -152,11 +167,18 @@ beforeEach(() => {
   originalClose = HTMLDialogElement.prototype.close;
   originalDecode = HTMLImageElement.prototype.decode;
   originalGetClientRects = HTMLElement.prototype.getClientRects;
+  originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
 
   HTMLDialogElement.prototype.showModal = showModalStub;
   HTMLDialogElement.prototype.close = closeDialogStub;
   HTMLImageElement.prototype.decode = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
   HTMLElement.prototype.getClientRects = getClientRectsStub;
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    if (this.classList.contains("snap-motion-media-gallery-viewport")) {
+      return new DOMRect(0, 0, 800, 500);
+    }
+    return originalGetBoundingClientRect.call(this);
+  };
   vi.stubGlobal("requestAnimationFrame", runAnimationFrameImmediately);
   vi.stubGlobal("cancelAnimationFrame", vi.fn<(handle: number) => void>());
   Object.defineProperties(HTMLImageElement.prototype, {
@@ -170,6 +192,7 @@ afterEach(() => {
   HTMLDialogElement.prototype.close = originalClose;
   HTMLImageElement.prototype.decode = originalDecode;
   HTMLElement.prototype.getClientRects = originalGetClientRects;
+  HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
   vi.unstubAllGlobals();
   document.body.replaceChildren();
   document.documentElement.removeAttribute("style");
@@ -540,15 +563,13 @@ describe("MediaGalleryDialog lifecycle", () => {
     await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
     await flushReactiveTasks();
     await frames.flushNext();
-    await wrapper.get('[data-testid="snap-motion-media-gallery-track"]').trigger("transitionend", {
-      propertyName: "transform",
-    });
+    await advanceToRecentering(wrapper, frames);
     await flushReactiveTasks();
 
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("1");
     expect(wrapper.get("dialog").attributes("data-track-state")).toBe("recentering");
     expect(wrapper.emitted("settled")).toBeUndefined();
-    expect(frames.pending()).toBe(1);
+    expect(frames.pending()).toBeGreaterThan(0);
 
     await wrapper.setProps({ open: false });
     await wrapper.get('[data-testid="snap-motion-media-gallery-shell"]').trigger("transitionend", {
@@ -979,7 +1000,7 @@ describe("MediaGalleryDialog navigation", () => {
     expect(gallery.settledId).toBe("b");
     expect(await frames.flushNext()).toBe(true);
     expect(wrapper.get("dialog").attributes("data-track-state")).toBe("settling");
-    await settleTrack(wrapper);
+    await settleTrack(wrapper, frames);
     await frames.flushAll();
     expect(gallery.settledId).toBe("b");
     expect(wrapper.emitted("settled") ?? []).not.toContainEqual(["c", { reason: "programmatic" }]);
@@ -1113,15 +1134,13 @@ describe("MediaGalleryDialog navigation", () => {
     ).toBe("true");
     expect(namedImages(wrapper)).toHaveLength(1);
 
-    await wrapper.get('[data-testid="snap-motion-media-gallery-track"]').trigger("transitionend", {
-      propertyName: "transform",
-    });
+    await advanceToRecentering(wrapper, frames);
     await flushReactiveTasks();
     expect(exposedSlots(wrapper)).toHaveLength(1);
     expect(exposedSlots(wrapper)[0]?.attributes("data-item-id")).toBe("two");
     expect(wrapper.emitted("settled")).toBeUndefined();
 
-    await frames.flushNext();
+    await frames.flushAll();
     expect(wrapper.emitted("settled")?.at(-1)).toEqual(["two", { reason: "next" }]);
     expect(wrapper.get('[data-testid="snap-motion-media-gallery-status"]').text()).toBe(
       "Two, 2 of 3",
@@ -1149,15 +1168,32 @@ describe("MediaGalleryDialog navigation", () => {
     expect(next.attributes("aria-disabled")).toBe("false");
     expect(next.attributes("disabled")).toBeUndefined();
 
-    await wrapper.get('[data-testid="snap-motion-media-gallery-track"]').trigger("transitionend", {
-      propertyName: "transform",
-    });
+    await advanceToRecentering(wrapper, frames);
     await flushReactiveTasks();
 
     expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("2");
     expect(previous.attributes("disabled")).toBeUndefined();
     expect(next.attributes("aria-disabled")).toBe("true");
     expect(next.attributes()).toHaveProperty("disabled");
+  });
+
+  it("finishes an active track from its owned offset when reduced motion becomes active", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountGallery({ reducedMotionOverride: false });
+    await flushReactiveTasks();
+    await frames.flushNext();
+
+    await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
+    await flushReactiveTasks();
+    await frames.flushNext();
+    expect(wrapper.get("dialog").attributes("data-track-state")).toBe("settling");
+
+    await wrapper.setProps({ reducedMotionOverride: true });
+    await flushReactiveTasks();
+    await frames.flushAll();
+    expect(wrapper.get("dialog").attributes("data-track-state")).toBe("idle");
+    expect(wrapper.get("dialog").attributes("data-gallery-index")).toBe("1");
+    expect(wrapper.emitted("settled")?.at(-1)).toEqual(["two", { reason: "next" }]);
   });
 });
 

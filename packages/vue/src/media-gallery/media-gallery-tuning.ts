@@ -8,5 +8,5 @@ export const MEDIA_GALLERY_TUNING = {
   zoomStep: 0.5,
   doubleTapScale: 2,
   closeDuration: 220,
-  trackDuration: 160,
+  trackDuration: 180,
 } as const;

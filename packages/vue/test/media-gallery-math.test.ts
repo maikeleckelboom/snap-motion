@@ -14,6 +14,7 @@ import {
   hasDistinctMediaGallerySource,
   isRepeatedGalleryTap,
   resolveGalleryCommitOffset,
+  resolveGalleryVisibleIndex,
   resolveGalleryMediaVisibility,
   resolvePreservedGalleryIndex,
   resolveGallerySwipe,
@@ -51,6 +52,37 @@ const galleryItem = (changes: Partial<MediaGalleryItem> = {}): MediaGalleryItem 
   preview: { src: "/one-preview.jpg", width: 800, height: 500 },
   full: { src: "/one-full.jpg", width: 1_600, height: 1_000 },
   ...changes,
+});
+
+describe("gallery visible identity", () => {
+  const base = {
+    currentIndex: 1,
+    destinationIndex: undefined,
+    itemCount: 3,
+    offset: 0,
+    pitch: 800,
+    visibleIndex: 1,
+  };
+
+  it.each([
+    ["rest", { offset: 0 }, 1],
+    ["forward before crossing", { offset: -411 }, 1],
+    ["forward after crossing", { offset: -413 }, 2],
+    ["forward midpoint jitter", { offset: -400, visibleIndex: 2 }, 2],
+    ["forward reversal", { offset: -387, visibleIndex: 2 }, 1],
+    ["backward after crossing", { offset: 413 }, 0],
+    ["backward midpoint jitter", { offset: 400, visibleIndex: 0 }, 0],
+    ["backward reversal", { offset: 387, visibleIndex: 0 }, 1],
+    ["first boundary", { currentIndex: 0, offset: 800, visibleIndex: 0 }, 0],
+    ["last boundary", { currentIndex: 2, offset: -800, visibleIndex: 2 }, 2],
+    ["committed flick before center", { destinationIndex: 2, offset: -100 }, 1],
+    ["committed flick after center", { destinationIndex: 2, offset: -800 }, 2],
+    ["autonomous distant destination", { itemCount: 5, destinationIndex: 4, offset: -800 }, 4],
+    ["cancelled return", { offset: -387, visibleIndex: 2 }, 1],
+    ["instant recenter", { currentIndex: 2, offset: 0, visibleIndex: 2 }, 2],
+  ] as const)("%s", (_name, changes, expected) => {
+    expect(resolveGalleryVisibleIndex({ ...base, ...changes })).toBe(expected);
+  });
 });
 
 describe("gallery three-slot track", () => {
