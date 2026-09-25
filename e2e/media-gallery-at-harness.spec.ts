@@ -80,6 +80,44 @@ async function closeGallery(page: Page) {
   await expect(gallery(page)).not.toBeVisible();
 }
 
+async function galleryPointer(
+  page: Page,
+  type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel",
+  fraction: number,
+  elapsedMs = 0,
+) {
+  await page.getByTestId("snap-motion-media-gallery-viewport").evaluate(
+    (viewport, input) => {
+      const rect = viewport.getBoundingClientRect();
+      const event = new PointerEvent(input.type, {
+        bubbles: true,
+        button: 0,
+        buttons: input.type === "pointerup" || input.type === "pointercancel" ? 0 : 1,
+        cancelable: true,
+        clientX: rect.left + rect.width * (0.5 + input.fraction),
+        clientY: rect.top + rect.height / 2,
+        isPrimary: true,
+        pointerId: 428,
+        pointerType: "touch",
+      });
+      Object.defineProperty(event, "timeStamp", { value: input.start + input.elapsedMs });
+      (input.type === "pointerdown" ? viewport : window).dispatchEvent(event);
+    },
+    { type, fraction, elapsedMs, start: 1000 },
+  );
+}
+
+async function expectVisibleGalleryItem(
+  page: Page,
+  title: string,
+  description: string,
+  position: string,
+) {
+  await expect(page.getByTestId("snap-motion-media-gallery-title")).toHaveText(title);
+  await expect(page.getByTestId("snap-motion-media-gallery-description")).toHaveText(description);
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText(position);
+}
+
 async function holdButtonTransitionAtMidpoint(page: Page, direction: "next" | "previous") {
   const control = page.getByTestId(`snap-motion-media-gallery-${direction}`);
   const track = page.getByTestId("snap-motion-media-gallery-track");
@@ -374,6 +412,109 @@ test("settled item description and application actions share the native modal", 
   await expect(actionButton).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(actionLink).toBeFocused();
+});
+
+test("visible title, description, and count follow held, reversed, cancelled, and flicked tracks", async ({
+  page,
+}) => {
+  await page.getByTestId("reduced-motion-mode").selectOption("no-preference");
+  await openScenario(page, "baseline");
+  const dialog = gallery(page);
+  const track = page.getByTestId("snap-motion-media-gallery-track");
+  const originalDescription =
+    "Wide timeline description for the exact mechanically settled Gallery item.";
+  const incomingDescription = "Tall document description for the settled final Gallery item.";
+  const originalStatus = "Wide timeline, 2 of 3";
+  await expectVisibleGalleryItem(page, "Wide timeline", originalDescription, "2 / 3");
+
+  await galleryPointer(page, "pointerdown", 0);
+  await galleryPointer(page, "pointermove", -0.48, 300);
+  await expectVisibleGalleryItem(page, "Wide timeline", originalDescription, "2 / 3");
+  await galleryPointer(page, "pointermove", -0.53, 400);
+  await expectVisibleGalleryItem(page, "Tall document", incomingDescription, "3 / 3");
+  await galleryPointer(page, "pointermove", -0.5, 450);
+  await expectVisibleGalleryItem(page, "Tall document", incomingDescription, "3 / 3");
+  await galleryPointer(page, "pointermove", -0.47, 475);
+  await expectVisibleGalleryItem(page, "Wide timeline", originalDescription, "2 / 3");
+  await galleryPointer(page, "pointermove", -0.65, 500);
+  await expectVisibleGalleryItem(page, "Tall document", incomingDescription, "3 / 3");
+  await expect(dialog).toHaveAttribute("data-settled-id", "wide-timeline");
+  await expect(page.getByTestId("snap-motion-media-gallery-status")).toHaveText(originalStatus);
+  await expect(dialog.getByRole("img")).toHaveAccessibleName(/wide blue timeline/i);
+
+  await galleryPointer(page, "pointermove", -0.05, 700);
+  await expectVisibleGalleryItem(page, "Wide timeline", originalDescription, "2 / 3");
+  await galleryPointer(page, "pointerup", -0.05, 900);
+  await expect(dialog).toHaveAttribute("data-track-state", "idle");
+
+  await galleryPointer(page, "pointerdown", 0);
+  await galleryPointer(page, "pointermove", -0.65, 500);
+  await expectVisibleGalleryItem(page, "Tall document", incomingDescription, "3 / 3");
+  await galleryPointer(page, "pointercancel", -0.65, 600);
+  await expect(dialog).toHaveAttribute("data-track-state", "settling");
+  await track.evaluate(async (element) => {
+    for (let frame = 0; frame < 4; frame += 1) {
+      const animation = element.getAnimations()[0];
+      if (animation) {
+        animation.pause();
+        animation.currentTime = 5;
+        return;
+      }
+      await new Promise<void>((resolveFrame) => {
+        requestAnimationFrame(() => resolveFrame());
+      });
+    }
+    throw new Error("Cancelled drag return animation did not start.");
+  });
+  await expectVisibleGalleryItem(page, "Tall document", incomingDescription, "3 / 3");
+  await track.evaluate((element) => {
+    const animation = element.getAnimations()[0];
+    if (!animation) {
+      throw new Error("Cancelled drag return animation is unavailable.");
+    }
+    animation.currentTime = 150;
+  });
+  await expectVisibleGalleryItem(page, "Wide timeline", originalDescription, "2 / 3");
+  await track.evaluate((element) => element.getAnimations()[0]?.finish());
+  await expect(dialog).toHaveAttribute("data-track-state", "idle");
+  await expect(dialog).toHaveAttribute("data-settled-id", "wide-timeline");
+
+  await galleryPointer(page, "pointerdown", 0);
+  await galleryPointer(page, "pointermove", -0.1, 25);
+  await expectVisibleGalleryItem(page, "Wide timeline", originalDescription, "2 / 3");
+  await galleryPointer(page, "pointerup", -0.1, 50);
+  await expect(dialog).toHaveAttribute("data-track-state", "settling");
+  await track.evaluate(async (element) => {
+    for (let frame = 0; frame < 4; frame += 1) {
+      const animation = element.getAnimations()[0];
+      if (animation) {
+        animation.pause();
+        animation.currentTime = 5;
+        return;
+      }
+      await new Promise<void>((resolveFrame) => {
+        requestAnimationFrame(() => resolveFrame());
+      });
+    }
+    throw new Error("Flick settlement animation did not start.");
+  });
+  await expectVisibleGalleryItem(page, "Wide timeline", originalDescription, "2 / 3");
+  await track.evaluate((element) => {
+    const animation = element.getAnimations()[0];
+    if (!animation) {
+      throw new Error("Flick settlement animation is unavailable.");
+    }
+    animation.currentTime = 150;
+  });
+  await expectVisibleGalleryItem(page, "Tall document", incomingDescription, "3 / 3");
+  await expect(dialog).toHaveAttribute("data-settled-id", "wide-timeline");
+  await expect(page.getByTestId("snap-motion-media-gallery-status")).toHaveText(originalStatus);
+  await expect(dialog.getByRole("img")).toHaveAccessibleName(/wide blue timeline/i);
+  await track.evaluate((element) => element.getAnimations()[0]?.finish());
+  await expect(dialog).toHaveAttribute("data-settled-id", "tall-document");
+  await expect(page.getByTestId("snap-motion-media-gallery-status")).toHaveText(
+    "Tall document, 3 of 3",
+  );
 });
 
 test("baseline event order ends with a bounded focus-restoration trace entry", async ({ page }) => {

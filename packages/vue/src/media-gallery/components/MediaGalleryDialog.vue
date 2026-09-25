@@ -1,7 +1,13 @@
 <script setup lang="ts" generic="TItem extends MediaGalleryItem">
 import type { ActiveIdRequestDetails, SettlementDetails } from "@snap-motion/core";
 import type { CloseReason, FocusReturnOptions, InitialFocus } from "@snap-motion/vue/dialog";
-import { useEventListener, useResizeObserver, useScrollLock, useTimeoutFn } from "@vueuse/core";
+import {
+  useEventListener,
+  useRafFn,
+  useResizeObserver,
+  useScrollLock,
+  useTimeoutFn,
+} from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from "vue";
 
 import {
@@ -128,6 +134,7 @@ const shell = ref<HTMLElement>();
 const closeButton = ref<HTMLButtonElement>();
 const titleHeading = ref<HTMLElement>();
 const imageViewport = ref<HTMLElement>();
+const trackElement = ref<HTMLElement>();
 const intendedActiveId = shallowRef<TId | undefined>(props.activeId ?? items.value[0]?.id);
 const internalActiveId = shallowRef<TId | undefined>(intendedActiveId.value);
 const latestValidAuthorityId = shallowRef<TId | undefined>(
@@ -137,6 +144,7 @@ const latestValidAuthorityId = shallowRef<TId | undefined>(
 );
 const mechanicalAnchorId = shallowRef<TId | undefined>(intendedActiveId.value);
 const galleryIndex = ref(indexForId(intendedActiveId.value));
+const visibleIndex = ref(galleryIndex.value);
 const dialogState = ref<DialogState>("closed");
 const imageLoadStateByItem = ref<Record<string, ImageLoadState>>({});
 const imageRetryAttemptByItem = ref<Record<string, number>>({});
@@ -218,6 +226,12 @@ function clearPendingCloseHandoffs() {
 }
 
 const activeItem = computed(() => items.value[galleryIndex.value] ?? items.value[0]);
+const visibleGalleryIndex = computed(() =>
+  trackNavigationState.value === "idle" && pointerMode.value !== "swipe"
+    ? galleryIndex.value
+    : visibleIndex.value,
+);
+const visibleItem = computed(() => items.value[visibleGalleryIndex.value] ?? items.value[0]);
 const semanticActiveId = computed<TId | undefined>(() => props.activeId ?? internalActiveId.value);
 const settledId = computed<TId | undefined>(() => activeItem.value?.id);
 const trackSlots = computed(() =>
@@ -253,7 +267,7 @@ const trackStyle = computed(() => ({
   "--_gallery-track-x": `${trackOffsetX.value.toFixed(3)}px`,
 }));
 const galleryPosition = computed(() =>
-  messages.value.position({ index: galleryIndex.value, count: items.value.length }),
+  messages.value.position({ index: visibleGalleryIndex.value, count: items.value.length }),
 );
 const previousLabel = computed(() => {
   const item = items.value[galleryIndex.value - 1];
@@ -274,6 +288,34 @@ const { start: startTrackFallback, stop: stopTrackFallback } = useTimeoutFn(
   MEDIA_GALLERY_TUNING.trackDuration + 80,
   { immediate: false },
 );
+const { pause: pauseVisibleTrack, resume: sampleVisibleTrack } = useRafFn(
+  () => {
+    if (pointerMode.value !== "swipe" && trackNavigationState.value !== "settling") {
+      pauseVisibleTrack();
+      return;
+    }
+    const track = trackElement.value;
+    const viewport = imageViewport.value;
+    if (!track || !viewport) return;
+    const viewportRect = viewport.getBoundingClientRect();
+    const width = viewportRect.width;
+    if (width <= 0) return;
+    // Read the painted track, since trackOffsetX is only the CSS transition target.
+    const offset = track.getBoundingClientRect().left - viewportRect.left;
+    const direction = Math.sign(-offset);
+    const destination = trackDestinationIndex.value;
+    const candidate =
+      destination !== undefined && Math.sign(destination - galleryIndex.value) === direction
+        ? destination
+        : galleryIndex.value + direction;
+    const neighbor =
+      candidate >= 0 && candidate < items.value.length ? candidate : galleryIndex.value;
+    const hysteresis = Math.min(12, width * 0.02);
+    const crossing = width / 2 + (visibleIndex.value === neighbor ? -hysteresis : hysteresis);
+    visibleIndex.value = Math.abs(offset) >= crossing ? neighbor : galleryIndex.value;
+  },
+  { immediate: false },
+);
 
 function cancelOpeningWork() {
   if (openingFrame === undefined) return;
@@ -282,6 +324,8 @@ function cancelOpeningWork() {
 }
 
 function resetTrackState() {
+  pauseVisibleTrack();
+  visibleIndex.value = galleryIndex.value;
   pendingTrackDestination = undefined;
   pendingTrackDestinationId = undefined;
   pendingTrackAnnouncement = true;
@@ -316,8 +360,12 @@ function invalidateNavigation(): number {
 
 function beginNavigation(preserveTrackOffset = false): number {
   const currentTrackOffset = trackOffsetX.value;
+  const currentVisibleIndex = visibleIndex.value;
   const generation = invalidateNavigation();
-  if (preserveTrackOffset) trackOffsetX.value = currentTrackOffset;
+  if (preserveTrackOffset) {
+    trackOffsetX.value = currentTrackOffset;
+    visibleIndex.value = currentVisibleIndex;
+  }
   return generation;
 }
 
@@ -767,6 +815,7 @@ function beginTrackSettlement(
     void completeTrackSettlement(generation);
     return;
   }
+  sampleVisibleTrack();
   startTrackFallback(generation);
 }
 
@@ -790,6 +839,8 @@ async function completeTrackSettlement(generation = pendingTrackGeneration) {
   pendingTrackReason = undefined;
 
   if (destination === undefined) {
+    pauseVisibleTrack();
+    visibleIndex.value = galleryIndex.value;
     trackTransitionEnabled.value = false;
     trackNavigationState.value = "idle";
     pendingTrackGeneration = undefined;
@@ -803,6 +854,8 @@ async function completeTrackSettlement(generation = pendingTrackGeneration) {
   trackTransitionEnabled.value = false;
   trackNavigationState.value = "recentering";
   galleryIndex.value = destination;
+  pauseVisibleTrack();
+  visibleIndex.value = destination;
   trackOffsetX.value = 0;
   trackDestinationIndex.value = undefined;
   mediaTransitionMode.value = "direct";
@@ -1097,6 +1150,7 @@ function onWindowPointerMove(event: PointerEvent) {
         galleryIndex.value,
         items.value.length,
       );
+      sampleVisibleTrack();
     }
   }
   event.preventDefault();
@@ -1672,17 +1726,17 @@ defineExpose({
         </div>
         <div class="snap-motion-media-gallery-identity" aria-live="off">
           <div class="snap-motion-media-gallery-item-heading">
-            <strong data-testid="snap-motion-media-gallery-title">{{ activeItem?.title }}</strong>
+            <strong data-testid="snap-motion-media-gallery-title">{{ visibleItem?.title }}</strong>
             <span class="tabular" data-testid="snap-motion-media-gallery-position">
               {{ galleryPosition }}
             </span>
           </div>
           <p
-            v-if="activeItem?.description"
+            v-if="visibleItem?.description"
             class="snap-motion-media-gallery-description"
             data-testid="snap-motion-media-gallery-description"
           >
-            {{ activeItem.description }}
+            {{ visibleItem.description }}
           </p>
         </div>
         <div class="snap-motion-media-gallery-header-actions">
@@ -1742,6 +1796,7 @@ defineExpose({
           @pointerdown="onImagePointerDown"
         >
           <div
+            ref="trackElement"
             class="snap-motion-media-gallery-track"
             :class="{ transitioning: trackTransitionEnabled }"
             :style="trackStyle"
