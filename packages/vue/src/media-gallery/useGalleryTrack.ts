@@ -1,28 +1,11 @@
 import { useRafFn } from "@vueuse/core";
+import { cubicBezier } from "motion";
 import { ref, watch, type ComputedRef, type Ref } from "vue";
 
 import { resolveGalleryVisibleIndex } from "./media-gallery-math";
 import { MEDIA_GALLERY_TUNING } from "./media-gallery-tuning";
 
-function cubicTrackCoordinate(t: number, first: number, second: number): number {
-  const remaining = 1 - t;
-  return 3 * remaining * remaining * t * first + 3 * remaining * t * t * second + t * t * t;
-}
-
-/** Match the former CSS cubic-bezier(0.22, 0.8, 0.2, 1) travel curve. */
-function easeTrack(progress: number): number {
-  if (progress <= 0) return 0;
-  if (progress >= 1) return 1;
-
-  let lower = 0;
-  let upper = 1;
-  for (let iteration = 0; iteration < 20; iteration += 1) {
-    const t = (lower + upper) / 2;
-    if (cubicTrackCoordinate(t, 0.22, 0.2) < progress) lower = t;
-    else upper = t;
-  }
-  return cubicTrackCoordinate((lower + upper) / 2, 0.8, 1);
-}
+const easeTrack = cubicBezier(0.22, 0.8, 0.2, 1);
 
 interface TrackTravel {
   readonly from: number;
