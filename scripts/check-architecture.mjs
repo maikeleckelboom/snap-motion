@@ -125,10 +125,9 @@ for (const file of sourceFiles) {
           `${repoPath(file)} imports external runtime ${specifier}; core must stay independent.`,
         );
       }
-      const forbiddenGalleryRuntime =
-        ["@snap-motion/core", "vue-router"].includes(specifier) ||
-        (specifier === "motion" &&
-          repoPath(file) !== "packages/vue/src/media-gallery/useGalleryTrack.ts");
+      const forbiddenGalleryRuntime = ["@snap-motion/core", "motion", "vue-router"].includes(
+        specifier,
+      );
       if (
         vueArea(file) === "media-gallery" &&
         forbiddenGalleryRuntime &&

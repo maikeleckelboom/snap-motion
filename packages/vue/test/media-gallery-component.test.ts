@@ -63,6 +63,7 @@ function runAnimationFrameImmediately(callback: FrameRequestCallback) {
 function useControlledAnimationFrames() {
   let nextFrame = 1;
   let timestamp = 0;
+  vi.spyOn(Date, "now").mockImplementation(() => timestamp);
   const callbacks = new Map<number, FrameRequestCallback>();
   const request = vi.fn<(callback: FrameRequestCallback) => number>((callback) => {
     const frame = nextFrame;
@@ -193,6 +194,7 @@ afterEach(() => {
   HTMLImageElement.prototype.decode = originalDecode;
   HTMLElement.prototype.getClientRects = originalGetClientRects;
   HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
   document.documentElement.removeAttribute("style");
