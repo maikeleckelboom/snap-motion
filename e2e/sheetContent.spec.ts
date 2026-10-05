@@ -21,7 +21,8 @@ test("top scrim follows expansion in both directions while remaining viewport-fi
   await page.clock.install();
   await fixture(page);
   await page.getByTestId("content-snap").selectOption("full");
-  await page.clock.pauseAt(new Date());
+  // Pause before opening, allowing for transport time between the host and browser clocks.
+  await page.clock.pauseAt(new Date(Date.now() + 1_000));
   const sample = () =>
     page.evaluate(() => {
       const target = document.querySelector<HTMLDialogElement>('[data-testid="content-sheet"]')!;
