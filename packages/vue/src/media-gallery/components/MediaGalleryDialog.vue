@@ -35,10 +35,8 @@ import {
   isRepeatedGalleryTap,
   normalizeMediaGalleryItems,
   panMediaTransform,
-  resolveGalleryCommitOffset,
   resolvePreservedGalleryIndex,
   resolveGallerySwipe,
-  resolveGalleryTrackOffset,
   resolveGalleryTrackSlots,
   resolvePinchTransform,
   shouldTransitionGalleryMedia,
@@ -63,6 +61,8 @@ interface PointerSample {
 }
 
 interface GestureSession {
+  readonly startOffset: number;
+  readonly targetIndex: number;
   readonly pointerId: number;
   readonly pointerType: string;
   readonly startPan: MediaPoint;
@@ -147,7 +147,8 @@ const pointerCount = ref(0);
 const transform = shallowRef<MediaTransform>({ ...fittedMediaTransform });
 const mediaTransitionMode = ref<MediaTransitionMode>("direct");
 const trackNavigationState = ref<TrackNavigationState>("idle");
-const trackDestinationIndex = ref<number>();
+// Retain keyed physical slots through takeovers. Coordinates change only at actual rest.
+const retainedTrackSlots = shallowRef<readonly { itemIndex: number; position: number }[]>();
 const previousFocused = ref(false);
 const nextFocused = ref(false);
 const zoomInFocused = ref(false);
@@ -177,6 +178,7 @@ let pendingTrack:
     }
   | undefined;
 let navigationGeneration = 0;
+let navigationReason: ActiveIdRequestDetails["reason"] | undefined;
 let closeGeneration = 0;
 let capturedOpener: HTMLElement | undefined;
 let capturedOpenerGeneration = 0;
@@ -205,8 +207,7 @@ const {
   visibleIndex,
 } = useGalleryTrack({
   currentIndex: () => galleryIndex.value,
-  destinationIndex: () => trackDestinationIndex.value,
-  itemCount: () => items.value.length,
+  slots: () => trackSlots.value,
   pitch: () => geometry.width,
   reducedMotion,
   track: trackElement,
@@ -241,6 +242,7 @@ const {
   previewFailedByItem,
   replaceCollection: replaceImageCollection,
   retryImage,
+  refreshSources,
   shouldMountFull,
   visibleFullSrc,
   visibleFullSrcset,
@@ -254,7 +256,7 @@ const {
   preloadPolicy: () => props.preloadPolicy,
 });
 const visibleGalleryIndex = computed(() =>
-  trackNavigationState.value === "idle" && pointerMode.value !== "swipe"
+  trackNavigationState.value === "idle" && pointerMode.value === "idle"
     ? galleryIndex.value
     : visibleIndex.value,
 );
@@ -262,13 +264,13 @@ const visibleItem = computed(() => items.value[visibleGalleryIndex.value] ?? ite
 const semanticActiveId = computed<TId | undefined>(() => props.activeId ?? internalActiveId.value);
 const settledId = computed<TId | undefined>(() => activeItem.value?.id);
 const trackSlots = computed(() =>
-  resolveGalleryTrackSlots(galleryIndex.value, items.value.length, trackDestinationIndex.value).map(
-    (slot) => ({ ...slot, item: items.value[slot.itemIndex] }),
-  ),
+  (
+    retainedTrackSlots.value ?? resolveGalleryTrackSlots(galleryIndex.value, items.value.length)
+  ).map((slot) => ({ ...slot, item: items.value[slot.itemIndex] })),
 );
-const canGoPrevious = computed(() => galleryIndex.value > 0);
-const canGoNext = computed(() => galleryIndex.value < items.value.length - 1);
-const galleryBusy = computed(() => trackNavigationState.value !== "idle");
+const navigationIndex = computed(() => indexForId(intendedActiveId.value));
+const canGoPrevious = computed(() => navigationIndex.value > 0);
+const canGoNext = computed(() => navigationIndex.value < items.value.length - 1);
 const canNavigatePrevious = canGoPrevious;
 const canNavigateNext = canGoNext;
 const isZoomed = computed(() => transform.value.scale > 1.001);
@@ -284,11 +286,11 @@ const galleryPosition = computed(() =>
   messages.value.position({ index: visibleGalleryIndex.value, count: items.value.length }),
 );
 const previousLabel = computed(() => {
-  const item = items.value[galleryIndex.value - 1];
+  const item = items.value[navigationIndex.value - 1];
   return messages.value.previousItem({ title: item?.title });
 });
 const nextLabel = computed(() => {
-  const item = items.value[galleryIndex.value + 1];
+  const item = items.value[navigationIndex.value + 1];
   return messages.value.nextItem({ title: item?.title });
 });
 
@@ -305,9 +307,11 @@ function cancelOpeningWork() {
 
 function resetTrackState(preserveOffset = false) {
   if (preserveOffset) stopTrack();
-  else resetTrack();
+  else {
+    retainedTrackSlots.value = undefined;
+    resetTrack();
+  }
   pendingTrack = undefined;
-  trackDestinationIndex.value = undefined;
   trackNavigationState.value = "idle";
 }
 
@@ -385,6 +389,7 @@ function resolveRollbackId(): TId | undefined {
 function acceptActiveId(id: TId | undefined, reason: ActiveIdRequestDetails["reason"]): void {
   if (id === intendedActiveId.value) return;
   intendedActiveId.value = id;
+  navigationReason = reason;
   if (props.activeId === undefined) {
     internalActiveId.value = id;
     mechanicalAnchorId.value = id;
@@ -518,6 +523,53 @@ function interruptDiscreteTransform() {
   transform.value = rendered;
 }
 
+function prepareTrackDestination(destination: number) {
+  const physicalSlots = [...trackSlots.value].map(({ itemIndex, position }) => ({
+    itemIndex,
+    position,
+  }));
+  const origin = physicalSlots.find((slot) => slot.itemIndex === navigationIndex.value);
+  const direction = Math.sign(destination - navigationIndex.value);
+  if (!physicalSlots.some((slot) => slot.itemIndex === destination)) {
+    let position = (origin?.position ?? 0) + direction;
+    while (physicalSlots.some((slot) => slot.position === position)) position += direction || 1;
+    physicalSlots.push({ itemIndex: destination, position });
+  }
+  const target = physicalSlots.find((slot) => slot.itemIndex === destination);
+  if (target) {
+    for (const step of [-1, 1]) {
+      const itemIndex = destination + step;
+      const position = target.position + step;
+      if (
+        itemIndex >= 0 &&
+        itemIndex < items.value.length &&
+        !physicalSlots.some((slot) => slot.itemIndex === itemIndex || slot.position === position)
+      ) {
+        physicalSlots.push({ itemIndex, position });
+      }
+    }
+  }
+  retainedTrackSlots.value = physicalSlots;
+}
+
+function resolveDragOffset(start: number, delta: number) {
+  const positions = trackSlots.value.map((slot) => slot.position);
+  const minimum = -Math.max(...positions) * geometry.width;
+  const maximum = -Math.min(...positions) * geometry.width;
+  const value = start + Math.max(-geometry.width, Math.min(geometry.width, delta));
+  if (value < minimum) return minimum - Math.min(24, (minimum - value) * 0.08);
+  if (value > maximum) return maximum + Math.min(24, (value - maximum) * 0.08);
+  return value;
+}
+
+function resumeIntendedSettlement(generation: number) {
+  const destination = navigationIndex.value;
+  const id = items.value[destination]?.id;
+  if (id && (destination !== galleryIndex.value || navigationReason !== undefined)) {
+    beginTrackSettlement(destination, true, navigationReason, generation, id);
+  } else beginTrackSettlement(undefined, false, undefined, generation);
+}
+
 function beginTrackSettlement(
   destinationIndex?: number,
   announcement = true,
@@ -528,11 +580,10 @@ function beginTrackSettlement(
   if (!isNavigationCurrent(generation)) return;
   pendingTrack = { destination: destinationIndex, destinationId, announcement, reason, generation };
   trackNavigationState.value = "settling";
-  const direction = Math.sign((destinationIndex ?? galleryIndex.value) - galleryIndex.value) as
-    | -1
-    | 0
-    | 1;
-  const offset = direction === 0 ? 0 : resolveGalleryCommitOffset(direction, geometry.width);
+  const position =
+    trackSlots.value.find((slot) => slot.itemIndex === (destinationIndex ?? galleryIndex.value))
+      ?.position ?? 0;
+  const offset = -position * geometry.width;
   animateTrackTo(offset, () => void completeTrackSettlement(generation));
 }
 
@@ -560,8 +611,8 @@ async function completeTrackSettlement(generation: number) {
 
   trackNavigationState.value = "recentering";
   galleryIndex.value = destination;
+  retainedTrackSlots.value = undefined;
   resetTrack();
-  trackDestinationIndex.value = undefined;
   mediaTransitionMode.value = "direct";
   resetTransform();
   await nextTick();
@@ -580,6 +631,7 @@ async function completeTrackSettlement(generation: number) {
       return;
     }
     mechanicalAnchorId.value = id;
+    navigationReason = undefined;
     if (id && reason) emit("settled", id, { reason });
     if (announcement) announceCurrent();
   });
@@ -591,34 +643,16 @@ async function changeIndex(
   announcement = true,
 ): Promise<boolean> {
   const nextIndex = clampIndex(index);
-  if (galleryBusy.value) return false;
-  if (nextIndex === galleryIndex.value) {
-    const id = items.value[nextIndex]?.id;
-    if (!id || id === intendedActiveId.value) return false;
-    acceptActiveId(id, reason);
-    await nextTick();
-    if (props.activeId === undefined || props.activeId === id) {
-      mechanicalAnchorId.value = id;
-      emit("settled", id, { reason });
-      if (announcement) announceCurrent();
-    } else {
-      const authoritativeId = resolveRollbackId();
-      if (authoritativeId !== undefined) synchronizeExact(authoritativeId, false);
-    }
-    return true;
-  }
+  if (!isNavigationCurrent(navigationGeneration)) return false;
+  if (nextIndex === navigationIndex.value) return false;
+  prepareTrackDestination(nextIndex);
   clearPointerState();
-  const generation = invalidateNavigation();
+  const generation = invalidateNavigation(true);
   const destinationId = items.value[nextIndex]?.id;
   if (!destinationId) return false;
   acceptActiveId(destinationId, reason);
-  trackDestinationIndex.value = nextIndex;
   await nextTick();
-  if (
-    !isNavigationCurrent(generation) ||
-    items.value[nextIndex]?.id !== destinationId ||
-    trackDestinationIndex.value !== nextIndex
-  ) {
+  if (!isNavigationCurrent(generation) || items.value[nextIndex]?.id !== destinationId) {
     return false;
   }
   if (trackFrame !== undefined) cancelAnimationFrame(trackFrame);
@@ -631,24 +665,20 @@ async function changeIndex(
 }
 
 function previous(): boolean {
-  if (!canGoPrevious.value || galleryBusy.value) return false;
-  void changeIndex(galleryIndex.value - 1, "previous");
+  if (!canGoPrevious.value || !isNavigationCurrent(navigationGeneration)) return false;
+  void changeIndex(navigationIndex.value - 1, "previous");
   return true;
 }
 
 function next(): boolean {
-  if (!canGoNext.value || galleryBusy.value) return false;
-  void changeIndex(galleryIndex.value + 1, "next");
+  if (!canGoNext.value || !isNavigationCurrent(navigationGeneration)) return false;
+  void changeIndex(navigationIndex.value + 1, "next");
   return true;
 }
 
 function navigateTo(id: TId): boolean {
   const index = items.value.findIndex((item) => item.id === id);
-  if (
-    index < 0 ||
-    galleryBusy.value ||
-    (index === galleryIndex.value && id === intendedActiveId.value)
-  ) {
+  if (index < 0 || !isNavigationCurrent(navigationGeneration) || id === intendedActiveId.value) {
     return false;
   }
   void changeIndex(index, "programmatic");
@@ -662,6 +692,7 @@ function synchronizeExact(id: TId, reportSettlement = true): boolean {
   mechanicalAnchorId.value = id;
   if (id === props.activeId) latestValidAuthorityId.value = id;
   intendedActiveId.value = id;
+  navigationReason = undefined;
   invalidateNavigation();
   clearPointerState();
   galleryIndex.value = index;
@@ -742,7 +773,6 @@ function clearPointerState() {
 function onImagePointerDown(event: PointerEvent) {
   if (
     dialogState.value !== "open" ||
-    galleryBusy.value ||
     (isElement(event.target) && event.target.closest("button")) ||
     (event.pointerType === "mouse" && event.button !== 0)
   ) {
@@ -750,6 +780,10 @@ function onImagePointerDown(event: PointerEvent) {
   }
   interruptDiscreteTransform();
   measureGeometry();
+  if (!gesture && !isZoomed.value) {
+    prepareTrackDestination(navigationIndex.value);
+    invalidateNavigation(true);
+  }
   const sample: PointerSample = {
     id: event.pointerId,
     pointerType: event.pointerType,
@@ -766,6 +800,8 @@ function onImagePointerDown(event: PointerEvent) {
 
   if (!gesture) {
     gesture = {
+      startOffset: getTrackOffset(),
+      targetIndex: navigationIndex.value,
       pointerId: event.pointerId,
       pointerType: event.pointerType,
       startPan: { x: transform.value.x, y: transform.value.y },
@@ -839,9 +875,7 @@ function onWindowPointerMove(event: PointerEvent) {
     }
     if (gesture.mode === "swipe") {
       setMediaTransition("swipe");
-      setTrackOffset(
-        resolveGalleryTrackOffset(deltaX, geometry.width, galleryIndex.value, items.value.length),
-      );
+      setTrackOffset(resolveDragOffset(gesture.startOffset, deltaX));
     }
   }
   event.preventDefault();
@@ -888,24 +922,24 @@ function onWindowPointerUp(event: PointerEvent) {
     deltaX,
     deltaY,
     elapsedMs: event.timeStamp - gesture.startTime,
-    index: galleryIndex.value,
+    index: gesture.targetIndex,
     itemCount: items.value.length,
     scale: gesture.startScale,
     viewportWidth: geometry.width,
   });
   const wasTap = Math.hypot(deltaX, deltaY) < MEDIA_GALLERY_TUNING.swipeThreshold;
   if (direction !== 0) {
-    const destination = galleryIndex.value + direction;
+    const destination = gesture.targetIndex + direction;
+    prepareTrackDestination(destination);
     const generation = invalidateNavigation(true);
     const destinationId = items.value[destination]?.id;
     if (!destinationId) return;
     acceptActiveId(destinationId, "drag");
-    trackDestinationIndex.value = destination;
     beginTrackSettlement(destination, true, "drag", generation, destinationId);
   } else {
-    if (Math.abs(getTrackOffset()) > 0.01) {
+    if (Math.abs(getTrackOffset()) > 0.01 || navigationReason !== undefined) {
       const generation = invalidateNavigation(true);
-      beginTrackSettlement(undefined, true, undefined, generation);
+      resumeIntendedSettlement(generation);
     }
     if (wasTap) handleTouchTap(event);
   }
@@ -920,7 +954,7 @@ function onWindowPointerCancel(event: PointerEvent) {
   if (gesture) gesture.cancelled = true;
   clearPointerState();
   const generation = invalidateNavigation(true);
-  beginTrackSettlement(undefined, true, undefined, generation);
+  resumeIntendedSettlement(generation);
 }
 
 function onLostPointerCapture(event: PointerEvent) {
@@ -938,6 +972,24 @@ function onDoubleClick(event: MouseEvent) {
   );
 }
 
+function onWheel(event: WheelEvent) {
+  if (dialogState.value !== "open" || trackNavigationState.value !== "idle" || event.ctrlKey)
+    return;
+  const unit =
+    event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? Math.max(1, geometry.height) : 1;
+  const delta = Math.max(
+    -240,
+    Math.min(240, Number.isFinite(event.deltaY) ? event.deltaY * unit : 0),
+  );
+  if (Math.abs(delta) < 0.01) return;
+  interruptDiscreteTransform();
+  measureGeometry();
+  const scale = Math.max(1, Math.min(4, transform.value.scale * 2 ** (-delta / 480)));
+  if (Math.abs(scale - transform.value.scale) < 0.001) return;
+  zoomTo(scale, localPoint(event.clientX, event.clientY), "wheel");
+  event.preventDefault();
+}
+
 function onDialogKeyDown(event: KeyboardEvent) {
   maintainModalTabOrder(event, dialog.value);
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -945,9 +997,9 @@ function onDialogKeyDown(event: KeyboardEvent) {
 
   let handled = true;
   if (event.key === "ArrowLeft") {
-    void changeIndex(galleryIndex.value - 1, "keyboard");
+    void changeIndex(navigationIndex.value - 1, "keyboard");
   } else if (event.key === "ArrowRight") {
-    void changeIndex(galleryIndex.value + 1, "keyboard");
+    void changeIndex(navigationIndex.value + 1, "keyboard");
   } else if (event.key === "Home") {
     void changeIndex(0, "keyboard");
   } else if (event.key === "End") {
@@ -1030,6 +1082,8 @@ async function openDialog(lifecycle: number) {
     emitCloseRequest("programmatic");
     return;
   }
+  if (props.activeId !== undefined) intendedActiveId.value = resolveRollbackId();
+  navigationReason = undefined;
   const requestedIndex = items.value.findIndex((item) => item.id === intendedActiveId.value);
   galleryIndex.value = requestedIndex < 0 ? 0 : requestedIndex;
   mediaTransitionMode.value = "direct";
@@ -1085,11 +1139,10 @@ function onCancel(event: Event) {
 function startClose() {
   if (!dialog.value?.open || dialogState.value === "closing") return;
   closingLifecycleGeneration = lifecycleGeneration;
-  invalidateOpenCycle();
-  invalidateNavigation();
+  cancelOpeningWork();
+  invalidateNavigation(true);
   const generation = invalidateClose();
   clearPointerState();
-  resetTransform();
   dialogState.value = "closing";
   if (reducedMotion.value) {
     finishClose(generation);
@@ -1197,6 +1250,7 @@ useEventListener("pointerup", onWindowPointerUp);
 useEventListener("pointercancel", onWindowPointerCancel);
 useEventListener("blur", clearPointerState);
 useEventListener(imageViewport, "lostpointercapture", onLostPointerCapture);
+useEventListener(imageViewport, "wheel", onWheel, { passive: false });
 useEventListener(reducedMotionQuery, "change", onReducedMotionChange);
 useResizeObserver(imageViewport, measureGeometry);
 
@@ -1260,10 +1314,27 @@ watch(
 );
 
 watch(items, (nextItems, previousItems) => {
+  if (
+    nextItems.length === previousItems.length &&
+    nextItems.every((item, index) => {
+      const previousItem = previousItems[index];
+      return (
+        previousItem &&
+        item.id === previousItem.id &&
+        item.intrinsicWidth * previousItem.intrinsicHeight ===
+          previousItem.intrinsicWidth * item.intrinsicHeight
+      );
+    })
+  ) {
+    refreshSources(previousItems);
+    return;
+  }
   replaceImageCollection();
   const collectionGeneration = itemCollectionGeneration.value;
   const openGeneration = openCycleGeneration.value;
   const navigation = invalidateNavigation();
+  navigationReason = undefined;
+  clearPointerState();
   const previousId = previousItems[galleryIndex.value]?.id;
   const previousSemanticId = semanticActiveId.value;
   const nextIds = new Set(nextItems.map((item) => item.id));
@@ -1489,7 +1560,7 @@ defineExpose({
                 :style="slot.item.id === activeItem?.id ? transformStyle : undefined"
               >
                 <img
-                  v-if="open"
+                  v-if="open || dialogState === 'closing'"
                   class="snap-motion-media-gallery-media snap-motion-media-gallery-preview"
                   :class="{
                     concealed: shouldMountFull(slot.item) && imageLoadState(slot.item) === 'loaded',
@@ -1519,9 +1590,11 @@ defineExpose({
                 />
                 <img
                   v-if="
-                    open && shouldMountFull(slot.item) && imageLoadState(slot.item) !== 'failed'
+                    (open || dialogState === 'closing') &&
+                    shouldMountFull(slot.item) &&
+                    imageLoadState(slot.item) !== 'failed'
                   "
-                  :key="`${openCycleGeneration}-${itemCollectionGeneration}-${slot.item.id}-${imageRetryAttempt(slot.item)}`"
+                  :key="`${openCycleGeneration}-${itemCollectionGeneration}-${slot.item.id}`"
                   class="snap-motion-media-gallery-media snap-motion-media-gallery-full"
                   :class="{ revealed: imageLoadState(slot.item) === 'loaded' }"
                   :data-item-collection="itemCollectionGeneration"

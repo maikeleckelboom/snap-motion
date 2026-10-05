@@ -141,9 +141,13 @@ The exposed handle contains `activeId`, `settledId`, `navigateTo`, `synchronizeT
 `next`, `resetToFit`, `requestClose`, and `dialog`. `navigateTo` performs a new programmatic action;
 `synchronizeTo` exactly adopts state already changed by the same authority. On a controlled gallery
 it refuses an ID other than the current prop, so the handle cannot become a competing state store.
-Navigation methods return `true` only when they synchronously accept work; boundary, busy, empty,
+Navigation methods return `true` only when they synchronously accept work; boundary, closed, empty,
 unknown, and current-destination no-ops return `false`. `requestClose()` defaults to the
 `programmatic` reason; UI paths always supply their exact interaction reason.
+
+New fit gestures and navigation commands interrupt existing travel immediately. Adjacent targets
+step from the latest intended destination. See [gallery interruption](gallery-interruption.md)
+for the physical continuity, cancellation, and controlled-authority policy.
 
 Opening, navigation, settlement, image decode, item replacement, closing, and reopening are
 generation-guarded. Work from a stale open cycle cannot publish focus, state, measurements,

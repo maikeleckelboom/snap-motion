@@ -97,7 +97,12 @@ export function useGalleryImages(options: {
       options.isOpen() &&
       openGeneration === options.openCycleGeneration.value &&
       collectionGeneration === itemCollectionGeneration.value &&
-      options.items.value.some((candidate) => candidate.id === item.id) &&
+      options.items.value.some(
+        (candidate) =>
+          candidate.id === item.id &&
+          !hasDistinctMediaGallerySource(candidate.full, item.full) &&
+          !hasDistinctMediaGallerySource(candidate.preview, item.preview),
+      ) &&
       (attempt === undefined || attempt === imageRetryAttempt(item)) &&
       (attempt === undefined ||
         attempt === 0 ||
@@ -222,6 +227,22 @@ export function useGalleryImages(options: {
     resetMediaSourceState();
   }
 
+  function refreshSources(previousItems: readonly MediaGalleryItem[]) {
+    for (const item of options.items.value) {
+      const previous = previousItems.find((candidate) => candidate.id === item.id);
+      if (
+        !previous ||
+        (!hasDistinctMediaGallerySource(item.full, previous.full) &&
+          !hasDistinctMediaGallerySource(item.preview, previous.preview))
+      )
+        continue;
+      retryByItem.value = withoutKey(retryByItem.value, item.id);
+      selectedFullSourceByItem.value = withoutKey(selectedFullSourceByItem.value, item.id);
+      previewFailedByItem.value = withoutKey(previewFailedByItem.value, item.id);
+      if (options.isOpen()) setImageLoadState(item, imageLoadDefault(item));
+    }
+  }
+
   watch(
     () => options.activeItem.value?.id,
     (id, previousId) => {
@@ -250,6 +271,7 @@ export function useGalleryImages(options: {
     onPreviewImageError,
     previewFailedByItem,
     replaceCollection,
+    refreshSources,
     retryImage,
     shouldMountFull,
     visibleFullSrc,

@@ -163,6 +163,153 @@ function namedImages(wrapper: VueWrapper) {
   return wrapper.findAll("img").filter((image) => (image.attributes("alt") ?? "").length > 0);
 }
 
+async function galleryPointer(wrapper: VueWrapper, type: string, x: number, time: number) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperties(event, {
+    pointerId: { value: 91 },
+    pointerType: { value: "mouse" },
+    button: { value: 0 },
+    clientX: { value: x },
+    clientY: { value: 200 },
+    timeStamp: { value: time },
+  });
+  wrapper.get('[data-testid="snap-motion-media-gallery-viewport"]').element.dispatchEvent(event);
+  await flushReactiveTasks();
+}
+
+describe("MediaGalleryDialog interrupted authority", () => {
+  it("cancels queued control starts before their first frame", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountGallery({ reducedMotionOverride: false });
+    await flushReactiveTasks();
+    await frames.flushNext();
+    const handle = wrapper.vm as unknown as { next: () => boolean; previous: () => boolean };
+    expect(handle.next()).toBe(true);
+    expect(handle.previous()).toBe(true);
+    await flushReactiveTasks();
+    await frames.flushAll();
+    expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("one");
+    expect(wrapper.emitted("settled")).toEqual([["one", { reason: "previous" }]]);
+  });
+
+  it("keeps both boundaries after rapid controls and a reduced-motion change", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountGallery({ reducedMotionOverride: false });
+    await flushReactiveTasks();
+    await frames.flushNext();
+    const handle = wrapper.vm as unknown as { next: () => boolean; previous: () => boolean };
+    expect(handle.previous()).toBe(false);
+    expect(handle.next()).toBe(true);
+    await flushReactiveTasks();
+    await frames.flushNext();
+    expect(handle.next()).toBe(true);
+    expect(handle.next()).toBe(false);
+    await flushReactiveTasks();
+    await frames.flushNext();
+    await wrapper.setProps({ reducedMotionOverride: true });
+    await frames.flushAll();
+    expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("three");
+    expect(wrapper.emitted("settled")).toEqual([["three", { reason: "next" }]]);
+  });
+
+  it("preserves zoom and image identity through source changes and closing", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountGallery({ reducedMotionOverride: false });
+    await flushReactiveTasks();
+    await frames.flushNext();
+    await wrapper.get('[data-testid="snap-motion-media-gallery-zoom-in"]').trigger("click");
+    const image = wrapper.get("img").element;
+    const scale = wrapper.get("dialog").attributes("data-scale");
+    await wrapper.setProps({
+      items: items.map((item) => ({
+        ...item,
+        title: `${item.title} changed`,
+        preview: { ...item.preview, src: `${item.preview.src}?theme=dark` },
+      })),
+    });
+    expect(wrapper.get("img").element).toBe(image);
+    expect(wrapper.get("dialog").attributes("data-scale")).toBe(scale);
+    await wrapper.setProps({ open: false });
+    expect(wrapper.get("dialog").attributes("data-dialog-state")).toBe("closing");
+    expect(wrapper.get("img").element).toBe(image);
+    expect(wrapper.get("dialog").attributes("data-scale")).toBe(scale);
+    wrapper.unmount();
+  });
+
+  it("takes ownership in the recenter frame without emitting the superseded settlement", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountGallery({ reducedMotionOverride: false });
+    await flushReactiveTasks();
+    await frames.flushNext();
+    await wrapper.get('[data-testid="snap-motion-media-gallery-next"]').trigger("click");
+    await advanceToRecentering(wrapper, frames);
+    await galleryPointer(wrapper, "pointerdown", 500, 1000);
+    await frames.flushAll();
+    expect(wrapper.emitted("settled")).toBeUndefined();
+    expect(
+      wrapper
+        .get('[data-testid="snap-motion-media-gallery-viewport"]')
+        .attributes("data-pointer-mode"),
+    ).toBe("pending");
+    await galleryPointer(wrapper, "pointermove", 300, 1100);
+    await galleryPointer(wrapper, "pointerup", 300, 1200);
+    await frames.flushAll();
+    expect(wrapper.emitted("settled")).toEqual([["three", { reason: "drag" }]]);
+  });
+
+  for (const authority of [
+    "accept",
+    "reject",
+    "redirect",
+    "external",
+    "collection",
+    "reopen",
+  ] as const) {
+    it(`invalidates superseded gesture work with ${authority} authority`, async () => {
+      const frames = useControlledAnimationFrames();
+      const wrapper = mountGallery({
+        activeId: "one",
+        reducedMotionOverride: false,
+        ...(authority === "accept"
+          ? {
+              "onUpdate:activeId": (id: string | undefined) =>
+                void wrapper.setProps({ activeId: id }),
+            }
+          : {}),
+      });
+      await flushReactiveTasks();
+      await frames.flushNext();
+      await galleryPointer(wrapper, "pointerdown", 500, 0);
+      await galleryPointer(wrapper, "pointermove", 300, 100);
+      await galleryPointer(wrapper, "pointerup", 300, 200);
+      await frames.flushNext();
+      await galleryPointer(wrapper, "pointerdown", 500, 300);
+      await galleryPointer(wrapper, "pointermove", 300, 400);
+      if (authority === "external") await wrapper.setProps({ activeId: "two" });
+      if (authority === "collection") await wrapper.setProps({ items: [items[0]!] });
+      if (authority === "reopen") {
+        await wrapper.setProps({ open: false });
+        await wrapper.setProps({ open: true });
+      }
+      await galleryPointer(wrapper, "pointerup", 300, 500);
+      if (authority === "redirect") await wrapper.setProps({ activeId: "two" });
+      await frames.flushAll();
+      const expected =
+        authority === "accept"
+          ? "three"
+          : authority === "external" || authority === "redirect"
+            ? "two"
+            : "one";
+      expect(wrapper.get("dialog").attributes("data-settled-id")).toBe(expected);
+      expect(wrapper.get("dialog").attributes("data-active-id")).toBe(expected);
+      const settlements = wrapper.emitted("settled") ?? [];
+      expect(settlements.every(([id]) => id === expected)).toBe(true);
+      expect(authority === "reject" ? settlements : []).toEqual([]);
+      wrapper.unmount();
+    });
+  }
+});
+
 beforeEach(() => {
   originalShowModal = HTMLDialogElement.prototype.showModal;
   originalClose = HTMLDialogElement.prototype.close;
@@ -698,7 +845,7 @@ describe("MediaGalleryDialog navigation", () => {
     expect(gallery.navigateTo("missing")).toBe(false);
   });
 
-  it("refuses adjacent commands while track settlement owns navigation", async () => {
+  it("retargets adjacent commands during settlement and only settles the latest request", async () => {
     const frames = useControlledAnimationFrames();
     const wrapper = mountGallery({ reducedMotionOverride: false });
     await flushReactiveTasks();
@@ -709,8 +856,13 @@ describe("MediaGalleryDialog navigation", () => {
     await flushReactiveTasks();
     await frames.flushNext();
     expect(wrapper.get("dialog").attributes("data-track-state")).toBe("settling");
+    expect(gallery.next()).toBe(true);
     expect(gallery.next()).toBe(false);
-    expect(gallery.previous()).toBe(false);
+    expect(gallery.previous()).toBe(true);
+    await flushReactiveTasks();
+    await frames.flushAll();
+    expect(wrapper.emitted("update:activeId")?.map(([id]) => id)).toEqual(["two", "three", "two"]);
+    expect(wrapper.emitted("settled")).toEqual([["two", { reason: "previous" }]]);
   });
 
   it("adopts a valid external ID while open without echoing a semantic request", async () => {
@@ -1167,8 +1319,8 @@ describe("MediaGalleryDialog navigation", () => {
     expect(wrapper.get("dialog").attributes("data-track-state")).toBe("settling");
     expect(previous.attributes("aria-disabled")).toBe("false");
     expect(previous.attributes("disabled")).toBeUndefined();
-    expect(next.attributes("aria-disabled")).toBe("false");
-    expect(next.attributes("disabled")).toBeUndefined();
+    expect(next.attributes("aria-disabled")).toBe("true");
+    expect(next.attributes()).toHaveProperty("disabled");
 
     await advanceToRecentering(wrapper, frames);
     await flushReactiveTasks();

@@ -26,6 +26,77 @@ async function openGallery(page: Page) {
   await expect(gallery(page)).toHaveAttribute("data-dialog-state", "open");
 }
 
+test("in-flight gallery drag takeover preserves the image and continues to the next destination", async ({
+  page,
+}) => {
+  await openGallery(page);
+  await page.getByTestId("snap-motion-media-gallery-shell").evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+  });
+  const result = await gallery(page).evaluate(async (dialog) => {
+    const viewport = dialog.querySelector<HTMLElement>(
+      '[data-testid="snap-motion-media-gallery-viewport"]',
+    )!;
+    const rect = viewport.getBoundingClientRect();
+    const frame = () =>
+      new Promise<void>((resolve) =>
+        dialog.ownerDocument.defaultView!.requestAnimationFrame(() => resolve()),
+      );
+    const send = (type: string, x: number, id: number) =>
+      viewport.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          buttons: type === "pointerup" ? 0 : 1,
+          pointerId: id,
+          pointerType: "mouse",
+          clientX: rect.left + rect.width * 0.7 + x,
+          clientY: rect.top + rect.height / 2,
+        }),
+      );
+    send("pointerdown", 0, 501);
+    send("pointermove", -rect.width * 0.2, 501);
+    send("pointerup", -rect.width * 0.2, 501);
+    await frame();
+    const firstDestination = dialog.getAttribute("data-active-id");
+    const item = dialog.querySelector<HTMLElement>(`[data-item-id="${firstDestination}"]`)!;
+    const before = item.getBoundingClientRect().left;
+    const stateAtDown = dialog.getAttribute("data-track-state");
+    send("pointerdown", 0, 502);
+    await Promise.resolve();
+    const accepted = viewport.dataset.pointerMode;
+    const after = item.getBoundingClientRect().left;
+    send("pointermove", -90, 502);
+    await Promise.resolve();
+    const moved = item.getBoundingClientRect().left;
+    send("pointerup", -90, 502);
+    await Promise.resolve();
+    const finalDestination = dialog.getAttribute("data-active-id");
+    // Frame-based wait extends beyond both possible completions, including obsolete work.
+    const deadline = performance.now() + 500;
+    while (performance.now() < deadline) await frame();
+    return {
+      stateAtDown,
+      accepted,
+      before,
+      after,
+      moved,
+      firstDestination,
+      finalDestination,
+      settled: dialog.getAttribute("data-settled-id"),
+      state: dialog.getAttribute("data-track-state"),
+    };
+  });
+  expect(result.stateAtDown).toBe("settling");
+  expect(result.accepted).toBe("pending");
+  expect(Math.abs(result.after - result.before)).toBeLessThan(1);
+  expect(result.moved - result.after).toBeCloseTo(-90, 0);
+  expect(result.finalDestination).not.toBe(result.firstDestination);
+  expect(result.settled).toBe(result.finalDestination);
+  expect(result.state).toBe("idle");
+});
+
 async function visibleCardPoint(target: Locator) {
   return target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
@@ -817,8 +888,8 @@ test("discrete, focal, touch, and wheel zoom preserve the canonical fit state", 
     element.dispatchEvent(event);
     return event.defaultPrevented;
   });
-  expect(wheelPrevented).toBe(false);
-  await expect(dialog).toHaveAttribute("data-scale", "1.0000");
+  expect(wheelPrevented).toBe(true);
+  await expect(dialog).toHaveAttribute("data-scale", "1.1892");
 
   for (let step = 0; step < 6; step += 1) await zoomIn.click();
   await expect(dialog).toHaveAttribute("data-scale", "4.0000");
@@ -854,6 +925,7 @@ test("fit swipe, zoomed pan, pinch, cancellation, and resize keep exclusive owne
   await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("4 / 5");
   await expect(dialog).toBeVisible();
 
+  await expect(dialog).toHaveAttribute("data-track-state", "idle");
   await page.getByTestId("snap-motion-media-gallery-zoom-in").click();
   await page
     .locator('[data-slot-position="0"] .snap-motion-media-gallery-transform')

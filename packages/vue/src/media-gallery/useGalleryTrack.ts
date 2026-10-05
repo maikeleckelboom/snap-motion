@@ -1,7 +1,6 @@
 import { transition } from "@vueuse/core";
 import { ref, watch, type ComputedRef, type Ref } from "vue";
 
-import { resolveGalleryVisibleIndex } from "./media-gallery-math";
 import { MEDIA_GALLERY_TUNING } from "./media-gallery-tuning";
 
 interface TrackTravel {
@@ -11,8 +10,7 @@ interface TrackTravel {
 
 export function useGalleryTrack(options: {
   currentIndex: () => number;
-  destinationIndex: () => number | undefined;
-  itemCount: () => number;
+  slots: () => readonly { itemIndex: number; position: number }[];
   pitch: () => number;
   reducedMotion: ComputedRef<boolean>;
   track: Ref<HTMLElement | undefined>;
@@ -23,14 +21,24 @@ export function useGalleryTrack(options: {
 
   function renderOffset(value: number) {
     options.track.value?.style.setProperty("--_gallery-track-x", `${value.toFixed(3)}px`);
-    visibleIndex.value = resolveGalleryVisibleIndex({
-      currentIndex: options.currentIndex(),
-      destinationIndex: options.destinationIndex(),
-      itemCount: options.itemCount(),
-      offset: value,
-      pitch: options.pitch(),
-      visibleIndex: visibleIndex.value,
-    });
+    const pitch = options.pitch();
+    const slots = options.slots();
+    const previous = slots.find((slot) => slot.itemIndex === visibleIndex.value);
+    const nearest = slots.reduce<(typeof slots)[number] | undefined>(
+      (best, slot) =>
+        !best || Math.abs(slot.position * pitch + value) < Math.abs(best.position * pitch + value)
+          ? slot
+          : best,
+      undefined,
+    );
+    if (
+      nearest &&
+      (!previous ||
+        Math.abs(nearest.position * pitch + value) + Math.min(24, pitch * 0.04) <
+          Math.abs(previous.position * pitch + value))
+    ) {
+      visibleIndex.value = nearest.itemIndex;
+    }
   }
 
   watch(offset, renderOffset, { flush: "sync" });
