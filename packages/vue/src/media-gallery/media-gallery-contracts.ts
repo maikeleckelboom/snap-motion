@@ -217,6 +217,7 @@ export type GalleryMediaAction =
   | "keyboard"
   | "pan"
   | "pinch"
+  | "wheel"
   | "swipe";
 
 export interface PinchTransformInput {
