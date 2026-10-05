@@ -68,10 +68,10 @@ Mixed-aspect media keeps that containing viewport stable. A preview stays mounte
 full image decodes. A failed full image is removed without hiding the preview and can be retried.
 When `preview` and `full` identify the same source, the Gallery renders one preview layer and does
 not request a duplicate.
-Only the mechanically settled item is exposed to assistive technology. Its optional `description`
-is rendered with that same mechanical item, below the item title and position. A controlled request
-cannot publish destination copy before the host adopts it, and the description is intentionally not
-a live announcement.
+Only the mechanically settled item is exposed to assistive technology. The visible title,
+description and counter follow the nearest presented image during motion with midpoint hysteresis.
+This presentation does not change controlled selection or announce a settlement. The description
+is intentionally not a live announcement.
 
 ## Responsive loading and retry
 

@@ -163,10 +163,16 @@ function namedImages(wrapper: VueWrapper) {
   return wrapper.findAll("img").filter((image) => (image.attributes("alt") ?? "").length > 0);
 }
 
-async function galleryPointer(wrapper: VueWrapper, type: string, x: number, time: number) {
+async function galleryPointer(
+  wrapper: VueWrapper,
+  type: string,
+  x: number,
+  time: number,
+  pointerId = 91,
+) {
   const event = new Event(type, { bubbles: true, cancelable: true });
   Object.defineProperties(event, {
-    pointerId: { value: 91 },
+    pointerId: { value: pointerId },
     pointerType: { value: "mouse" },
     button: { value: 0 },
     clientX: { value: x },
@@ -178,6 +184,29 @@ async function galleryPointer(wrapper: VueWrapper, type: string, x: number, time
 }
 
 describe("MediaGalleryDialog interrupted authority", () => {
+  it("preserves the interrupted offset when a takeover becomes a pinch and resumes on release", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountGallery({ reducedMotionOverride: false });
+    await flushReactiveTasks();
+    await frames.flushNext();
+    await galleryPointer(wrapper, "pointerdown", 500, 0);
+    await galleryPointer(wrapper, "pointermove", 300, 100);
+    await galleryPointer(wrapper, "pointerup", 300, 200);
+    await frames.flushNext();
+    await galleryPointer(wrapper, "pointerdown", 500, 300);
+    const track = wrapper.get('[data-testid="snap-motion-media-gallery-track"]');
+    const offset = track.attributes("style");
+    await galleryPointer(wrapper, "pointerdown", 600, 320, 92);
+    expect(track.attributes("style")).toBe(offset);
+    await galleryPointer(wrapper, "pointermove", 650, 350, 92);
+    expect(Number(wrapper.get("dialog").attributes("data-scale"))).toBeGreaterThan(1);
+    await galleryPointer(wrapper, "pointerup", 500, 400);
+    await galleryPointer(wrapper, "pointerup", 650, 420, 92);
+    await frames.flushAll();
+    expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("two");
+    expect(wrapper.emitted("settled")).toEqual([["two", { reason: "drag" }]]);
+  });
+
   it("cancels queued control starts before their first frame", async () => {
     const frames = useControlledAnimationFrames();
     const wrapper = mountGallery({ reducedMotionOverride: false });

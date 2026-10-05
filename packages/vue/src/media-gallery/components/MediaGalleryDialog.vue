@@ -727,7 +727,7 @@ function startPinch() {
     pointerIds: [first.id, second.id],
   };
   setMediaTransition("pinch");
-  setTrackOffset(0);
+  stopTrack();
 }
 
 function updatePinch() {
@@ -909,7 +909,9 @@ function onWindowPointerUp(event: PointerEvent) {
     if (activePointers.size === 0) {
       gesture = undefined;
       pointerMode.value = "idle";
-      setTrackOffset(0);
+      if (Math.abs(getTrackOffset()) > 0.01 || navigationReason !== undefined) {
+        resumeIntendedSettlement(invalidateNavigation(true));
+      }
     }
     return;
   }
