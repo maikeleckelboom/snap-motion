@@ -73,7 +73,7 @@ describe("Verify browser CI contracts", () => {
       "webkit-stacked-deck-pile",
     ])
       expect(crossBrowser).toContain(`- project: ${project}`);
-    expect(crossBrowser).toContain("project: webkit-stacked-deck-direct\n            workers: 1");
+    expect(crossBrowser).toContain("project: webkit-stacked-deck-direct\n            workers: 2");
     expect(crossBrowser).toContain("--workers=${{ matrix.workers }}");
     expect(chromium).toContain("--workers=2");
     for (const job of [chromium, crossBrowser, jobBlock(workflow, "browser-integration")]) {

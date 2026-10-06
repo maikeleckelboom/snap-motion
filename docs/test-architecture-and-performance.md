@@ -155,15 +155,21 @@ native Direct capture/paint authority and pile-perimeter compositing in WebKit.
 This closes the coverage gap that otherwise appears when candidate materialization
 stops running the local gate. Complete local verification retains both projects.
 
-The extra WebKit Direct spec retains its original one-worker cap. Its native-frame
+The extra WebKit Direct spec initially retained its original one-worker cap. Its
 airborne reversal capture failed once in two complete two-worker repetitions and
 once in ten focused two-worker repetitions; ten focused one-worker repetitions
-passed. The failure changes captured scale by 0.00016 against the existing 0.00001
-continuity limit. The limit remains unchanged. This is a demonstrated concurrency
-constraint, not a dismissed flake. WebKit pile passed both complete repetitions at
-two workers. Its source-CI Direct owner also uses one worker. Investigating
-native-frame publication/capture timing further is a
-separate follow-up; no production behavior is changed in this pass.
+passed. Chromium CI then reproduced the same transient-state race: two native
+frames sometimes outlasted the 230ms release being inspected. The capture scenario
+now installs the clock before startup and drives its original browser coroutine
+in 16ms frames, waiting for explicit coroutine readiness. All original physical
+capture, landing-progress, inventory, 2px continuity and 0.00001 scale/rotation
+assertions remain. Twenty focused repetitions across Chromium/WebKit passed in
+31.7s; two complete repetitions of Chromium Direct/pile/reversal and WebKit Direct
+passed all 138 selections without retries. This permits two workers for WebKit
+Direct too. Every other native Direct paint/capture witness retains real time.
+WebKit pile also passed both complete repetitions at two workers. No source owner
+requires serialization after these synchronization fixes; preview and packed
+fixture drivers retain their small existing sequential certification flow.
 
 Each original source-CI owner passed two complete local repetitions at two workers:
 Chromium general 244 passes, deck 84, Direct/pile/reversal 88; Firefox and WebKit
@@ -196,7 +202,8 @@ from the package configurations and requires its containing path to be transferr
 
 Source-browser and package-integration classification are independent. Pure lab
 E2E changes require source browsers; packed/preview fixture and package-assembly
-changes require integration. Documentation/candidate records require neither.
+changes require integration. Documentation/candidate records and the two named
+timing-audit JSON files require neither; other configuration paths fail closed.
 Release-history tooling keeps its existing browser-irrelevant allowlist. Production
 source (including Core math and feature modules), dependencies, shared styles,
 configuration, CI, malformed/missing diffs, and unknown paths require both. Feature

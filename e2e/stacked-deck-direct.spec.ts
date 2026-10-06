@@ -77,15 +77,23 @@ async function runRapidDirectChain(
     readonly direction: -1 | 1;
     readonly fraction?: number;
   }[],
+  options: { readonly controlledTime?: boolean } = {},
 ): Promise<RapidDirectChainResult> {
+  const controlledTime = options.controlledTime ?? false;
   const ownsTrace = await page.evaluate(
     () =>
       !(window as typeof window & { snapMotionDirectRafTraceStop?: () => void })
         .snapMotionDirectRafTraceStop,
   );
   if (ownsTrace) await startDirectRafTrace(page);
-  const result = await page.evaluate(
-    async ({ ids, initialIndex, rapidSteps }) => {
+  if (controlledTime)
+    await page.evaluate(() => {
+      (window as typeof window & { rapidChainReady: boolean }).rapidChainReady = false;
+    });
+  const resultPromise = page.evaluate(
+    async ({ ids, initialIndex, rapidSteps, controlled }) => {
+      if (controlled)
+        (window as typeof window & { rapidChainReady: boolean }).rapidChainReady = true;
       const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
       const directDebug = (
         root as HTMLElement & {
@@ -254,8 +262,33 @@ async function runRapidDirectChain(
       }
       return { hand, snapshots };
     },
-    { ids: itemIds, initialIndex: startIndex, rapidSteps: steps },
+    { ids: itemIds, initialIndex: startIndex, rapidSteps: steps, controlled: controlledTime },
   );
+  if (controlledTime) {
+    let completed = false;
+    // Observe completion; awaiting the original promise below still propagates errors.
+    void resultPromise
+      .finally(() => {
+        completed = true;
+      })
+      .catch(() => undefined);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { rapidChainReady: boolean }).rapidChainReady,
+        ),
+      )
+      .toBe(true);
+    for (let elapsed = 0; elapsed < 6_000; elapsed += 16) {
+      if (completed) break;
+      await page.clock.runFor(16);
+    }
+    expect(
+      completed,
+      "the physical rapid chain must complete within its controlled frame budget",
+    ).toBe(true);
+  }
+  const result = await resultPromise;
   if (ownsTrace) {
     const trace = await stopDirectRafTrace(page);
     const testInfo = test.info();
@@ -946,13 +979,18 @@ test("Direct preserves three inverse releases while repeatedly crossing the sema
  * the path it already had — it simply finishes being a release before it can be anything else.
  */
 test("Direct never absorbs an airborne reversal target into the next hand", async ({ page }) => {
+  await page.clock.install();
   await prepareDirect(page, 4);
+  await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 100));
   // Keep release, reversal, and the next press in one browser task. Protocol round-trips can
   // outlast the real 230 ms flight under parallel load and would turn this into a settled restart.
-  const reversal = await runRapidDirectChain(page, STACKED_DECK_IDS, 4, [
-    { direction: 1 },
-    { direction: -1 },
-  ]);
+  const reversal = await runRapidDirectChain(
+    page,
+    STACKED_DECK_IDS,
+    4,
+    [{ direction: 1 }, { direction: -1 }],
+    { controlledTime: true },
+  );
   const capture = reversal.snapshots[1]!;
   const captureTrace = JSON.stringify(reversal.snapshots, null, 2);
   // The press opened on a shell that had physically arrived, so nothing was absorbed and nothing
@@ -972,12 +1010,19 @@ test("Direct never absorbs an airborne reversal target into the next hand", asyn
   );
 
   await finishPointer(page, reversal.hand, 0, 16, "pointercancel");
+  await page.clock.runFor(1_000);
   await selectStable(page, 4);
-  const alternating = await runRapidDirectChain(page, STACKED_DECK_IDS, 4, [
-    { direction: 1, fraction: 0.99 },
-    { direction: -1, fraction: 1 },
-    { direction: 1, fraction: 1 },
-  ]);
+  const alternating = await runRapidDirectChain(
+    page,
+    STACKED_DECK_IDS,
+    4,
+    [
+      { direction: 1, fraction: 0.99 },
+      { direction: -1, fraction: 1 },
+      { direction: 1, fraction: 1 },
+    ],
+    { controlledTime: true },
+  );
   const alternatingTrace = JSON.stringify(alternating.snapshots, null, 2);
   expect(
     alternating.snapshots.filter((snapshot) => snapshot.openedOnAirborneShell),
@@ -987,6 +1032,7 @@ test("Direct never absorbs an airborne reversal target into the next hand", asyn
   expectRapidChainLandingProgress(alternating.snapshots);
   expect(alternating.snapshots.every((snapshot) => snapshot.landingCount <= 1)).toBe(true);
   await finishPointer(page, alternating.hand, 0, 16, "pointercancel");
+  await page.clock.runFor(1_000);
 });
 
 test("Direct two-item machine-gun reuse keeps one record per persistent shell", async ({

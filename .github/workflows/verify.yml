@@ -182,7 +182,7 @@ jobs:
           - project: webkit-stacked-deck
             workers: 2
           - project: webkit-stacked-deck-direct
-            workers: 1
+            workers: 2
           - project: webkit-stacked-deck-pile
             workers: 2
     env:
