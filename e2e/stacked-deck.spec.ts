@@ -27,6 +27,7 @@ import {
 const existingResizeObserverWarning =
   /ResizeObserver loop completed with undelivered notifications\./;
 const collectedPageErrors = new WeakMap<Page, string[]>();
+const controlledRevolution = /repeated revolutions without drift or shell loss/;
 test.describe.configure({ timeout: 60_000 });
 
 async function readNarrowPageGeometry(page: Page) {
@@ -374,6 +375,51 @@ async function readTraversalTrace(page: Page): Promise<TraversalSample[]> {
   );
 }
 
+/** Drive every rAF, including Vue's DOM publication, without waiting out 28 real springs. */
+async function settleControlledTraversal(
+  page: Page,
+  targetId: string,
+  exchange: "shuffle" | "direct",
+  traced: boolean,
+) {
+  for (let elapsed = 0; elapsed < 6_000; elapsed += 64) {
+    await page.clock.runFor(64);
+    const done = traced
+      ? await page.evaluate(
+          () =>
+            (window as typeof window & { stackedDeckTraversalTrace?: { done: boolean } })
+              .stackedDeckTraversalTrace?.done,
+        )
+      : (await viewport(page).getAttribute("data-phase")) === "idle";
+    if (done) break;
+  }
+  await expectCarouselAt(viewport(page), targetId);
+  if (!traced) return;
+  const trace = await readTraversalTrace(page);
+  // Geometry is read from the real browser on each controlled animation frame. The exhaustive
+  // sequence retains intermediate shell/opacity/continuity evidence as well as the rest invariant.
+  expect(trace.filter((sample) => sample.controllerPhase === "settling").length).toBeGreaterThan(3);
+  expect(new Set(trace.map((sample) => sample.physicalIndex)).size).toBeGreaterThan(3);
+  if (exchange === "shuffle") {
+    expect(expectPersistentPhysicalExchange(trace)).toBeGreaterThan(0);
+    expectContinuousHandoffs(trace);
+  }
+  // Direct releases keep their own outgoing shells after semantic handoff; Shuffle's top/target
+  // role assertion does not describe that choreography. Both retain finite, unclipped real DOM poses.
+  expect(
+    trace.every((sample) =>
+      sample.poses.every(
+        (pose) =>
+          pose.clipPath === "none" &&
+          [pose.translateX, pose.translateY, pose.scale, pose.rotate, pose.opacity].every(
+            Number.isFinite,
+          ),
+      ),
+    ),
+  ).toBe(true);
+  expectShellInventory(trace);
+}
+
 function uniqueInOrder(values: readonly number[]) {
   return values.filter((value, index) => index === 0 || value !== values[index - 1]);
 }
@@ -684,7 +730,7 @@ async function expectNothingIsClipped(page: Page) {
   }
 }
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   const errors: string[] = [];
   collectedPageErrors.set(page, errors);
   page.on("pageerror", (error) => errors.push(error.message));
@@ -693,8 +739,12 @@ test.beforeEach(async ({ page }) => {
       errors.push(`${message.type()}: ${message.text()}`);
     }
   });
+  if (controlledRevolution.test(testInfo.title)) await page.clock.install();
   await page.setViewportSize({ width: 1_440, height: 1_000 });
   await openLabDemo(page, "stacked-deck", "no-preference");
+  if (controlledRevolution.test(testInfo.title)) {
+    await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 100));
+  }
 });
 
 test.afterEach(async ({ page }) => {
@@ -888,18 +938,15 @@ test("pointer, wheel, and keyboard cross former ordinal edges as adjacent exchan
 test("both exchange variants complete repeated revolutions without drift or shell loss", async ({
   page,
 }) => {
-  // WebKit needs roughly 90 seconds for these 28 full settlements in isolation and can exceed two
-  // minutes under the full parallel browser matrix. Keep the ordinary per-settlement readiness
-  // assertion; this scenario-level budget only covers the deliberately long repeated-revolution run.
-  test.setTimeout(180_000);
   const stage = viewport(page);
   for (const exchange of ["shuffle", "direct"] as const) {
     await page.getByTestId(`stacked-deck-exchange-${exchange}`).click();
     await destinations(page).first().click();
     await expectCarouselAt(stage, IDS[0]);
     for (let step = 1; step <= 7; step += 1) {
-      await page.getByTestId("stacked-deck-next").click();
-      await expectCarouselAt(stage, IDS[step % IDS.length]!);
+      if (step === 1) await installTraversalTrace(page);
+      await page.getByTestId("stacked-deck-next").dispatchEvent("click");
+      await settleControlledTraversal(page, IDS[step % IDS.length]!, exchange, step === 1);
       const frame = await readFrame(page);
       expect(frame.physicalPosition).toBeCloseTo(0, 6);
       expectPersistentShellInventory(frame);
@@ -908,8 +955,14 @@ test("both exchange variants complete repeated revolutions without drift or shel
     await destinations(page).first().click();
     await expectCarouselAt(stage, IDS[0]);
     for (let step = 1; step <= 7; step += 1) {
-      await page.getByTestId("stacked-deck-previous").click();
-      await expectCarouselAt(stage, IDS[(IDS.length - (step % IDS.length)) % IDS.length]!);
+      if (step === 1) await installTraversalTrace(page);
+      await page.getByTestId("stacked-deck-previous").dispatchEvent("click");
+      await settleControlledTraversal(
+        page,
+        IDS[(IDS.length - (step % IDS.length)) % IDS.length]!,
+        exchange,
+        step === 1,
+      );
       const frame = await readFrame(page);
       expect(frame.physicalPosition).toBeCloseTo(0, 6);
       expectPersistentShellInventory(frame);
@@ -920,10 +973,6 @@ test("both exchange variants complete repeated revolutions without drift or shel
 test("distinct pointer gestures complete repeated revolutions without drift or shell loss", async ({
   page,
 }) => {
-  // This is another 28-settlement revolution stress and is selected by the WebKit cyclic matrix.
-  // The test-level budget covers that deliberate duration; each settlement keeps the ordinary
-  // readiness assertion and every exchange still checks local zero plus persistent shell identity.
-  test.setTimeout(180_000);
   const stage = viewport(page);
   const pitch = await motionPitch(stage);
   for (const exchange of ["shuffle", "direct"] as const) {
@@ -932,9 +981,10 @@ test("distinct pointer gestures complete repeated revolutions without drift or s
       await destinations(page).first().click();
       await expectCarouselAt(stage, IDS[0]);
       for (let step = 1; step <= 7; step += 1) {
+        if (step === 1) await installTraversalTrace(page);
         await flick(page, direction, pitch);
         const targetIndex = (direction * step + IDS.length * step) % IDS.length;
-        await expectCarouselAt(stage, IDS[targetIndex]!);
+        await settleControlledTraversal(page, IDS[targetIndex]!, exchange, step === 1);
         const frame = await readFrame(page);
         expect(frame.physicalPosition).toBeCloseTo(0, 6);
         expectPersistentShellInventory(frame);

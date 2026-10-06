@@ -454,13 +454,19 @@ test.describe("Sheet content presentation", () => {
   });
 
   test("reopens an active close continuously and ignores obsolete completion", async ({ page }) => {
+    await page.clock.install();
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await fixture(page);
+    await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 100));
     await opener(page).focus();
     await opener(page).dispatchEvent("click");
     await expect(dialog(page)).toHaveAttribute("data-sheet-state", "opening");
+    // Reach an actual intermediate opening frame before closing. Transport time used to decide
+    // whether the close had any travel left, making the transient-state assertion race the spring.
+    await page.clock.runFor(160);
     await close(page).dispatchEvent("click");
     await expect(dialog(page)).toHaveAttribute("data-sheet-state", "closing");
+    await page.clock.runFor(32);
     const before = await panel(page).evaluate((element) => {
       const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform);
       return matrix.m42;
@@ -471,12 +477,14 @@ test.describe("Sheet content presentation", () => {
       const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform);
       return matrix.m42;
     });
-    // Browser commands span frames; a full-surface teleport is distinguishable from spring travel.
-    expect(Math.abs(after - before)).toBeLessThan(160);
+    expect(Math.abs(after - before)).toBeLessThan(0.1);
+    // Run past both old and new completion times. An obsolete close must not hide the reopened dialog.
+    await page.clock.runFor(2_000);
     await expectSheetOpenAt(dialog(page), "full");
     await expectUnchangedPresentation(page);
     await expect(close(page)).toBeFocused();
     await page.keyboard.press("Escape");
+    await page.clock.runFor(2_000);
     await expect(dialog(page)).not.toBeVisible();
     await expect(opener(page)).toBeFocused();
   });

@@ -85,6 +85,38 @@ Candidate optimization must query authoritative GitHub evidence for the exact
 source SHA and retrieve the certified archives. A locally editable verification
 marker is insufficient. Historical records and reconstruction remain immutable.
 
+## Controlled settlement evidence
+
+An isolated Linux checkout used Node 24.16.0, pnpm 11.13.1, and Playwright 1.61.1.
+The original two scenarios passed at one worker. Converted scenarios and Sheet
+reopen then passed three repetitions at two workers: 21 passes, no retries/failures.
+
+| Scenario                                      | Chromium before | Chromium after range | WebKit before | WebKit after range |
+| --------------------------------------------- | --------------: | -------------------: | ------------: | -----------------: |
+| Button revolutions, both variants/directions  |           24.2s |             5.6-6.0s |         40.6s |         10.1-10.5s |
+| Pointer revolutions, both variants/directions |           24.2s |             6.1-6.6s |         35.5s |         10.4-10.8s |
+
+These local before/after figures share a machine; the CI WebKit baseline is slower.
+Every original 28-settlement sequence, six-decimal local-zero assertion, and shell
+inventory remains. Each variant/direction additionally traces a representative
+exchange through intermediate rAF publications. Shuffle retains opaque-shell and
+continuous-handoff assertions; Direct retains finite unclipped DOM poses because
+its independently released shells have different top/target roles. Existing
+real-time pointer, compositing, takeover, and full-frame exchange tests remain.
+No production duration or spring is changed. Sampling every frame of all 28
+settlements added unnecessary WebKit style-resolution cost, so the added tracing
+is representative while the original exhaustive rest checks still cover every step.
+
+Sheet reopen installs the clock before fixture startup, reaches an actual opening
+frame, closes for 32ms, and reopens without transport-time drift. Its continuity
+assertion tightens from 160px to 0.1px. Advancing past both obsolete and current
+completion times still proves the reopened dialog survives and returns focus.
+
+Playwright controls rAF/performance clocks; it does not accelerate native WAAPI or
+CSS animation timelines. The deck's bounded spring uses rAF, and these tests read
+the actual DOM, while dedicated real-time paint witnesses retain compositor proof.
+See the [official clock documentation](https://playwright.dev/docs/clock).
+
 ## Structural performance budgets
 
 - Exhaustive state-machine permutations belong in deterministic model tests.
