@@ -1,5 +1,13 @@
 # @snap-motion/vue
 
+## 0.1.0-beta.13
+
+### Patch Changes
+
+- 019a9e4: Keep the presented gallery corridor continuous when pruning retargets a distant mechanical anchor. Recycle only off-screen target coordinates and rebase snap-back at actual rest. Keep the private core and Vue candidate versions aligned.
+- Updated dependencies [019a9e4]
+  - @snap-motion/core@0.1.0-beta.13
+
 ## 0.1.0-beta.12
 
 ### Patch Changes
