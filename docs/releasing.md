@@ -7,7 +7,7 @@ The release-candidate lifecycle has separate producer and consumer phases:
 1. Push the exact clean source SHA and wait for a successful **complete** GitHub Verify run on
    that branch. Package authority builds/packs once; static consumers and browser integration certify those
    same archives. The final Browser certification gate writes `verified-source-packages` evidence
-   only when all three Chromium groups, Firefox, WebKit, WebKit Stacked Deck, integration, Linux,
+   only when all three Chromium groups, Firefox, WebKit, all three WebKit Stacked Deck owners, integration, Linux,
    Windows, package authority, and repository admission succeed. Documentation-only or package-only skips do not
    qualify as complete source evidence.
 2. From that same clean attached source SHA, with an aligned unrecorded package version,

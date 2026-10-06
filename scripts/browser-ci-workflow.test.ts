@@ -65,14 +65,23 @@ describe("Verify browser CI contracts", () => {
     expect(playwrightVersion).toBeDefined();
     expect(chromium).toContain("group: [general, deck, direct]");
     expect(chromium).toContain("SNAP_MOTION_BROWSER_GROUP:");
-    expect(crossBrowser).toContain("project: [firefox, webkit, webkit-stacked-deck]");
+    for (const project of [
+      "firefox",
+      "webkit",
+      "webkit-stacked-deck",
+      "webkit-stacked-deck-direct",
+      "webkit-stacked-deck-pile",
+    ])
+      expect(crossBrowser).toContain(`- project: ${project}`);
+    expect(crossBrowser).toContain("project: webkit-stacked-deck-direct\n            workers: 1");
+    expect(crossBrowser).toContain("--workers=${{ matrix.workers }}");
+    expect(chromium).toContain("--workers=2");
     for (const job of [chromium, crossBrowser, jobBlock(workflow, "browser-integration")]) {
       expect(job).toContain("image: mcr.microsoft.com/playwright:v" + playwrightVersion + "-noble");
       expect(job).toContain("options: --user 1001");
       expect(job).not.toMatch(/playwright\s+install(?:-deps)?\b/);
     }
     for (const job of [chromium, crossBrowser]) {
-      expect(job).toContain("--workers=2");
       expect(job).not.toContain("--shard=");
       expect(job).toContain("--reporter=line,json");
       expect(job).toContain("node scripts/reportBrowserTiming.ts");

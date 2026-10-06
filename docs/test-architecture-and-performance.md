@@ -146,11 +146,14 @@ Chromium has three deterministic, disjoint file groups: general (122 tests), dec
 (42), and Direct/pile/reversal (44). New source specs default to general; no unknown
 spec silently falls out of certification. A unit test checks the complete file
 partition and production-preview exclusion. Firefox (55), WebKit interoperability
-(55), and WebKit cyclic deck (13) run as separate jobs. Every job uses two workers
+(55), and WebKit cyclic deck (13) run as separate jobs. These owners use two workers
 and an official Playwright 1.61.1 container matched to the package pin. Preview and
 framework fixture certification retain their small existing one-worker jobs.
-Local complete verification also retains the existing extra 25 WebKit Direct and
-12 WebKit pile tests; they were never part of the baseline source-CI matrix.
+The existing extra 25 WebKit Direct and 12 WebKit pile tests are promoted from
+local-only release verification to two independent source-CI owners. They certify
+native Direct capture/paint authority and pile-perimeter compositing in WebKit.
+This closes the coverage gap that otherwise appears when candidate materialization
+stops running the local gate. Complete local verification retains both projects.
 
 The extra WebKit Direct spec retains its original one-worker cap. Its native-frame
 airborne reversal capture failed once in two complete two-worker repetitions and
@@ -158,19 +161,21 @@ once in ten focused two-worker repetitions; ten focused one-worker repetitions
 passed. The failure changes captured scale by 0.00016 against the existing 0.00001
 continuity limit. The limit remains unchanged. This is a demonstrated concurrency
 constraint, not a dismissed flake. WebKit pile passed both complete repetitions at
-two workers. Source-CI owners do not include the extra Direct spec and remain
-parallel. Investigating its native-frame publication/capture timing further is a
+two workers. Its source-CI Direct owner also uses one worker. Investigating
+native-frame publication/capture timing further is a
 separate follow-up; no production behavior is changed in this pass.
 
-Each source-CI owner passed two complete local repetitions at two workers:
+Each original source-CI owner passed two complete local repetitions at two workers:
 Chromium general 244 passes, deck 84, Direct/pile/reversal 88; Firefox and WebKit
 each 106 passes plus four existing skips; WebKit cyclic 26 passes. There were no
 failures or retries across those 662 selections. The corrected general run excludes
 preview, whose built entrypoint belongs to integration. Diagnostic writers now use
 per-test output paths, avoiding collisions during parallel/repeated execution.
 
-No source-browser tests are deleted or moved. Source CI still selects Chromium
-208, Firefox 55, and WebKit 68, including four existing engine-conditional skips.
+No source-browser tests are deleted. Source CI still selects Chromium 208 and
+Firefox 55; WebKit increases from 68 to 105 by inheriting the 37 existing local
+release cases. Four existing engine-conditional skips remain. Complete local
+browser counts remain Chromium 208, Firefox 55, and WebKit 105.
 Preview adds one Chromium test; framework fixtures add 12; packed preferences
 retain all 48 three-engine cells. The unit suite keeps all 930 original tests and
 adds deterministic tests for partitioning, classification, reporting and evidence.

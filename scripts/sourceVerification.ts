@@ -20,6 +20,8 @@ export const sourceVerificationJobs = [
   "Interoperability firefox",
   "Interoperability webkit",
   "Interoperability webkit-stacked-deck",
+  "Interoperability webkit-stacked-deck-direct",
+  "Interoperability webkit-stacked-deck-pile",
   "Browser integration",
   "Browser certification",
 ] as const;
