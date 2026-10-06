@@ -191,6 +191,98 @@ function checkPresentedNodes(nodes: readonly { element: Element; position: strin
 }
 
 describe("MediaGalleryDialog interrupted authority", () => {
+  it("preserves the physical coordinate of an intersecting zoomed mechanical anchor", async () => {
+    const frames = useControlledAnimationFrames();
+    const wrapper = mountGallery({ reducedMotionOverride: false });
+    await flushReactiveTasks();
+    await frames.flushAll();
+    for (let index = 0; index < 2; index += 1) {
+      await galleryPointer(wrapper, "pointerdown", 500, index * 300);
+      await galleryPointer(wrapper, "pointermove", 300, index * 300 + 100);
+      await galleryPointer(wrapper, "pointerup", 300, index * 300 + 200);
+    }
+    for (let step = 0; step < 4; step += 1) {
+      await wrapper.get('[data-testid="snap-motion-media-gallery-zoom-in"]').trigger("click");
+    }
+    const anchor = wrapper.get('[data-item-id="one"]');
+    const presented = [
+      { element: anchor.element, position: anchor.attributes("data-slot-position") },
+    ];
+    expect(Number(wrapper.get("dialog").attributes("data-scale"))).toBeGreaterThan(1);
+    expect(
+      (wrapper.vm as unknown as { navigateTo: (id: string) => boolean }).navigateTo("one"),
+    ).toBe(true);
+    await flushReactiveTasks();
+    checkPresentedNodes(presented);
+    await frames.flushAll();
+    expect(wrapper.get("dialog").attributes("data-track-state")).toBe("idle");
+    expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("one");
+    expect(wrapper.emitted("settled")).toEqual([["one", { reason: "programmatic" }]]);
+    wrapper.unmount();
+  });
+
+  for (const mode of ["fit", "zoom"] as const) {
+    it(`keeps a presented corridor when retargeting a distant ${mode} mechanical anchor`, async () => {
+      const frames = useControlledAnimationFrames();
+      const collection = Array.from({ length: 40 }, (_, index) => ({
+        ...items[0]!,
+        id: `item-${index}`,
+      }));
+      const wrapper = mountGallery({ items: collection, reducedMotionOverride: false });
+      await flushReactiveTasks();
+      await frames.flushAll();
+      for (let index = 0; index < 30; index += 1) {
+        await galleryPointer(wrapper, "pointerdown", 500, index * 300);
+        await galleryPointer(wrapper, "pointermove", 300, index * 300 + 100);
+        await galleryPointer(wrapper, "pointerup", 300, index * 300 + 200);
+      }
+      if (mode === "zoom") {
+        for (let step = 0; step < 4; step += 1) {
+          await wrapper.get('[data-testid="snap-motion-media-gallery-zoom-in"]').trigger("click");
+        }
+      }
+      const scale = Number(wrapper.get("dialog").attributes("data-scale"));
+      const startOffset = Number.parseFloat(
+        wrapper
+          .get<HTMLElement>('[data-testid="snap-motion-media-gallery-track"]')
+          .element.style.getPropertyValue("--_gallery-track-x"),
+      );
+      const anchor = wrapper.get('[data-item-id="item-0"]').element;
+      expect(
+        (wrapper.vm as unknown as { navigateTo: (id: string) => boolean }).navigateTo("item-0"),
+      ).toBe(true);
+      await flushReactiveTasks();
+      expect(wrapper.get('[data-item-id="item-0"]').element).toBe(anchor);
+      expect(
+        Math.abs(Number(anchor.getAttribute("data-slot-position")) + startOffset / 800),
+      ).toBeGreaterThan((scale + 1) / 2);
+      for (let frame = 0; frame < 60 && frames.pending() > 0; frame += 1) {
+        await frames.flushNext();
+        const offset =
+          Number.parseFloat(
+            wrapper
+              .get<HTMLElement>('[data-testid="snap-motion-media-gallery-track"]')
+              .element.style.getPropertyValue("--_gallery-track-x"),
+          ) || 0;
+        const presented = wrapper
+          .findAll(".snap-motion-media-gallery-slot")
+          .filter(
+            (slot) =>
+              Math.abs(Number(slot.attributes("data-slot-position")) + offset / 800) <
+              (slot.attributes("data-item-id") === "item-0" ? (scale + 1) / 2 : 1),
+          );
+        expect(
+          presented.length,
+          "Every travel frame must retain a presented image corridor",
+        ).toBeGreaterThan(0);
+      }
+      expect(frames.pending()).toBe(0);
+      expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("item-0");
+      expect(wrapper.emitted("settled")).toEqual([["item-0", { reason: "programmatic" }]]);
+      wrapper.unmount();
+    });
+  }
+
   for (const input of ["command", "gesture"] as const) {
     it(`bounds retained slots during large-gallery ${input} retargeting without replacing the presented corridor`, async () => {
       const frames = useControlledAnimationFrames();

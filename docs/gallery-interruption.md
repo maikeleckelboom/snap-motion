@@ -24,6 +24,10 @@ destination and immediate navigation neighbors. At most eight slots remain mount
 independent of collection size or the number of retargets before arrival. New destinations
 extend the presented corridor in the requested direction without replacing a visible image
 or accumulating distant obsolete destinations.
+An off-screen target, including a distant mechanical anchor, is placed next to that corridor
+in the requested direction, outside its numeric scale/pan bounds. An intersecting zoomed anchor
+keeps its physical coordinate. Its keyed node remains intact. Returning to the mechanical anchor
+also rebases and releases retained history at actual rest.
 Only arrival rebases the destination to position zero. There is no intermediate
 rebase reported as settlement. Recenter callbacks are generation guarded, so a
 pointerdown at that boundary cancels the previous completion without losing input.
