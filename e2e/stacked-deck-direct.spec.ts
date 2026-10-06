@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import type { StackedDeckDirectDebug } from "../packages/vue/src/stacked-deck/use-stacked-deck-motion";
 import { expectCarouselAt, openLabDemo, type ReducedMotionMode } from "./helpers";
 import {
   STACKED_DECK_IDS,
@@ -2422,29 +2423,84 @@ interface DirectReleaseFrame {
   readonly activeId: string;
 }
 
-/** Records every rendered frame of one release, from the browser's own animation clock. */
+type DirectRenderedFrame = NonNullable<StackedDeckDirectDebug["rendered"]>;
+
+interface DirectReleasePublication extends DirectReleaseFrame {
+  readonly revision: number;
+  readonly timestamp: number;
+  readonly poses: DirectRenderedFrame["poses"];
+}
+
+interface DirectReleasePublications {
+  readonly frames: DirectReleasePublication[];
+  readonly restPoses: DirectRenderedFrame["poses"];
+  readonly originIndex: number;
+  completed?: DirectReleasePublication;
+  stop(): void;
+}
+
+/** Observe every DOM publication, with an independent RAF trace for movement assertions. */
 async function recordDirectReleaseFrames(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const root = document.querySelector<HTMLElement>("[data-testid='stacked-deck-viewport']")!;
+    const root = document.querySelector<HTMLElement>(
+      "[data-testid='stacked-deck-viewport']",
+    )! as HTMLElement & { snapMotionDirectDebug: StackedDeckDirectDebug };
+    const initial = root.snapMotionDirectDebug.rendered;
+    if (initial === undefined) throw new Error("Direct rendered-publication evidence is missing.");
+    const initialRevision = initial.revision;
+    const originIndex = initial.poses.findIndex((pose) => pose.interactive);
+    if (originIndex < 0) throw new Error("Direct has no resting interactive source.");
     const traced = window as typeof window & {
       snapMotionDirectReleaseFrames?: DirectReleaseFrame[];
+      snapMotionDirectReleasePublications?: DirectReleasePublications;
     };
     const frames: DirectReleaseFrame[] = [];
     traced.snapMotionDirectReleaseFrames = frames;
+    let rafHandle = 0;
+    let released = false;
+    const publications: DirectReleasePublications = {
+      frames: [],
+      restPoses: initial.poses,
+      originIndex,
+      stop() {
+        root.removeEventListener("snap-motion-direct-frame", publish);
+        cancelAnimationFrame(rafHandle);
+      },
+    };
+    traced.snapMotionDirectReleasePublications = publications;
+    function publish() {
+      const rendered = root.snapMotionDirectDebug.rendered!;
+      const shell = root.querySelectorAll<HTMLElement>(".screen-chrome")[originIndex]!;
+      const publication: DirectReleasePublication = {
+        revision: rendered.revision,
+        timestamp: rendered.timestamp,
+        poses: rendered.poses,
+        phase: rendered.projection.phase ?? "none",
+        settlement: rendered.projection.settlement,
+        travel: rendered.projection.signedTravel,
+        landings: rendered.landings.length,
+        sourceX: Number(shell.dataset.translateX),
+        sourceY: Number(shell.dataset.translateY),
+        controllerTarget: root.dataset.targetId ?? "",
+        activeId: root.dataset.activeId ?? "",
+      };
+      publications.frames.push(publication);
+      if (publication.phase === "returning" || publication.phase === "parking") released = true;
+      // A cleared, published projection closes this gesture, including any parking presentation
+      // that legitimately outlives controller idle. Retain the first completion, not a later repair.
+      if (
+        released &&
+        publication.revision > initialRevision &&
+        publication.phase === "none" &&
+        publication.landings === 0 &&
+        root.dataset.phase === "idle"
+      ) {
+        publications.completed ??= publication;
+      }
+    }
+    root.addEventListener("snap-motion-direct-frame", publish);
     const record = () => {
-      const debug = (
-        root as HTMLElement & {
-          snapMotionDirectDebug?: {
-            landings?: readonly unknown[];
-            projection?: {
-              originIndex: number;
-              phase?: string;
-              settlement: number;
-              signedTravel: number;
-            };
-          };
-        }
-      ).snapMotionDirectDebug;
+      const debug = root.snapMotionDirectDebug;
       const projection = debug?.projection;
       const shells = [...root.querySelectorAll<HTMLElement>(".screen-chrome")];
       frames.push({
@@ -2463,9 +2519,9 @@ async function recordDirectReleaseFrames(page: Page): Promise<void> {
         controllerTarget: root.dataset.targetId ?? "",
         activeId: root.dataset.activeId ?? "",
       });
-      requestAnimationFrame(record);
+      rafHandle = requestAnimationFrame(record);
     };
-    requestAnimationFrame(record);
+    rafHandle = requestAnimationFrame(record);
   });
 }
 
@@ -2508,13 +2564,29 @@ async function realMouseRelease(
     }
   }
   await page.mouse.up();
+  // This attribute certifies controller mechanical rest, not a RAF observer's final sample.
+  // Vue publishes exact rest synchronously even when WebKit does not schedule another paint/RAF.
   await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
-  await page.waitForTimeout(160);
+  await page.waitForFunction(
+    () =>
+      (
+        window as typeof window & {
+          snapMotionDirectReleasePublications?: DirectReleasePublications;
+        }
+      ).snapMotionDirectReleasePublications?.completed !== undefined,
+    undefined,
+    { polling: 50, timeout: 8_000 },
+  );
 
   return page.evaluate(() => {
-    const frames = (
-      window as typeof window & { snapMotionDirectReleaseFrames?: DirectReleaseFrame[] }
-    ).snapMotionDirectReleaseFrames!;
+    const traced = window as typeof window & {
+      snapMotionDirectReleaseFrames: DirectReleaseFrame[];
+      snapMotionDirectReleasePublications: DirectReleasePublications;
+    };
+    const publications = traced.snapMotionDirectReleasePublications;
+    publications.stop();
+    const completed = publications.completed!;
+    const frames = traced.snapMotionDirectReleaseFrames;
     const held = frames.findIndex((frame) => frame.phase === "held");
     const after = frames.slice(held < 0 ? 0 : held);
     const live = after.filter((frame) => frame.phase !== "none");
@@ -2529,11 +2601,24 @@ async function realMouseRelease(
     ).length;
     const releaseX = released[0]?.sourceX ?? 0;
     const releaseY = released[0]?.sourceY ?? 0;
+    // Match the deterministic Direct-return component proof: nine decimal places, signed zero
+    // normalized, and all resting geometry rather than a permissive source-distance threshold.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper must serialize with the browser evaluation callback.
+    const exact = (value: number) => Number(value.toFixed(9)) || 0;
+    const geometry = (poses: DirectRenderedFrame["poses"]) =>
+      poses.map(({ opacity, rotate, scale, translateX, translateY }) => ({
+        opacity: exact(opacity),
+        rotate: exact(rotate),
+        scale: exact(scale),
+        translateX: exact(translateX),
+        translateY: exact(translateY),
+      }));
+    const restSource = publications.restPoses[publications.originIndex]!;
     return {
-      phases: [...new Set(after.map((frame) => frame.phase))],
-      maxLandings: Math.max(0, ...after.map((frame) => frame.landings)),
-      controllerTarget: released.at(-1)?.controllerTarget ?? "",
-      settledId: after.at(-1)?.activeId ?? "",
+      phases: [...new Set(publications.frames.map((frame) => frame.phase))],
+      maxLandings: Math.max(0, ...publications.frames.map((frame) => frame.landings)),
+      controllerTarget: completed.controllerTarget,
+      settledId: completed.activeId,
       lifecycleOpenings,
       openedPhase: released[0]?.phase ?? "",
       // The regression stated physically: the shell still sitting on the vector the hand let go of
@@ -2549,7 +2634,7 @@ async function realMouseRelease(
         0,
         ...released.map((frame) => Math.hypot(frame.sourceX - releaseX, frame.sourceY - releaseY)),
       ),
-      maxSettlement: Math.max(0, ...released.map((frame) => frame.settlement)),
+      maxSettlement: Math.max(0, ...publications.frames.map((frame) => frame.settlement)),
       // A clock of its own: the presentation advancing on a frame the deck did not move on.
       settlementWithoutTravel: released.filter(
         (frame, index) =>
@@ -2557,7 +2642,13 @@ async function realMouseRelease(
           Math.abs(frame.travel - released[index - 1]!.travel) < 1e-9 &&
           Math.abs(frame.settlement - released[index - 1]!.settlement) > 1e-9,
       ).length,
-      finalSource: Math.hypot(after.at(-1)!.sourceX, after.at(-1)!.sourceY),
+      finalSource: Math.hypot(completed.sourceX, completed.sourceY),
+      finalGeometry: geometry(completed.poses),
+      restGeometry: geometry(publications.restPoses),
+      finalDOM: [exact(completed.sourceX), exact(completed.sourceY)],
+      restDOM: [exact(restSource.translateX), exact(restSource.translateY)],
+      finalRevision: completed.revision,
+      finalTimestamp: completed.timestamp,
     };
   });
 }
@@ -2595,6 +2686,10 @@ for (const direction of [1, -1] as const) {
     expect(report.controllerTarget, "the controller kept a different card").toBe(before);
     expect(report.settledId).toBe(before);
     expect(report.finalSource, "the card did not come all the way home").toBeLessThan(0.5);
+    expect(report.finalGeometry, "the completed return differs from canonical rest").toEqual(
+      report.restGeometry,
+    );
+    expect(report.finalDOM, "the DOM source differs from canonical rest").toEqual(report.restDOM);
     await expectCarouselAt(stage, before);
   });
 
