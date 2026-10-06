@@ -335,3 +335,18 @@ controlled time and checks real screenshots against physical publication geometr
 WebKit Direct visual authority takes 40.2s; native capture/paint witnesses continue
 to use real frames. Packed Nuxt build/hydration takes 82s. Removing screenshot or
 compositor assertions would trade confidence for speed and is outside this pass.
+
+### Lightweight verification measurement
+
+| Verify run                                                | Wall clock | Owners that ran                                      |
+| --------------------------------------------------------- | ---------: | ---------------------------------------------------- |
+| Audit/docs-only commit `8dfb8ec` (before)                 |       180s | admission, authority, Linux, Windows, certification  |
+| Docs-only commit `0dd6363` (after)                        |        57s | admission, metadata format, certification            |
+| Ownership-change commit `2a49902` (full, run 37518319646) |       291s | all fourteen source owners; complete matrix retained |
+
+The lightweight path is roughly 3x faster than the previous audit-only run and its
+cost is admission plus one installed `format:check`. The runtime-source path is
+unchanged (291s versus the earlier 310s full matrix) and still requires every owner.
+A candidate-record-only commit takes the same path; history integrity and record
+validity are enforced by admission, whose append-only tests (modify, delete, rename,
+valid add, invalid add) are unchanged.
