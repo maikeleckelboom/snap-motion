@@ -200,16 +200,40 @@ the missing-input failure, then passed API checking with transferred declaration
 and no package rebuild. The workflow contract derives every API Extractor input
 from the package configurations and requires its containing path to be transferred.
 
-Source-browser and package-integration classification are independent. Pure lab
-E2E changes require source browsers; packed/preview fixture and package-assembly
-changes require integration. Documentation/candidate records and the two named
-timing-audit JSON files require neither; other configuration paths fail closed.
-Release-history tooling keeps its existing browser-irrelevant allowlist. Production
-source (including Core math and feature modules), dependencies, shared styles,
-configuration, CI, malformed/missing diffs, and unknown paths require both. Feature
-source is deliberately not narrowed until a dependency/consumer map can justify it.
-Every skip and the union of mixed changes is tested; the final gate requires each
-owner to succeed or skip exactly as classified and also requires Linux/Windows.
+### Verification ownership
+
+Repository admission always runs (history integrity plus classification) and publishes
+five independent owners, each with one documented purpose. Package authority builds and
+packs the one archive set; Linux verification runs format, lint, typecheck, unit tests,
+API and size checks over it; Windows portability runs the pnpm/assembly tests and
+`pack:packages`; source browsers run the lab matrix; package integration runs preview,
+fixtures and packed Nuxt. Dependencies are closed: Linux needs the authority, and
+browsers or integration need Linux, so a lab-only E2E change still runs lint and
+typecheck over the spec.
+
+| Path class (exact)                                                                                                                                        | Owners required                        |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Root `*.md`, `docs/**/*.md`, `.changeset/*.md`, `config/release-candidates/*.json`, `config/test-performance-{before,after}.json`                         | none (metadata format gate only)       |
+| Release tooling and its tests (`release-candidate*`, `sourceVerification*`, `verify-release-candidate`, `release-blockers.json`, `release-candidate.yml`) | package authority, Linux               |
+| `pnpm-cli.test`, `release-package-assembly.test`, `verify-packages`, `packages/**/*.md`                                                                   | adds Windows                           |
+| `pack-packages`, `release-package-assembly`, `pnpm-cli`, `packedArchive`                                                                                  | authority, Linux, Windows, integration |
+| `verifyPackagesBrowser`, `certifySurfacePreferences`, `e2e/media-preview.spec.ts`, `fixture-e2e/**`, `fixtures/packed-consumers/**`                       | authority, Linux, integration          |
+| other `e2e/**`                                                                                                                                            | authority, Linux, source browsers      |
+| everything else (source, manifests, lockfile, config, CI, classifier, unknown, nested Markdown)                                                           | every owner                            |
+
+Mixed changes take the union; a metadata file can never downgrade another path. Empty,
+invalid, unreachable or unavailable diffs, unknown events and manual dispatch require every
+owner. Lightweight runs add a `Metadata format` job (`pnpm format:check`) because the
+Linux suite that normally enforces repository-wide formatting is skipped. The admission
+summary lists each owner as required (with its triggering paths) or skipped.
+
+The final gate asserts, for every owner, required ⇒ success and not required ⇒ skipped;
+anything else (failure, cancellation, an unexpected skip or an unexpected run) fails, and
+incoherent flag sets are rejected. Only a run requiring all five owners writes the verified
+source archive evidence. Candidate preparation additionally requires GitHub's job snapshot
+to show all fourteen source owners successful exactly once, so a lightweight or partial
+Verify run, even at the candidate's exact SHA, can never satisfy it, and a newer
+lightweight run does not shadow an earlier full run.
 
 Each source owner emits Playwright JSON, per-project/spec/test totals, retries,
 skips, the twenty slowest tests, and a soft Step Summary. Setup, installation,

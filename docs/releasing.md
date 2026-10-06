@@ -8,8 +8,9 @@ The release-candidate lifecycle has separate producer and consumer phases:
    that branch. Package authority builds/packs once; static consumers and browser integration certify those
    same archives. The final Browser certification gate writes `verified-source-packages` evidence
    only when all three Chromium groups, Firefox, WebKit, all three WebKit Stacked Deck owners, integration, Linux,
-   Windows, package authority, and repository admission succeed. Documentation-only or package-only skips do not
-   qualify as complete source evidence.
+   Windows, package authority, and repository admission succeed. Documentation-only, metadata-only, tooling-only or package-only runs skip owners by
+   design and never qualify as complete source evidence (see verification ownership in
+   `test-architecture-and-performance.md`).
 2. From that same clean attached source SHA, with an aligned unrecorded package version,
    `pnpm release:candidate:prepare` queries GitHub through the authenticated `gh` CLI, requires
    every owner in GitHub's successful current-attempt job snapshot, downloads its verified archive
