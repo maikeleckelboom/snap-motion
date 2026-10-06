@@ -5,7 +5,7 @@ framework-neutral core owns geometry, semantic surface state, and physical posit
 integration turns those mechanics into carousels, stacked decks, coverflow rails, galleries,
 dialogs, and sheets, using Motion as its imperative spring driver.
 
-The reusable packages are currently beta candidates at `0.1.0-beta.10`. Their manifests
+The reusable packages are currently beta candidates at `0.1.0-beta.14`. Their manifests
 intentionally remain `private`, and neither package is published to npm.
 
 ## Quick start

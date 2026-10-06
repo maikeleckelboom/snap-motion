@@ -1,5 +1,11 @@
 # @snap-motion/core
 
+## 0.1.0-beta.14
+
+### Patch Changes
+
+- 9776197: Recycle off-screen gallery owners into a connected physical corridor through compounded interruptions and reversals. Preserve presented keyed coordinates, transformed anchor bounds and the fixed eight-slot limit. Keep the private Core and Vue candidates aligned.
+
 ## 0.1.0-beta.13
 
 ### Patch Changes
