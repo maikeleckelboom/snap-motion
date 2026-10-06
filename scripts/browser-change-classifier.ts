@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 
 export interface BrowserChangeClassification {
   readonly browserRequired: boolean;
+  readonly packageIntegrationRequired: boolean;
   readonly changedPaths: readonly string[];
   readonly reason: string;
 }
@@ -27,6 +28,16 @@ const browserIrrelevantPaths = new Set([
   "scripts/verify-release-candidate.ts",
 ]);
 
+// Package construction/consumer changes need archive and hydration proof, not lab behavior.
+const packageIntegrationPaths = new Set([
+  "scripts/pack-packages.ts",
+  "scripts/release-package-assembly.ts",
+  "scripts/pnpm-cli.ts",
+  "scripts/verifyPackagesBrowser.ts",
+  "scripts/certifySurfacePreferences.ts",
+  "e2e/media-preview.spec.ts",
+]);
+
 function normalizedPath(path: string): string {
   return path.trim().replaceAll("\\", "/").replace(/^\.\//, "");
 }
@@ -44,24 +55,39 @@ export function classifyChangedPaths(paths: readonly string[]): BrowserChangeCla
   if (changedPaths.length === 0) {
     return {
       browserRequired: true,
+      packageIntegrationRequired: true,
       changedPaths,
       reason: "Browser certification is required because the changed-path set is empty.",
     };
   }
 
-  const browserRelevantPath = changedPaths.find((path) => !isBrowserIrrelevantPath(path));
-  if (browserRelevantPath !== undefined) {
-    return {
-      browserRequired: true,
-      changedPaths,
-      reason: `Browser certification is required because ${browserRelevantPath || "an empty path"} is not explicitly browser-irrelevant.`,
-    };
+  let browserRequired = false;
+  let packageIntegrationRequired = false;
+  for (const path of changedPaths) {
+    if (
+      packageIntegrationPaths.has(path) ||
+      path.startsWith("fixture-e2e/") ||
+      path.startsWith("fixtures/packed-consumers/")
+    ) {
+      packageIntegrationRequired = true;
+    } else if (isBrowserIrrelevantPath(path)) {
+      continue;
+    } else if (path.startsWith("e2e/")) {
+      browserRequired = true;
+    } else {
+      // Unknown paths, config, dependencies, production source and shared CSS fail closed.
+      browserRequired = true;
+      packageIntegrationRequired = true;
+    }
   }
-
   return {
-    browserRequired: false,
+    browserRequired,
+    packageIntegrationRequired,
     changedPaths,
-    reason: `All ${changedPaths.length} changed path${changedPaths.length === 1 ? " is" : "s are"} explicitly browser-irrelevant.`,
+    reason:
+      browserRequired || packageIntegrationRequired
+        ? `Changed-path ownership requires source browsers=${browserRequired}, package integration=${packageIntegrationRequired}. Unknown paths require both.`
+        : `All ${changedPaths.length} changed path${changedPaths.length === 1 ? " is" : "s are"} explicitly browser-irrelevant.`,
   };
 }
 
@@ -104,7 +130,7 @@ function changedPathsFromGit(git: GitCommand, base: string, head: string): reado
 }
 
 function failClosed(reason: string): BrowserChangeClassification {
-  return { browserRequired: true, changedPaths: [], reason };
+  return { browserRequired: true, packageIntegrationRequired: true, changedPaths: [], reason };
 }
 
 function errorMessage(error: unknown): string {

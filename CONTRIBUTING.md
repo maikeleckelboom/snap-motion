@@ -9,8 +9,26 @@ Use Node and pnpm versions pinned by the repository, then run:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm verify
+pnpm check:fast
 ```
+
+Use the validation ladder during development:
+
+1. Run the exact changed test, then its affected spec or unit selection.
+2. Run `pnpm test:browser:gallery`, `pnpm test:browser:stacked-deck`, or
+   `pnpm test:browser:sheet` for the product's existing browser owners. These use
+   source aliases and need no package build. Extra WebKit Direct/pile geometry
+   certification is available as `pnpm test:browser:stacked-deck:extended`.
+3. Run `pnpm check:fast` for formatting, lint/architecture, types, and the complete
+   fast unit/component/model layer. Type checking prepares package declarations once.
+4. Run one `pnpm verify` on the final stable tree. This is complete source
+   certification, including exact packed consumers, browser behavior, preview and fixtures.
+5. Push the source and wait for GitHub Verify. Candidate materialization reuses its
+   exact certified archives; `pnpm release:candidate` is a separate release operation.
+
+Do not run the full release or source universe after every edit. Browser timing,
+ownership, concurrency, skip rules, and evidence are documented in
+[the test architecture audit](docs/test-architecture-and-performance.md).
 
 ## Development runs from source
 

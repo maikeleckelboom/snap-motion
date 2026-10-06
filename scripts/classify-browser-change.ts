@@ -42,7 +42,7 @@ function publishGitHubOutputs(classification: BrowserChangeClassification) {
   if (outputPath !== undefined) {
     appendFileSync(
       outputPath,
-      `browser_required=${classification.browserRequired}\nreason=${singleLine(classification.reason)}\n`,
+      `browser_required=${classification.browserRequired}\npackage_integration_required=${classification.packageIntegrationRequired}\nreason=${singleLine(classification.reason)}\n`,
     );
   }
 
@@ -58,6 +58,7 @@ function publishGitHubOutputs(classification: BrowserChangeClassification) {
         "## Browser change scope",
         "",
         `- Browser required: **${classification.browserRequired}**`,
+        `- Package integration required: **${classification.packageIntegrationRequired}**`,
         `- Reason: ${singleLine(classification.reason)}`,
         "",
         "### Changed paths",
@@ -84,6 +85,7 @@ const classification =
 process.stdout.write(
   [
     `browser_required=${classification.browserRequired}`,
+    `package_integration_required=${classification.packageIntegrationRequired}`,
     `reason=${singleLine(classification.reason)}`,
     `changed_paths=${classification.changedPaths.length}`,
     "",

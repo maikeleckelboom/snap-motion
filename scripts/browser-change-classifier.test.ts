@@ -111,8 +111,6 @@ describe("browser changed-path classification", () => {
     ["lockfile", "pnpm-lock.yaml"],
     ["root manifest", "package.json"],
     ["Verify workflow", ".github/workflows/verify.yml"],
-    ["shared package assembly", "scripts/release-package-assembly.ts"],
-    ["browser package verification", "scripts/verifyPackagesBrowser.ts"],
     ["unknown path", "future/new-authority.toml"],
   ])("requires browser certification for %s changes", (_label, path) => {
     expect(classifyChangedPaths([path]).browserRequired).toBe(true);
@@ -120,6 +118,52 @@ describe("browser changed-path classification", () => {
 
   it("fails closed for an empty path set", () => {
     expect(classifyChangedPaths([]).browserRequired).toBe(true);
+  });
+});
+
+describe("independent source and package browser ownership", () => {
+  it.each([
+    "scripts/release-package-assembly.ts",
+    "scripts/pack-packages.ts",
+    "scripts/pnpm-cli.ts",
+    "scripts/verifyPackagesBrowser.ts",
+    "e2e/media-preview.spec.ts",
+    "fixture-e2e/router.spec.ts",
+    "fixtures/packed-consumers/package.template.json",
+  ])("certifies integration only for %s", (path) => {
+    expect(classifyChangedPaths([path])).toMatchObject({
+      browserRequired: false,
+      packageIntegrationRequired: true,
+    });
+  });
+  it("keeps lab-only tests out of packed certification", () => {
+    expect(classifyChangedPaths(["e2e/stacked-deck.spec.ts", "e2e/helpers.ts"])).toMatchObject({
+      browserRequired: true,
+      packageIntegrationRequired: false,
+    });
+  });
+  it.each([
+    { paths: [] },
+    { paths: ["future/config.json"] },
+    { paths: ["packages/core/src/math.ts"] },
+    { paths: ["packages/vue/src/media-gallery/use-media-gallery.ts"] },
+    { paths: ["shared.css"] },
+    { paths: ["pnpm-lock.yaml"] },
+    { paths: ["playwright.config.ts"] },
+    { paths: ["scripts/classify-browser-change.ts"] },
+  ])("fails closed for shared or unknown ownership: %j", ({ paths }) => {
+    expect(classifyChangedPaths(paths)).toMatchObject({
+      browserRequired: true,
+      packageIntegrationRequired: true,
+    });
+  });
+  it("unions both owners across a mixed change", () => {
+    expect(
+      classifyChangedPaths(["e2e/sheet.spec.ts", "scripts/pack-packages.ts", "docs/geometry.md"]),
+    ).toMatchObject({ browserRequired: true, packageIntegrationRequired: true });
+    expect(
+      classifyChangedPaths(["docs/geometry.md", "config/release-candidates/0.1.0-beta.14.json"]),
+    ).toMatchObject({ browserRequired: false, packageIntegrationRequired: false });
   });
 });
 
