@@ -1,0 +1,5529 @@
+{
+  "schemaVersion": 1,
+  "startingCommit": "a0377e13dc098c8e814a2c39724ce7b4696df312",
+  "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+  "workflowRun": {
+    "id": 37507407043,
+    "attempt": 1,
+    "url": "https://github.com/maikeleckelboom/snap-motion/actions/runs/37507407043",
+    "conclusion": "success"
+  },
+  "method": "Native Playwright JSON durations, including hooks; aggregate test duration differs from parallel wall time. GitHub job/step durations use one-second-resolution API timestamps. No hard timing thresholds.",
+  "beforeReference": "config/test-performance-before.json",
+  "baselineFirstAttempt": {
+    "wallSeconds": 626,
+    "chromiumCohortWallSeconds": 472,
+    "conclusion": "failure",
+    "reason": "Existing Sheet reopen timing race; retry passed but failOnFlakyTests correctly rejected the attempt. Passing Chromium 2 rerun measured 478s separately."
+  },
+  "ci": {
+    "schemaVersion": 1,
+    "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+    "runId": 37507407043,
+    "runAttempt": 1,
+    "url": "https://github.com/maikeleckelboom/snap-motion/actions/runs/37507407043",
+    "conclusion": "success",
+    "wallSeconds": 310,
+    "jobs": [
+      {
+        "name": "Repository admission",
+        "conclusion": "success",
+        "seconds": 12,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 4
+          },
+          {
+            "name": "Validate release-candidate history",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Classify browser change scope",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Interoperability webkit-stacked-deck",
+        "conclusion": "success",
+        "seconds": 154,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Initialize containers",
+            "conclusion": "success",
+            "seconds": 29
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 3
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 9
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 4
+          },
+          {
+            "name": "Run independent interoperability owner",
+            "conclusion": "success",
+            "seconds": 102
+          },
+          {
+            "name": "Report browser timing",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Upload timing and failure evidence",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Stop containers",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Windows portability",
+        "conclusion": "success",
+        "seconds": 83,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 6
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 16
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 24
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 10
+          },
+          {
+            "name": "Verify Windows package and CLI portability",
+            "conclusion": "success",
+            "seconds": 20
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Package authority",
+        "conclusion": "success",
+        "seconds": 62,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 5
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 9
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 6
+          },
+          {
+            "name": "Build package authority",
+            "conclusion": "success",
+            "seconds": 11
+          },
+          {
+            "name": "Pack prepared package authority",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Certify browser-free packed packages",
+            "conclusion": "success",
+            "seconds": 21
+          },
+          {
+            "name": "Save prepared package authority",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Chromium direct",
+        "conclusion": "success",
+        "seconds": 192,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Initialize containers",
+            "conclusion": "success",
+            "seconds": 26
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 4
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 9
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 6
+          },
+          {
+            "name": "Run Chromium direct",
+            "conclusion": "success",
+            "seconds": 140
+          },
+          {
+            "name": "Report browser timing",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Upload timing and failure evidence",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Stop containers",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Interoperability webkit-stacked-deck-direct",
+        "conclusion": "success",
+        "seconds": 242,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Initialize containers",
+            "conclusion": "success",
+            "seconds": 25
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 3
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 9
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 6
+          },
+          {
+            "name": "Run independent interoperability owner",
+            "conclusion": "success",
+            "seconds": 192
+          },
+          {
+            "name": "Report browser timing",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Upload timing and failure evidence",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Stop containers",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Chromium general",
+        "conclusion": "success",
+        "seconds": 170,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Initialize containers",
+            "conclusion": "success",
+            "seconds": 32
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 3
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 9
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 6
+          },
+          {
+            "name": "Run Chromium general",
+            "conclusion": "success",
+            "seconds": 109
+          },
+          {
+            "name": "Report browser timing",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Upload timing and failure evidence",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Stop containers",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Interoperability webkit",
+        "conclusion": "success",
+        "seconds": 151,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Initialize containers",
+            "conclusion": "success",
+            "seconds": 25
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 3
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 9
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 5
+          },
+          {
+            "name": "Run independent interoperability owner",
+            "conclusion": "success",
+            "seconds": 102
+          },
+          {
+            "name": "Report browser timing",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Upload timing and failure evidence",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Stop containers",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Interoperability webkit-stacked-deck-pile",
+        "conclusion": "success",
+        "seconds": 217,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Initialize containers",
+            "conclusion": "success",
+            "seconds": 25
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 3
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 9
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 6
+          },
+          {
+            "name": "Run independent interoperability owner",
+            "conclusion": "success",
+            "seconds": 167
+          },
+          {
+            "name": "Report browser timing",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Upload timing and failure evidence",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Stop containers",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Interoperability firefox",
+        "conclusion": "success",
+        "seconds": 126,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Initialize containers",
+            "conclusion": "success",
+            "seconds": 25
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 3
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 9
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 6
+          },
+          {
+            "name": "Run independent interoperability owner",
+            "conclusion": "success",
+            "seconds": 76
+          },
+          {
+            "name": "Report browser timing",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Upload timing and failure evidence",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Stop containers",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Chromium deck",
+        "conclusion": "success",
+        "seconds": 135,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Initialize containers",
+            "conclusion": "success",
+            "seconds": 34
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 3
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 8
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 5
+          },
+          {
+            "name": "Run Chromium deck",
+            "conclusion": "success",
+            "seconds": 78
+          },
+          {
+            "name": "Report browser timing",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Upload timing and failure evidence",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Stop containers",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Linux verification",
+        "conclusion": "success",
+        "seconds": 78,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 4
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 9
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 6
+          },
+          {
+            "name": "Reuse exact prepared package authority",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run pnpm format:check",
+            "conclusion": "success",
+            "seconds": 3
+          },
+          {
+            "name": "Run pnpm lint",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run pnpm typecheck:prepared",
+            "conclusion": "success",
+            "seconds": 12
+          },
+          {
+            "name": "Run pnpm test:unit",
+            "conclusion": "success",
+            "seconds": 20
+          },
+          {
+            "name": "Build application and fixture authority",
+            "conclusion": "success",
+            "seconds": 9
+          },
+          {
+            "name": "Run pnpm api:check:prepared",
+            "conclusion": "success",
+            "seconds": 4
+          },
+          {
+            "name": "Run pnpm size:check",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Browser integration",
+        "conclusion": "success",
+        "seconds": 168,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Initialize containers",
+            "conclusion": "success",
+            "seconds": 26
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 3
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 9
+          },
+          {
+            "name": "Run pnpm install --frozen-lockfile",
+            "conclusion": "success",
+            "seconds": 6
+          },
+          {
+            "name": "Reuse exact prepared package authority",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Build production preview",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Build framework fixtures",
+            "conclusion": "success",
+            "seconds": 11
+          },
+          {
+            "name": "Certify production preview",
+            "conclusion": "success",
+            "seconds": 4
+          },
+          {
+            "name": "Certify framework fixtures",
+            "conclusion": "success",
+            "seconds": 16
+          },
+          {
+            "name": "Certify packed Nuxt build and hydration",
+            "conclusion": "success",
+            "seconds": 82
+          },
+          {
+            "name": "Report integration timing",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Upload integration evidence",
+            "conclusion": "success",
+            "seconds": 2
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Stop containers",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      },
+      {
+        "name": "Browser certification",
+        "conclusion": "success",
+        "seconds": 10,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 5
+          },
+          {
+            "name": "Retrieve source-certified archives",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Certify browser evidence",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Save verified source package evidence",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "conclusion": "success",
+            "seconds": 0
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success",
+            "seconds": 1
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success",
+            "seconds": 0
+          }
+        ]
+      }
+    ]
+  },
+  "unitTests": {
+    "before": 930,
+    "after": 984,
+    "removed": 0,
+    "beforeCiStepSeconds": 17,
+    "afterCiStepSeconds": 20,
+    "afterNativeWallSeconds": 19.04
+  },
+  "chromiumCohort": {
+    "wallSeconds": 192,
+    "aggregateJobSeconds": 497
+  },
+  "interoperabilityCohort": {
+    "wallSeconds": 283,
+    "aggregateJobSeconds": 890
+  },
+  "browserCounts": {
+    "sourceCiBefore": {
+      "chromium": 208,
+      "firefox": 55,
+      "webkit": 68
+    },
+    "sourceCiAfter": {
+      "chromium": 208,
+      "firefox": 55,
+      "webkit": 105
+    },
+    "completeLocalBeforeAndAfter": {
+      "chromium": 208,
+      "firefox": 55,
+      "webkit": 105
+    },
+    "previewAndFrameworkFixtures": {
+      "chromium": 13
+    },
+    "packedPreferenceCells": {
+      "chromium": 16,
+      "firefox": 16,
+      "webkit": 16
+    },
+    "movedToSourceCi": "All existing 25 WebKit Direct and 12 WebKit pile cases formerly owned by local release verification; no removed cases or assertions."
+  },
+  "groups": [
+    {
+      "schemaVersion": 1,
+      "wallMilliseconds": 165187.016,
+      "outcomes": {
+        "startTime": "2026-10-06T17:57:22.196Z",
+        "duration": 165187.016,
+        "expected": 12,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "projects": [
+        {
+          "project": "webkit-stacked-deck-pile",
+          "tests": 12,
+          "milliseconds": 252006
+        }
+      ],
+      "specs": [
+        {
+          "project": "webkit-stacked-deck-pile",
+          "spec": "stacked-deck-pile.spec.ts",
+          "tests": 12,
+          "milliseconds": 252006
+        }
+      ],
+      "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+      "group": "webkit-stacked-deck-pile"
+    },
+    {
+      "schemaVersion": 1,
+      "wallMilliseconds": 190336,
+      "outcomes": {
+        "startTime": "2026-10-06T17:58:02.720Z",
+        "duration": 190336,
+        "expected": 25,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "projects": [
+        {
+          "project": "webkit-stacked-deck-direct",
+          "tests": 25,
+          "milliseconds": 362144
+        }
+      ],
+      "specs": [
+        {
+          "project": "webkit-stacked-deck-direct",
+          "spec": "stacked-deck-direct.spec.ts",
+          "tests": 25,
+          "milliseconds": 362144
+        }
+      ],
+      "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+      "group": "webkit-stacked-deck-direct"
+    },
+    {
+      "schemaVersion": 1,
+      "wallMilliseconds": 101065.693,
+      "outcomes": {
+        "startTime": "2026-10-06T17:57:22.676Z",
+        "duration": 101065.693,
+        "expected": 13,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "projects": [
+        {
+          "project": "webkit-stacked-deck",
+          "tests": 13,
+          "milliseconds": 189502
+        }
+      ],
+      "specs": [
+        {
+          "project": "webkit-stacked-deck",
+          "spec": "stacked-deck.spec.ts",
+          "tests": 13,
+          "milliseconds": 189502
+        }
+      ],
+      "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+      "group": "webkit-stacked-deck"
+    },
+    {
+      "schemaVersion": 1,
+      "wallMilliseconds": 100356.049,
+      "outcomes": {
+        "startTime": "2026-10-06T17:57:21.171Z",
+        "duration": 100356.049,
+        "expected": 53,
+        "skipped": 2,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "projects": [
+        {
+          "project": "webkit",
+          "tests": 55,
+          "milliseconds": 188911
+        }
+      ],
+      "specs": [
+        {
+          "project": "webkit",
+          "spec": "sheetContent.spec.ts",
+          "tests": 20,
+          "milliseconds": 57692
+        },
+        {
+          "project": "webkit",
+          "spec": "sheet.spec.ts",
+          "tests": 10,
+          "milliseconds": 37671
+        },
+        {
+          "project": "webkit",
+          "spec": "galleryTakeover.spec.ts",
+          "tests": 7,
+          "milliseconds": 28886
+        },
+        {
+          "project": "webkit",
+          "spec": "showcase-smoke.spec.ts",
+          "tests": 5,
+          "milliseconds": 27873
+        },
+        {
+          "project": "webkit",
+          "spec": "stackedDeckConsumer.spec.ts",
+          "tests": 4,
+          "milliseconds": 14346
+        },
+        {
+          "project": "webkit",
+          "spec": "surfaceState.spec.ts",
+          "tests": 2,
+          "milliseconds": 11599
+        },
+        {
+          "project": "webkit",
+          "spec": "stackedDeckTrace.spec.ts",
+          "tests": 7,
+          "milliseconds": 10844
+        }
+      ],
+      "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+      "group": "webkit"
+    },
+    {
+      "schemaVersion": 1,
+      "wallMilliseconds": 14452.696000000002,
+      "outcomes": {
+        "startTime": "2026-10-06T17:58:45.598Z",
+        "duration": 14452.696000000002,
+        "expected": 12,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "projects": [
+        {
+          "project": "",
+          "tests": 12,
+          "milliseconds": 12404
+        }
+      ],
+      "specs": [
+        {
+          "project": "",
+          "spec": "surface-preferences.spec.ts",
+          "tests": 6,
+          "milliseconds": 6219
+        },
+        {
+          "project": "",
+          "spec": "routing-hydration.spec.ts",
+          "tests": 6,
+          "milliseconds": 6185
+        }
+      ],
+      "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+      "group": "fixtures"
+    },
+    {
+      "schemaVersion": 1,
+      "wallMilliseconds": 2581.201,
+      "outcomes": {
+        "startTime": "2026-10-06T17:58:41.771Z",
+        "duration": 2581.201,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "projects": [
+        {
+          "project": "chromium",
+          "tests": 1,
+          "milliseconds": 906
+        }
+      ],
+      "specs": [
+        {
+          "project": "chromium",
+          "spec": "media-preview.spec.ts",
+          "tests": 1,
+          "milliseconds": 906
+        }
+      ],
+      "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+      "group": "preview"
+    },
+    {
+      "schemaVersion": 1,
+      "wallMilliseconds": 74524.96,
+      "outcomes": {
+        "startTime": "2026-10-06T17:58:03.043Z",
+        "duration": 74524.96,
+        "expected": 53,
+        "skipped": 2,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "projects": [
+        {
+          "project": "firefox",
+          "tests": 55,
+          "milliseconds": 136764
+        }
+      ],
+      "specs": [
+        {
+          "project": "firefox",
+          "spec": "sheetContent.spec.ts",
+          "tests": 20,
+          "milliseconds": 55540
+        },
+        {
+          "project": "firefox",
+          "spec": "sheet.spec.ts",
+          "tests": 10,
+          "milliseconds": 28925
+        },
+        {
+          "project": "firefox",
+          "spec": "galleryTakeover.spec.ts",
+          "tests": 7,
+          "milliseconds": 16844
+        },
+        {
+          "project": "firefox",
+          "spec": "showcase-smoke.spec.ts",
+          "tests": 5,
+          "milliseconds": 11412
+        },
+        {
+          "project": "firefox",
+          "spec": "surfaceState.spec.ts",
+          "tests": 2,
+          "milliseconds": 9178
+        },
+        {
+          "project": "firefox",
+          "spec": "stackedDeckConsumer.spec.ts",
+          "tests": 4,
+          "milliseconds": 8581
+        },
+        {
+          "project": "firefox",
+          "spec": "stackedDeckTrace.spec.ts",
+          "tests": 7,
+          "milliseconds": 6284
+        }
+      ],
+      "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+      "group": "firefox"
+    },
+    {
+      "schemaVersion": 1,
+      "wallMilliseconds": 108352.325,
+      "outcomes": {
+        "startTime": "2026-10-06T17:57:30.238Z",
+        "duration": 108352.325,
+        "expected": 122,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "projects": [
+        {
+          "project": "chromium",
+          "tests": 122,
+          "milliseconds": 208650
+        }
+      ],
+      "specs": [
+        {
+          "project": "chromium",
+          "spec": "sheetContent.spec.ts",
+          "tests": 20,
+          "milliseconds": 33200
+        },
+        {
+          "project": "chromium",
+          "spec": "coverflow-gallery.spec.ts",
+          "tests": 16,
+          "milliseconds": 29685
+        },
+        {
+          "project": "chromium",
+          "spec": "coverflow-navigation.spec.ts",
+          "tests": 6,
+          "milliseconds": 18463
+        },
+        {
+          "project": "chromium",
+          "spec": "coverflow-motion.spec.ts",
+          "tests": 5,
+          "milliseconds": 18060
+        },
+        {
+          "project": "chromium",
+          "spec": "media-gallery-at-harness.spec.ts",
+          "tests": 14,
+          "milliseconds": 17433
+        },
+        {
+          "project": "chromium",
+          "spec": "sheet.spec.ts",
+          "tests": 10,
+          "milliseconds": 16999
+        },
+        {
+          "project": "chromium",
+          "spec": "galleryTakeover.spec.ts",
+          "tests": 7,
+          "milliseconds": 10337
+        },
+        {
+          "project": "chromium",
+          "spec": "pointerCapture.spec.ts",
+          "tests": 6,
+          "milliseconds": 9962
+        },
+        {
+          "project": "chromium",
+          "spec": "accessibility.spec.ts",
+          "tests": 2,
+          "milliseconds": 8878
+        },
+        {
+          "project": "chromium",
+          "spec": "coverflow-pagination-focus.spec.ts",
+          "tests": 5,
+          "milliseconds": 8853
+        },
+        {
+          "project": "chromium",
+          "spec": "default-surfaces.spec.ts",
+          "tests": 6,
+          "milliseconds": 8024
+        },
+        {
+          "project": "chromium",
+          "spec": "surfaceState.spec.ts",
+          "tests": 2,
+          "milliseconds": 6945
+        },
+        {
+          "project": "chromium",
+          "spec": "showcase-smoke.spec.ts",
+          "tests": 5,
+          "milliseconds": 6481
+        },
+        {
+          "project": "chromium",
+          "spec": "overlay-lifecycle.spec.ts",
+          "tests": 5,
+          "milliseconds": 4500
+        },
+        {
+          "project": "chromium",
+          "spec": "paged-grid.spec.ts",
+          "tests": 4,
+          "milliseconds": 3684
+        },
+        {
+          "project": "chromium",
+          "spec": "lab-navigation.spec.ts",
+          "tests": 3,
+          "milliseconds": 2985
+        },
+        {
+          "project": "chromium",
+          "spec": "keyboard-certification.spec.ts",
+          "tests": 2,
+          "milliseconds": 1341
+        },
+        {
+          "project": "chromium",
+          "spec": "realm-overlay.spec.ts",
+          "tests": 2,
+          "milliseconds": 1163
+        },
+        {
+          "project": "chromium",
+          "spec": "coverflow-wheel.spec.ts",
+          "tests": 1,
+          "milliseconds": 1114
+        },
+        {
+          "project": "chromium",
+          "spec": "variable-rail.spec.ts",
+          "tests": 1,
+          "milliseconds": 543
+        }
+      ],
+      "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+      "group": "general"
+    },
+    {
+      "schemaVersion": 1,
+      "wallMilliseconds": 138348.10499999998,
+      "outcomes": {
+        "startTime": "2026-10-06T17:57:22.755Z",
+        "duration": 138348.10499999998,
+        "expected": 44,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "projects": [
+        {
+          "project": "chromium",
+          "tests": 44,
+          "milliseconds": 250169
+        }
+      ],
+      "specs": [
+        {
+          "project": "chromium",
+          "spec": "stacked-deck-direct.spec.ts",
+          "tests": 25,
+          "milliseconds": 133927
+        },
+        {
+          "project": "chromium",
+          "spec": "stacked-deck-pile.spec.ts",
+          "tests": 12,
+          "milliseconds": 79697
+        },
+        {
+          "project": "chromium",
+          "spec": "stacked-deck-direct-reversal.spec.ts",
+          "tests": 7,
+          "milliseconds": 36545
+        }
+      ],
+      "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+      "group": "direct"
+    },
+    {
+      "schemaVersion": 1,
+      "wallMilliseconds": 76953.87599999999,
+      "outcomes": {
+        "startTime": "2026-10-06T17:57:28.441Z",
+        "duration": 76953.87599999999,
+        "expected": 42,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "projects": [
+        {
+          "project": "chromium",
+          "tests": 42,
+          "milliseconds": 143353
+        }
+      ],
+      "specs": [
+        {
+          "project": "chromium",
+          "spec": "stacked-deck.spec.ts",
+          "tests": 31,
+          "milliseconds": 136702
+        },
+        {
+          "project": "chromium",
+          "spec": "stackedDeckConsumer.spec.ts",
+          "tests": 4,
+          "milliseconds": 4100
+        },
+        {
+          "project": "chromium",
+          "spec": "stackedDeckTrace.spec.ts",
+          "tests": 7,
+          "milliseconds": 2551
+        }
+      ],
+      "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+      "group": "deck"
+    }
+  ],
+  "projects": [
+    {
+      "project": "webkit-stacked-deck-pile",
+      "tests": 12,
+      "milliseconds": 252006
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "tests": 25,
+      "milliseconds": 362144
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "tests": 13,
+      "milliseconds": 189502
+    },
+    {
+      "project": "webkit",
+      "tests": 55,
+      "milliseconds": 188911
+    },
+    {
+      "project": "",
+      "tests": 12,
+      "milliseconds": 12404
+    },
+    {
+      "project": "chromium",
+      "tests": 209,
+      "milliseconds": 603078
+    },
+    {
+      "project": "firefox",
+      "tests": 55,
+      "milliseconds": 136764
+    }
+  ],
+  "specs": [
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "tests": 25,
+      "milliseconds": 362144
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "tests": 12,
+      "milliseconds": 252006
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "tests": 13,
+      "milliseconds": 189502
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "tests": 31,
+      "milliseconds": 136702
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "tests": 25,
+      "milliseconds": 133927
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "tests": 12,
+      "milliseconds": 79697
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "tests": 20,
+      "milliseconds": 57692
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "tests": 20,
+      "milliseconds": 55540
+    },
+    {
+      "project": "webkit",
+      "spec": "sheet.spec.ts",
+      "tests": 10,
+      "milliseconds": 37671
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct-reversal.spec.ts",
+      "tests": 7,
+      "milliseconds": 36545
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "tests": 20,
+      "milliseconds": 33200
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "tests": 16,
+      "milliseconds": 29685
+    },
+    {
+      "project": "firefox",
+      "spec": "sheet.spec.ts",
+      "tests": 10,
+      "milliseconds": 28925
+    },
+    {
+      "project": "webkit",
+      "spec": "galleryTakeover.spec.ts",
+      "tests": 7,
+      "milliseconds": 28886
+    },
+    {
+      "project": "webkit",
+      "spec": "showcase-smoke.spec.ts",
+      "tests": 5,
+      "milliseconds": 27873
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-navigation.spec.ts",
+      "tests": 6,
+      "milliseconds": 18463
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-motion.spec.ts",
+      "tests": 5,
+      "milliseconds": 18060
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "tests": 14,
+      "milliseconds": 17433
+    },
+    {
+      "project": "chromium",
+      "spec": "sheet.spec.ts",
+      "tests": 10,
+      "milliseconds": 16999
+    },
+    {
+      "project": "firefox",
+      "spec": "galleryTakeover.spec.ts",
+      "tests": 7,
+      "milliseconds": 16844
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "tests": 4,
+      "milliseconds": 14346
+    },
+    {
+      "project": "webkit",
+      "spec": "surfaceState.spec.ts",
+      "tests": 2,
+      "milliseconds": 11599
+    },
+    {
+      "project": "firefox",
+      "spec": "showcase-smoke.spec.ts",
+      "tests": 5,
+      "milliseconds": 11412
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckTrace.spec.ts",
+      "tests": 7,
+      "milliseconds": 10844
+    },
+    {
+      "project": "chromium",
+      "spec": "galleryTakeover.spec.ts",
+      "tests": 7,
+      "milliseconds": 10337
+    },
+    {
+      "project": "chromium",
+      "spec": "pointerCapture.spec.ts",
+      "tests": 6,
+      "milliseconds": 9962
+    },
+    {
+      "project": "firefox",
+      "spec": "surfaceState.spec.ts",
+      "tests": 2,
+      "milliseconds": 9178
+    },
+    {
+      "project": "chromium",
+      "spec": "accessibility.spec.ts",
+      "tests": 2,
+      "milliseconds": 8878
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-pagination-focus.spec.ts",
+      "tests": 5,
+      "milliseconds": 8853
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "tests": 4,
+      "milliseconds": 8581
+    },
+    {
+      "project": "chromium",
+      "spec": "default-surfaces.spec.ts",
+      "tests": 6,
+      "milliseconds": 8024
+    },
+    {
+      "project": "chromium",
+      "spec": "surfaceState.spec.ts",
+      "tests": 2,
+      "milliseconds": 6945
+    },
+    {
+      "project": "chromium",
+      "spec": "showcase-smoke.spec.ts",
+      "tests": 5,
+      "milliseconds": 6481
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckTrace.spec.ts",
+      "tests": 7,
+      "milliseconds": 6284
+    },
+    {
+      "project": "",
+      "spec": "surface-preferences.spec.ts",
+      "tests": 6,
+      "milliseconds": 6219
+    },
+    {
+      "project": "",
+      "spec": "routing-hydration.spec.ts",
+      "tests": 6,
+      "milliseconds": 6185
+    },
+    {
+      "project": "chromium",
+      "spec": "overlay-lifecycle.spec.ts",
+      "tests": 5,
+      "milliseconds": 4500
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "tests": 4,
+      "milliseconds": 4100
+    },
+    {
+      "project": "chromium",
+      "spec": "paged-grid.spec.ts",
+      "tests": 4,
+      "milliseconds": 3684
+    },
+    {
+      "project": "chromium",
+      "spec": "lab-navigation.spec.ts",
+      "tests": 3,
+      "milliseconds": 2985
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckTrace.spec.ts",
+      "tests": 7,
+      "milliseconds": 2551
+    },
+    {
+      "project": "chromium",
+      "spec": "keyboard-certification.spec.ts",
+      "tests": 2,
+      "milliseconds": 1341
+    },
+    {
+      "project": "chromium",
+      "spec": "realm-overlay.spec.ts",
+      "tests": 2,
+      "milliseconds": 1163
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-wheel.spec.ts",
+      "tests": 1,
+      "milliseconds": 1114
+    },
+    {
+      "project": "chromium",
+      "spec": "media-preview.spec.ts",
+      "tests": 1,
+      "milliseconds": 906
+    },
+    {
+      "project": "chromium",
+      "spec": "variable-rail.spec.ts",
+      "tests": 1,
+      "milliseconds": 543
+    }
+  ],
+  "top20": [
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "fast alternating Direct around semantic zero preserves pile-perimeter material ownership",
+      "milliseconds": 75836,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct visual authority only ever advances, however fast the hand is",
+      "milliseconds": 40151,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct gives identical fresh and chained hands the same transaction zero",
+      "milliseconds": 33977,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "shuffle forward interior keeps every background material behind the physical pile",
+      "milliseconds": 28543,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "shuffle backward interior keeps every background material behind the physical pile",
+      "milliseconds": 27912,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct deterministic heavy abuse retains every concurrent release and records paint handoffs",
+      "milliseconds": 27421,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "a two-item deck preserves forward and backward physical direction",
+      "milliseconds": 27075,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct establishes a new zero throughout parking and after parking outruns the spring",
+      "milliseconds": 26031,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct chains interior and wrap exchanges for two revolutions without scalar debt",
+      "milliseconds": 25245,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "interior and semantic-wrap exchanges have equivalent rendered choreography",
+      "milliseconds": 24859,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "pointer, wheel, and keyboard cross former ordinal edges as adjacent exchanges",
+      "milliseconds": 24536,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "direct forward interior keeps every background material behind the physical pile",
+      "milliseconds": 23259,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct hands one shell over continuously and passes it behind only between clear bodies",
+      "milliseconds": 22886,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "direct forward semantic wrap keeps every background material behind the physical pile",
+      "milliseconds": 21849,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "shuffle forward semantic wrap keeps every background material behind the physical pile",
+      "milliseconds": 21722,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "fast alternating Direct around semantic zero preserves pile-perimeter material ownership",
+      "milliseconds": 21654,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "direct backward interior keeps every background material behind the physical pile",
+      "milliseconds": 21616,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct visual authority only ever advances, however fast the hand is",
+      "milliseconds": 21577,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct deterministic heavy abuse retains every concurrent release and records paint handoffs",
+      "milliseconds": 19709,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct parks opaquely behind the new top and keeps immediate reversal continuous",
+      "milliseconds": 19271,
+      "status": "expected",
+      "retries": 0
+    }
+  ],
+  "tests": [
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "shuffle forward interior keeps every background material behind the physical pile",
+      "milliseconds": 28543,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "shuffle backward interior keeps every background material behind the physical pile",
+      "milliseconds": 27912,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "shuffle forward semantic wrap keeps every background material behind the physical pile",
+      "milliseconds": 21722,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "direct forward interior keeps every background material behind the physical pile",
+      "milliseconds": 23259,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "direct backward interior keeps every background material behind the physical pile",
+      "milliseconds": 21616,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "direct forward semantic wrap keeps every background material behind the physical pile",
+      "milliseconds": 21849,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct Next keeps the complete pile physically covered",
+      "milliseconds": 6734,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct Previous keeps the complete pile physically covered",
+      "milliseconds": 5310,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct ArrowRight wrap keeps the complete pile physically covered",
+      "milliseconds": 5435,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct ArrowLeft wrap keeps the complete pile physically covered",
+      "milliseconds": 5501,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "Direct parking inserts the outgoing card before an occluded fold shell re-emerges",
+      "milliseconds": 8289,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-pile",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "fast alternating Direct around semantic zero preserves pile-perimeter material ownership",
+      "milliseconds": 75836,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct gives identical fresh and chained hands the same transaction zero",
+      "milliseconds": 33977,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct chains interior and wrap exchanges for two revolutions without scalar debt",
+      "milliseconds": 25245,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct takeover preserves same-hand reversal and the two-item physical direction",
+      "milliseconds": 9374,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct establishes a new zero throughout parking and after parking outruns the spring",
+      "milliseconds": 26031,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct lets an interrupted release land while the next hand reverses onto it",
+      "milliseconds": 13039,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct preserves every unfinished shell through a third immediate same-direction hand",
+      "milliseconds": 6204,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct preserves three inverse releases while repeatedly crossing the semantic seam",
+      "milliseconds": 6351,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct never absorbs an airborne reversal target into the next hand",
+      "milliseconds": 4863,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct two-item machine-gun reuse keeps one record per persistent shell",
+      "milliseconds": 12005,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct deterministic heavy abuse retains every concurrent release and records paint handoffs",
+      "milliseconds": 27421,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct dark-to-light takeover preserves overlapping paint order at new-hand zero",
+      "milliseconds": 4594,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct keeps three local grab points attached through diagonal owned movement",
+      "milliseconds": 16211,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct reports touch catch-up and owns a former-edge gesture normally",
+      "milliseconds": 13091,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct overdrag and reversal keep one stable origin with only an adjacent target",
+      "milliseconds": 10437,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct parks opaquely behind the new top and keeps immediate reversal continuous",
+      "milliseconds": 19271,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct keyboard, controls, wheel, and programmatic navigation share the physical model",
+      "milliseconds": 16767,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct preserves nested controls on the new top and accepts controlled takeover",
+      "milliseconds": 3910,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct hands one shell over continuously and passes it behind only between clear bodies",
+      "milliseconds": 22886,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct release stays finite and completes after the deck itself has stopped",
+      "milliseconds": 16334,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct grab takes ownership without a frame drawn from the wrong presentation",
+      "milliseconds": 8653,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct visual authority only ever advances, however fast the hand is",
+      "milliseconds": 40151,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a returning release once, travelling forward",
+      "milliseconds": 6783,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a committed release once, travelling forward",
+      "milliseconds": 5695,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a returning release once, travelling backward",
+      "milliseconds": 6879,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck-direct",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a committed release once, travelling backward",
+      "milliseconds": 5972,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "real pointer movement maps 1:1 to the visual top in both directions",
+      "milliseconds": 9403,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "high-contrast exchange changes depth with body clearance and no crossing shadow",
+      "milliseconds": 16423,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "successive rendered frames preserve the physical exchange shells",
+      "milliseconds": 13876,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "interior and semantic-wrap exchanges have equivalent rendered choreography",
+      "milliseconds": 24859,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "pointer, wheel, and keyboard cross former ordinal edges as adjacent exchanges",
+      "milliseconds": 24536,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "both exchange variants complete repeated revolutions without drift or shell loss",
+      "milliseconds": 9345,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "distinct pointer gestures complete repeated revolutions without drift or shell loss",
+      "milliseconds": 10127,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "a two-item deck preserves forward and backward physical direction",
+      "milliseconds": 27075,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "one held gesture cannot discard a second card however far it travels",
+      "milliseconds": 17919,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "a re-grab during settlement rebases without a jump and cannot inherit momentum",
+      "milliseconds": 5123,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "an accepted arrow from the inspection control preserves deterministic focus",
+      "milliseconds": 7973,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "cancel, lost capture, cyclic former edges, and reduced motion restore coherently",
+      "milliseconds": 17092,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "stacked-deck.spec.ts",
+      "title": "inspection, visual semantics, and accessibility expose one authoritative card",
+      "milliseconds": 5751,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "compounded programmatic retargets and reversals retain a painted physical corridor",
+      "milliseconds": 7425,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "window blur resolves a partially dragged takeover exactly once",
+      "milliseconds": 6171,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "mouse takes over at 32ms, chains three destinations and reverses",
+      "milliseconds": 6102,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "mouse takes over at 144ms, chains three destinations and reverses",
+      "milliseconds": 4947,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "touch takes over at 32ms, chains three destinations and reverses",
+      "milliseconds": 825,
+      "status": "skipped",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "touch takes over at 144ms, chains three destinations and reverses",
+      "milliseconds": 764,
+      "status": "skipped",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "mixed-aspect images retain their nodes and positions through snap-back takeover and final rebase",
+      "milliseconds": 2652,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheet.spec.ts",
+      "title": "opens every physical side with stable attributes, handle geometry, and no idle compositor hint",
+      "milliseconds": 2842,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheet.spec.ts",
+      "title": "keeps mirrored slow drags, high-velocity closing, and touch input semantic",
+      "milliseconds": 5926,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheet.spec.ts",
+      "title": "preserves vertical multi-snap geometry, native scrolling, dynamic and short content",
+      "milliseconds": 2735,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheet.spec.ts",
+      "title": "keeps a fixed horizontal layout through partial reveal, drag, interruption, and resize",
+      "milliseconds": 7065,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheet.spec.ts",
+      "title": "changes side atomically while open, dragging, settling, and closed",
+      "milliseconds": 3964,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheet.spec.ts",
+      "title": "keeps full-bleed surfaces and one centered content measure without elastic gaps",
+      "milliseconds": 3478,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheet.spec.ts",
+      "title": "maps all four safe areas independently from physical attachment and the content gutter",
+      "milliseconds": 3503,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheet.spec.ts",
+      "title": "keeps physical left and right placement in RTL and closes through every modal path",
+      "milliseconds": 3405,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheet.spec.ts",
+      "title": "certifies host-owned adaptive composition, state preservation, focus transfer, and rapid resize",
+      "milliseconds": 2332,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheet.spec.ts",
+      "title": "retains forced-colors structure and modal tab containment",
+      "milliseconds": 2421,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "top scrim follows expansion in both directions while remaining viewport-fixed",
+      "milliseconds": 4264,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "Sheet scrim resolves with the authoritative live motion preference",
+      "milliseconds": 2345,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "preserves user scroll when reversing a close before native dismissal",
+      "milliseconds": 3785,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "makes the body visibly available to immediate Tab during opening",
+      "milliseconds": 1948,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "makes a custom initial body focus target visible before waiting for the entrance",
+      "milliseconds": 1229,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "reveals the wrapped target of immediate Shift+Tab on a short viewport",
+      "milliseconds": 1622,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "top keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 3490,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "bottom keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 3472,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "left keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 3107,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "right keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 3082,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "form preserves authored content, wrapping, and native overflow on a short viewport",
+      "milliseconds": 2964,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "prose preserves authored content, wrapping, and native overflow on a short viewport",
+      "milliseconds": 2970,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "media preserves authored content, wrapping, and native overflow on a short viewport",
+      "milliseconds": 2985,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "keeps immediate Escape, Tab, Shift+Tab, and early navigation in the local modal lifecycle",
+      "milliseconds": 3056,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "reopens an active close continuously and ignores obsolete completion",
+      "milliseconds": 1812,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "honors an omitted override under reduce, explicit overrides, and live system changes",
+      "milliseconds": 1663,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "honors an omitted override under no-preference, explicit overrides, and live system changes",
+      "milliseconds": 2594,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "reconciles resize, side changes, dynamic content, and zoom without replacing form state",
+      "milliseconds": 4331,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "keeps drag cancellation responsive, and dismisses through the handle",
+      "milliseconds": 4582,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "sheetContent.spec.ts",
+      "title": "allows direct drag takeover during opening and continuous reversal before release",
+      "milliseconds": 2391,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Coverflow presents at full workspace width and accepts its normal control",
+      "milliseconds": 6879,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Stacked Deck exchanges one card from its presentation control",
+      "milliseconds": 10420,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Paged Grid keeps default keyboard paging operational",
+      "milliseconds": 2766,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Gallery opens and closes its dialog with focus return",
+      "milliseconds": 3702,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Sheet opens and closes from the default presentation with focus return",
+      "milliseconds": 4106,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (shuffle)",
+      "milliseconds": 5147,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (shuffle)",
+      "milliseconds": 2471,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (direct)",
+      "milliseconds": 4211,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (direct)",
+      "milliseconds": 2517,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects premature retirement even when a skipped sample permits enough time",
+      "milliseconds": 12,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects inconsistent snapshots and an overlapping paint swap",
+      "milliseconds": 4,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace reports moving handoffs whose intermediate clearance was not sampled",
+      "milliseconds": 3,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace records the actual RAF microtask order in both callback schedules",
+      "milliseconds": 624,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace sees inert visible bodies and rejects a temporary computed-style mutation",
+      "milliseconds": 3333,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with early recorder, skipped samples and a delayed frame",
+      "milliseconds": 3679,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with late recorder, skipped samples and a delayed frame",
+      "milliseconds": 3189,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "surfaceState.spec.ts",
+      "title": "coverflow retains canonical and settled emphasis after touch and focus departure",
+      "milliseconds": 6237,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "webkit",
+      "spec": "surfaceState.spec.ts",
+      "title": "stacked-deck retains canonical and settled emphasis after touch and focus departure",
+      "milliseconds": 5362,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "routing-hydration.spec.ts",
+      "title": "Vue Router owns push, replacement, Back closure, and direct-entry fallback",
+      "milliseconds": 381,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "routing-hydration.spec.ts",
+      "title": "Vue Router can delay and refuse controlled navigation and close requests",
+      "milliseconds": 3011,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "routing-hydration.spec.ts",
+      "title": "Nuxt hydrates a query-controlled overlay without warnings",
+      "milliseconds": 799,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "routing-hydration.spec.ts",
+      "title": "Nuxt can delay controlled gallery navigation and close without hydration drift",
+      "milliseconds": 1574,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "routing-hydration.spec.ts",
+      "title": "Nuxt full media route remains meaningful without JavaScript",
+      "milliseconds": 144,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "routing-hydration.spec.ts",
+      "title": "Nuxt adaptive sheet hydrates one host and transfers focused state inline",
+      "milliseconds": 276,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "surface-preferences.spec.ts",
+      "title": "Coverflow image is the complete neutral panel at default allocation",
+      "milliseconds": 299,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "surface-preferences.spec.ts",
+      "title": "Coverflow image is the complete neutral panel at narrow allocation",
+      "milliseconds": 262,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "surface-preferences.spec.ts",
+      "title": "Coverflow image is the complete neutral panel at wide allocation",
+      "milliseconds": 285,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "surface-preferences.spec.ts",
+      "title": "spatial surfaces distinguish pointer, keyboard and forced-colors focus",
+      "milliseconds": 4063,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "surface-preferences.spec.ts",
+      "title": "Nuxt wide Coverflow hydrates with no-preference before navigation",
+      "milliseconds": 1040,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "",
+      "spec": "surface-preferences.spec.ts",
+      "title": "Nuxt wide Coverflow hydrates with reduce before navigation",
+      "milliseconds": 270,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-preview.spec.ts",
+      "title": "built lab resolves and decodes every fixture under a non-root base",
+      "milliseconds": 906,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "compounded programmatic retargets and reversals retain a painted physical corridor",
+      "milliseconds": 4946,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "window blur resolves a partially dragged takeover exactly once",
+      "milliseconds": 3515,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "mouse takes over at 32ms, chains three destinations and reverses",
+      "milliseconds": 2933,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "mouse takes over at 144ms, chains three destinations and reverses",
+      "milliseconds": 3044,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "touch takes over at 32ms, chains three destinations and reverses",
+      "milliseconds": 349,
+      "status": "skipped",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "touch takes over at 144ms, chains three destinations and reverses",
+      "milliseconds": 333,
+      "status": "skipped",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "mixed-aspect images retain their nodes and positions through snap-back takeover and final rebase",
+      "milliseconds": 1724,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheet.spec.ts",
+      "title": "opens every physical side with stable attributes, handle geometry, and no idle compositor hint",
+      "milliseconds": 2237,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheet.spec.ts",
+      "title": "keeps mirrored slow drags, high-velocity closing, and touch input semantic",
+      "milliseconds": 5635,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheet.spec.ts",
+      "title": "preserves vertical multi-snap geometry, native scrolling, dynamic and short content",
+      "milliseconds": 1808,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheet.spec.ts",
+      "title": "keeps a fixed horizontal layout through partial reveal, drag, interruption, and resize",
+      "milliseconds": 6755,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheet.spec.ts",
+      "title": "changes side atomically while open, dragging, settling, and closed",
+      "milliseconds": 2546,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheet.spec.ts",
+      "title": "keeps full-bleed surfaces and one centered content measure without elastic gaps",
+      "milliseconds": 1609,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheet.spec.ts",
+      "title": "maps all four safe areas independently from physical attachment and the content gutter",
+      "milliseconds": 2070,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheet.spec.ts",
+      "title": "keeps physical left and right placement in RTL and closes through every modal path",
+      "milliseconds": 1859,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheet.spec.ts",
+      "title": "certifies host-owned adaptive composition, state preservation, focus transfer, and rapid resize",
+      "milliseconds": 2919,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheet.spec.ts",
+      "title": "retains forced-colors structure and modal tab containment",
+      "milliseconds": 1487,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "top scrim follows expansion in both directions while remaining viewport-fixed",
+      "milliseconds": 3557,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "Sheet scrim resolves with the authoritative live motion preference",
+      "milliseconds": 1429,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "preserves user scroll when reversing a close before native dismissal",
+      "milliseconds": 3154,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "makes the body visibly available to immediate Tab during opening",
+      "milliseconds": 1345,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "makes a custom initial body focus target visible before waiting for the entrance",
+      "milliseconds": 2238,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "reveals the wrapped target of immediate Shift+Tab on a short viewport",
+      "milliseconds": 1118,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "top keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 3373,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "bottom keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 3233,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "left keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 3297,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "right keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 3225,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "form preserves authored content, wrapping, and native overflow on a short viewport",
+      "milliseconds": 3388,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "prose preserves authored content, wrapping, and native overflow on a short viewport",
+      "milliseconds": 3236,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "media preserves authored content, wrapping, and native overflow on a short viewport",
+      "milliseconds": 3374,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "keeps immediate Escape, Tab, Shift+Tab, and early navigation in the local modal lifecycle",
+      "milliseconds": 3723,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "reopens an active close continuously and ignores obsolete completion",
+      "milliseconds": 1857,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "honors an omitted override under reduce, explicit overrides, and live system changes",
+      "milliseconds": 1532,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "honors an omitted override under no-preference, explicit overrides, and live system changes",
+      "milliseconds": 2494,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "reconciles resize, side changes, dynamic content, and zoom without replacing form state",
+      "milliseconds": 3779,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "keeps drag cancellation responsive, and dismisses through the handle",
+      "milliseconds": 4141,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "sheetContent.spec.ts",
+      "title": "allows direct drag takeover during opening and continuous reversal before release",
+      "milliseconds": 2047,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Coverflow presents at full workspace width and accepts its normal control",
+      "milliseconds": 2230,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Stacked Deck exchanges one card from its presentation control",
+      "milliseconds": 2698,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Paged Grid keeps default keyboard paging operational",
+      "milliseconds": 1845,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Gallery opens and closes its dialog with focus return",
+      "milliseconds": 1212,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Sheet opens and closes from the default presentation with focus return",
+      "milliseconds": 3427,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (shuffle)",
+      "milliseconds": 2533,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (shuffle)",
+      "milliseconds": 1579,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (direct)",
+      "milliseconds": 3023,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (direct)",
+      "milliseconds": 1446,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects premature retirement even when a skipped sample permits enough time",
+      "milliseconds": 9,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects inconsistent snapshots and an overlapping paint swap",
+      "milliseconds": 2,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace reports moving handoffs whose intermediate clearance was not sampled",
+      "milliseconds": 2,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace records the actual RAF microtask order in both callback schedules",
+      "milliseconds": 324,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace sees inert visible bodies and rejects a temporary computed-style mutation",
+      "milliseconds": 1781,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with early recorder, skipped samples and a delayed frame",
+      "milliseconds": 2089,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with late recorder, skipped samples and a delayed frame",
+      "milliseconds": 2077,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "surfaceState.spec.ts",
+      "title": "coverflow retains canonical and settled emphasis after touch and focus departure",
+      "milliseconds": 4820,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "firefox",
+      "spec": "surfaceState.spec.ts",
+      "title": "stacked-deck retains canonical and settled emphasis after touch and focus departure",
+      "milliseconds": 4358,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "accessibility.spec.ts",
+      "title": "paged grid passes active, inert, mobile, and zoomed layouts",
+      "milliseconds": 4881,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "accessibility.spec.ts",
+      "title": "sheet passes every vertical snap and reduced-motion state",
+      "milliseconds": 3997,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "in-flight gallery drag takeover preserves the image and continues to the next destination",
+      "milliseconds": 1417,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "settled card, side card, touch tap, cancellation, and stage focus resolve once",
+      "milliseconds": 4057,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "shared inspect control opens directly without starting a carousel drag",
+      "milliseconds": 723,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "dialog entrance and directional track expose rendered intermediate states",
+      "milliseconds": 1192,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "native modal contains focus, guards the background, and restores scroll styles",
+      "milliseconds": 1383,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "scrim closes only a true scrim sequence and not an image gesture",
+      "milliseconds": 1118,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "close synchronizes every carousel owner and resumes navigation without catch-up",
+      "milliseconds": 3812,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "buttons, keys, announcements, and item changes own bounded gallery navigation",
+      "milliseconds": 2015,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "navigation controls stay boundary-driven during button and swipe settlement",
+      "milliseconds": 1981,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "discrete, focal, touch, and wheel zoom preserve the canonical fit state",
+      "milliseconds": 2005,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "fit swipe, zoomed pan, pinch, cancellation, and resize keep exclusive ownership",
+      "milliseconds": 1283,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "loading preserves geometry, requests only the current full image, and reveals decoded content",
+      "milliseconds": 1737,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "default preload stays bounded across one move and rapid replacement navigation",
+      "milliseconds": 1906,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "a failed full image retains its preview and leaves navigation and close usable",
+      "milliseconds": 2142,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "semantics, focus visibility, coarse discovery, reduced motion, and reflow remain usable",
+      "milliseconds": 1534,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-gallery.spec.ts",
+      "title": "focus restoration falls back to the stage when the logical control is unavailable",
+      "milliseconds": 1380,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-motion.spec.ts",
+      "title": "slow direct drag stays 1:1 and visually neutral in both directions",
+      "milliseconds": 2469,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-motion.spec.ts",
+      "title": "fast maximum-skip traversal projects every intermediate card and announces only the settle",
+      "milliseconds": 3134,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-motion.spec.ts",
+      "title": "maximum skip 1, 2, and 5 preserve destination policy",
+      "milliseconds": 5878,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-motion.spec.ts",
+      "title": "re-grab cancels a pending semantic handoff and preserves continuous ordering",
+      "milliseconds": 2327,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-motion.spec.ts",
+      "title": "elastic ends remain symmetric and reduced motion settles exactly across stage modes",
+      "milliseconds": 4252,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-navigation.spec.ts",
+      "title": "slow drag, midpoint crossing, and both reversals stay physically continuous",
+      "milliseconds": 2236,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-navigation.spec.ts",
+      "title": "elastic end drags keep the capsule inside the fixed navigation rail",
+      "milliseconds": 3090,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-navigation.spec.ts",
+      "title": "a swipe gives the stage keyboard ownership without disturbing retained in-component focus",
+      "milliseconds": 2241,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-navigation.spec.ts",
+      "title": "an interrupted Arrow transition announces only the settlement it earns",
+      "milliseconds": 3081,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-navigation.spec.ts",
+      "title": "fully settled sequential Arrow transitions each announce exactly once",
+      "milliseconds": 3001,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-navigation.spec.ts",
+      "title": "boundaries, Home/End, native buttons, and form controls keep their keyboard contracts",
+      "milliseconds": 4814,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-pagination-focus.spec.ts",
+      "title": "pointer drag leaves one exact capsule and no keyboard focus halo",
+      "milliseconds": 2328,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-pagination-focus.spec.ts",
+      "title": "pointer click selects without showing the keyboard halo",
+      "milliseconds": 1515,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-pagination-focus.spec.ts",
+      "title": "keyboard focus and selection remain distinct on the same control",
+      "milliseconds": 1561,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-pagination-focus.spec.ts",
+      "title": "item one keeps keyboard focus while the capsule settles on item five",
+      "milliseconds": 2578,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-pagination-focus.spec.ts",
+      "title": "keyboard traversal immediately restores focus visibility after pointer use",
+      "milliseconds": 871,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "coverflow-wheel.spec.ts",
+      "title": "stepped wheel destinations advance monotonically and reverse exactly",
+      "milliseconds": 1114,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "default-surfaces.spec.ts",
+      "title": "publishes an accessible structure at rest, disabled, and mid-navigation",
+      "milliseconds": 2557,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "default-surfaces.spec.ts",
+      "title": "exchanges exactly one screen however far a gesture travels",
+      "milliseconds": 1613,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "default-surfaces.spec.ts",
+      "title": "hints the compositor only while a surface is moving",
+      "milliseconds": 1549,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "default-surfaces.spec.ts",
+      "title": "keeps a consumer's own controls inside a card usable",
+      "milliseconds": 891,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "default-surfaces.spec.ts",
+      "title": "reports what actually moved the surface",
+      "milliseconds": 901,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "default-surfaces.spec.ts",
+      "title": "lets a route take over selection even while the surface refuses input",
+      "milliseconds": 513,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "compounded programmatic retargets and reversals retain a painted physical corridor",
+      "milliseconds": 2093,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "window blur resolves a partially dragged takeover exactly once",
+      "milliseconds": 1016,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "mouse takes over at 32ms, chains three destinations and reverses",
+      "milliseconds": 1508,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "mouse takes over at 144ms, chains three destinations and reverses",
+      "milliseconds": 1496,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "touch takes over at 32ms, chains three destinations and reverses",
+      "milliseconds": 1659,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "touch takes over at 144ms, chains three destinations and reverses",
+      "milliseconds": 1594,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "galleryTakeover.spec.ts",
+      "title": "mixed-aspect images retain their nodes and positions through snap-back takeover and final rebase",
+      "milliseconds": 971,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "keyboard-certification.spec.ts",
+      "title": "sheet radio group supplies the non-drag Arrow-key path",
+      "milliseconds": 727,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "keyboard-certification.spec.ts",
+      "title": "interactive grid descendants keep directional keys and outgoing focus never becomes inert",
+      "milliseconds": 614,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "lab-navigation.spec.ts",
+      "title": "opens as a focused showcase and progressively discloses the workbench",
+      "milliseconds": 707,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "lab-navigation.spec.ts",
+      "title": "normalizes valid, incomplete, invalid, and conflicting direct URLs",
+      "milliseconds": 1634,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "lab-navigation.spec.ts",
+      "title": "keeps history-driven search parameter changes coherent",
+      "milliseconds": 644,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "the dedicated surface exposes the complete stable matrix and a genuinely non-live trace",
+      "milliseconds": 1242,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "scenario controls preserve focus, never auto-open, and clear only the trace",
+      "milliseconds": 470,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "settled item description and application actions share the native modal",
+      "milliseconds": 624,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "visible title, description, and count follow held, reversed, cancelled, and flicked tracks",
+      "milliseconds": 1209,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "baseline event order ends with a bounded focus-restoration trace entry",
+      "milliseconds": 716,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "mixed-aspect navigation preserves usable geometry through both transition directions",
+      "milliseconds": 1313,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "named first, final, and single-item boundaries start at their exact states",
+      "milliseconds": 1421,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "preview-only, delayed full, and terminal failures are deterministic",
+      "milliseconds": 3422,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "responsive retry follows the selected candidate across retry, navigation, and reopen",
+      "milliseconds": 1026,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "cancelled swipe emits no semantic change and close cancels pending settlement",
+      "milliseconds": 1299,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "long localized content reflows at 320 CSS pixels and 200%-equivalent geometry",
+      "milliseconds": 1643,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "full, reduced, and system motion selections remain visibly distinct",
+      "milliseconds": 1213,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "the complete harness remains usable under forced-colors emulation",
+      "milliseconds": 1252,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "media-gallery-at-harness.spec.ts",
+      "title": "a sub-threshold completed swipe does not add a semantic change",
+      "milliseconds": 583,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "overlay-lifecycle.spec.ts",
+      "title": "modal ignores stale native close delivery",
+      "milliseconds": 567,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "overlay-lifecycle.spec.ts",
+      "title": "modal reapplies focus policy when an unexpected native close is refused",
+      "milliseconds": 627,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "overlay-lifecycle.spec.ts",
+      "title": "modal hands returned focus to immediate keyboard, pointer, and application owners",
+      "milliseconds": 806,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "overlay-lifecycle.spec.ts",
+      "title": "a gallery can close back into an underlying modal without losing either focus return",
+      "milliseconds": 653,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "overlay-lifecycle.spec.ts",
+      "title": "Gallery survives ten rapid open-close cycles without retaining focus listeners or scroll lock",
+      "milliseconds": 1847,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "paged-grid.spec.ts",
+      "title": "uses explicit two-by-two pages with correct gap geometry and a partial final page",
+      "milliseconds": 526,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "paged-grid.spec.ts",
+      "title": "supports direct drag, keyboard paging, final-boundary resistance, and normal Tab traversal",
+      "milliseconds": 1577,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "paged-grid.spec.ts",
+      "title": "remeasures across stage and column changes while preserving a valid semantic page",
+      "milliseconds": 580,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "paged-grid.spec.ts",
+      "title": "retargets safely as items are added and removed, including the one-item boundary",
+      "milliseconds": 1001,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "pointerCapture.spec.ts",
+      "title": "native touch StackedDeck shuffle retains transferred capture until release",
+      "milliseconds": 1585,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "pointerCapture.spec.ts",
+      "title": "native touch StackedDeck shuffle retains transferred capture until cancel",
+      "milliseconds": 1844,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "pointerCapture.spec.ts",
+      "title": "native touch StackedDeck shuffle retains transferred capture until capture-loss",
+      "milliseconds": 1925,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "pointerCapture.spec.ts",
+      "title": "native touch StackedDeck direct retains transferred capture until release",
+      "milliseconds": 1327,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "pointerCapture.spec.ts",
+      "title": "native touch StackedDeck direct retains transferred capture until cancel",
+      "milliseconds": 1825,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "pointerCapture.spec.ts",
+      "title": "native touch StackedDeck direct retains transferred capture until capture-loss",
+      "milliseconds": 1456,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "realm-overlay.spec.ts",
+      "title": "Gallery restores focus to an opener from an iframe realm",
+      "milliseconds": 570,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "realm-overlay.spec.ts",
+      "title": "adopted-document Gallery images promote full media and release scroll lock",
+      "milliseconds": 593,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheet.spec.ts",
+      "title": "opens every physical side with stable attributes, handle geometry, and no idle compositor hint",
+      "milliseconds": 979,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheet.spec.ts",
+      "title": "keeps mirrored slow drags, high-velocity closing, and touch input semantic",
+      "milliseconds": 3641,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheet.spec.ts",
+      "title": "preserves vertical multi-snap geometry, native scrolling, dynamic and short content",
+      "milliseconds": 779,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheet.spec.ts",
+      "title": "keeps a fixed horizontal layout through partial reveal, drag, interruption, and resize",
+      "milliseconds": 6145,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheet.spec.ts",
+      "title": "changes side atomically while open, dragging, settling, and closed",
+      "milliseconds": 1589,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheet.spec.ts",
+      "title": "keeps full-bleed surfaces and one centered content measure without elastic gaps",
+      "milliseconds": 835,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheet.spec.ts",
+      "title": "maps all four safe areas independently from physical attachment and the content gutter",
+      "milliseconds": 768,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheet.spec.ts",
+      "title": "keeps physical left and right placement in RTL and closes through every modal path",
+      "milliseconds": 691,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheet.spec.ts",
+      "title": "certifies host-owned adaptive composition, state preservation, focus transfer, and rapid resize",
+      "milliseconds": 818,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheet.spec.ts",
+      "title": "retains forced-colors structure and modal tab containment",
+      "milliseconds": 754,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "top scrim follows expansion in both directions while remaining viewport-fixed",
+      "milliseconds": 2033,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "Sheet scrim resolves with the authoritative live motion preference",
+      "milliseconds": 869,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "preserves user scroll when reversing a close before native dismissal",
+      "milliseconds": 2205,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "makes the body visibly available to immediate Tab during opening",
+      "milliseconds": 456,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "makes a custom initial body focus target visible before waiting for the entrance",
+      "milliseconds": 337,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "reveals the wrapped target of immediate Shift+Tab on a short viewport",
+      "milliseconds": 403,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "top keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 2191,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "bottom keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 2146,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "left keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 2147,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "right keeps content fully presented and measured identically across usable snaps",
+      "milliseconds": 2156,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "form preserves authored content, wrapping, and native overflow on a short viewport",
+      "milliseconds": 2136,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "prose preserves authored content, wrapping, and native overflow on a short viewport",
+      "milliseconds": 2211,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "media preserves authored content, wrapping, and native overflow on a short viewport",
+      "milliseconds": 2079,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "keeps immediate Escape, Tab, Shift+Tab, and early navigation in the local modal lifecycle",
+      "milliseconds": 2114,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "reopens an active close continuously and ignores obsolete completion",
+      "milliseconds": 885,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "honors an omitted override under reduce, explicit overrides, and live system changes",
+      "milliseconds": 561,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "honors an omitted override under no-preference, explicit overrides, and live system changes",
+      "milliseconds": 1515,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "reconciles resize, side changes, dynamic content, and zoom without replacing form state",
+      "milliseconds": 2529,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "keeps drag cancellation responsive, and dismisses through the handle",
+      "milliseconds": 2988,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "sheetContent.spec.ts",
+      "title": "allows direct drag takeover during opening and continuous reversal before release",
+      "milliseconds": 1239,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Coverflow presents at full workspace width and accepts its normal control",
+      "milliseconds": 1502,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Stacked Deck exchanges one card from its presentation control",
+      "milliseconds": 1321,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Paged Grid keeps default keyboard paging operational",
+      "milliseconds": 1174,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Gallery opens and closes its dialog with focus return",
+      "milliseconds": 460,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "showcase-smoke.spec.ts",
+      "title": "Sheet opens and closes from the default presentation with focus return",
+      "milliseconds": 2024,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "surfaceState.spec.ts",
+      "title": "coverflow retains canonical and settled emphasis after touch and focus departure",
+      "milliseconds": 3460,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "surfaceState.spec.ts",
+      "title": "stacked-deck retains canonical and settled emphasis after touch and focus departure",
+      "milliseconds": 3485,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "variable-rail.spec.ts",
+      "title": "unequal-width rail advances by measured centers and preserves edge insets",
+      "milliseconds": 543,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct-reversal.spec.ts",
+      "title": "one held Direct reversal traces a single physical path through neutral",
+      "milliseconds": 9923,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct-reversal.spec.ts",
+      "title": "a coalesced sample out of resistance lands the pile where the hand is",
+      "milliseconds": 4968,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct-reversal.spec.ts",
+      "title": "a held reversal across the cyclic boundary is the same physical path",
+      "milliseconds": 5541,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct-reversal.spec.ts",
+      "title": "a reversing hand keeps its grip on the card in both axes",
+      "milliseconds": 1834,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct-reversal.spec.ts",
+      "title": "raw Y moves only the held Direct source",
+      "milliseconds": 3077,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct-reversal.spec.ts",
+      "title": "an exposed held two-axis reversal changes centre material only by physical motion",
+      "milliseconds": 10193,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct-reversal.spec.ts",
+      "title": "a reversing touch contact tracks the same physical path as a mouse",
+      "milliseconds": 1009,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct gives identical fresh and chained hands the same transaction zero",
+      "milliseconds": 7970,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct chains interior and wrap exchanges for two revolutions without scalar debt",
+      "milliseconds": 5471,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct takeover preserves same-hand reversal and the two-item physical direction",
+      "milliseconds": 3575,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct establishes a new zero throughout parking and after parking outruns the spring",
+      "milliseconds": 7699,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct lets an interrupted release land while the next hand reverses onto it",
+      "milliseconds": 1977,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct preserves every unfinished shell through a third immediate same-direction hand",
+      "milliseconds": 1508,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct preserves three inverse releases while repeatedly crossing the semantic seam",
+      "milliseconds": 1539,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct never absorbs an airborne reversal target into the next hand",
+      "milliseconds": 2386,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct two-item machine-gun reuse keeps one record per persistent shell",
+      "milliseconds": 3610,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct deterministic heavy abuse retains every concurrent release and records paint handoffs",
+      "milliseconds": 19709,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct dark-to-light takeover preserves overlapping paint order at new-hand zero",
+      "milliseconds": 1296,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct keeps three local grab points attached through diagonal owned movement",
+      "milliseconds": 4602,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct reports touch catch-up and owns a former-edge gesture normally",
+      "milliseconds": 3577,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct overdrag and reversal keep one stable origin with only an adjacent target",
+      "milliseconds": 2775,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct parks opaquely behind the new top and keeps immediate reversal continuous",
+      "milliseconds": 5809,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct keyboard, controls, wheel, and programmatic navigation share the physical model",
+      "milliseconds": 4849,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct preserves nested controls on the new top and accepts controlled takeover",
+      "milliseconds": 2331,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct hands one shell over continuously and passes it behind only between clear bodies",
+      "milliseconds": 12029,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct release stays finite and completes after the deck itself has stopped",
+      "milliseconds": 8422,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct grab takes ownership without a frame drawn from the wrong presentation",
+      "milliseconds": 2636,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct visual authority only ever advances, however fast the hand is",
+      "milliseconds": 21577,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a returning release once, travelling forward",
+      "milliseconds": 2635,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a committed release once, travelling forward",
+      "milliseconds": 1669,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a returning release once, travelling backward",
+      "milliseconds": 2630,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a committed release once, travelling backward",
+      "milliseconds": 1646,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "shuffle forward interior keeps every background material behind the physical pile",
+      "milliseconds": 8179,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "shuffle backward interior keeps every background material behind the physical pile",
+      "milliseconds": 7369,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "shuffle forward semantic wrap keeps every background material behind the physical pile",
+      "milliseconds": 7602,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "direct forward interior keeps every background material behind the physical pile",
+      "milliseconds": 8346,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "direct backward interior keeps every background material behind the physical pile",
+      "milliseconds": 7432,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "direct forward semantic wrap keeps every background material behind the physical pile",
+      "milliseconds": 7526,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct Next keeps the complete pile physically covered",
+      "milliseconds": 2432,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct Previous keeps the complete pile physically covered",
+      "milliseconds": 1658,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct ArrowRight wrap keeps the complete pile physically covered",
+      "milliseconds": 1799,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct ArrowLeft wrap keeps the complete pile physically covered",
+      "milliseconds": 1758,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "Direct parking inserts the outgoing card before an occluded fold shell re-emerges",
+      "milliseconds": 3942,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck-pile.spec.ts",
+      "title": "fast alternating Direct around semantic zero preserves pile-perimeter material ownership",
+      "milliseconds": 21654,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "real pointer movement maps 1:1 to the visual top in both directions",
+      "milliseconds": 2955,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "high-contrast exchange changes depth with body clearance and no crossing shadow",
+      "milliseconds": 4759,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "successive rendered frames preserve the physical exchange shells",
+      "milliseconds": 3563,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "interior and semantic-wrap exchanges have equivalent rendered choreography",
+      "milliseconds": 7423,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "pointer, wheel, and keyboard cross former ordinal edges as adjacent exchanges",
+      "milliseconds": 7014,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "both exchange variants complete repeated revolutions without drift or shell loss",
+      "milliseconds": 6748,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "distinct pointer gestures complete repeated revolutions without drift or shell loss",
+      "milliseconds": 7929,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "a two-item deck preserves forward and backward physical direction",
+      "milliseconds": 10935,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "ten consecutive exchanges restore the persistent shell inventory",
+      "milliseconds": 8788,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "deck thickness follows canonical ring depth across every semantic ordinal",
+      "milliseconds": 1838,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "the settings physical shell retraces its geometry and material through reversal",
+      "milliseconds": 1650,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "one held gesture cannot discard a second card however far it travels",
+      "milliseconds": 6456,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "a violent flick from a middle card still resolves exactly one adjacent card",
+      "milliseconds": 5230,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "one coalesced wheel burst exchanges one card and a later burst exchanges another",
+      "milliseconds": 2716,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "rapid relative commands never merge into one multi-card throw",
+      "milliseconds": 3320,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "non-adjacent absolute navigation synchronizes instead of throwing every card",
+      "milliseconds": 4332,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "reversal retraces the same card and changes direction only through neutral",
+      "milliseconds": 1357,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "one gesture reverses freely across its whole envelope but never past it",
+      "milliseconds": 1447,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "a re-grab is a new gesture with its own envelope and no surviving velocity",
+      "milliseconds": 3621,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "fast successive gestures each resolve one card with no settlement cooldown",
+      "milliseconds": 1990,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "a reverse gesture during settlement takes the card back immediately",
+      "milliseconds": 1803,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "a re-grab during settlement rebases without a jump and cannot inherit momentum",
+      "milliseconds": 1621,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "inspection follows the authoritative card instead of waiting for mechanical rest",
+      "milliseconds": 3666,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "an accepted arrow from the inspection control preserves deterministic focus",
+      "milliseconds": 2360,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "distinct rapid commands, keys, and wheel bursts each resolve one card",
+      "milliseconds": 3889,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "cancel, lost capture, cyclic former edges, and reduced motion restore coherently",
+      "milliseconds": 5952,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "responsive bleed surface avoids internal clipping and page overflow",
+      "milliseconds": 18552,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "three-card narrow consumers contain document width through every exchange frame",
+      "milliseconds": 1034,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "named metadata follows visual authority, ownership follows the anchor",
+      "milliseconds": 675,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "authority holds through jitter around the handoff instead of oscillating",
+      "milliseconds": 1654,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stacked-deck.spec.ts",
+      "title": "inspection, visual semantics, and accessibility expose one authoritative card",
+      "milliseconds": 1425,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (shuffle)",
+      "milliseconds": 1534,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (shuffle)",
+      "milliseconds": 620,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (direct)",
+      "milliseconds": 1432,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (direct)",
+      "milliseconds": 514,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects premature retirement even when a skipped sample permits enough time",
+      "milliseconds": 5,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects inconsistent snapshots and an overlapping paint swap",
+      "milliseconds": 1,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace reports moving handoffs whose intermediate clearance was not sampled",
+      "milliseconds": 0,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace records the actual RAF microtask order in both callback schedules",
+      "milliseconds": 91,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace sees inert visible bodies and rejects a temporary computed-style mutation",
+      "milliseconds": 818,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with early recorder, skipped samples and a delayed frame",
+      "milliseconds": 826,
+      "status": "expected",
+      "retries": 0
+    },
+    {
+      "project": "chromium",
+      "spec": "stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with late recorder, skipped samples and a delayed frame",
+      "milliseconds": 810,
+      "status": "expected",
+      "retries": 0
+    }
+  ],
+  "candidateMaterializationProbe": {
+    "schemaVersion": 1,
+    "sourceCommit": "983324eecd40abd1e16f80b416dde1e2cbf9f6c0",
+    "branch": "dev",
+    "scope": "Real authoritative fetch, formatter and materializer; isolated timing probe. Existing beta.14 remains ineligible for a new repository record.",
+    "fetchSeconds": 3.4568415999999997,
+    "assemblySeconds": 1.0516117000000005,
+    "wallSeconds": 4.5084533,
+    "verified": {
+      "packages": [
+        {
+          "name": "@snap-motion/core",
+          "version": "0.1.0-beta.14",
+          "file": "snap-motion-core-0.1.0-beta.14.tgz",
+          "bytes": 35246,
+          "sha256": "4797f58c84d945c8a762638ef4080f0e76fe19afc1790890946b1720dd77fda1",
+          "private": true,
+          "sideEffects": false,
+          "exports": ["."],
+          "dependencies": {},
+          "peerDependencies": {}
+        },
+        {
+          "name": "@snap-motion/vue",
+          "version": "0.1.0-beta.14",
+          "file": "snap-motion-vue-0.1.0-beta.14.tgz",
+          "bytes": 84544,
+          "sha256": "6c1d4fbb78ea267a1225c3595e598e6717096463f94df9ee1fec9ed2e788944e",
+          "private": true,
+          "sideEffects": ["**/*.css"],
+          "exports": [
+            ".",
+            "./carousel",
+            "./coverflow",
+            "./dialog",
+            "./localization",
+            "./media-gallery",
+            "./motion",
+            "./sheet",
+            "./stacked-deck",
+            "./style.css"
+          ],
+          "dependencies": {
+            "@vueuse/core": "14.4.0",
+            "motion": "12.42.2",
+            "@snap-motion/core": "^0.1.0-beta.14"
+          },
+          "peerDependencies": {
+            "vue": ">=3.5.0 <4"
+          }
+        }
+      ],
+      "runId": 37507407043,
+      "runAttempt": 1,
+      "artifactId": 11432457715,
+      "artifactDigest": "sha256:3e8b89ca41a5d194f7ab0a9b7bf753d68d24489387c63bcb66400f7bf78d2a16",
+      "url": "https://github.com/maikeleckelboom/snap-motion/actions/runs/37507407043"
+    }
+  },
+  "candidatePreparationBefore": {
+    "measured": false,
+    "reason": "Old workflow required complete local pnpm verify; historical beta.14 is already recorded and remains ineligible. No version bump or new repository candidate was authorized for a timing experiment."
+  },
+  "reconstruction": {
+    "before": {
+      "schemaVersion": 1,
+      "sourceCommit": "a0377e13dc098c8e814a2c39724ce7b4696df312",
+      "runId": 37484209120,
+      "runAttempt": 1,
+      "url": "https://github.com/maikeleckelboom/snap-motion/actions/runs/37484209120",
+      "conclusion": "success",
+      "wallSeconds": 45,
+      "jobs": [
+        {
+          "name": "Verify recorded candidate 0.1.0-beta.14",
+          "conclusion": "success",
+          "seconds": 45,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+              "conclusion": "success",
+              "seconds": 4
+            },
+            {
+              "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "conclusion": "success",
+              "seconds": 9
+            },
+            {
+              "name": "Run pnpm install --frozen-lockfile",
+              "conclusion": "success",
+              "seconds": 5
+            },
+            {
+              "name": "Verify and reassemble immutable recorded candidate",
+              "conclusion": "success",
+              "seconds": 19
+            },
+            {
+              "name": "Upload verified private release-candidate artifacts",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        }
+      ]
+    },
+    "after": {
+      "schemaVersion": 1,
+      "sourceCommit": "5997db098a99026868bf068e5a7bdbaf15bd2297",
+      "runId": 37497899550,
+      "runAttempt": 1,
+      "url": "https://github.com/maikeleckelboom/snap-motion/actions/runs/37497899550",
+      "conclusion": "success",
+      "wallSeconds": 49,
+      "jobs": [
+        {
+          "name": "Verify recorded candidate 0.1.0-beta.14",
+          "conclusion": "success",
+          "seconds": 49,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+              "conclusion": "success",
+              "seconds": 4
+            },
+            {
+              "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "conclusion": "success",
+              "seconds": 9
+            },
+            {
+              "name": "Run pnpm install --frozen-lockfile",
+              "conclusion": "success",
+              "seconds": 7
+            },
+            {
+              "name": "Verify and reassemble immutable recorded candidate",
+              "conclusion": "success",
+              "seconds": 19
+            },
+            {
+              "name": "Upload verified private release-candidate artifacts",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "localRepeatEvidence": {
+    "sourceOwners": [
+      {
+        "group": "general-corrected",
+        "repetitions": 2,
+        "workers": 2,
+        "wallMilliseconds": 208850.433,
+        "outcomes": {
+          "startTime": "2026-10-06T16:12:37.511Z",
+          "duration": 208850.433,
+          "expected": 244,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "projects": [
+          {
+            "project": "chromium",
+            "tests": 244,
+            "milliseconds": 409568
+          }
+        ]
+      },
+      {
+        "group": "deck",
+        "repetitions": 2,
+        "workers": 2,
+        "wallMilliseconds": 140509.446,
+        "outcomes": {
+          "startTime": "2026-10-06T15:58:36.657Z",
+          "duration": 140509.446,
+          "expected": 84,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "projects": [
+          {
+            "project": "chromium",
+            "tests": 84,
+            "milliseconds": 272214
+          }
+        ]
+      },
+      {
+        "group": "direct",
+        "repetitions": 2,
+        "workers": 2,
+        "wallMilliseconds": 224607.764,
+        "outcomes": {
+          "startTime": "2026-10-06T16:00:57.990Z",
+          "duration": 224607.764,
+          "expected": 88,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "projects": [
+          {
+            "project": "chromium",
+            "tests": 88,
+            "milliseconds": 430715
+          }
+        ]
+      },
+      {
+        "group": "firefox",
+        "repetitions": 2,
+        "workers": 2,
+        "wallMilliseconds": 109336.25,
+        "outcomes": {
+          "startTime": "2026-10-06T16:04:44.165Z",
+          "duration": 109336.25,
+          "expected": 106,
+          "skipped": 4,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "projects": [
+          {
+            "project": "firefox",
+            "tests": 110,
+            "milliseconds": 209624
+          }
+        ]
+      },
+      {
+        "group": "webkit",
+        "repetitions": 2,
+        "workers": 2,
+        "wallMilliseconds": 115411.11700000001,
+        "outcomes": {
+          "startTime": "2026-10-06T16:06:34.317Z",
+          "duration": 115411.11700000001,
+          "expected": 106,
+          "skipped": 4,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "projects": [
+          {
+            "project": "webkit",
+            "tests": 110,
+            "milliseconds": 223538
+          }
+        ]
+      },
+      {
+        "group": "webkit-stacked-deck",
+        "repetitions": 2,
+        "workers": 2,
+        "wallMilliseconds": 114906.013,
+        "outcomes": {
+          "startTime": "2026-10-06T16:08:30.568Z",
+          "duration": 114906.013,
+          "expected": 26,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "projects": [
+          {
+            "project": "webkit-stacked-deck",
+            "tests": 26,
+            "milliseconds": 222322
+          }
+        ]
+      }
+    ],
+    "controlledCapture": {
+      "startTime": "2026-10-06T17:47:27.981Z",
+      "duration": 31664.019,
+      "expected": 20,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "directOwnersAfterCaptureFix": {
+      "startTime": "2026-10-06T17:48:29.596Z",
+      "duration": 408416.78599999996,
+      "expected": 138,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "galleryCapture": {
+      "startTime": "2026-10-06T17:13:08.791Z",
+      "duration": 36039.699,
+      "expected": 30,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "gallerySpec": {
+      "startTime": "2026-10-06T17:13:45.710Z",
+      "duration": 41502.968,
+      "expected": 34,
+      "skipped": 8,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "completeVerify": {
+      "passed": true,
+      "wallSeconds": 778,
+      "sourceCommit": "72655adf8e6e690c9519f71c688dc95b7dbd7199",
+      "unitTests": 977,
+      "sourceBrowserSelected": 368,
+      "sourceBrowserPassed": 364,
+      "sourceBrowserSkipped": 4,
+      "sourceBrowserSeconds": 618.3,
+      "scope": "One complete isolated Linux verification. Subsequent CI/test synchronization changes received focused repeats and the exact final full GitHub matrix."
+    }
+  }
+}

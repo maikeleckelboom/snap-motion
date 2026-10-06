@@ -228,3 +228,86 @@ cost: integration (177s) waited for all Linux verification (123s). The separate
 package-authority owner removes that barrier while keeping one build/pack and one
 fast unit suite. Its additional setup is an explicit cost of letting source checks
 and packed-browser certification proceed concurrently from the same immutable bytes.
+
+## Final measured results
+
+Full source run [37507407043](https://github.com/maikeleckelboom/snap-motion/actions/runs/37507407043)
+passed all fourteen owners at `983324eecd40abd1e16f80b416dde1e2cbf9f6c0`, attempt 1.
+[The after profile](../config/test-performance-after.json) retains every source,
+preview and fixture spec/project/test, the top twenty tests, job/step durations,
+coverage counts, repeat evidence, and candidate/reconstruction measurements.
+The following rows distinguish native test time from job and parallel cohort time.
+
+| Layer                          |                                                Before |                                                After |
+| ------------------------------ | ----------------------------------------------------: | ---------------------------------------------------: |
+| Units                          |                                930 tests; 17s CI step |           984 tests; 20s CI step; 19.04s native wall |
+| Chromium longest job           |                478s passing execution; 432s test step |                             192s job; 140s test step |
+| Chromium cohort wall           |                                    472s first attempt |                                                 192s |
+| Chromium aggregate test steps  |                            609s across two executions |                  327s across three concurrent owners |
+| Firefox                        |    Shared 607s job; approximately 118s test intervals |                         126s job; 74.5s native tests |
+| WebKit interoperability        |    Shared 607s job; approximately 137s test intervals |                        151s job; 100.4s native tests |
+| WebKit cyclic deck             |    Shared 607s job; approximately 294s test intervals |                        154s job; 101.1s native tests |
+| WebKit Direct                  | Existing local-only owner; no independent CI baseline |                        242s job; 190.3s native tests |
+| WebKit pile                    | Existing local-only owner; no independent CI baseline |                        217s job; 165.2s native tests |
+| Interoperability cohort wall   |                 607s combined job; 123 selected cases |          283s across five owners; 160 selected cases |
+| Browser integration            |           177s job; 51s installation; 70s packed Nuxt |             168s job; 26s container; 82s packed Nuxt |
+| Normal browser-relevant Verify |             626s measured first-attempt critical path |                          310s successful full matrix |
+| Candidate preparation          |   Entire local `pnpm verify`; not independently timed | 4.51s isolated certified fetch/materialization probe |
+| Candidate reconstruction       |                      45s job; 19s reconstruction step |                     49s job; 19s reconstruction step |
+
+The 626s baseline attempt failed on the documented Sheet flake; it is measured
+execution cost, not a passing full-run claim. The passing Chromium 2 execution is
+reported separately. The final source critical path is 50.5% shorter, while
+source CI inherits all 37 existing WebKit release-only cases. Chromium jobs are
+170s/135s/192s including setup, compared with 229s/478s; their test steps are
+109s/78s/140s. Aggregate Chromium job time drops from 707s across the recorded
+executions to 497s despite a third setup. No case, engine witness, or assertion
+is removed to obtain these results.
+
+The final CI revolution scenarios take 6.75s/7.93s in Chromium and 9.35s/10.13s
+in WebKit, retaining both variants, both directions, every settlement, and added
+representative transition tracing. Cross-browser CI selected 160 cases, with
+156 passes and four unchanged conditional skips. Source Chromium passed all 208.
+Preview/fixtures passed all 13; packed certification retained sixteen preference
+cells per engine. The original 930 unit tests remain; 54 new tooling/architecture
+tests account for the count increase.
+
+Browser installation is absent in the matched containers, but container startup
+still costs 25-34s per owner. Parallel setup has a measured cost; the main gain is
+concurrent engines, balanced work and controlled spring frames. This run also
+queued Firefox and WebKit Direct for 41s after other browser owners started. Thus
+the interoperability cohort's 283s exceeds its longest individual 242s job.
+
+Concurrency is context-local: clocks, lab state, preferences and debug publications
+belong to each page/context. The shared Vite server serves immutable source and
+has no mutable per-test server state; jobs own separate hosts/ports. Diagnostic
+filenames use per-test output paths. Two workers were retained after repeated
+whole-owner coverage; higher worker counts were unnecessary to meet the critical
+path target and would add contention on two-core runners. The final full CI matrix
+had no unexpected or flaky outcomes and no test retries. Earlier newly exposed
+Gallery/Direct timing failures were investigated and fixed, not waived.
+
+One complete isolated Linux `pnpm verify` passed in 778s, including 977 units at
+that revision, all 368 source-browser selections (364 passes/four existing skips),
+packed consumers, preview and fixtures. Subsequent synchronization and CI-input
+repairs received focused repeats and final exact-source GitHub certification.
+The full local browser matrix still took 618s: running all engines and native paint
+witnesses on one host remains expensive. Focused development commands avoid paying
+that aggregate cost during iteration; Windows `pnpm check:fast` measured 65.6s.
+
+The candidate probe performs real authoritative GitHub retrieval, archive inspection,
+formatting, exclusive sandbox assembly and hash comparison at the certified source.
+Fetch took 3.46s and assembly 1.05s. It creates no repository candidate, changes no
+version and leaves the already-recorded beta.14 ineligible. An independent old
+candidate timing is unavailable; the old full-gate dependency is established by
+the command graph, not represented as an invented measurement. Reconstruction of
+the existing immutable record passed in
+[37497899550](https://github.com/maikeleckelboom/snap-motion/actions/runs/37497899550),
+retaining the historical-source-to-archive identity proof.
+
+Remaining costs are intentional paint evidence and package consumer preparation.
+The slowest final test is WebKit pile perimeter ownership (75.8s): it already uses
+controlled time and checks real screenshots against physical publication geometry.
+WebKit Direct visual authority takes 40.2s; native capture/paint witnesses continue
+to use real frames. Packed Nuxt build/hydration takes 82s. Removing screenshot or
+compositor assertions would trade confidence for speed and is outside this pass.
