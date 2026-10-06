@@ -52,7 +52,8 @@ export default defineConfig({
     {
       name: "webkit-stacked-deck-direct",
       testMatch: stackedDeckDirectSpec,
-      workers: 2,
+      // Native-frame capture continuity failed at two workers; 10 serial repeats passed.
+      workers: 1,
       use: { ...devices["Desktop Safari"] },
     },
     {

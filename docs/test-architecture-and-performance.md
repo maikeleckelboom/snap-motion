@@ -128,3 +128,67 @@ See the [official clock documentation](https://playwright.dev/docs/clock).
 - Changed-path skips and the final certification gate have deterministic tests.
 - Development follows focused test, affected suite, fast checks, then one final
   source gate. Release materialization is a separate operation.
+
+## Implemented ownership and artifact reuse
+
+Chromium has three deterministic, disjoint file groups: general (122 tests), deck
+(42), and Direct/pile/reversal (44). New source specs default to general; no unknown
+spec silently falls out of certification. A unit test checks the complete file
+partition and production-preview exclusion. Firefox (55), WebKit interoperability
+(55), and WebKit cyclic deck (13) run as separate jobs. Every job uses two workers
+and an official Playwright 1.61.1 container matched to the package pin. Preview and
+framework fixture certification retain their small existing one-worker jobs.
+Local complete verification also retains the existing extra 25 WebKit Direct and
+12 WebKit pile tests; they were never part of the baseline source-CI matrix.
+
+The extra WebKit Direct spec retains its original one-worker cap. Its native-frame
+airborne reversal capture failed once in two complete two-worker repetitions and
+once in ten focused two-worker repetitions; ten focused one-worker repetitions
+passed. The failure changes captured scale by 0.00016 against the existing 0.00001
+continuity limit. The limit remains unchanged. This is a demonstrated concurrency
+constraint, not a dismissed flake. WebKit pile passed both complete repetitions at
+two workers. Source-CI owners do not include the extra Direct spec and remain
+parallel. Investigating its native-frame publication/capture timing further is a
+separate follow-up; no production behavior is changed in this pass.
+
+Each source-CI owner passed two complete local repetitions at two workers:
+Chromium general 244 passes, deck 84, Direct/pile/reversal 88; Firefox and WebKit
+each 106 passes plus four existing skips; WebKit cyclic 26 passes. There were no
+failures or retries across those 662 selections. The corrected general run excludes
+preview, whose built entrypoint belongs to integration. Diagnostic writers now use
+per-test output paths, avoiding collisions during parallel/repeated execution.
+
+No source-browser tests are deleted or moved. Source CI still selects Chromium
+208, Firefox 55, and WebKit 68, including four existing engine-conditional skips.
+Preview adds one Chromium test; framework fixtures add 12; packed preferences
+retain all 48 three-engine cells. The unit suite keeps all 930 original tests and
+adds deterministic tests for partitioning, classification, reporting and evidence.
+
+Linux builds package authority once and packs once. Integration downloads that
+exact artifact by ID and never repacks or rebuilds package authority. It still
+builds preview and framework fixtures, then certifies the same tarballs through
+Nuxt. The production-root lab build and non-root preview remain separate because
+they prove different entry/base-path behavior. Separate jobs may build application
+fixtures again; transferring the larger Nuxt output has not demonstrated a gain.
+
+Source-browser and package-integration classification are independent. Pure lab
+E2E changes require source browsers; packed/preview fixture and package-assembly
+changes require integration. Documentation/candidate records require neither.
+Release-history tooling keeps its existing browser-irrelevant allowlist. Production
+source (including Core math and feature modules), dependencies, shared styles,
+configuration, CI, malformed/missing diffs, and unknown paths require both. Feature
+source is deliberately not narrowed until a dependency/consumer map can justify it.
+Every skip and the union of mixed changes is tested; the final gate requires each
+owner to succeed or skip exactly as classified and also requires Linux/Windows.
+
+Each source owner emits Playwright JSON, per-project/spec/test totals, retries,
+skips, the twenty slowest tests, and a soft Step Summary. Setup, installation,
+build and package-consumer costs remain distinct workflow steps. Use
+`pnpm test:timing:ci <run-id> <output.json>` to export job and step timings from
+the exact GitHub attempt. Durations are reporting signals, never hard assertions.
+
+Release preparation retrieves the full GitHub-certified archive set instead of
+rerunning `pnpm verify`. New records bind exact SHA, branch, run, attempt, archive
+metadata and hashes to remotely retrieved evidence. Local marker files are rejected.
+Historical candidate reconstruction remains a distinct source-to-bytes proof.
+See [releasing](releasing.md) for expiry, full-rerun, and clean-source requirements.

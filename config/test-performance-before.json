@@ -457,6 +457,11 @@
       "seconds": 601.2530000000003
     },
     {
+      "project": "chromium-fixtures",
+      "tests": 12,
+      "seconds": 11.713
+    },
+    {
       "project": "firefox",
       "tests": 55,
       "seconds": 117.81000000000002
@@ -658,6 +663,18 @@
       "spec": "e2e/showcase-smoke.spec.ts",
       "tests": 5,
       "seconds": 6.4959999999999996
+    },
+    {
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/routing-hydration.spec.ts",
+      "tests": 6,
+      "seconds": 5.922000000000001
+    },
+    {
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/surface-preferences.spec.ts",
+      "tests": 6,
+      "seconds": 5.7909999999999995
     },
     {
       "project": "firefox",
@@ -1603,6 +1620,90 @@
       "spec": "e2e/media-preview.spec.ts",
       "title": "built lab resolves and decodes every fixture under a non-root base",
       "seconds": 1.08
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/routing-hydration.spec.ts",
+      "title": "Vue Router owns push, replacement, Back closure, and direct-entry fallback",
+      "seconds": 0.389
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/routing-hydration.spec.ts",
+      "title": "Vue Router can delay and refuse controlled navigation and close requests",
+      "seconds": 2.915
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/routing-hydration.spec.ts",
+      "title": "Nuxt hydrates a query-controlled overlay without warnings",
+      "seconds": 0.732
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/routing-hydration.spec.ts",
+      "title": "Nuxt can delay controlled gallery navigation and close without hydration drift",
+      "seconds": 1.543
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/routing-hydration.spec.ts",
+      "title": "Nuxt full media route remains meaningful without JavaScript",
+      "seconds": 0.102
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/routing-hydration.spec.ts",
+      "title": "Nuxt adaptive sheet hydrates one host and transfers focused state inline",
+      "seconds": 0.241
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/surface-preferences.spec.ts",
+      "title": "Coverflow image is the complete neutral panel at default allocation",
+      "seconds": 0.241
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/surface-preferences.spec.ts",
+      "title": "Coverflow image is the complete neutral panel at narrow allocation",
+      "seconds": 0.222
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/surface-preferences.spec.ts",
+      "title": "Coverflow image is the complete neutral panel at wide allocation",
+      "seconds": 0.23
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/surface-preferences.spec.ts",
+      "title": "spatial surfaces distinguish pointer, keyboard and forced-colors focus",
+      "seconds": 3.833
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/surface-preferences.spec.ts",
+      "title": "Nuxt wide Coverflow hydrates with no-preference before navigation",
+      "seconds": 0.975
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium-fixtures",
+      "spec": "fixture-e2e/surface-preferences.spec.ts",
+      "title": "Nuxt wide Coverflow hydrates with reduce before navigation",
+      "seconds": 0.29
     },
     {
       "job": "Chromium 1/2",
