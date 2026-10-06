@@ -63,6 +63,10 @@ export function useGalleryTrack(options: {
     visibleIndex.value = options.currentIndex();
   }
 
+  // Exact adoption and collection reconciliation change the mechanical anchor independently
+  // of travel. Rebase presentation synchronously so a pending gesture cannot expose an old item.
+  watch(options.currentIndex, reset, { flush: "sync" });
+
   async function runTravel(current: TrackTravel) {
     await transition(offset, offset.value, current.to, {
       duration: MEDIA_GALLERY_TUNING.trackDuration,

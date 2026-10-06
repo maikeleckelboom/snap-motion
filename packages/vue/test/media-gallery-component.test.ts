@@ -183,7 +183,232 @@ async function galleryPointer(
   await flushReactiveTasks();
 }
 
+function checkPresentedNodes(nodes: readonly { element: Element; position: string | undefined }[]) {
+  for (const node of nodes) {
+    expect(node.element.isConnected).toBe(true);
+    expect(node.element.getAttribute("data-slot-position")).toBe(node.position);
+  }
+}
+
 describe("MediaGalleryDialog interrupted authority", () => {
+  for (const input of ["command", "gesture"] as const) {
+    it(`bounds retained slots during large-gallery ${input} retargeting without replacing the presented corridor`, async () => {
+      const frames = useControlledAnimationFrames();
+      const collection = Array.from({ length: 300 }, (_, index) => ({
+        ...items[0]!,
+        id: `item-${index}`,
+      }));
+      const wrapper = mountGallery({ items: collection, reducedMotionOverride: false });
+      await flushReactiveTasks();
+      await frames.flushAll();
+      const handle = wrapper.vm as unknown as { navigateTo: (id: string) => boolean };
+      const navigate = (id: string) => expect(handle.navigateTo(id)).toBe(true);
+      let maximum = 0;
+      for (let index = 2; index < collection.length - 1; index += 1) {
+        const offset =
+          Number.parseFloat(
+            wrapper
+              .get<HTMLElement>('[data-testid="snap-motion-media-gallery-track"]')
+              .element.style.getPropertyValue("--_gallery-track-x"),
+          ) || 0;
+        let visibleNodes = wrapper
+          .findAll(".snap-motion-media-gallery-slot")
+          .filter(
+            (slot) => Math.abs(Number(slot.attributes("data-slot-position")) + offset / 800) <= 1,
+          )
+          .map((slot) => ({
+            element: slot.element,
+            position: slot.attributes("data-slot-position"),
+          }));
+        if (input === "command") navigate(`item-${index}`);
+        else {
+          await galleryPointer(wrapper, "pointerdown", 500, index * 300);
+          checkPresentedNodes(visibleNodes);
+          await galleryPointer(wrapper, "pointermove", 300, index * 300 + 100);
+          const movedOffset = Number.parseFloat(
+            wrapper
+              .get<HTMLElement>('[data-testid="snap-motion-media-gallery-track"]')
+              .element.style.getPropertyValue("--_gallery-track-x"),
+          );
+          visibleNodes = wrapper
+            .findAll(".snap-motion-media-gallery-slot")
+            .filter(
+              (slot) =>
+                Math.abs(Number(slot.attributes("data-slot-position")) + movedOffset / 800) <= 1,
+            )
+            .map((slot) => ({
+              element: slot.element,
+              position: slot.attributes("data-slot-position"),
+            }));
+          await galleryPointer(wrapper, "pointerup", 300, index * 300 + 200);
+        }
+        await flushReactiveTasks();
+        maximum = Math.max(maximum, wrapper.findAll(".snap-motion-media-gallery-slot").length);
+        checkPresentedNodes(visibleNodes);
+      }
+      expect(maximum).toBeLessThanOrEqual(8);
+      // Each deliberately unadvanced takeover leaves an aborted RAF to consume. Drain those
+      // obsolete callbacks as well as the final travel, proving none can publish old work.
+      for (let frame = 0; frame < collection.length + 20 && frames.pending() > 0; frame += 1) {
+        await frames.flushNext();
+      }
+      await frames.flushAll();
+      expect(wrapper.get("dialog").attributes("data-settled-id")).toBe(
+        input === "command" ? "item-298" : "item-297",
+      );
+      expect(wrapper.emitted("settled")).toEqual([
+        [
+          input === "command" ? "item-298" : "item-297",
+          { reason: input === "command" ? "programmatic" : "drag" },
+        ],
+      ]);
+      wrapper.unmount();
+    });
+  }
+
+  for (const adoption of ["external", "exact", "reorder"] as const) {
+    for (const release of ["pointerup", "pointercancel"] as const) {
+      it(`keeps synchronized presentation on pending pointerdown after ${adoption} and ${release}`, async () => {
+        const frames = useControlledAnimationFrames();
+        const fourth = {
+          ...items[0]!,
+          id: "four",
+          title: "Four",
+          description: "Fourth description",
+        };
+        const collection = [...items, fourth];
+        const wrapper = mountGallery({
+          items: collection,
+          ...(adoption === "external" ? { activeId: "one" } : {}),
+        });
+        await flushReactiveTasks();
+        await frames.flushAll();
+        if (adoption === "external") await wrapper.setProps({ activeId: "four" });
+        else if (adoption === "exact") {
+          (wrapper.vm as unknown as { synchronizeTo: (id: string) => boolean }).synchronizeTo(
+            "four",
+          );
+        } else {
+          await wrapper.setProps({ items: [fourth, items[1]!, items[2]!, items[0]!] });
+        }
+        await flushReactiveTasks();
+        const expected = adoption === "reorder" ? items[0]! : fourth;
+        const checkPresentation = () => {
+          expect(wrapper.get('[data-testid="snap-motion-media-gallery-title"]').text()).toBe(
+            expected.title,
+          );
+          expect(wrapper.get('[data-testid="snap-motion-media-gallery-description"]').text()).toBe(
+            expected.description,
+          );
+          expect(wrapper.get('[data-testid="snap-motion-media-gallery-position"]').text()).toBe(
+            "4 / 4",
+          );
+          expect(namedImages(wrapper)[0]?.attributes("alt")).toBe(expected.alt);
+        };
+        checkPresentation();
+        const settlements = wrapper.emitted("settled")?.length ?? 0;
+        await galleryPointer(wrapper, "pointerdown", 500, 100);
+        checkPresentation();
+        await galleryPointer(wrapper, release, 500, 200);
+        await frames.flushAll();
+        checkPresentation();
+        expect(wrapper.get("dialog").attributes("data-track-state")).toBe("idle");
+        expect(wrapper.emitted("settled")?.length ?? 0).toBe(settlements);
+        wrapper.unmount();
+      });
+    }
+  }
+
+  for (const mode of ["takeover", "drag", "pan", "pinch"] as const) {
+    it(`resolves ${mode} ownership on window blur without duplicate settlement`, async () => {
+      const frames = useControlledAnimationFrames();
+      const wrapper = mountGallery({ reducedMotionOverride: mode === "pan" });
+      await flushReactiveTasks();
+      await frames.flushAll();
+      if (mode === "takeover" || mode === "pinch") {
+        await galleryPointer(wrapper, "pointerdown", 500, 0);
+        await galleryPointer(wrapper, "pointermove", 300, 100);
+        await galleryPointer(wrapper, "pointerup", 300, 200);
+        await frames.flushNext();
+      }
+      if (mode === "pan") {
+        await wrapper.get('[data-testid="snap-motion-media-gallery-zoom-in"]').trigger("click");
+        await frames.flushAll();
+      }
+      await galleryPointer(wrapper, "pointerdown", 500, 300);
+      if (mode === "pinch") await galleryPointer(wrapper, "pointerdown", 600, 320, 92);
+      await galleryPointer(
+        wrapper,
+        "pointermove",
+        mode === "pinch" ? 650 : 450,
+        400,
+        mode === "pinch" ? 92 : 91,
+      );
+      expect(Number(wrapper.get("dialog").attributes("data-scale"))).toBeGreaterThan(
+        mode === "pan" || mode === "pinch" ? 1 : 0,
+      );
+      expect(
+        wrapper
+          .get('[data-testid="snap-motion-media-gallery-viewport"]')
+          .attributes("data-pointer-mode"),
+      ).toBe(mode === "pan" || mode === "pinch" ? "pan" : "swipe");
+      const transformBefore = wrapper.get("dialog").attributes("data-scale");
+      window.dispatchEvent(new Event("blur"));
+      await flushReactiveTasks();
+      await galleryPointer(wrapper, "lostpointercapture", 450, 410);
+      window.dispatchEvent(new Event("blur"));
+      await frames.flushAll();
+      expect(
+        wrapper
+          .get('[data-testid="snap-motion-media-gallery-viewport"]')
+          .attributes("data-pointer-mode"),
+      ).toBe("idle");
+      expect(wrapper.get("dialog").attributes("data-track-state")).toBe("idle");
+      expect(
+        wrapper
+          .get<HTMLElement>('[data-testid="snap-motion-media-gallery-track"]')
+          .element.style.getPropertyValue("--_gallery-track-x"),
+      ).toBe("0.000px");
+      const navigating = mode === "takeover" || mode === "pinch";
+      expect(wrapper.get("dialog").attributes("data-settled-id")).toBe(navigating ? "two" : "one");
+      expect(wrapper.emitted("settled") ?? []).toEqual(
+        navigating ? [["two", { reason: "drag" }]] : [],
+      );
+      expect(wrapper.get("dialog").attributes("data-scale")).toBe(
+        navigating ? "1.0000" : transformBefore,
+      );
+      wrapper.unmount();
+    });
+  }
+
+  for (const invalidation of ["external", "collection", "close", "unmount"] as const) {
+    it(`does not resume blurred takeover after ${invalidation} invalidation`, async () => {
+      const frames = useControlledAnimationFrames();
+      const wrapper = mountGallery({ reducedMotionOverride: false });
+      await flushReactiveTasks();
+      await frames.flushAll();
+      await galleryPointer(wrapper, "pointerdown", 500, 0);
+      await galleryPointer(wrapper, "pointermove", 300, 100);
+      await galleryPointer(wrapper, "pointerup", 300, 200);
+      await frames.flushNext();
+      await galleryPointer(wrapper, "pointerdown", 500, 300);
+      await galleryPointer(wrapper, "pointermove", 450, 400);
+      const dialogElement = wrapper.get("dialog").element;
+      if (invalidation === "external") await wrapper.setProps({ activeId: "three" });
+      if (invalidation === "collection") await wrapper.setProps({ items: [items[0]!] });
+      if (invalidation === "close") await wrapper.setProps({ open: false });
+      if (invalidation === "unmount") wrapper.unmount();
+      const settlements = wrapper.emitted("settled") ?? [];
+      window.dispatchEvent(new Event("blur"));
+      await frames.flushAll();
+      expect(wrapper.emitted("settled") ?? []).toEqual(settlements);
+      expect(dialogElement.getAttribute("data-track-state")).toBe("idle");
+      if (invalidation !== "unmount") {
+        wrapper.unmount();
+      }
+    });
+  }
+
   it("preserves the interrupted offset when a takeover becomes a pinch and resumes on release", async () => {
     const frames = useControlledAnimationFrames();
     const wrapper = mountGallery({ reducedMotionOverride: false });

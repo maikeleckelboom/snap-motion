@@ -147,7 +147,7 @@ const pointerCount = ref(0);
 const transform = shallowRef<MediaTransform>({ ...fittedMediaTransform });
 const mediaTransitionMode = ref<MediaTransitionMode>("direct");
 const trackNavigationState = ref<TrackNavigationState>("idle");
-// Retain keyed physical slots through takeovers. Coordinates change only at actual rest.
+// Retain the presented keyed corridor through takeovers. Off-screen history can be recycled.
 const retainedTrackSlots = shallowRef<readonly { itemIndex: number; position: number }[]>();
 const previousFocused = ref(false);
 const nextFocused = ref(false);
@@ -524,14 +524,23 @@ function interruptDiscreteTransform() {
 }
 
 function prepareTrackDestination(destination: number) {
-  const physicalSlots = [...trackSlots.value].map(({ itemIndex, position }) => ({
-    itemIndex,
-    position,
-  }));
+  const presentedPosition = geometry.width > 0 ? -getTrackOffset() / geometry.width : 0;
+  // Slots are at most one viewport wide. Preserve every intersecting image, the hysteresis
+  // owner and the mechanical anchor before recycling off-screen history.
+  const physicalSlots = trackSlots.value
+    .filter(
+      (slot) =>
+        Math.abs(slot.position - presentedPosition) <= 1 ||
+        slot.itemIndex === visibleIndex.value ||
+        slot.itemIndex === galleryIndex.value,
+    )
+    .map(({ itemIndex, position }) => ({ itemIndex, position }));
   const origin = physicalSlots.find((slot) => slot.itemIndex === navigationIndex.value);
   const direction = Math.sign(destination - navigationIndex.value);
   if (!physicalSlots.some((slot) => slot.itemIndex === destination)) {
-    let position = (origin?.position ?? 0) + direction;
+    // An off-screen superseded destination must not push every later target farther away.
+    // Extend the presented corridor instead, without moving any image already on screen.
+    let position = (origin?.position ?? Math.round(presentedPosition)) + direction;
     while (physicalSlots.some((slot) => slot.position === position)) position += direction || 1;
     physicalSlots.push({ itemIndex: destination, position });
   }
@@ -949,14 +958,21 @@ function onWindowPointerUp(event: PointerEvent) {
   pointerMode.value = "idle";
 }
 
+function cancelPointerInteraction() {
+  if (activePointers.size === 0) return;
+  // Clear ownership before releasing capture: blur and lost capture may arrive together.
+  clearPointerState();
+  if (
+    isNavigationCurrent(navigationGeneration) &&
+    (Math.abs(getTrackOffset()) > 0.01 || navigationReason !== undefined)
+  ) {
+    resumeIntendedSettlement(invalidateNavigation(true));
+  }
+}
+
 function onWindowPointerCancel(event: PointerEvent) {
   if (!activePointers.has(event.pointerId)) return;
-  activePointers.delete(event.pointerId);
-  safeReleasePointer(event.pointerId);
-  if (gesture) gesture.cancelled = true;
-  clearPointerState();
-  const generation = invalidateNavigation(true);
-  resumeIntendedSettlement(generation);
+  cancelPointerInteraction();
 }
 
 function onLostPointerCapture(event: PointerEvent) {
@@ -1250,7 +1266,7 @@ function onReducedMotionChange(event: MediaQueryListEvent) {
 useEventListener("pointermove", onWindowPointerMove, { passive: false });
 useEventListener("pointerup", onWindowPointerUp);
 useEventListener("pointercancel", onWindowPointerCancel);
-useEventListener("blur", clearPointerState);
+useEventListener("blur", cancelPointerInteraction);
 useEventListener(imageViewport, "lostpointercapture", onLostPointerCapture);
 useEventListener(imageViewport, "wheel", onWheel, { passive: false });
 useEventListener(reducedMotionQuery, "change", onReducedMotionChange);

@@ -2,6 +2,53 @@ import { expect, test } from "@playwright/test";
 
 import { openLabDemo } from "./helpers";
 
+test("window blur resolves a partially dragged takeover exactly once", async ({ page }) => {
+  await openLabDemo(page, "gallery-at", "no-preference");
+  await page.getByTestId("at-scenario-first-item").click();
+  await page.getByTestId("at-open-gallery").click();
+  const dialog = page.getByTestId("snap-motion-media-gallery");
+  await expect(dialog).toHaveAttribute("data-dialog-state", "open");
+  await page.getByTestId("snap-motion-media-gallery-shell").evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+  });
+  const clockTime = new Date("2026-01-01T00:00:00Z");
+  await page.clock.install({ time: clockTime });
+  await page.clock.pauseAt(new Date(clockTime.getTime() + 1000));
+  const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
+  const box = await viewport.boundingBox();
+  if (!box) throw new Error("Missing gallery viewport");
+  const x = box.x + box.width * 0.65;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - box.width * 0.25, y);
+  await page.mouse.up();
+  await page.clock.runFor(32);
+  await expect(dialog).toHaveAttribute("data-track-state", "settling");
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - box.width * 0.08, y);
+  await expect(viewport).toHaveAttribute("data-pointer-mode", "swipe");
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect(viewport).toHaveAttribute("data-pointer-mode", "idle");
+  await expect(dialog).toHaveAttribute("data-track-state", "settling");
+  await page.mouse.up();
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await page.clock.runFor(600);
+  await expect(dialog).toHaveAttribute("data-track-state", "idle");
+  await expect(dialog).toHaveAttribute("data-active-id", "wide-timeline");
+  await expect(dialog).toHaveAttribute("data-settled-id", "wide-timeline");
+  await expect(page.getByTestId("snap-motion-media-gallery-position")).toHaveText("2 / 3");
+  expect(
+    await page
+      .getByTestId("snap-motion-media-gallery-track")
+      .evaluate((element) => element.style.getPropertyValue("--_gallery-track-x")),
+  ).toBe("0.000px");
+  await expect(
+    page.getByTestId("at-event-trace").locator("li").filter({ hasText: "settled" }),
+  ).toHaveCount(1);
+});
+
 for (const pointer of ["mouse", "touch"] as const) {
   for (const age of [32, 144]) {
     test(`${pointer} takes over at ${age}ms, chains three destinations and reverses`, async ({
@@ -22,8 +69,9 @@ for (const pointer of ["mouse", "touch"] as const) {
       await page.keyboard.press("Home");
       await expect(dialog).toHaveAttribute("data-track-state", "idle");
       await expect(dialog).toHaveAttribute("data-settled-id", "templates");
-      await page.clock.install();
-      await page.clock.pauseAt(new Date());
+      const clockTime = new Date("2026-01-01T00:00:00Z");
+      await page.clock.install({ time: clockTime });
+      await page.clock.pauseAt(new Date(clockTime.getTime() + 1000));
       const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
       const box = await viewport.boundingBox();
       if (!box) throw new Error("Missing gallery viewport");
