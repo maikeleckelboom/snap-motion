@@ -173,6 +173,12 @@ Nuxt. The production-root lab build and non-root preview remain separate because
 they prove different entry/base-path behavior. Separate jobs may build application
 fixtures again; transferring the larger Nuxt output has not demonstrated a gain.
 
+Authority includes raw `temp/declarations` alongside public `dist` and tarballs:
+API checking consumes those generated declarations. A fresh consumer reproduced
+the missing-input failure, then passed API checking with transferred declarations
+and no package rebuild. The workflow contract derives every API Extractor input
+from the package configurations and requires its containing path to be transferred.
+
 Source-browser and package-integration classification are independent. Pure lab
 E2E changes require source browsers; packed/preview fixture and package-assembly
 changes require integration. Documentation/candidate records require neither.

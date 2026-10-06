@@ -67,6 +67,7 @@ jobs:
           path: |
             packages/core/dist
             packages/vue/dist
+            temp/declarations
             .artifacts/packages
           if-no-files-found: error
           retention-days: 7

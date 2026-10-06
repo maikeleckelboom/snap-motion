@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile, readdir } from "node:fs/promises";
+import { relative, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -88,6 +88,32 @@ describe("Verify browser CI contracts", () => {
     expect(authority).toContain("name: prepared-package-authority");
     expect(authority).toContain("packages/core/dist");
     expect(authority).toContain("packages/vue/dist");
+    const transferredPaths = authority
+      .match(/          path: \|\n((?: {12}.+\n)+)/)?.[1]
+      ?.trim()
+      .split(/\n/)
+      .map((path) => path.trim());
+    expect(transferredPaths?.length).toBeGreaterThan(0);
+    for (const packageName of ["core", "vue"]) {
+      const projectDirectory = resolve(repositoryRoot, "packages", packageName);
+      const configs = (await readdir(projectDirectory)).filter((file) =>
+        /^api-extractor(?:\..+)?\.json$/.test(file),
+      );
+      expect(configs.length).toBeGreaterThan(0);
+      for (const file of configs) {
+        const config = JSON.parse(await readFile(resolve(projectDirectory, file), "utf8")) as {
+          mainEntryPointFilePath: string;
+        };
+        const input = relative(
+          repositoryRoot,
+          resolve(config.mainEntryPointFilePath.replace("<projectFolder>", projectDirectory)),
+        ).replaceAll("\\", "/");
+        expect(
+          transferredPaths?.some((path) => input === path || input.startsWith(`${path}/`)),
+          `${packageName}/${file} requires transferred input ${input}`,
+        ).toBe(true);
+      }
+    }
     expect(authority).toContain(".artifacts/packages");
     expect(authority).toContain("include-hidden-files: true");
     expect(integration).toContain("needs: [repository-admission, package-authority]");
