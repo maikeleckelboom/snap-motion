@@ -7,13 +7,15 @@ type Bounds = { readonly pan: number; readonly radius: number };
 const fittedExtent = () => ({ pan: 0, radius: 1 });
 
 function coverage(slots: readonly Slot[], extent: (index: number) => Bounds) {
-  return slots
-    .map((slot) => {
-      const { pan, radius } = extent(slot.itemIndex);
-      return { start: slot.position + pan - radius, end: slot.position + pan + radius };
-    })
-    // oxlint-disable-next-line unicorn/no-array-sort -- ES2022 package types; this mapped array is private to the oracle.
-    .sort((a, b) => a.start - b.start);
+  return (
+    slots
+      .map((slot) => {
+        const { pan, radius } = extent(slot.itemIndex);
+        return { start: slot.position + pan - radius, end: slot.position + pan + radius };
+      })
+      // oxlint-disable-next-line unicorn/no-array-sort -- ES2022 package types; this mapped array is private to the oracle.
+      .sort((a, b) => a.start - b.start)
+  );
 }
 
 function assertCorridor(
