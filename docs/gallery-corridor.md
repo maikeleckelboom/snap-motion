@@ -37,14 +37,17 @@ Allocation preserves the coordinate of every intersecting keyed image. Those int
 the current position, so their union is connected. Off-screen destination, mechanical and
 presentation owners are placed at the corridor edges. Fitted centers stay at least one pitch
 apart. Their visibility radii exceed half a pitch, so adjacent intervals overlap. A transformed
-anchor uses its actual extent when joining the corridor and when checking coordinate collisions.
+anchor uses its actual extent when joining the corridor. Placing new owners beyond the physical
+extrema also prevents coordinate collisions.
 The resulting union covers the current position, both physical extremes, and every intermediate
-position. Drag limits, elastic edge behavior, animation duration and settlement authority are unchanged.
+position. New coordinates extend beyond the retained physical extrema by at least one pitch,
+including ordinary immediate neighbors. Drag limits, elastic edge behavior, animation duration
+and settlement authority are unchanged.
 
 The eight-slot bound follows from at most three intersecting fitted slots, one transformed anchor,
 and the destination, presentation owner and two destination neighbors. An off-screen mechanical
 anchor consumes the same reserved anchor slot. Duplicate semantic items are omitted. New fitted
-slots extend outside the fitted coordinate extrema, preserving their one-pitch minimum separation.
+slots extend outside the physical coordinate extrema, preserving their one-pitch minimum separation.
 This bound does not depend on collection size, semantic distance or interruption count.
 
 ## Regression ownership

@@ -312,10 +312,11 @@ test("the dedicated surface exposes the complete stable matrix and a genuinely n
   await expect(
     harness(page).getByRole("heading", { name: "Media gallery AT certification harness" }),
   ).toBeVisible();
-  await expect(harness(page).getByRole("radio")).toHaveCount(10);
+  await expect(harness(page).getByRole("radio")).toHaveCount(11);
 
   for (const id of [
     "baseline",
+    "corridor",
     "first-item",
     "final-item",
     "single-item",

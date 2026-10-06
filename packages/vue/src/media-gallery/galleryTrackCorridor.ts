@@ -27,12 +27,10 @@ export function allocateGalleryTrackCorridor(options: {
     1;
   // These intervals all contain the presented position. Their union is connected, including
   // the mechanical image's actual fitted width, scale and pan. Never move these keyed nodes.
-  const slots = options.slots
-    .filter((slot) => {
-      const { pan, radius } = extent(slot.itemIndex);
-      return Math.abs(slot.position + pan - presentedPosition) <= radius;
-    })
-    .map(({ itemIndex, position }) => ({ itemIndex, position }));
+  const slots = options.slots.filter((slot) => {
+    const { pan, radius } = extent(slot.itemIndex);
+    return Math.abs(slot.position + pan - presentedPosition) <= radius;
+  });
 
   function append(itemIndex: number, side: number) {
     if (
@@ -42,33 +40,14 @@ export function allocateGalleryTrackCorridor(options: {
     )
       return;
     const { pan, radius } = extent(itemIndex);
-    const fitted = slots.filter((slot) => slot.itemIndex !== mechanicalIndex);
     // Keep fitted centers at least one pitch apart. The first new image is just off-screen,
     // and adjacent fitted visibility intervals overlap because each radius exceeds half a pitch.
-    const fittedEdge =
-      fitted.length > 0
-        ? side > 0
-          ? Math.max(...fitted.map((slot) => slot.position))
-          : Math.min(...fitted.map((slot) => slot.position))
-        : undefined;
-    let position = presentedPosition + side * radius - pan;
-    if (fittedEdge !== undefined) {
-      position = side > 0 ? Math.max(position, fittedEdge + 1) : Math.min(position, fittedEdge - 1);
-    } else if (slots.length > 0) {
-      const edge = slots.reduce((best, slot) => {
-        const bounds = extent(slot.itemIndex);
-        const end = slot.position + bounds.pan + side * bounds.radius;
-        return side > 0 ? Math.max(best, end) : Math.min(best, end);
-      }, presentedPosition);
-      position = edge + side * (radius - 1) - pan;
-      position =
-        side > 0
-          ? Math.max(position, presentedPosition + radius - pan)
-          : Math.min(position, presentedPosition - radius - pan);
-    }
-    // Only the transformed mechanical coordinate can collide with a fitted edge. Its extent
-    // bridges the skipped coordinate, so moving one pitch outward remains covered.
-    while (slots.some((slot) => Math.abs(slot.position - position) < 1e-9)) position += side;
+    // Project onto the requested side so both directions follow the same edge rule.
+    const distance = Math.max(
+      side * (presentedPosition - pan) + radius,
+      ...slots.map((slot) => side * slot.position + 1),
+    );
+    const position = side * distance;
     slots.push({ itemIndex, position });
   }
 
