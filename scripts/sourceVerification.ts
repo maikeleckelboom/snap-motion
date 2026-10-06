@@ -11,6 +11,7 @@ import {
 const repository = "maikeleckelboom/snap-motion";
 export const sourceVerificationJobs = [
   "Repository admission",
+  "Package authority",
   "Linux verification",
   "Windows portability",
   "Chromium general",

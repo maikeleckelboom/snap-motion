@@ -26,6 +26,7 @@ describe("Verify browser CI contracts", () => {
     const workflow = await workflowSource();
     const admission = jobBlock(workflow, "repository-admission");
     const linux = jobBlock(workflow, "linux-verification");
+    const authority = jobBlock(workflow, "package-authority");
     const manifest = JSON.parse(
       await readFile(resolve(repositoryRoot, "package.json"), "utf8"),
     ) as { scripts: Record<string, string> };
@@ -38,12 +39,13 @@ describe("Verify browser CI contracts", () => {
     expect(admission).toContain("node scripts/classify-browser-change.ts");
     expect(admission).toContain("browser_required: ${{ steps.classify.outputs.browser_required }}");
     expect(linux).not.toMatch(/playwright|chromium|firefox|webkit/i);
-    expect(occurrences(linux, "run: pnpm build:packages")).toBe(1);
+    expect(occurrences(authority, "run: pnpm build:packages")).toBe(1);
+    expect(linux).not.toContain("run: pnpm build:packages");
     expect(linux).toContain("pnpm typecheck:prepared");
     expect(linux).toContain("pnpm build:apps:prepared");
     expect(linux).toContain("pnpm api:check:prepared");
-    expect(linux).toContain("pnpm pack:packages:prepared");
-    expect(linux).toContain("pnpm verify:packages:prepared");
+    expect(authority).toContain("pnpm pack:packages:prepared");
+    expect(authority).toContain("pnpm verify:packages:prepared");
     expect(occurrences(manifest.scripts.verify ?? "", "build:packages")).toBe(1);
     expect(manifest.scripts.typecheck).toContain("build:packages");
     expect(manifest.scripts.build).toContain("build:packages");
@@ -80,16 +82,21 @@ describe("Verify browser CI contracts", () => {
 
   it("reuses one archive authority through static and browser consumers", async () => {
     const workflow = await workflowSource();
+    const authority = jobBlock(workflow, "package-authority");
     const linux = jobBlock(workflow, "linux-verification");
     const integration = jobBlock(workflow, "browser-integration");
-    expect(linux).toContain("name: prepared-package-authority");
-    expect(linux).toContain("packages/core/dist");
-    expect(linux).toContain("packages/vue/dist");
-    expect(linux).toContain(".artifacts/packages");
-    expect(linux).toContain("include-hidden-files: true");
-    expect(integration).toContain("needs: [repository-admission, linux-verification]");
+    expect(authority).toContain("name: prepared-package-authority");
+    expect(authority).toContain("packages/core/dist");
+    expect(authority).toContain("packages/vue/dist");
+    expect(authority).toContain(".artifacts/packages");
+    expect(authority).toContain("include-hidden-files: true");
+    expect(integration).toContain("needs: [repository-admission, package-authority]");
+    expect(linux).toContain("needs: [repository-admission, package-authority]");
+    expect(linux).toContain(
+      "artifact-ids: ${{ needs.package-authority.outputs.package_artifact }}",
+    );
     expect(integration).toContain(
-      "artifact-ids: ${{ needs.linux-verification.outputs.package_artifact }}",
+      "artifact-ids: ${{ needs.package-authority.outputs.package_artifact }}",
     );
     expect(integration).not.toContain("run: pnpm build:packages");
     expect(integration).not.toContain("run: pnpm pack:packages");
@@ -112,6 +119,7 @@ describe("Verify browser CI contracts", () => {
     );
     for (const job of [
       "repository-admission",
+      "package-authority",
       "linux-verification",
       "windows-portability",
       "chromium",
@@ -121,6 +129,7 @@ describe("Verify browser CI contracts", () => {
       expect(dependencies).toContain(job);
     for (const result of [
       "ADMISSION",
+      "PACKAGE",
       "LINUX",
       "WINDOWS",
       "CHROMIUM",

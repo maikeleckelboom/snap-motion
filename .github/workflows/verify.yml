@@ -34,11 +34,11 @@ jobs:
         name: Classify browser change scope
         run: node scripts/classify-browser-change.ts
 
-  linux-verification:
-    name: Linux verification
+  package-authority:
+    name: Package authority
     needs: repository-admission
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 4
     outputs:
       package_artifact: ${{ steps.package-authority.outputs.artifact-id }}
     steps:
@@ -51,16 +51,8 @@ jobs:
           cache: pnpm
           node-version-file: .node-version
       - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check
-      - run: pnpm lint
       - name: Build package authority
         run: pnpm build:packages
-      - run: pnpm typecheck:prepared
-      - run: pnpm test:unit
-      - name: Build application and fixture authority
-        run: pnpm build:apps:prepared
-      - run: pnpm api:check:prepared
-      - run: pnpm size:check
       - name: Pack prepared package authority
         run: pnpm pack:packages:prepared
       - name: Certify browser-free packed packages
@@ -78,6 +70,34 @@ jobs:
             .artifacts/packages
           if-no-files-found: error
           retention-days: 7
+
+  linux-verification:
+    name: Linux verification
+    needs: [repository-admission, package-authority]
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          cache: pnpm
+          node-version-file: .node-version
+      - run: pnpm install --frozen-lockfile
+      - name: Reuse exact prepared package authority
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ needs.package-authority.outputs.package_artifact }}
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck:prepared
+      - run: pnpm test:unit
+      - name: Build application and fixture authority
+        run: pnpm build:apps:prepared
+      - run: pnpm api:check:prepared
+      - run: pnpm size:check
 
   windows-portability:
     name: Windows portability
@@ -187,7 +207,7 @@ jobs:
   browser-integration:
     name: Browser integration
     if: ${{ needs.repository-admission.result == 'success' && needs.repository-admission.outputs.package_integration_required == 'true' }}
-    needs: [repository-admission, linux-verification]
+    needs: [repository-admission, package-authority]
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.61.1-noble
@@ -206,7 +226,7 @@ jobs:
       - name: Reuse exact prepared package authority
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          artifact-ids: ${{ needs.linux-verification.outputs.package_artifact }}
+          artifact-ids: ${{ needs.package-authority.outputs.package_artifact }}
       - name: Build production preview
         run: pnpm build:preview:prepared
       - name: Build framework fixtures
@@ -249,6 +269,7 @@ jobs:
     needs:
       [
         repository-admission,
+        package-authority,
         linux-verification,
         windows-portability,
         chromium,
@@ -266,13 +287,14 @@ jobs:
         if: ${{ needs.repository-admission.outputs.browser_required == 'true' && needs.repository-admission.outputs.package_integration_required == 'true' && needs.linux-verification.result == 'success' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          artifact-ids: ${{ needs.linux-verification.outputs.package_artifact }}
+          artifact-ids: ${{ needs.package-authority.outputs.package_artifact }}
       - name: Certify browser evidence
         env:
           BROWSER_REQUIRED: ${{ needs.repository-admission.outputs.browser_required }}
           PACKAGE_INTEGRATION_REQUIRED: ${{ needs.repository-admission.outputs.package_integration_required }}
           SCOPE_REASON: ${{ needs.repository-admission.outputs.reason }}
           ADMISSION_RESULT: ${{ needs.repository-admission.result }}
+          PACKAGE_RESULT: ${{ needs.package-authority.result }}
           LINUX_RESULT: ${{ needs.linux-verification.result }}
           WINDOWS_RESULT: ${{ needs.windows-portability.result }}
           CHROMIUM_RESULT: ${{ needs.chromium.result }}

@@ -6,6 +6,7 @@ import { inspectReleasePackages } from "./release-package-assembly.ts";
 const env = process.env;
 assertBrowserCertification(env.BROWSER_REQUIRED, env.PACKAGE_INTEGRATION_REQUIRED, {
   admission: env.ADMISSION_RESULT,
+  packages: env.PACKAGE_RESULT,
   linux: env.LINUX_RESULT,
   windows: env.WINDOWS_RESULT,
   chromium: env.CHROMIUM_RESULT,

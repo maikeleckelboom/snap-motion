@@ -165,8 +165,9 @@ Preview adds one Chromium test; framework fixtures add 12; packed preferences
 retain all 48 three-engine cells. The unit suite keeps all 930 original tests and
 adds deterministic tests for partitioning, classification, reporting and evidence.
 
-Linux builds package authority once and packs once. Integration downloads that
-exact artifact by ID and never repacks or rebuilds package authority. It still
+The package-authority job builds once, packs once, and checks static consumers.
+Linux verification and integration both download that exact artifact by ID and
+proceed concurrently; neither repacks or rebuilds package authority. Integration still
 builds preview and framework fixtures, then certifies the same tarballs through
 Nuxt. The production-root lab build and non-root preview remain separate because
 they prove different entry/base-path behavior. Separate jobs may build application
@@ -193,3 +194,9 @@ rerunning `pnpm verify`. New records bind exact SHA, branch, run, attempt, archi
 metadata and hashes to remotely retrieved evidence. Local marker files are rejected.
 Historical candidate reconstruction remains a distinct source-to-bytes proof.
 See [releasing](releasing.md) for expiry, full-rerun, and clean-source requirements.
+
+The first optimized full GitHub run passed in 331s. It exposed a remaining dependency
+cost: integration (177s) waited for all Linux verification (123s). The separate
+package-authority owner removes that barrier while keeping one build/pack and one
+fast unit suite. Its additional setup is an explicit cost of letting source checks
+and packed-browser certification proceed concurrently from the same immutable bytes.

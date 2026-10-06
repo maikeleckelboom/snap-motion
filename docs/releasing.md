@@ -5,10 +5,10 @@ No workflow publishes packages. `pnpm release:check` remains the complete local 
 The release-candidate lifecycle has separate producer and consumer phases:
 
 1. Push the exact clean source SHA and wait for a successful **complete** GitHub Verify run on
-   that branch. Linux builds/packs once; static consumers and browser integration certify those
+   that branch. Package authority builds/packs once; static consumers and browser integration certify those
    same archives. The final Browser certification gate writes `verified-source-packages` evidence
    only when all three Chromium groups, Firefox, WebKit, WebKit Stacked Deck, integration, Linux,
-   Windows, and repository admission succeed. Documentation-only or package-only skips do not
+   Windows, package authority, and repository admission succeed. Documentation-only or package-only skips do not
    qualify as complete source evidence.
 2. From that same clean attached source SHA, with an aligned unrecorded package version,
    `pnpm release:candidate:prepare` queries GitHub through the authenticated `gh` CLI, requires

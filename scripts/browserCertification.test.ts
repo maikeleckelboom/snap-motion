@@ -4,6 +4,7 @@ import { assertBrowserCertification } from "./browserCertification.ts";
 
 const clean = {
   admission: "success",
+  packages: "success",
   linux: "success",
   windows: "success",
   chromium: "success",
@@ -31,16 +32,21 @@ it("certifies every required matrix, including package integration only and inte
     }),
   ).not.toThrow();
 });
-it.each(["admission", "linux", "windows", "chromium", "interoperability", "integration"] as const)(
-  "fails closed when %s fails or unexpectedly skips",
-  (owner) => {
-    for (const result of [undefined, "failure", "cancelled", "skipped"]) {
-      expect(() =>
-        assertBrowserCertification("true", "true", { ...clean, [owner]: result }),
-      ).toThrow(/Source authority|Browser owner|Browser ownership/);
-    }
-  },
-);
+it.each([
+  "admission",
+  "packages",
+  "linux",
+  "windows",
+  "chromium",
+  "interoperability",
+  "integration",
+] as const)("fails closed when %s fails or unexpectedly skips", (owner) => {
+  for (const result of [undefined, "failure", "cancelled", "skipped"]) {
+    expect(() => assertBrowserCertification("true", "true", { ...clean, [owner]: result })).toThrow(
+      /Source authority|Browser owner|Browser ownership/,
+    );
+  }
+});
 it("rejects missing flags and incoherent skip decisions", () => {
   expect(() => assertBrowserCertification(undefined, "true", clean)).toThrow(
     /Source authority|Browser owner|Browser ownership/,

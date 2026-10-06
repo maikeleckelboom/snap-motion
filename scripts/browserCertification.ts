@@ -1,5 +1,6 @@
 export interface CertificationResults {
   readonly admission: string | undefined;
+  readonly packages: string | undefined;
   readonly linux: string | undefined;
   readonly windows: string | undefined;
   readonly chromium: string | undefined;
@@ -18,7 +19,7 @@ export function assertBrowserCertification(
   ) {
     throw new Error("Browser ownership outputs are missing or invalid.");
   }
-  for (const owner of ["admission", "linux", "windows"] as const) {
+  for (const owner of ["admission", "packages", "linux", "windows"] as const) {
     if (results[owner] !== "success")
       throw new Error(`Source authority ${owner} did not succeed: ${results[owner]}.`);
   }
