@@ -80,6 +80,15 @@ function useControlledAnimationFrames() {
   return {
     cancel,
     pending: () => callbacks.size,
+    async advance(milliseconds: number) {
+      timestamp += milliseconds;
+      const frame = [...callbacks.entries()];
+      for (const [id, callback] of frame) {
+        if (!callbacks.delete(id)) continue;
+        callback(timestamp);
+      }
+      await flushReactiveTasks();
+    },
     async flushNext() {
       const entry = callbacks.entries().next().value as [number, FrameRequestCallback] | undefined;
       if (!entry) return false;
@@ -191,6 +200,120 @@ function checkPresentedNodes(nodes: readonly { element: Element; position: strin
 }
 
 describe("MediaGalleryDialog interrupted authority", () => {
+  for (const mode of ["fit", "zoom-pan"] as const) {
+    it(`covers every rendered sample through compounded corridor reversals under ${mode}`, async () => {
+      const frames = useControlledAnimationFrames();
+      const collection = Array.from({ length: 6 }, (_, index) => ({
+        ...items[0]!,
+        id: `item-${index}`,
+      }));
+      const wrapper = mountGallery({ items: collection, reducedMotionOverride: false });
+      await flushReactiveTasks();
+      await frames.flushAll();
+      const handle = wrapper.vm as unknown as { navigateTo: (id: string) => boolean };
+      const sample = (label: string) => {
+        const offset =
+          Number.parseFloat(
+            wrapper
+              .get<HTMLElement>('[data-testid="snap-motion-media-gallery-track"]')
+              .element.style.getPropertyValue("--_gallery-track-x"),
+          ) || 0;
+        const scale = Number(wrapper.get("dialog").attributes("data-scale"));
+        const anchorTransform = wrapper.find(
+          '[data-item-id="item-0"] .snap-motion-media-gallery-transform',
+        );
+        const pan = anchorTransform.exists()
+          ? Number.parseFloat(
+              (anchorTransform.element as HTMLElement).style.getPropertyValue("--_gallery-pan-x"),
+            ) || 0
+          : 0;
+        const slots = wrapper.findAll(".snap-motion-media-gallery-slot").map((slot) => ({
+          id: slot.attributes("data-item-id"),
+          position: Number(slot.attributes("data-slot-position")),
+        }));
+        const covered = slots.some(
+          (slot) =>
+            Math.abs(slot.position * 800 + offset + (slot.id === "item-0" ? pan : 0)) <
+            (slot.id === "item-0" ? (scale + 1) / 2 : 1) * 800,
+        );
+        if (!covered)
+          throw new Error(
+            JSON.stringify({
+              label,
+              offset,
+              slots,
+              state: wrapper.get("dialog").attributes("data-track-state"),
+            }),
+          );
+        expect(covered).toBe(true);
+        expect(wrapper.emitted("settled") ?? []).toEqual([]);
+      };
+      const command = async (index: number) => {
+        expect(handle.navigateTo(`item-${index}`)).toBe(true);
+        await flushReactiveTasks();
+        sample(`command ${index}`);
+      };
+      let time = 0;
+      const swipe = async (delta: number) => {
+        await galleryPointer(wrapper, "pointerdown", 400, time);
+        sample("takeover");
+        await galleryPointer(wrapper, "pointermove", 400 + delta * 800, time + 100);
+        sample(`move ${delta}`);
+        await galleryPointer(wrapper, "pointerup", 400 + delta * 800, time + 200);
+        sample(`release ${delta}`);
+        time += 300;
+      };
+      await command(3);
+      await swipe(0.5);
+      await command(4);
+      await frames.advance(0);
+      await frames.advance(65);
+      sample("partial travel to 4");
+      await command(1);
+      await swipe(0.25);
+      await swipe(-0.75);
+      await frames.advance(0);
+      await frames.advance(60);
+      sample("partial travel to 1");
+      if (mode === "fit") await swipe(0.75);
+      else {
+        for (let step = 0; step < 4; step += 1) {
+          await wrapper.get('[data-testid="snap-motion-media-gallery-zoom-in"]').trigger("click");
+        }
+        // Happy DOM has no stylesheet layout. Supply the rendered matrix that real CSS produces
+        // so discrete-transform interruption samples the scaled anchor instead of an identity matrix.
+        const originalComputedStyle = window.getComputedStyle.bind(window);
+        vi.spyOn(window, "getComputedStyle").mockImplementation((element) => {
+          const style = originalComputedStyle(element);
+          if (
+            element instanceof HTMLElement &&
+            element.classList.contains("snap-motion-media-gallery-transform")
+          ) {
+            const scale = Number(element.style.getPropertyValue("--_gallery-scale")) || 1;
+            const x = Number.parseFloat(element.style.getPropertyValue("--_gallery-pan-x")) || 0;
+            const y = Number.parseFloat(element.style.getPropertyValue("--_gallery-pan-y")) || 0;
+            style.transform = `matrix(${scale}, 0, 0, ${scale}, ${x}, ${y})`;
+          }
+          return style;
+        });
+        await galleryPointer(wrapper, "pointerdown", 400, time);
+        await galleryPointer(wrapper, "pointermove", 650, time + 100);
+        await galleryPointer(wrapper, "pointerup", 650, time + 200);
+        sample("zoomed and panned reversal");
+        await command(0);
+      }
+      expect(Number(wrapper.get("dialog").attributes("data-scale"))).toBe(mode === "fit" ? 1 : 3);
+      expect(Number(wrapper.get("dialog").attributes("data-pan-x"))).toBe(mode === "fit" ? 0 : 250);
+      for (let frame = 0; frame < 6; frame += 1) {
+        await frames.advance(20);
+        sample("return travel");
+      }
+      await frames.flushAll();
+      expect(wrapper.get("dialog").attributes("data-settled-id")).toBe("item-0");
+      wrapper.unmount();
+    });
+  }
+
   it("preserves the physical coordinate of an intersecting zoomed mechanical anchor", async () => {
     const frames = useControlledAnimationFrames();
     const wrapper = mountGallery({ reducedMotionOverride: false });
@@ -248,14 +371,19 @@ describe("MediaGalleryDialog interrupted authority", () => {
           .element.style.getPropertyValue("--_gallery-track-x"),
       );
       const anchor = wrapper.get('[data-item-id="item-0"]').element;
+      const anchorPosition = Number(anchor.getAttribute("data-slot-position"));
+      const anchorWasPresented = Math.abs(anchorPosition + startOffset / 800) <= (scale + 1) / 2;
       expect(
         (wrapper.vm as unknown as { navigateTo: (id: string) => boolean }).navigateTo("item-0"),
       ).toBe(true);
       await flushReactiveTasks();
       expect(wrapper.get('[data-item-id="item-0"]').element).toBe(anchor);
+      const retainedPosition = Number(anchor.getAttribute("data-slot-position"));
       expect(
-        Math.abs(Number(anchor.getAttribute("data-slot-position")) + startOffset / 800),
-      ).toBeGreaterThan((scale + 1) / 2);
+        anchorWasPresented
+          ? retainedPosition === anchorPosition
+          : Math.abs(retainedPosition + startOffset / 800) >= (scale + 1) / 2,
+      ).toBe(true);
       for (let frame = 0; frame < 60 && frames.pending() > 0; frame += 1) {
         await frames.flushNext();
         const offset =

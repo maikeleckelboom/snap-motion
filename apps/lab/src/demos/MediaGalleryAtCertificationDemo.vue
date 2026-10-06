@@ -13,6 +13,7 @@ import { mediaFixtures } from "@/fixtures/media";
 
 type ScenarioId =
   | "baseline"
+  | "corridor"
   | "delayed-full"
   | "final-item"
   | "first-item"
@@ -107,6 +108,22 @@ const baselineItems: readonly MediaGalleryItem[] = [
 ];
 
 const scenarios: readonly CertificationScenario[] = [
+  {
+    id: "corridor",
+    label: "Interruptible physical corridor",
+    purpose: "Six fitted images for compounded retargeting and reversals before settlement.",
+    initialIndex: 0,
+    items: Array.from({ length: 6 }, (_, index) => ({
+      ...baselineItems[1]!,
+      id: `item-${index}`,
+      title: `Corridor item ${index + 1}`,
+    })),
+    expectedCurrentItem: "Corridor item 1",
+    fullMedia: "Yes",
+    loadingExpected: "Yes",
+    failureExpected: "No",
+    retryExpectation: "Not offered",
+  },
   {
     id: "baseline",
     label: "Baseline, three items",
@@ -310,6 +327,7 @@ const selectedScenarioId = ref<ScenarioId>("baseline");
 const open = ref(false);
 const opener = ref<HTMLButtonElement>();
 const harness = ref<HTMLElement>();
+const gallery = ref<{ navigateTo: (id: string) => boolean }>();
 const trace = ref<TraceEntry[]>([]);
 let traceSequence = 0;
 
@@ -517,6 +535,7 @@ async function onClosed(finalId: string | undefined) {
     </div>
 
     <MediaGalleryDialog
+      ref="gallery"
       :focus-return="focusReturn"
       :active-id="selectedActiveId"
       :items="selectedScenario.items"
@@ -535,6 +554,17 @@ async function onClosed(finalId: string | undefined) {
     >
       <template #actions>
         <div class="at-gallery-actions">
+          <template v-if="selectedScenarioId === 'corridor'">
+            <button
+              v-for="index in [0, 1, 3, 4]"
+              :key="index"
+              type="button"
+              :data-testid="`at-retarget-${index}`"
+              @click="gallery?.navigateTo(`item-${index}`)"
+            >
+              Item {{ index + 1 }}
+            </button>
+          </template>
           <a data-testid="at-gallery-action-link" href="#at-gallery-action-target" tabindex="0">
             Switch locale
           </a>

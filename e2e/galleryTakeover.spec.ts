@@ -2,6 +2,175 @@ import { expect, test } from "@playwright/test";
 
 import { openLabDemo } from "./helpers";
 
+test("compounded programmatic retargets and reversals retain a painted physical corridor", async ({
+  page,
+}) => {
+  await openLabDemo(page, "gallery-at", "no-preference");
+  await page.getByTestId("at-scenario-corridor").click();
+  await page.getByTestId("at-open-gallery").click();
+  const dialog = page.getByTestId("snap-motion-media-gallery");
+  await expect(dialog).toHaveAttribute("data-dialog-state", "open");
+  await page.getByTestId("snap-motion-media-gallery-shell").evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+  });
+  await expect
+    .poll(() =>
+      dialog
+        .locator("img")
+        .evaluateAll((images) =>
+          images.every(
+            (image) =>
+              image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0,
+          ),
+        ),
+    )
+    .toBe(true);
+  const clockTime = new Date("2026-01-01T00:00:00Z");
+  await page.clock.install({ time: clockTime });
+  await page.clock.pauseAt(new Date(clockTime.getTime() + 1000));
+  await dialog.evaluate((element) => {
+    const viewport = element.querySelector<HTMLElement>(
+      '[data-testid="snap-motion-media-gallery-viewport"]',
+    )!;
+    const bounds = () => {
+      const rect = viewport.getBoundingClientRect();
+      return [...element.querySelectorAll<HTMLImageElement>("img")].flatMap((image) => {
+        if (!image.complete || !image.naturalWidth || Number(getComputedStyle(image).opacity) === 0)
+          return [];
+        const box = image.getBoundingClientRect();
+        // object-fit: contain leaves empty space inside the transformed image element's box.
+        const fit = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
+        const width = image.naturalWidth * fit;
+        const height = image.naturalHeight * fit;
+        const left = box.x + (box.width - width) / 2;
+        const top = box.y + (box.height - height) / 2;
+        return left < rect.right &&
+          left + width > rect.left &&
+          top < rect.bottom &&
+          top + height > rect.top
+          ? [
+              {
+                image,
+                x: box.x,
+                position: image.closest("[data-slot-position]")?.getAttribute("data-slot-position"),
+              },
+            ]
+          : [];
+      });
+    };
+    const trace = {
+      samples: 0,
+      blanks: 0,
+      maximum: 0,
+      before: [] as ReturnType<typeof bounds>,
+      sample() {
+        this.samples += 1;
+        if (!bounds().length) this.blanks += 1;
+        this.maximum = Math.max(
+          this.maximum,
+          element.querySelectorAll("[data-slot-position]").length,
+        );
+      },
+      capture() {
+        this.before = bounds();
+      },
+      takeover() {
+        return this.before.every(
+          ({ image, x, position }) =>
+            image.isConnected &&
+            image.closest("[data-slot-position]")?.getAttribute("data-slot-position") ===
+              position &&
+            Math.abs(image.getBoundingClientRect().x - x) < 0.1,
+        );
+      },
+    };
+    (window as typeof window & { corridorTrace: typeof trace }).corridorTrace = trace;
+    const frame = () => {
+      trace.sample();
+      if (element.isConnected) requestAnimationFrame(frame);
+    };
+    frame();
+  });
+  const sample = async () => {
+    const blanks = await page.evaluate(() => {
+      const trace = (
+        window as typeof window & { corridorTrace: { sample: () => void; blanks: number } }
+      ).corridorTrace;
+      trace.sample();
+      return trace.blanks;
+    });
+    expect(blanks).toBe(0);
+  };
+  const advance = async (milliseconds: number) => {
+    for (let elapsed = 0; elapsed < milliseconds; elapsed += 8) {
+      await page.clock.runFor(Math.min(8, milliseconds - elapsed));
+      await sample();
+    }
+  };
+  const command = async (index: number) => {
+    await page.getByTestId(`at-retarget-${index}`).dispatchEvent("click");
+    await sample();
+  };
+  const viewport = page.getByTestId("snap-motion-media-gallery-viewport");
+  const box = await viewport.boundingBox();
+  if (!box) throw new Error("Missing corridor viewport");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  const swipe = async (delta: number) => {
+    await page.mouse.move(x, y);
+    await page.evaluate(() =>
+      (
+        window as typeof window & { corridorTrace: { capture: () => void } }
+      ).corridorTrace.capture(),
+    );
+    await page.mouse.down();
+    expect(
+      await page.evaluate(() =>
+        (
+          window as typeof window & { corridorTrace: { takeover: () => boolean } }
+        ).corridorTrace.takeover(),
+      ),
+    ).toBe(true);
+    await expect(viewport).toHaveAttribute("data-pointer-mode", "pending");
+    for (let step = 1; step <= 12; step += 1) {
+      await page.mouse.move(x + (delta * box.width * step) / 12, y);
+      await sample();
+    }
+    await page.mouse.up();
+    await sample();
+  };
+  await command(3);
+  await swipe(0.5);
+  await command(4);
+  await advance(81);
+  await command(1);
+  await swipe(0.25);
+  await swipe(-0.75);
+  await advance(60);
+  await swipe(0.75);
+  await expect(dialog).toHaveAttribute("data-active-id", "item-0");
+  await expect(dialog).toHaveAttribute("data-settled-id", "item-0");
+  await expect(
+    page.getByTestId("at-event-trace").locator("li").filter({ hasText: "settled" }),
+  ).toHaveCount(0);
+  await advance(240);
+  await expect(dialog).toHaveAttribute("data-track-state", "idle");
+  await expect(
+    page.getByTestId("at-event-trace").locator("li").filter({ hasText: "settled" }),
+  ).toHaveCount(1);
+  const result = await page.evaluate(() => {
+    const trace = (
+      window as typeof window & {
+        corridorTrace: { samples: number; blanks: number; maximum: number };
+      }
+    ).corridorTrace;
+    return { samples: trace.samples, blanks: trace.blanks, maximum: trace.maximum };
+  });
+  expect(result.samples).toBeGreaterThan(100);
+  expect(result.blanks).toBe(0);
+  expect(result.maximum).toBeLessThanOrEqual(8);
+});
+
 test("window blur resolves a partially dragged takeover exactly once", async ({ page }) => {
   await openLabDemo(page, "gallery-at", "no-preference");
   await page.getByTestId("at-scenario-first-item").click();

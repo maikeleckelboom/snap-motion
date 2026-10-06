@@ -17,6 +17,7 @@ import {
   type FocusRestoreVerification,
 } from "../../internal/accessibility/focus-restore";
 import { isElement, isHTMLElement } from "../../internal/dom/realm";
+import { allocateGalleryTrackCorridor } from "../galleryTrackCorridor";
 import {
   fittedMediaTransform,
   type GalleryMediaAction,
@@ -32,6 +33,7 @@ import {
 import {
   canonicalMediaGalleryTransform,
   clampGalleryIndex,
+  fitMediaWithinViewport,
   isRepeatedGalleryTap,
   normalizeMediaGalleryItems,
   panMediaTransform,
@@ -524,58 +526,30 @@ function interruptDiscreteTransform() {
 }
 
 function prepareTrackDestination(destination: number) {
-  const presentedPosition = geometry.width > 0 ? -getTrackOffset() / geometry.width : 0;
-  const previousTarget = trackSlots.value.find((slot) => slot.itemIndex === destination);
-  const targetPan =
-    destination === galleryIndex.value && geometry.width > 0
-      ? transform.value.x / geometry.width
-      : 0;
-  const targetRadius = destination === galleryIndex.value ? (transform.value.scale + 1) / 2 : 1;
-  const targetIsPresented =
-    previousTarget !== undefined &&
-    Math.abs(previousTarget.position - presentedPosition + targetPan) <= targetRadius;
-  // Fitted slots are at most one viewport wide; the mechanical image may extend through zoom/pan.
-  // Preserve every intersecting image and the hysteresis owner before recycling off-screen history.
-  const physicalSlots = trackSlots.value
-    .filter(
-      (slot) =>
-        Math.abs(slot.position - presentedPosition) <= 1 ||
-        slot.itemIndex === visibleIndex.value ||
-        (slot.itemIndex === galleryIndex.value &&
-          (slot.itemIndex !== destination || targetIsPresented)),
-    )
-    .map(({ itemIndex, position }) => ({ itemIndex, position }));
-  const origin = physicalSlots.find((slot) => slot.itemIndex === navigationIndex.value);
-  const direction =
-    Math.sign(destination - navigationIndex.value) ||
-    Math.sign((previousTarget?.position ?? presentedPosition) - presentedPosition) ||
-    1;
-  if (!physicalSlots.some((slot) => slot.itemIndex === destination)) {
-    // An off-screen superseded destination must not push every later target farther away.
-    // Extend the presented corridor instead, without moving any image already on screen.
-    let position = (origin?.position ?? Math.round(presentedPosition)) + direction;
-    while (
-      physicalSlots.some((slot) => slot.position === position) ||
-      Math.abs(position - presentedPosition + targetPan) <= targetRadius
-    )
-      position += direction;
-    physicalSlots.push({ itemIndex: destination, position });
-  }
-  const target = physicalSlots.find((slot) => slot.itemIndex === destination);
-  if (target) {
-    for (const step of [-1, 1]) {
-      const itemIndex = destination + step;
-      const position = target.position + step;
-      if (
-        itemIndex >= 0 &&
-        itemIndex < items.value.length &&
-        !physicalSlots.some((slot) => slot.itemIndex === itemIndex || slot.position === position)
-      ) {
-        physicalSlots.push({ itemIndex, position });
-      }
-    }
-  }
-  retainedTrackSlots.value = physicalSlots;
+  retainedTrackSlots.value = allocateGalleryTrackCorridor({
+    slots: trackSlots.value,
+    presentedPosition: geometry.width > 0 ? -getTrackOffset() / geometry.width : 0,
+    destination,
+    intendedIndex: navigationIndex.value,
+    mechanicalIndex: galleryIndex.value,
+    visibleIndex: visibleIndex.value,
+    itemCount: items.value.length,
+    extent: (itemIndex) => {
+      const item = items.value[itemIndex];
+      const fitted = fitMediaWithinViewport(geometry, {
+        width: item?.intrinsicWidth ?? 1,
+        height: item?.intrinsicHeight ?? 1,
+      });
+      const mechanical = itemIndex === galleryIndex.value;
+      return {
+        pan: mechanical && geometry.width > 0 ? transform.value.x / geometry.width : 0,
+        radius:
+          geometry.width > 0
+            ? (1 + (fitted.width / geometry.width) * (mechanical ? transform.value.scale : 1)) / 2
+            : 1,
+      };
+    },
+  });
 }
 
 function resolveDragOffset(start: number, delta: number) {
