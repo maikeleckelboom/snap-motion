@@ -12,7 +12,7 @@ The release-candidate lifecycle has separate producer and consumer phases:
    qualify as complete source evidence.
 2. From that same clean attached source SHA, with an aligned unrecorded package version,
    `pnpm release:candidate:prepare` queries GitHub through the authenticated `gh` CLI, requires
-   every owner in the same successful run attempt, downloads its immutable verified archive
+   every owner in GitHub's successful current-attempt job snapshot, downloads its verified archive
    artifact into a fresh temporary directory, and checks commit/run/attempt, package metadata,
    versions and SHA-256 identity. It exclusively creates `config/release-candidates/<version>.json`
    and writes ignored package/release output under `.artifacts`. It does not rebuild or repeat
@@ -24,7 +24,11 @@ The release-candidate lifecycle has separate producer and consumer phases:
    authorities, and requires the package set, manifest data, archive bytes, and SHA-256 hashes to
    match before reconstructing `.artifacts/packages` and `.artifacts/release`.
 
-The source artifact is retained for 14 days. Missing/expired artifacts, partial reruns, unavailable
+GitHub's current-attempt snapshot can retain earlier successful owners at the same SHA after a
+selected rerun. Reusing those successful results is valid only when the complete matrix succeeded
+and that attempt's final gate issued the verified archive evidence. No local result substitutes.
+
+The source artifact is retained for 14 days. Missing/expired artifacts, incomplete reruns, unavailable
 GitHub access, skipped owners, an unpushed source, or a changed HEAD fail closed. Dispatch full
 Verify on the exact source branch to renew evidence. No local marker, `verified=true`, fallback
 full-gate result, or trust flag can substitute for the GitHub authority. Existing schema-1 records

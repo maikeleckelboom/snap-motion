@@ -10,14 +10,15 @@ is the source baseline. `config/test-performance-before.json` preserves job/step
 durations, every spec and project, individual tests, and the twenty slowest tests.
 Serial line-reporter start-to-next-start intervals estimate test duration including
 hooks and the next test's launch. They are not precise reporter durations. Job API
-timings are exact to GitHub's one-second resolution. Chromium 2 uses its passing
-second attempt; other jobs use attempt 1. Four existing conditional skips remain.
+timings are exact to GitHub's one-second resolution. The latest-attempt API
+snapshot retains successful first-attempt executions; Chromium 2 uses its passing
+second execution. Four existing conditional skips remain.
 
 | Layer                            |                                                  Baseline |
 | -------------------------------- | --------------------------------------------------------: |
 | Unit suite                       |                             17s; 930 tests; Linux job 88s |
 | Chromium 1                       |                       177s test step; 229s job; 104 tests |
-| Chromium 2                       | 432s passing test step; 104 tests; first-attempt job 478s |
+| Chromium 2                       |               432s passing test step; 104 tests; 478s job |
 | Chromium parallel critical path  |          432s tests plus setup; 609s aggregate test steps |
 | Firefox                          |        approximately 118s serial test intervals; 55 tests |
 | WebKit interoperability          |                              approximately 137s; 55 tests |

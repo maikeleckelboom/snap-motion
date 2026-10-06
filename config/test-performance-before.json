@@ -3,7 +3,7 @@
   "sourceCommit": "8fa65ecf4215c4586cb007655cf54b277c83e229",
   "startingCommit": "a0377e13dc098c8e814a2c39724ce7b4696df312",
   "workflowRun": 37470543891,
-  "method": "Serial line reporter start-to-next-start intervals; includes per-test hooks and next-test launch. Job API is attempt 1; Chromium 2 log is passing attempt 2. Four conditional skips retained.",
+  "method": "Serial line reporter start-to-next-start intervals; includes per-test hooks and next-test launch. GitHub latest-attempt job snapshot retains successful attempt-1 jobs; Chromium 2 is the passing attempt-2 execution. Four conditional skips retained.",
   "jobs": [
     {
       "name": "Chromium 2/2",

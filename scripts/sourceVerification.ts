@@ -124,7 +124,8 @@ export async function fetchVerifiedSource(
     throw new Error(
       `Push source ${sourceCommit} and wait for complete GitHub Verify before preparing a candidate. No local verification bypass is supported.`,
     );
-  // One current attempt only. A partial rerun is deliberately insufficient; dispatch a full Verify.
+  // GitHub's current-attempt snapshot can retain earlier successful owners at this same SHA.
+  // Require the complete successful matrix and this attempt's final-gate artifact together.
   const jobs = githubJson<{ jobs: { name: string; conclusion: string | null }[] }>(
     `repos/${repository}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,
   ).jobs;
