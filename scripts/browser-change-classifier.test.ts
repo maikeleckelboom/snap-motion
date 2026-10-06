@@ -122,6 +122,19 @@ describe("browser changed-path classification", () => {
 });
 
 describe("independent source and package browser ownership", () => {
+  it.each(["config/test-performance-before.json", "config/test-performance-after.json"])(
+    "keeps measured audit evidence browser-irrelevant: %s",
+    (path) => {
+      expect(classifyChangedPaths([path])).toMatchObject({
+        browserRequired: false,
+        packageIntegrationRequired: false,
+      });
+      expect(classifyChangedPaths([path, "packages/core/src/math.ts"])).toMatchObject({
+        browserRequired: true,
+        packageIntegrationRequired: true,
+      });
+    },
+  );
   it.each([
     "scripts/release-package-assembly.ts",
     "scripts/pack-packages.ts",
@@ -145,6 +158,7 @@ describe("independent source and package browser ownership", () => {
   it.each([
     { paths: [] },
     { paths: ["future/config.json"] },
+    { paths: ["config/test-performance-selection.json"] },
     { paths: ["packages/core/src/math.ts"] },
     { paths: ["packages/vue/src/media-gallery/use-media-gallery.ts"] },
     { paths: ["shared.css"] },

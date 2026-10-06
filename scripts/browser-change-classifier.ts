@@ -12,6 +12,9 @@ export type GitCommand = (arguments_: readonly string[]) => string;
 const browserIrrelevantPaths = new Set([
   ".github/workflows/release-candidate.yml",
   "config/release-blockers.json",
+  // Audit data has no runtime, build, or test-selection consumers.
+  "config/test-performance-before.json",
+  "config/test-performance-after.json",
   "docs/releasing.md",
   "scripts/check-release-candidate-history.ts",
   "scripts/release-candidate-history.test.ts",
