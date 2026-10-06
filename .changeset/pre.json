@@ -21,6 +21,7 @@
     "final-beta-correctness",
     "final-dogfood-handoff",
     "final-pre-integration-polish",
+    "gallery-interruption-hardening",
     "interruptible-gallery",
     "multi-edge-sheet",
     "one-card-interaction-envelope",

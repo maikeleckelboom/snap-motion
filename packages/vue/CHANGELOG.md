@@ -1,5 +1,13 @@
 # @snap-motion/vue
 
+## 0.1.0-beta.12
+
+### Patch Changes
+
+- Keep gallery presentation synchronized after exact adoption and collection reconciliation, recover interrupted gestures on window blur, and bound retained off-screen slots without moving presented images. Clarify interruptible navigation and presentation semantics. Keep the private core and Vue candidate versions aligned.
+- Updated dependencies
+  - @snap-motion/core@0.1.0-beta.12
+
 ## 0.1.0-beta.11
 
 ### Minor Changes
