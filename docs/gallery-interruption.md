@@ -20,10 +20,11 @@ At the first and last items, outward gestures cannot request another item.
 
 Keyed physical slots intersecting the viewport retain their positions through interruption.
 Off-screen history is recycled, retaining the presentation owner, mechanical anchor,
-destination and immediate navigation neighbors. At most eight slots remain mounted,
-independent of collection size or the number of retargets before arrival. New destinations
-extend the presented corridor in the requested direction without replacing a visible image
-or accumulating distant obsolete destinations.
+destination and immediate navigation neighbors. Retained visibility intervals form one connected
+corridor covering the current offset and the entire physical drag and settlement span.
+At most eight slots remain mounted, independent of collection size or the number of retargets
+before arrival. Off-screen owners receive adjacent physical coordinates instead of retaining
+historical semantic spacing. See [physical corridor proof and regression](gallery-corridor.md).
 An off-screen target, including a distant mechanical anchor, is placed next to that corridor
 in the requested direction, outside its numeric scale/pan bounds. An intersecting zoomed anchor
 keeps its physical coordinate. Its keyed node remains intact. Returning to the mechanical anchor
