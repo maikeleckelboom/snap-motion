@@ -145,6 +145,10 @@ Navigation methods return `true` only when they synchronously accept work; bound
 unknown, and current-destination no-ops return `false`. `requestClose()` defaults to the
 `programmatic` reason; UI paths always supply their exact interaction reason.
 
+Active settlement does not cause navigation methods to return `false`. `settledId` identifies
+the mechanical item exposed to assistive technology, while visible copy follows presentation.
+Intermediate presentation changes emit no `settled` event.
+
 New fit gestures and navigation commands interrupt existing travel immediately. Adjacent targets
 step from the latest intended destination. See [gallery interruption](gallery-interruption.md)
 for the physical continuity, cancellation, and controlled-authority policy.

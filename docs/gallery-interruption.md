@@ -18,9 +18,12 @@ Reversal steps back from that intended destination and follows the pointer immed
 An insufficient or cancelled gesture returns to the existing intended destination.
 At the first and last items, outward gestures cannot request another item.
 
-Keyed physical slots retain their positions through interruption. New destinations
-extend those slots without replacing a visible image. Nonadjacent commands use the
-nearest free slot in the requested direction, retaining existing slots if interrupted.
+Keyed physical slots intersecting the viewport retain their positions through interruption.
+Off-screen history is recycled, retaining the presentation owner, mechanical anchor,
+destination and immediate navigation neighbors. At most eight slots remain mounted,
+independent of collection size or the number of retargets before arrival. New destinations
+extend the presented corridor in the requested direction without replacing a visible image
+or accumulating distant obsolete destinations.
 Only arrival rebases the destination to position zero. There is no intermediate
 rebase reported as settlement. Recenter callbacks are generation guarded, so a
 pointerdown at that boundary cancels the previous completion without losing input.
@@ -33,6 +36,14 @@ collection replacement, and close/reopen invalidate obsolete work.
 
 Buttons, keyboard commands, and `navigateTo` use the same intended destination and
 cancellation rules. No duration, public option, dependency, or URL input gate is added.
+Commands return false for closed, empty, unknown-ID, boundary or already-intended no-ops,
+never merely because settlement is active. Intermediate visible copy changes are not settlements.
+
+Exact adoption and structural reconciliation synchronously rebase the track presentation to
+the mechanical index. Pointerdown without movement therefore keeps the adopted title,
+description and position. Window blur, pointer cancellation and lost capture release gesture
+ownership once and restore the existing intended destination. Recovery preserves zoom/pan
+transforms and cannot restart work after close, unmount or external invalidation.
 
 ## Consumer patch parity
 

@@ -39,7 +39,7 @@ export interface MediaGalleryItem {
   readonly preview: MediaGalleryImageSource;
   /** High-quality source promoted according to `preloadPolicy`. */
   readonly full: MediaGalleryImageSource;
-  /** Optional settled-item description rendered as non-live dialog content. */
+  /** Optional non-live description following the nearest presented image with hysteresis. */
   readonly description?: string;
 }
 
@@ -119,13 +119,13 @@ export interface MediaGalleryHandle<Id extends string = string> {
   readonly activeId: Id | undefined;
   /** Native dialog element when mounted. */
   readonly dialog: HTMLDialogElement | undefined;
-  /** Mechanically settled media identity that owns title, description, position, and media. */
+  /** Mechanical media identity used for accessibility. Visible copy follows presentation during motion. */
   readonly settledId: Id | undefined;
-  /** Requests navigation to an available ID. Returns false when unavailable or already busy. */
+  /** Interrupts travel to request an ID. Returns false when closed, empty, unknown, or already intended. */
   navigateTo(id: Id): boolean;
-  /** Requests one adjacent item. Returns false at the boundary or while busy. */
+  /** Interrupts travel to step forward from intent. Returns false when closed, empty, or at the boundary. */
   next(): boolean;
-  /** Requests one previous item. Returns false at the boundary or while busy. */
+  /** Interrupts travel to step back from intent. Returns false when closed, empty, or at the boundary. */
   previous(): boolean;
   /** Restores the current media to its fitted transform. */
   resetToFit(): void;
