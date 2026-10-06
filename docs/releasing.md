@@ -1,18 +1,35 @@
 # Releasing
 
-No workflow publishes packages. `pnpm release:check` is the same authoritative gate as `pnpm verify`.
+No workflow publishes packages. `pnpm release:check` remains the complete local source gate
+(`pnpm verify`). Candidate materialization uses GitHub Verify as its certification authority.
 The release-candidate lifecycle has separate producer and consumer phases:
 
-1. From a clean worktree whose aligned package version is unrecorded,
-   `pnpm release:candidate:prepare` runs the full gate, certifies the exact packed-consumer archives,
-   exclusively creates `config/release-candidates/<version>.json`, and writes ignored package and
-   release output under `.artifacts`.
-2. Review and commit only the new producer record. That later provenance commit does not become the
+1. Push the exact clean source SHA and wait for a successful **complete** GitHub Verify run on
+   that branch. Linux builds/packs once; static consumers and browser integration certify those
+   same archives. The final Browser certification gate writes `verified-source-packages` evidence
+   only when all three Chromium groups, Firefox, WebKit, WebKit Stacked Deck, integration, Linux,
+   Windows, and repository admission succeed. Documentation-only or package-only skips do not
+   qualify as complete source evidence.
+2. From that same clean attached source SHA, with an aligned unrecorded package version,
+   `pnpm release:candidate:prepare` queries GitHub through the authenticated `gh` CLI, requires
+   every owner in the same successful run attempt, downloads its immutable verified archive
+   artifact into a fresh temporary directory, and checks commit/run/attempt, package metadata,
+   versions and SHA-256 identity. It exclusively creates `config/release-candidates/<version>.json`
+   and writes ignored package/release output under `.artifacts`. It does not rebuild or repeat
+   source behavioral certification. GitHub run, attempt, artifact ID/digest and URL are recorded.
+3. Review and commit only the new producer record. That later provenance commit does not become the
    package source authority; the record keeps the source commit that produced the archives.
-3. `pnpm release:candidate:verify -- <version>` reads an existing record, checks out its recorded
+4. `pnpm release:candidate:verify -- <version>` reads an existing record, checks out its recorded
    `source.commit` in an isolated detached worktree, uses the repository pnpm and package-assembly
    authorities, and requires the package set, manifest data, archive bytes, and SHA-256 hashes to
    match before reconstructing `.artifacts/packages` and `.artifacts/release`.
+
+The source artifact is retained for 14 days. Missing/expired artifacts, partial reruns, unavailable
+GitHub access, skipped owners, an unpushed source, or a changed HEAD fail closed. Dispatch full
+Verify on the exact source branch to renew evidence. No local marker, `verified=true`, fallback
+full-gate result, or trust flag can substitute for the GitHub authority. Existing schema-1 records
+remain unchanged; new records add optional structured GitHub provenance. Reconstruction deliberately
+retains its independent historical build/hash proof and needs no behavioral rerun.
 
 The shared assembler normalizes pnpm's platform-dependent gzip OS header byte before hashing. The
 tar payload remains pnpm-produced and unchanged, while Windows preparation and Linux verification

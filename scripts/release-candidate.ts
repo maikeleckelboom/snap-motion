@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { readFile, readdir } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join, resolve } from "node:path";
 
-import { resolveRepositoryPnpm, runPnpmSync } from "./pnpm-cli.ts";
+import { resolveRepositoryPnpm } from "./pnpm-cli.ts";
 import {
   assertAttachedSourceBranch,
   assertCandidateEligible,
@@ -15,11 +16,10 @@ import {
   serializeCandidateRecord,
   type CandidateRecord,
 } from "./release-candidate-record.ts";
-import { inspectReleasePackages } from "./release-package-assembly.ts";
+import { fetchVerifiedSource } from "./sourceVerification.ts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const artifactsRoot = resolve(repoRoot, ".artifacts");
-const packageDirectory = resolve(artifactsRoot, "packages");
 const candidateHistoryDirectory = resolve(repoRoot, "config/release-candidates");
 const changesetDirectory = resolve(repoRoot, ".changeset");
 
@@ -84,59 +84,88 @@ const candidateVersion = assertCandidateEligible(
   await currentPendingChangesets(),
 );
 
-// Eligibility must be proven before the full verification path repacks and replaces ignored output.
+// Eligibility and clean source precede network access and all artifact mutation.
 assertCleanWorktree();
-const pnpm = resolveRepositoryPnpm(repoRoot);
-runPnpmSync(pnpm, ["release:check"], { cwd: repoRoot });
-assertCleanWorktree();
-
-// `release:check` builds package authority once, packs it once, then certifies those exact archives
-// through the static and Chromium consumers. Later browser and fixture gates do not mutate them.
-const packages = await inspectReleasePackages(packageDirectory);
 const commit = capture("git", ["rev-parse", "HEAD"]);
-const record: CandidateRecord = {
-  schemaVersion: 1,
-  createdAt: capture("git", ["show", "-s", "--format=%cI", commit]),
-  source: {
-    repository: "https://github.com/maikeleckelboom/snap-motion",
-    visibility: "public",
-    branch: sourceBranch,
-    commit,
-  },
-  verification: { command: "pnpm release:check", passed: true },
-  packages,
-  private: true,
-  published: false,
-  intendedDistTag: "beta",
-  blockers: JSON.parse(
-    await readFile(resolve(repoRoot, "config/release-blockers.json"), "utf8"),
-  ) as readonly Record<string, unknown>[],
-};
-const candidateRecord = resolve(candidateHistoryDirectory, `${candidateVersion}.json`);
-const formattedRecord = spawnSync(
-  pnpm.command,
-  [...pnpm.argsPrefix, "exec", "oxfmt", "--stdin-filepath", candidateRecord],
-  {
-    cwd: repoRoot,
-    encoding: "utf8",
-    input: serializeCandidateRecord(record),
-  },
-);
-if (formattedRecord.status !== 0) {
-  throw (
-    formattedRecord.error ??
-    new Error(formattedRecord.stderr || "Could not format the candidate record before reservation.")
-  );
-}
-const recordSource = formattedRecord.stdout;
+const pnpm = resolveRepositoryPnpm(repoRoot);
+const packageDirectory = await mkdtemp(join(tmpdir(), "snap-motion-verified-source-"));
+try {
+  const verified = await fetchVerifiedSource(commit, sourceBranch, packageDirectory);
+  assertCleanWorktree();
+  if (capture("git", ["rev-parse", "HEAD"]) !== commit)
+    throw new Error("Source HEAD changed while retrieving certification.");
+  const packages = verified.packages;
+  if (
+    packages.length !== candidatePackages.length ||
+    packages.some(
+      (candidatePackage) =>
+        !candidatePackages.some(
+          (expected) =>
+            expected.name === candidatePackage.name &&
+            expected.version === candidatePackage.version,
+        ),
+    )
+  )
+    throw new Error("Certified package versions do not match the clean candidate source.");
 
-await finalizeNewCandidate({
-  artifactsRoot,
-  candidateRecord,
-  packageSourceDirectory: packageDirectory,
-  packages,
-  recordSource,
-});
-process.stdout.write(
-  `Prepared and certified new release candidate ${candidateVersion} from source commit ${commit}. Review and commit config/release-candidates/${candidateVersion}.json; ignored artifacts are in .artifacts/packages and .artifacts/release.\n`,
-);
+  const record: CandidateRecord = {
+    schemaVersion: 1,
+    createdAt: capture("git", ["show", "-s", "--format=%cI", commit]),
+    source: {
+      repository: "https://github.com/maikeleckelboom/snap-motion",
+      visibility: "public",
+      branch: sourceBranch,
+      commit,
+    },
+    verification: {
+      command: `GitHub Verify ${verified.url} attempt ${verified.runAttempt}`,
+      passed: true,
+      github: {
+        runId: verified.runId,
+        runAttempt: verified.runAttempt,
+        artifactId: verified.artifactId,
+        artifactDigest: verified.artifactDigest,
+        url: verified.url,
+      },
+    },
+    packages,
+    private: true,
+    published: false,
+    intendedDistTag: "beta",
+    blockers: JSON.parse(
+      await readFile(resolve(repoRoot, "config/release-blockers.json"), "utf8"),
+    ) as readonly Record<string, unknown>[],
+  };
+  const candidateRecord = resolve(candidateHistoryDirectory, `${candidateVersion}.json`);
+  const formattedRecord = spawnSync(
+    pnpm.command,
+    [...pnpm.argsPrefix, "exec", "oxfmt", "--stdin-filepath", candidateRecord],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      input: serializeCandidateRecord(record),
+    },
+  );
+  if (formattedRecord.status !== 0) {
+    throw (
+      formattedRecord.error ??
+      new Error(
+        formattedRecord.stderr || "Could not format the candidate record before reservation.",
+      )
+    );
+  }
+  const recordSource = formattedRecord.stdout;
+
+  await finalizeNewCandidate({
+    artifactsRoot,
+    candidateRecord,
+    packageSourceDirectory: packageDirectory,
+    packages,
+    recordSource,
+  });
+  process.stdout.write(
+    `Prepared and certified new release candidate ${candidateVersion} from source commit ${commit}. Review and commit config/release-candidates/${candidateVersion}.json; ignored artifacts are in .artifacts/packages and .artifacts/release.\n`,
+  );
+} finally {
+  await rm(packageDirectory, { recursive: true, force: true });
+}
