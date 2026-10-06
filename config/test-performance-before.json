@@ -1,0 +1,3197 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "8fa65ecf4215c4586cb007655cf54b277c83e229",
+  "startingCommit": "a0377e13dc098c8e814a2c39724ce7b4696df312",
+  "workflowRun": 37470543891,
+  "method": "Serial line reporter start-to-next-start intervals; includes per-test hooks and next-test launch. Job API is attempt 1; Chromium 2 log is passing attempt 2. Four conditional skips retained.",
+  "jobs": [
+    {
+      "name": "Chromium 2/2",
+      "conclusion": "success",
+      "seconds": 478,
+      "steps": [
+        {
+          "name": "Set up job",
+          "seconds": 1
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 1
+        },
+        {
+          "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 4
+        },
+        {
+          "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 8
+        },
+        {
+          "name": "Run pnpm install --frozen-lockfile",
+          "seconds": 6
+        },
+        {
+          "name": "Install Chromium",
+          "seconds": 23
+        },
+        {
+          "name": "Run Chromium 2/2",
+          "seconds": 432
+        },
+        {
+          "name": "Upload Chromium failure evidence",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 1
+        },
+        {
+          "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 0
+        },
+        {
+          "name": "Complete job",
+          "seconds": 0
+        }
+      ]
+    },
+    {
+      "name": "Linux verification",
+      "conclusion": "success",
+      "seconds": 88,
+      "steps": [
+        {
+          "name": "Set up job",
+          "seconds": 2
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 2
+        },
+        {
+          "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 3
+        },
+        {
+          "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 8
+        },
+        {
+          "name": "Run pnpm install --frozen-lockfile",
+          "seconds": 4
+        },
+        {
+          "name": "Run pnpm format:check",
+          "seconds": 3
+        },
+        {
+          "name": "Run pnpm lint",
+          "seconds": 1
+        },
+        {
+          "name": "Build package authority",
+          "seconds": 8
+        },
+        {
+          "name": "Run pnpm typecheck:prepared",
+          "seconds": 9
+        },
+        {
+          "name": "Run pnpm test:unit",
+          "seconds": 17
+        },
+        {
+          "name": "Build application and fixture authority",
+          "seconds": 8
+        },
+        {
+          "name": "Run pnpm api:check:prepared",
+          "seconds": 3
+        },
+        {
+          "name": "Run pnpm size:check",
+          "seconds": 1
+        },
+        {
+          "name": "Pack prepared package authority",
+          "seconds": 1
+        },
+        {
+          "name": "Certify browser-free packed packages",
+          "seconds": 14
+        },
+        {
+          "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 1
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 0
+        },
+        {
+          "name": "Complete job",
+          "seconds": 0
+        }
+      ]
+    },
+    {
+      "name": "Browser integration",
+      "conclusion": "success",
+      "seconds": 177,
+      "steps": [
+        {
+          "name": "Set up job",
+          "seconds": 2
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 1
+        },
+        {
+          "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 3
+        },
+        {
+          "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 8
+        },
+        {
+          "name": "Run pnpm install --frozen-lockfile",
+          "seconds": 4
+        },
+        {
+          "name": "Install integration browsers",
+          "seconds": 51
+        },
+        {
+          "name": "Build package authority",
+          "seconds": 8
+        },
+        {
+          "name": "Build production preview",
+          "seconds": 1
+        },
+        {
+          "name": "Build framework fixtures",
+          "seconds": 7
+        },
+        {
+          "name": "Pack prepared package authority",
+          "seconds": 1
+        },
+        {
+          "name": "Certify production preview",
+          "seconds": 3
+        },
+        {
+          "name": "Upload preview failure evidence",
+          "seconds": 0
+        },
+        {
+          "name": "Certify framework fixtures",
+          "seconds": 14
+        },
+        {
+          "name": "Upload fixture failure evidence",
+          "seconds": 0
+        },
+        {
+          "name": "Certify packed Nuxt build and hydration",
+          "seconds": 70
+        },
+        {
+          "name": "Upload packed surface evidence",
+          "seconds": 2
+        },
+        {
+          "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 0
+        },
+        {
+          "name": "Complete job",
+          "seconds": 0
+        }
+      ]
+    },
+    {
+      "name": "Windows portability",
+      "conclusion": "success",
+      "seconds": 76,
+      "steps": [
+        {
+          "name": "Set up job",
+          "seconds": 2
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 6
+        },
+        {
+          "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 19
+        },
+        {
+          "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 20
+        },
+        {
+          "name": "Run pnpm install --frozen-lockfile",
+          "seconds": 8
+        },
+        {
+          "name": "Verify Windows package and CLI portability",
+          "seconds": 16
+        },
+        {
+          "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 2
+        },
+        {
+          "name": "Complete job",
+          "seconds": 0
+        }
+      ]
+    },
+    {
+      "name": "Chromium 1/2",
+      "conclusion": "success",
+      "seconds": 229,
+      "steps": [
+        {
+          "name": "Set up job",
+          "seconds": 2
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 1
+        },
+        {
+          "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 4
+        },
+        {
+          "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 11
+        },
+        {
+          "name": "Run pnpm install --frozen-lockfile",
+          "seconds": 5
+        },
+        {
+          "name": "Install Chromium",
+          "seconds": 25
+        },
+        {
+          "name": "Run Chromium 1/2",
+          "seconds": 177
+        },
+        {
+          "name": "Upload Chromium failure evidence",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 1
+        },
+        {
+          "name": "Complete job",
+          "seconds": 0
+        }
+      ]
+    },
+    {
+      "name": "Cross-browser interoperability",
+      "conclusion": "success",
+      "seconds": 607,
+      "steps": [
+        {
+          "name": "Set up job",
+          "seconds": 2
+        },
+        {
+          "name": "Initialize containers",
+          "seconds": 26
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 1
+        },
+        {
+          "name": "Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 3
+        },
+        {
+          "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 11
+        },
+        {
+          "name": "Run pnpm install --frozen-lockfile",
+          "seconds": 6
+        },
+        {
+          "name": "Run Firefox and WebKit interoperability",
+          "seconds": 554
+        },
+        {
+          "name": "Upload cross-browser failure evidence",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          "seconds": 1
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 0
+        },
+        {
+          "name": "Stop containers",
+          "seconds": 0
+        },
+        {
+          "name": "Complete job",
+          "seconds": 0
+        }
+      ]
+    },
+    {
+      "name": "Repository admission",
+      "conclusion": "success",
+      "seconds": 11,
+      "steps": [
+        {
+          "name": "Set up job",
+          "seconds": 1
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 1
+        },
+        {
+          "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 6
+        },
+        {
+          "name": "Validate release-candidate history",
+          "seconds": 0
+        },
+        {
+          "name": "Classify browser change scope",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "seconds": 0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "seconds": 1
+        },
+        {
+          "name": "Complete job",
+          "seconds": 0
+        }
+      ]
+    },
+    {
+      "name": "Browser certification",
+      "conclusion": "success",
+      "seconds": 3,
+      "steps": [
+        {
+          "name": "Set up job",
+          "seconds": 0
+        },
+        {
+          "name": "Certify browser evidence",
+          "seconds": 0
+        },
+        {
+          "name": "Complete job",
+          "seconds": 0
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "project": "chromium",
+      "tests": 209,
+      "seconds": 601.2530000000003
+    },
+    {
+      "project": "firefox",
+      "tests": 55,
+      "seconds": 117.81000000000002
+    },
+    {
+      "project": "webkit",
+      "tests": 55,
+      "seconds": 137.44899999999993
+    },
+    {
+      "project": "webkit-stacked-deck",
+      "tests": 13,
+      "seconds": 294.28900000000004
+    }
+  ],
+  "specs": [
+    {
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "tests": 13,
+      "seconds": 294.28900000000004
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "tests": 31,
+      "seconds": 167.55399999999997
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "tests": 25,
+      "seconds": 118.565
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "tests": 12,
+      "seconds": 71.66900000000001
+    },
+    {
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "tests": 20,
+      "seconds": 48.42699999999999
+    },
+    {
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "tests": 20,
+      "seconds": 46.929
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "tests": 20,
+      "seconds": 34.191
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct-reversal.spec.ts",
+      "tests": 7,
+      "seconds": 30.192
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "tests": 16,
+      "seconds": 27.454
+    },
+    {
+      "project": "webkit",
+      "spec": "e2e/sheet.spec.ts",
+      "tests": 10,
+      "seconds": 26.913000000000004
+    },
+    {
+      "project": "firefox",
+      "spec": "e2e/sheet.spec.ts",
+      "tests": 10,
+      "seconds": 24.712000000000003
+    },
+    {
+      "project": "webkit",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "tests": 7,
+      "seconds": 20.332
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/coverflow-navigation.spec.ts",
+      "tests": 6,
+      "seconds": 18.439999999999998
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/sheet.spec.ts",
+      "tests": 10,
+      "seconds": 17.388
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/coverflow-motion.spec.ts",
+      "tests": 5,
+      "seconds": 17.334
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "tests": 14,
+      "seconds": 17.133
+    },
+    {
+      "project": "webkit",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "tests": 5,
+      "seconds": 14.984000000000002
+    },
+    {
+      "project": "firefox",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "tests": 7,
+      "seconds": 12.338999999999999
+    },
+    {
+      "project": "webkit",
+      "spec": "e2e/surfaceState.spec.ts",
+      "tests": 2,
+      "seconds": 10.835999999999999
+    },
+    {
+      "project": "firefox",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "tests": 5,
+      "seconds": 10.370000000000001
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/pointerCapture.spec.ts",
+      "tests": 6,
+      "seconds": 10.362000000000002
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "tests": 7,
+      "seconds": 10.118
+    },
+    {
+      "project": "firefox",
+      "spec": "e2e/surfaceState.spec.ts",
+      "tests": 2,
+      "seconds": 9.602
+    },
+    {
+      "project": "webkit",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "tests": 4,
+      "seconds": 9.314000000000002
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/accessibility.spec.ts",
+      "tests": 2,
+      "seconds": 8.488
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/coverflow-pagination-focus.spec.ts",
+      "tests": 5,
+      "seconds": 8.256
+    },
+    {
+      "project": "webkit",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "tests": 7,
+      "seconds": 8.141
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/default-surfaces.spec.ts",
+      "tests": 6,
+      "seconds": 7.914
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/surfaceState.spec.ts",
+      "tests": 2,
+      "seconds": 6.991
+    },
+    {
+      "project": "firefox",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "tests": 4,
+      "seconds": 6.747999999999999
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "tests": 5,
+      "seconds": 6.4959999999999996
+    },
+    {
+      "project": "firefox",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "tests": 7,
+      "seconds": 5.612
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/overlay-lifecycle.spec.ts",
+      "tests": 5,
+      "seconds": 4.647
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "tests": 4,
+      "seconds": 4.371
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/paged-grid.spec.ts",
+      "tests": 4,
+      "seconds": 3.6849999999999996
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/lab-navigation.spec.ts",
+      "tests": 3,
+      "seconds": 2.518
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "tests": 7,
+      "seconds": 2.406
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/keyboard-certification.spec.ts",
+      "tests": 2,
+      "seconds": 1.116
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/coverflow-wheel.spec.ts",
+      "tests": 1,
+      "seconds": 1.112
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/media-preview.spec.ts",
+      "tests": 1,
+      "seconds": 1.08
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/realm-overlay.spec.ts",
+      "tests": 2,
+      "seconds": 1.048
+    },
+    {
+      "project": "chromium",
+      "spec": "e2e/variable-rail.spec.ts",
+      "tests": 1,
+      "seconds": 0.725
+    }
+  ],
+  "top20": [
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "both exchange variants complete repeated revolutions without drift or shell loss",
+      "seconds": 76.79
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "distinct pointer gestures complete repeated revolutions without drift or shell loss",
+      "seconds": 65.892
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "distinct pointer gestures complete repeated revolutions without drift or shell loss",
+      "seconds": 23.923
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "both exchange variants complete repeated revolutions without drift or shell loss",
+      "seconds": 23.654
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "interior and semantic-wrap exchanges have equivalent rendered choreography",
+      "seconds": 22.371
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "a two-item deck preserves forward and backward physical direction",
+      "seconds": 21.812
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "fast alternating Direct around semantic zero preserves pile-perimeter material ownership",
+      "seconds": 20.85
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "pointer, wheel, and keyboard cross former ordinal edges as adjacent exchanges",
+      "seconds": 20.681
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct visual authority only ever advances, however fast the hand is",
+      "seconds": 20.1
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct deterministic heavy abuse retains every concurrent release and records paint handoffs",
+      "seconds": 19.979
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "cancel, lost capture, cyclic former edges, and reduced motion restore coherently",
+      "seconds": 19.926
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "responsive bleed surface avoids internal clipping and page overflow",
+      "seconds": 18.526
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "one held gesture cannot discard a second card however far it travels",
+      "seconds": 16.986
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "high-contrast exchange changes depth with body clearance and no crossing shadow",
+      "seconds": 13.934
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct hands one shell over continuously and passes it behind only between clear bodies",
+      "seconds": 11.814
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "successive rendered frames preserve the physical exchange shells",
+      "seconds": 11.036
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "a two-item deck preserves forward and backward physical direction",
+      "seconds": 10.444
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct-reversal.spec.ts",
+      "title": "an exposed held two-axis reversal changes centre material only by physical motion",
+      "seconds": 8.966
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "ten consecutive exchanges restore the persistent shell inventory",
+      "seconds": 8.838
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct release stays finite and completes after the deck itself has stopped",
+      "seconds": 8.318
+    }
+  ],
+  "tests": [
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › form preserves authored content, wrapping, and native overflow on a short viewport",
+      "seconds": 2.498
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › prose preserves authored content, wrapping, and native overflow on a short viewport",
+      "seconds": 2.165
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › media preserves authored content, wrapping, and native overflow on a short viewport",
+      "seconds": 2.186
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › keeps immediate Escape, Tab, Shift+Tab, and early navigation in the local modal lifecycle",
+      "seconds": 2.199
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › reopens an active close continuously and ignores obsolete completion",
+      "seconds": 2.093
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › honors an omitted override under reduce, explicit overrides, and live system changes",
+      "seconds": 0.583
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › honors an omitted override under no-preference, explicit overrides, and live system changes",
+      "seconds": 1.331
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › reconciles resize, side changes, dynamic content, and zoom without replacing form state",
+      "seconds": 2.236
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › keeps drag cancellation responsive, and dismisses through the handle",
+      "seconds": 2.985
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › allows direct drag takeover during opening and continuous reversal before release",
+      "seconds": 1.33
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Coverflow presents at full workspace width and accepts its normal control",
+      "seconds": 1.319
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Stacked Deck exchanges one card from its presentation control",
+      "seconds": 1.287
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Paged Grid keeps default keyboard paging operational",
+      "seconds": 1.214
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Gallery opens and closes its dialog with focus return",
+      "seconds": 0.604
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Sheet opens and closes from the default presentation with focus return",
+      "seconds": 2.072
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct-reversal.spec.ts",
+      "title": "one held Direct reversal traces a single physical path through neutral",
+      "seconds": 7.816
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct-reversal.spec.ts",
+      "title": "a coalesced sample out of resistance lands the pile where the hand is",
+      "seconds": 3.448
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct-reversal.spec.ts",
+      "title": "a held reversal across the cyclic boundary is the same physical path",
+      "seconds": 4.916
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct-reversal.spec.ts",
+      "title": "a reversing hand keeps its grip on the card in both axes",
+      "seconds": 1.547
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct-reversal.spec.ts",
+      "title": "raw Y moves only the held Direct source",
+      "seconds": 2.685
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct-reversal.spec.ts",
+      "title": "an exposed held two-axis reversal changes centre material only by physical motion",
+      "seconds": 8.966
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct-reversal.spec.ts",
+      "title": "a reversing touch contact tracks the same physical path as a mouse",
+      "seconds": 0.814
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct gives identical fresh and chained hands the same transaction zero",
+      "seconds": 7.3
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct chains interior and wrap exchanges for two revolutions without scalar debt",
+      "seconds": 3.172
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct takeover preserves same-hand reversal and the two-item physical direction",
+      "seconds": 2.614
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct establishes a new zero throughout parking and after parking outruns the spring",
+      "seconds": 6.045
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct lets an interrupted release land while the next hand reverses onto it",
+      "seconds": 1.155
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct preserves every unfinished shell through a third immediate same-direction hand",
+      "seconds": 0.929
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct preserves three inverse releases while repeatedly crossing the semantic seam",
+      "seconds": 1.001
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct never absorbs an airborne reversal target into the next hand",
+      "seconds": 1.674
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct two-item machine-gun reuse keeps one record per persistent shell",
+      "seconds": 2.993
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct deterministic heavy abuse retains every concurrent release and records paint handoffs",
+      "seconds": 19.979
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct dark-to-light takeover preserves overlapping paint order at new-hand zero",
+      "seconds": 0.777
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct keeps three local grab points attached through diagonal owned movement",
+      "seconds": 3.907
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct reports touch catch-up and owns a former-edge gesture normally",
+      "seconds": 3.075
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct overdrag and reversal keep one stable origin with only an adjacent target",
+      "seconds": 2.235
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct parks opaquely behind the new top and keeps immediate reversal continuous",
+      "seconds": 5.334
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct keyboard, controls, wheel, and programmatic navigation share the physical model",
+      "seconds": 4.137
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct preserves nested controls on the new top and accepts controlled takeover",
+      "seconds": 2.164
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct hands one shell over continuously and passes it behind only between clear bodies",
+      "seconds": 11.814
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct release stays finite and completes after the deck itself has stopped",
+      "seconds": 8.318
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct grab takes ownership without a frame drawn from the wrong presentation",
+      "seconds": 2.497
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct visual authority only ever advances, however fast the hand is",
+      "seconds": 20.1
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a returning release once, travelling forward",
+      "seconds": 2.403
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a committed release once, travelling forward",
+      "seconds": 1.264
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a returning release once, travelling backward",
+      "seconds": 2.419
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-direct.spec.ts",
+      "title": "Direct classifies a committed release once, travelling backward",
+      "seconds": 1.259
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "shuffle forward interior keeps every background material behind the physical pile",
+      "seconds": 7.359
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "shuffle backward interior keeps every background material behind the physical pile",
+      "seconds": 6.491
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "shuffle forward semantic wrap keeps every background material behind the physical pile",
+      "seconds": 6.654
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "direct forward interior keeps every background material behind the physical pile",
+      "seconds": 7.33
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "direct backward interior keeps every background material behind the physical pile",
+      "seconds": 6.531
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "direct forward semantic wrap keeps every background material behind the physical pile",
+      "seconds": 6.609
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct Next keeps the complete pile physically covered",
+      "seconds": 2.186
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct Previous keeps the complete pile physically covered",
+      "seconds": 1.479
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct ArrowRight wrap keeps the complete pile physically covered",
+      "seconds": 1.383
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "autonomous Direct ArrowLeft wrap keeps the complete pile physically covered",
+      "seconds": 1.466
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "Direct parking inserts the outgoing card before an occluded fold shell re-emerges",
+      "seconds": 3.331
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck-pile.spec.ts",
+      "title": "fast alternating Direct around semantic zero preserves pile-perimeter material ownership",
+      "seconds": 20.85
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "real pointer movement maps 1:1 to the visual top in both directions",
+      "seconds": 2.384
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "high-contrast exchange changes depth with body clearance and no crossing shadow",
+      "seconds": 4.139
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "successive rendered frames preserve the physical exchange shells",
+      "seconds": 3.4
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "interior and semantic-wrap exchanges have equivalent rendered choreography",
+      "seconds": 7.362
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "pointer, wheel, and keyboard cross former ordinal edges as adjacent exchanges",
+      "seconds": 7.017
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "both exchange variants complete repeated revolutions without drift or shell loss",
+      "seconds": 23.654
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "distinct pointer gestures complete repeated revolutions without drift or shell loss",
+      "seconds": 23.923
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "a two-item deck preserves forward and backward physical direction",
+      "seconds": 10.444
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "ten consecutive exchanges restore the persistent shell inventory",
+      "seconds": 8.838
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "deck thickness follows canonical ring depth across every semantic ordinal",
+      "seconds": 1.766
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "the settings physical shell retraces its geometry and material through reversal",
+      "seconds": 1.494
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "one held gesture cannot discard a second card however far it travels",
+      "seconds": 6.014
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "a violent flick from a middle card still resolves exactly one adjacent card",
+      "seconds": 5.317
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "one coalesced wheel burst exchanges one card and a later burst exchanges another",
+      "seconds": 2.714
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "rapid relative commands never merge into one multi-card throw",
+      "seconds": 3.521
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "non-adjacent absolute navigation synchronizes instead of throwing every card",
+      "seconds": 4.448
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "reversal retraces the same card and changes direction only through neutral",
+      "seconds": 1.481
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "one gesture reverses freely across its whole envelope but never past it",
+      "seconds": 1.557
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "a re-grab is a new gesture with its own envelope and no surviving velocity",
+      "seconds": 3.457
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "fast successive gestures each resolve one card with no settlement cooldown",
+      "seconds": 1.831
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "a reverse gesture during settlement takes the card back immediately",
+      "seconds": 1.704
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "a re-grab during settlement rebases without a jump and cannot inherit momentum",
+      "seconds": 1.59
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "inspection follows the authoritative card instead of waiting for mechanical rest",
+      "seconds": 3.091
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "an accepted arrow from the inspection control preserves deterministic focus",
+      "seconds": 2.263
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "distinct rapid commands, keys, and wheel bursts each resolve one card",
+      "seconds": 3.72
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "cancel, lost capture, cyclic former edges, and reduced motion restore coherently",
+      "seconds": 5.826
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "responsive bleed surface avoids internal clipping and page overflow",
+      "seconds": 18.526
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "three-card narrow consumers contain document width through every exchange frame",
+      "seconds": 1.444
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "named metadata follows visual authority, ownership follows the anchor",
+      "seconds": 0.755
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "authority holds through jitter around the handoff instead of oscillating",
+      "seconds": 1.689
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "inspection, visual semantics, and accessibility expose one authoritative card",
+      "seconds": 2.185
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (shuffle)",
+      "seconds": 1.592
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (shuffle)",
+      "seconds": 0.599
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (direct)",
+      "seconds": 1.586
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (direct)",
+      "seconds": 0.594
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects premature retirement even when a skipped sample permits enough time",
+      "seconds": 0.01
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects inconsistent snapshots and an overlapping paint swap",
+      "seconds": 0.009
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace reports moving handoffs whose intermediate clearance was not sampled",
+      "seconds": 0.007
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace records the actual RAF microtask order in both callback schedules",
+      "seconds": 0.111
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace sees inert visible bodies and rejects a temporary computed-style mutation",
+      "seconds": 0.662
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with early recorder, skipped samples and a delayed frame",
+      "seconds": 0.821
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with late recorder, skipped samples and a delayed frame",
+      "seconds": 0.786
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/surfaceState.spec.ts",
+      "title": "coverflow retains canonical and settled emphasis after touch and focus departure",
+      "seconds": 3.449
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/surfaceState.spec.ts",
+      "title": "stacked-deck retains canonical and settled emphasis after touch and focus departure",
+      "seconds": 3.542
+    },
+    {
+      "job": "Chromium 2/2",
+      "project": "chromium",
+      "spec": "e2e/variable-rail.spec.ts",
+      "title": "unequal-width rail advances by measured centers and preserves edge insets",
+      "seconds": 0.725
+    },
+    {
+      "job": "Browser integration",
+      "project": "chromium",
+      "spec": "e2e/media-preview.spec.ts",
+      "title": "built lab resolves and decodes every fixture under a non-root base",
+      "seconds": 1.08
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/accessibility.spec.ts",
+      "title": "automated accessibility certification › paged grid passes active, inert, mobile, and zoomed layouts",
+      "seconds": 5.062
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/accessibility.spec.ts",
+      "title": "automated accessibility certification › sheet passes every vertical snap and reduced-motion state",
+      "seconds": 3.426
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "in-flight gallery drag takeover preserves the image and continues to the next destination",
+      "seconds": 1.401
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "settled card, side card, touch tap, cancellation, and stage focus resolve once",
+      "seconds": 3.782
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "shared inspect control opens directly without starting a carousel drag",
+      "seconds": 0.693
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "dialog entrance and directional track expose rendered intermediate states",
+      "seconds": 1.143
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "native modal contains focus, guards the background, and restores scroll styles",
+      "seconds": 1.268
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "scrim closes only a true scrim sequence and not an image gesture",
+      "seconds": 1.543
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "close synchronizes every carousel owner and resumes navigation without catch-up",
+      "seconds": 3.442
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "buttons, keys, announcements, and item changes own bounded gallery navigation",
+      "seconds": 1.856
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "navigation controls stay boundary-driven during button and swipe settlement",
+      "seconds": 1.932
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "discrete, focal, touch, and wheel zoom preserve the canonical fit state",
+      "seconds": 1.525
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "fit swipe, zoomed pan, pinch, cancellation, and resize keep exclusive ownership",
+      "seconds": 1.134
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "loading preserves geometry, requests only the current full image, and reveals decoded content",
+      "seconds": 1.565
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "default preload stays bounded across one move and rapid replacement navigation",
+      "seconds": 1.739
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "a failed full image retains its preview and leaves navigation and close usable",
+      "seconds": 1.811
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "semantics, focus visibility, coarse discovery, reduced motion, and reflow remain usable",
+      "seconds": 1.405
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-gallery.spec.ts",
+      "title": "focus restoration falls back to the stage when the logical control is unavailable",
+      "seconds": 1.215
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-motion.spec.ts",
+      "title": "slow direct drag stays 1:1 and visually neutral in both directions",
+      "seconds": 2.326
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-motion.spec.ts",
+      "title": "fast maximum-skip traversal projects every intermediate card and announces only the settle",
+      "seconds": 3.213
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-motion.spec.ts",
+      "title": "maximum skip 1, 2, and 5 preserve destination policy",
+      "seconds": 5.702
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-motion.spec.ts",
+      "title": "re-grab cancels a pending semantic handoff and preserves continuous ordering",
+      "seconds": 2.412
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-motion.spec.ts",
+      "title": "elastic ends remain symmetric and reduced motion settles exactly across stage modes",
+      "seconds": 3.681
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-navigation.spec.ts",
+      "title": "slow drag, midpoint crossing, and both reversals stay physically continuous",
+      "seconds": 2.344
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-navigation.spec.ts",
+      "title": "elastic end drags keep the capsule inside the fixed navigation rail",
+      "seconds": 2.887
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-navigation.spec.ts",
+      "title": "a swipe gives the stage keyboard ownership without disturbing retained in-component focus",
+      "seconds": 2.192
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-navigation.spec.ts",
+      "title": "an interrupted Arrow transition announces only the settlement it earns",
+      "seconds": 3.359
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-navigation.spec.ts",
+      "title": "fully settled sequential Arrow transitions each announce exactly once",
+      "seconds": 3.005
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-navigation.spec.ts",
+      "title": "boundaries, Home/End, native buttons, and form controls keep their keyboard contracts",
+      "seconds": 4.653
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-pagination-focus.spec.ts",
+      "title": "pointer drag leaves one exact capsule and no keyboard focus halo",
+      "seconds": 2.328
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-pagination-focus.spec.ts",
+      "title": "pointer click selects without showing the keyboard halo",
+      "seconds": 1.413
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-pagination-focus.spec.ts",
+      "title": "keyboard focus and selection remain distinct on the same control",
+      "seconds": 1.42
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-pagination-focus.spec.ts",
+      "title": "item one keeps keyboard focus while the capsule settles on item five",
+      "seconds": 2.33
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-pagination-focus.spec.ts",
+      "title": "keyboard traversal immediately restores focus visibility after pointer use",
+      "seconds": 0.765
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/coverflow-wheel.spec.ts",
+      "title": "stepped wheel destinations advance monotonically and reverse exactly",
+      "seconds": 1.112
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/default-surfaces.spec.ts",
+      "title": "zero-configuration surfaces › publishes an accessible structure at rest, disabled, and mid-navigation",
+      "seconds": 2.487
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/default-surfaces.spec.ts",
+      "title": "zero-configuration surfaces › exchanges exactly one screen however far a gesture travels",
+      "seconds": 1.507
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/default-surfaces.spec.ts",
+      "title": "zero-configuration surfaces › hints the compositor only while a surface is moving",
+      "seconds": 1.5
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/default-surfaces.spec.ts",
+      "title": "zero-configuration surfaces › keeps a consumer's own controls inside a card usable",
+      "seconds": 0.944
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/default-surfaces.spec.ts",
+      "title": "zero-configuration surfaces › reports what actually moved the surface",
+      "seconds": 0.89
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/default-surfaces.spec.ts",
+      "title": "zero-configuration surfaces › lets a route take over selection even while the surface refuses input",
+      "seconds": 0.586
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "compounded programmatic retargets and reversals retain a painted physical corridor",
+      "seconds": 1.878
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "window blur resolves a partially dragged takeover exactly once",
+      "seconds": 0.938
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "mouse takes over at 32ms, chains three destinations and reverses",
+      "seconds": 1.451
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "mouse takes over at 144ms, chains three destinations and reverses",
+      "seconds": 1.546
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "touch takes over at 32ms, chains three destinations and reverses",
+      "seconds": 1.596
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "touch takes over at 144ms, chains three destinations and reverses",
+      "seconds": 1.63
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "mixed-aspect images retain their nodes and positions through snap-back takeover and final rebase",
+      "seconds": 1.079
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/keyboard-certification.spec.ts",
+      "title": "keyboard certification › sheet radio group supplies the non-drag Arrow-key path",
+      "seconds": 0.613
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/keyboard-certification.spec.ts",
+      "title": "keyboard certification › interactive grid descendants keep directional keys and outgoing focus never becomes inert",
+      "seconds": 0.503
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/lab-navigation.spec.ts",
+      "title": "lab audience navigation › opens as a focused showcase and progressively discloses the workbench",
+      "seconds": 0.589
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/lab-navigation.spec.ts",
+      "title": "lab audience navigation › normalizes valid, incomplete, invalid, and conflicting direct URLs",
+      "seconds": 1.343
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/lab-navigation.spec.ts",
+      "title": "lab audience navigation › keeps history-driven search parameter changes coherent",
+      "seconds": 0.586
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "the dedicated surface exposes the complete stable matrix and a genuinely non-live trace",
+      "seconds": 1.117
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "scenario controls preserve focus, never auto-open, and clear only the trace",
+      "seconds": 0.512
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "settled item description and application actions share the native modal",
+      "seconds": 0.548
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "visible title, description, and count follow held, reversed, cancelled, and flicked tracks",
+      "seconds": 1.039
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "baseline event order ends with a bounded focus-restoration trace entry",
+      "seconds": 0.684
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "mixed-aspect navigation preserves usable geometry through both transition directions",
+      "seconds": 1.232
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "named first, final, and single-item boundaries start at their exact states",
+      "seconds": 1.361
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "preview-only, delayed full, and terminal failures are deterministic",
+      "seconds": 3.347
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "responsive retry follows the selected candidate across retry, navigation, and reopen",
+      "seconds": 1.168
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "cancelled swipe emits no semantic change and close cancels pending settlement",
+      "seconds": 1.453
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "long localized content reflows at 320 CSS pixels and 200%-equivalent geometry",
+      "seconds": 1.642
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "full, reduced, and system motion selections remain visibly distinct",
+      "seconds": 1.273
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "the complete harness remains usable under forced-colors emulation",
+      "seconds": 1.149
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/media-gallery-at-harness.spec.ts",
+      "title": "a sub-threshold completed swipe does not add a semantic change",
+      "seconds": 0.608
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/overlay-lifecycle.spec.ts",
+      "title": "overlay lifecycle generations › modal ignores stale native close delivery",
+      "seconds": 0.529
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/overlay-lifecycle.spec.ts",
+      "title": "overlay lifecycle generations › modal reapplies focus policy when an unexpected native close is refused",
+      "seconds": 0.546
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/overlay-lifecycle.spec.ts",
+      "title": "overlay lifecycle generations › modal hands returned focus to immediate keyboard, pointer, and application owners",
+      "seconds": 0.699
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/overlay-lifecycle.spec.ts",
+      "title": "overlay lifecycle generations › a gallery can close back into an underlying modal without losing either focus return",
+      "seconds": 0.738
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/overlay-lifecycle.spec.ts",
+      "title": "overlay lifecycle generations › Gallery survives ten rapid open-close cycles without retaining focus listeners or scroll lock",
+      "seconds": 2.135
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/paged-grid.spec.ts",
+      "title": "paged grid › uses explicit two-by-two pages with correct gap geometry and a partial final page",
+      "seconds": 0.546
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/paged-grid.spec.ts",
+      "title": "paged grid › supports direct drag, keyboard paging, final-boundary resistance, and normal Tab traversal",
+      "seconds": 1.566
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/paged-grid.spec.ts",
+      "title": "paged grid › remeasures across stage and column changes while preserving a valid semantic page",
+      "seconds": 0.688
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/paged-grid.spec.ts",
+      "title": "paged grid › retargets safely as items are added and removed, including the one-item boundary",
+      "seconds": 0.885
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/pointerCapture.spec.ts",
+      "title": "native touch StackedDeck shuffle retains transferred capture until release",
+      "seconds": 1.427
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/pointerCapture.spec.ts",
+      "title": "native touch StackedDeck shuffle retains transferred capture until cancel",
+      "seconds": 1.917
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/pointerCapture.spec.ts",
+      "title": "native touch StackedDeck shuffle retains transferred capture until capture-loss",
+      "seconds": 1.92
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/pointerCapture.spec.ts",
+      "title": "native touch StackedDeck direct retains transferred capture until release",
+      "seconds": 1.315
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/pointerCapture.spec.ts",
+      "title": "native touch StackedDeck direct retains transferred capture until cancel",
+      "seconds": 1.82
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/pointerCapture.spec.ts",
+      "title": "native touch StackedDeck direct retains transferred capture until capture-loss",
+      "seconds": 1.963
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/realm-overlay.spec.ts",
+      "title": "Gallery restores focus to an opener from an iframe realm",
+      "seconds": 0.525
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/realm-overlay.spec.ts",
+      "title": "adopted-document Gallery images promote full media and release scroll lock",
+      "seconds": 0.523
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › opens every physical side with stable attributes, handle geometry, and no idle compositor hint",
+      "seconds": 0.96
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps mirrored slow drags, high-velocity closing, and touch input semantic",
+      "seconds": 3.715
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › preserves vertical multi-snap geometry, native scrolling, dynamic and short content",
+      "seconds": 0.913
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps a fixed horizontal layout through partial reveal, drag, interruption, and resize",
+      "seconds": 6.291
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › changes side atomically while open, dragging, settling, and closed",
+      "seconds": 1.716
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps full-bleed surfaces and one centered content measure without elastic gaps",
+      "seconds": 0.966
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › maps all four safe areas independently from physical attachment and the content gutter",
+      "seconds": 0.882
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps physical left and right placement in RTL and closes through every modal path",
+      "seconds": 0.778
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › certifies host-owned adaptive composition, state preservation, focus transfer, and rapid resize",
+      "seconds": 0.596
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › retains forced-colors structure and modal tab containment",
+      "seconds": 0.571
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "top scrim follows expansion in both directions while remaining viewport-fixed",
+      "seconds": 1.875
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet scrim resolves with the authoritative live motion preference",
+      "seconds": 0.6
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › preserves user scroll when reversing a close before native dismissal",
+      "seconds": 2.156
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › makes the body visibly available to immediate Tab during opening",
+      "seconds": 0.521
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › makes a custom initial body focus target visible before waiting for the entrance",
+      "seconds": 0.454
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › reveals the wrapped target of immediate Shift+Tab on a short viewport",
+      "seconds": 0.441
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › top keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.11
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › bottom keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.115
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › left keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.11
+    },
+    {
+      "job": "Chromium 1/2",
+      "project": "chromium",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › right keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.203
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "compounded programmatic retargets and reversals retain a painted physical corridor",
+      "seconds": 4.435
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "window blur resolves a partially dragged takeover exactly once",
+      "seconds": 1.457
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "mouse takes over at 32ms, chains three destinations and reverses",
+      "seconds": 2.062
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "mouse takes over at 144ms, chains three destinations and reverses",
+      "seconds": 2.135
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "touch takes over at 32ms, chains three destinations and reverses",
+      "seconds": 0.323
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "touch takes over at 144ms, chains three destinations and reverses",
+      "seconds": 0.298
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "mixed-aspect images retain their nodes and positions through snap-back takeover and final rebase",
+      "seconds": 1.629
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › opens every physical side with stable attributes, handle geometry, and no idle compositor hint",
+      "seconds": 1.743
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps mirrored slow drags, high-velocity closing, and touch input semantic",
+      "seconds": 4.776
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › preserves vertical multi-snap geometry, native scrolling, dynamic and short content",
+      "seconds": 2.296
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps a fixed horizontal layout through partial reveal, drag, interruption, and resize",
+      "seconds": 6.213
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › changes side atomically while open, dragging, settling, and closed",
+      "seconds": 2.501
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps full-bleed surfaces and one centered content measure without elastic gaps",
+      "seconds": 1.632
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › maps all four safe areas independently from physical attachment and the content gutter",
+      "seconds": 1.625
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps physical left and right placement in RTL and closes through every modal path",
+      "seconds": 1.53
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › certifies host-owned adaptive composition, state preservation, focus transfer, and rapid resize",
+      "seconds": 1.346
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › retains forced-colors structure and modal tab containment",
+      "seconds": 1.05
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "top scrim follows expansion in both directions while remaining viewport-fixed",
+      "seconds": 2.889
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet scrim resolves with the authoritative live motion preference",
+      "seconds": 1.071
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › preserves user scroll when reversing a close before native dismissal",
+      "seconds": 3.669
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › makes the body visibly available to immediate Tab during opening",
+      "seconds": 1.268
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › makes a custom initial body focus target visible before waiting for the entrance",
+      "seconds": 0.88
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › reveals the wrapped target of immediate Shift+Tab on a short viewport",
+      "seconds": 0.915
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › top keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.734
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › bottom keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.765
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › left keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.77
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › right keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.758
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › form preserves authored content, wrapping, and native overflow on a short viewport",
+      "seconds": 2.876
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › prose preserves authored content, wrapping, and native overflow on a short viewport",
+      "seconds": 2.842
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › media preserves authored content, wrapping, and native overflow on a short viewport",
+      "seconds": 3.441
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › keeps immediate Escape, Tab, Shift+Tab, and early navigation in the local modal lifecycle",
+      "seconds": 3.084
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › reopens an active close continuously and ignores obsolete completion",
+      "seconds": 2.727
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › honors an omitted override under reduce, explicit overrides, and live system changes",
+      "seconds": 1.102
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › honors an omitted override under no-preference, explicit overrides, and live system changes",
+      "seconds": 1.939
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › reconciles resize, side changes, dynamic content, and zoom without replacing form state",
+      "seconds": 3.015
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › keeps drag cancellation responsive, and dismisses through the handle",
+      "seconds": 3.744
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › allows direct drag takeover during opening and continuous reversal before release",
+      "seconds": 1.938
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Coverflow presents at full workspace width and accepts its normal control",
+      "seconds": 1.794
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Stacked Deck exchanges one card from its presentation control",
+      "seconds": 2.41
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Paged Grid keeps default keyboard paging operational",
+      "seconds": 2.448
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Gallery opens and closes its dialog with focus return",
+      "seconds": 1.068
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Sheet opens and closes from the default presentation with focus return",
+      "seconds": 2.65
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (shuffle)",
+      "seconds": 2.221
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (shuffle)",
+      "seconds": 1.182
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (direct)",
+      "seconds": 2.229
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (direct)",
+      "seconds": 1.116
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects premature retirement even when a skipped sample permits enough time",
+      "seconds": 0.013
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects inconsistent snapshots and an overlapping paint swap",
+      "seconds": 0.012
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace reports moving handoffs whose intermediate clearance was not sampled",
+      "seconds": 0.014
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace records the actual RAF microtask order in both callback schedules",
+      "seconds": 0.279
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace sees inert visible bodies and rejects a temporary computed-style mutation",
+      "seconds": 1.242
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with early recorder, skipped samples and a delayed frame",
+      "seconds": 1.499
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with late recorder, skipped samples and a delayed frame",
+      "seconds": 2.553
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/surfaceState.spec.ts",
+      "title": "coverflow retains canonical and settled emphasis after touch and focus departure",
+      "seconds": 4.264
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "firefox",
+      "spec": "e2e/surfaceState.spec.ts",
+      "title": "stacked-deck retains canonical and settled emphasis after touch and focus departure",
+      "seconds": 5.338
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "compounded programmatic retargets and reversals retain a painted physical corridor",
+      "seconds": 6.226
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "window blur resolves a partially dragged takeover exactly once",
+      "seconds": 2.334
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "mouse takes over at 32ms, chains three destinations and reverses",
+      "seconds": 4.511
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "mouse takes over at 144ms, chains three destinations and reverses",
+      "seconds": 3.859
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "touch takes over at 32ms, chains three destinations and reverses",
+      "seconds": 0.553
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "touch takes over at 144ms, chains three destinations and reverses",
+      "seconds": 0.432
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/galleryTakeover.spec.ts",
+      "title": "mixed-aspect images retain their nodes and positions through snap-back takeover and final rebase",
+      "seconds": 2.417
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › opens every physical side with stable attributes, handle geometry, and no idle compositor hint",
+      "seconds": 2.139
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps mirrored slow drags, high-velocity closing, and touch input semantic",
+      "seconds": 4.881
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › preserves vertical multi-snap geometry, native scrolling, dynamic and short content",
+      "seconds": 2.077
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps a fixed horizontal layout through partial reveal, drag, interruption, and resize",
+      "seconds": 6.41
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › changes side atomically while open, dragging, settling, and closed",
+      "seconds": 2.833
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps full-bleed surfaces and one centered content measure without elastic gaps",
+      "seconds": 2.019
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › maps all four safe areas independently from physical attachment and the content gutter",
+      "seconds": 1.971
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › keeps physical left and right placement in RTL and closes through every modal path",
+      "seconds": 1.727
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › certifies host-owned adaptive composition, state preservation, focus transfer, and rapid resize",
+      "seconds": 1.463
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheet.spec.ts",
+      "title": "multi-edge Sheet › retains forced-colors structure and modal tab containment",
+      "seconds": 1.393
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "top scrim follows expansion in both directions while remaining viewport-fixed",
+      "seconds": 2.985
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet scrim resolves with the authoritative live motion preference",
+      "seconds": 1.173
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › preserves user scroll when reversing a close before native dismissal",
+      "seconds": 2.745
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › makes the body visibly available to immediate Tab during opening",
+      "seconds": 1.258
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › makes a custom initial body focus target visible before waiting for the entrance",
+      "seconds": 0.999
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › reveals the wrapped target of immediate Shift+Tab on a short viewport",
+      "seconds": 0.971
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › top keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.772
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › bottom keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.794
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › left keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.752
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › right keeps content fully presented and measured identically across usable snaps",
+      "seconds": 2.77
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › form preserves authored content, wrapping, and native overflow on a short viewport",
+      "seconds": 2.748
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › prose preserves authored content, wrapping, and native overflow on a short viewport",
+      "seconds": 2.695
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › media preserves authored content, wrapping, and native overflow on a short viewport",
+      "seconds": 2.701
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › keeps immediate Escape, Tab, Shift+Tab, and early navigation in the local modal lifecycle",
+      "seconds": 2.916
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › reopens an active close continuously and ignores obsolete completion",
+      "seconds": 2.698
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › honors an omitted override under reduce, explicit overrides, and live system changes",
+      "seconds": 1.17
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › honors an omitted override under no-preference, explicit overrides, and live system changes",
+      "seconds": 1.961
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › reconciles resize, side changes, dynamic content, and zoom without replacing form state",
+      "seconds": 3.204
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › keeps drag cancellation responsive, and dismisses through the handle",
+      "seconds": 3.666
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/sheetContent.spec.ts",
+      "title": "Sheet content presentation › allows direct drag takeover during opening and continuous reversal before release",
+      "seconds": 1.951
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Coverflow presents at full workspace width and accepts its normal control",
+      "seconds": 3.022
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Stacked Deck exchanges one card from its presentation control",
+      "seconds": 5.375
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Paged Grid keeps default keyboard paging operational",
+      "seconds": 2.076
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Gallery opens and closes its dialog with focus return",
+      "seconds": 1.67
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/showcase-smoke.spec.ts",
+      "title": "showcase product path › Sheet opens and closes from the default presentation with focus return",
+      "seconds": 2.841
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (shuffle)",
+      "seconds": 3.31
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (shuffle)",
+      "seconds": 1.564
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck keeps narrow enlarged content usable through resize (direct)",
+      "seconds": 2.97
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/stackedDeckConsumer.spec.ts",
+      "title": "ordinary StackedDeck follows an omitted system motion preference (direct)",
+      "seconds": 1.47
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects premature retirement even when a skipped sample permits enough time",
+      "seconds": 0.026
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace rejects inconsistent snapshots and an overlapping paint swap",
+      "seconds": 0.012
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace reports moving handoffs whose intermediate clearance was not sampled",
+      "seconds": 0.012
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace records the actual RAF microtask order in both callback schedules",
+      "seconds": 0.478
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace sees inert visible bodies and rejects a temporary computed-style mutation",
+      "seconds": 2.336
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with early recorder, skipped samples and a delayed frame",
+      "seconds": 2.626
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/stackedDeckTrace.spec.ts",
+      "title": "Direct trace preserves exact arrival with late recorder, skipped samples and a delayed frame",
+      "seconds": 2.651
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/surfaceState.spec.ts",
+      "title": "coverflow retains canonical and settled emphasis after touch and focus departure",
+      "seconds": 5.308
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit",
+      "spec": "e2e/surfaceState.spec.ts",
+      "title": "stacked-deck retains canonical and settled emphasis after touch and focus departure",
+      "seconds": 5.528
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "real pointer movement maps 1:1 to the visual top in both directions",
+      "seconds": 6.6
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "high-contrast exchange changes depth with body clearance and no crossing shadow",
+      "seconds": 13.934
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "successive rendered frames preserve the physical exchange shells",
+      "seconds": 11.036
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "interior and semantic-wrap exchanges have equivalent rendered choreography",
+      "seconds": 22.371
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "pointer, wheel, and keyboard cross former ordinal edges as adjacent exchanges",
+      "seconds": 20.681
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "both exchange variants complete repeated revolutions without drift or shell loss",
+      "seconds": 76.79
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "distinct pointer gestures complete repeated revolutions without drift or shell loss",
+      "seconds": 65.892
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "a two-item deck preserves forward and backward physical direction",
+      "seconds": 21.812
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "one held gesture cannot discard a second card however far it travels",
+      "seconds": 16.986
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "a re-grab during settlement rebases without a jump and cannot inherit momentum",
+      "seconds": 4.756
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "an accepted arrow from the inspection control preserves deterministic focus",
+      "seconds": 7.758
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "cancel, lost capture, cyclic former edges, and reduced motion restore coherently",
+      "seconds": 19.926
+    },
+    {
+      "job": "Cross-browser interoperability",
+      "project": "webkit-stacked-deck",
+      "spec": "e2e/stacked-deck.spec.ts",
+      "title": "inspection, visual semantics, and accessibility expose one authoritative card",
+      "seconds": 5.747
+    }
+  ]
+}
