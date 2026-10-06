@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import {
   assertSourceEvidence,
   assertSourceWorkflow,
+  selectFullSourceRun,
   sourceVerificationJobs,
   type SourceWorkflowRun,
 } from "./sourceVerification.ts";
@@ -89,4 +90,59 @@ it("binds downloaded archive hashes, metadata, repository, attempt and commit to
       assertSourceEvidence({ ...evidence, ...change } as typeof evidence, run, []),
     ).toThrow(/Candidate source|Downloaded source evidence/);
   }
+});
+
+const lightweightJobs = [
+  { name: "Repository admission", conclusion: "success" },
+  { name: "Metadata format", conclusion: "success" },
+  ...sourceVerificationJobs
+    .filter((name) => name !== "Repository admission" && name !== "Browser certification")
+    .map((name) => ({ name, conclusion: "skipped" })),
+  { name: "Browser certification", conclusion: "success" },
+];
+const lightweightRun: SourceWorkflowRun = {
+  ...run,
+  id: 124,
+  html_url: run.html_url.replace("123", "124"),
+};
+
+it("never accepts a lightweight metadata-only Verify run as candidate source authority", () => {
+  expect(() => assertSourceWorkflow(lightweightRun, run.head_sha, "dev", lightweightJobs)).toThrow(
+    /Candidate source owner/,
+  );
+  expect(() =>
+    selectFullSourceRun([lightweightRun], run.head_sha, "dev", () => lightweightJobs),
+  ).toThrow(/lightweight and partial runs never qualify/);
+});
+it("rejects partial runs that skip any single owner, including tooling-only classification", () => {
+  for (const skipped of sourceVerificationJobs.filter((name) => name !== "Repository admission")) {
+    const partial = jobs.map((job) =>
+      job.name === skipped ? { ...job, conclusion: "skipped" } : job,
+    );
+    expect(() => selectFullSourceRun([run], run.head_sha, "dev", () => partial)).toThrow(
+      /never qualify/,
+    );
+  }
+});
+it("selects the full run even when a newer lightweight run shares the exact SHA", () => {
+  const selected = selectFullSourceRun([lightweightRun, run], run.head_sha, "dev", (candidate) =>
+    candidate.id === run.id ? jobs : lightweightJobs,
+  );
+  expect(selected.id).toBe(run.id);
+  expect(
+    selectFullSourceRun([run, lightweightRun], run.head_sha, "dev", (candidate) =>
+      candidate.id === run.id ? jobs : lightweightJobs,
+    ).id,
+  ).toBe(run.id);
+});
+it("ignores runs for another SHA, branch, event or conclusion while selecting", () => {
+  for (const change of [
+    { head_sha: "b".repeat(40) },
+    { head_branch: "main" },
+    { event: "pull_request" },
+    { conclusion: "failure" },
+  ])
+    expect(() =>
+      selectFullSourceRun([{ ...run, ...change }], run.head_sha, "dev", () => jobs),
+    ).toThrow(/never qualify/);
 });

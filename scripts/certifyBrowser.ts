@@ -1,23 +1,32 @@
 import { appendFile, writeFile } from "node:fs/promises";
 
-import { assertBrowserCertification } from "./browserCertification.ts";
+import { assertBrowserCertification, isFullSourceCertification } from "./browserCertification.ts";
 import { inspectReleasePackages } from "./release-package-assembly.ts";
 
 const env = process.env;
-assertBrowserCertification(env.BROWSER_REQUIRED, env.PACKAGE_INTEGRATION_REQUIRED, {
+const requirements = {
+  packages: env.PACKAGE_AUTHORITY_REQUIRED,
+  linux: env.LINUX_REQUIRED,
+  windows: env.WINDOWS_REQUIRED,
+  browser: env.BROWSER_REQUIRED,
+  integration: env.PACKAGE_INTEGRATION_REQUIRED,
+};
+assertBrowserCertification(requirements, {
   admission: env.ADMISSION_RESULT,
   packages: env.PACKAGE_RESULT,
+  metadataFormat: env.METADATA_FORMAT_RESULT,
   linux: env.LINUX_RESULT,
   windows: env.WINDOWS_RESULT,
   chromium: env.CHROMIUM_RESULT,
   interoperability: env.CROSS_BROWSER_RESULT,
   integration: env.INTEGRATION_RESULT,
 });
-const message = `Browser certification passed: source browsers=${env.BROWSER_REQUIRED}, package integration=${env.PACKAGE_INTEGRATION_REQUIRED}. ${env.SCOPE_REASON ?? ""}`;
+const full = isFullSourceCertification(requirements);
+const message = `Verification certification passed: ${JSON.stringify(requirements)}, full source certification=${full}. ${env.SCOPE_REASON ?? ""}`;
 if (env.GITHUB_STEP_SUMMARY)
   await appendFile(env.GITHUB_STEP_SUMMARY, `## Browser certification\n\n${message}\n`);
 process.stdout.write(`${message}\n`);
-if (env.BROWSER_REQUIRED === "true" && env.PACKAGE_INTEGRATION_REQUIRED === "true") {
+if (full) {
   if (
     !/^[0-9a-f]{40}$/.test(env.GITHUB_SHA ?? "") ||
     !/^\d+$/.test(env.GITHUB_RUN_ID ?? "") ||

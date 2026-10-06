@@ -18,8 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     outputs:
+      package_authority_required: ${{ steps.classify.outputs.package_authority_required }}
+      linux_verification_required: ${{ steps.classify.outputs.linux_verification_required }}
+      windows_portability_required: ${{ steps.classify.outputs.windows_portability_required }}
       browser_required: ${{ steps.classify.outputs.browser_required }}
       package_integration_required: ${{ steps.classify.outputs.package_integration_required }}
+      full_source_certification: ${{ steps.classify.outputs.full_source_certification }}
       reason: ${{ steps.classify.outputs.reason }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -31,11 +35,31 @@ jobs:
       - name: Validate release-candidate history
         run: node scripts/check-release-candidate-history.ts
       - id: classify
-        name: Classify browser change scope
+        name: Classify verification ownership
         run: node scripts/classify-browser-change.ts
+
+  # Lightweight runs skip the Linux suite, so keep the repository-wide format gate on what changed.
+  metadata-format:
+    name: Metadata format
+    if: ${{ needs.repository-admission.result == 'success' && needs.repository-admission.outputs.linux_verification_required == 'false' }}
+    needs: repository-admission
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          cache: pnpm
+          node-version-file: .node-version
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
 
   package-authority:
     name: Package authority
+    if: ${{ needs.repository-admission.result == 'success' && needs.repository-admission.outputs.package_authority_required == 'true' }}
     needs: repository-admission
     runs-on: ubuntu-latest
     timeout-minutes: 4
@@ -74,6 +98,7 @@ jobs:
 
   linux-verification:
     name: Linux verification
+    if: ${{ needs.repository-admission.result == 'success' && needs.repository-admission.outputs.linux_verification_required == 'true' }}
     needs: [repository-admission, package-authority]
     runs-on: ubuntu-latest
     timeout-minutes: 6
@@ -102,6 +127,7 @@ jobs:
 
   windows-portability:
     name: Windows portability
+    if: ${{ needs.repository-admission.result == 'success' && needs.repository-admission.outputs.windows_portability_required == 'true' }}
     needs: repository-admission
     runs-on: windows-latest
     timeout-minutes: 5
@@ -280,6 +306,7 @@ jobs:
     needs:
       [
         repository-admission,
+        metadata-format,
         package-authority,
         linux-verification,
         windows-portability,
@@ -295,16 +322,20 @@ jobs:
         with:
           node-version-file: .node-version
       - name: Retrieve source-certified archives
-        if: ${{ needs.repository-admission.outputs.browser_required == 'true' && needs.repository-admission.outputs.package_integration_required == 'true' && needs.linux-verification.result == 'success' }}
+        if: ${{ needs.repository-admission.outputs.full_source_certification == 'true' && needs.linux-verification.result == 'success' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           artifact-ids: ${{ needs.package-authority.outputs.package_artifact }}
       - name: Certify browser evidence
         env:
+          PACKAGE_AUTHORITY_REQUIRED: ${{ needs.repository-admission.outputs.package_authority_required }}
+          LINUX_REQUIRED: ${{ needs.repository-admission.outputs.linux_verification_required }}
+          WINDOWS_REQUIRED: ${{ needs.repository-admission.outputs.windows_portability_required }}
           BROWSER_REQUIRED: ${{ needs.repository-admission.outputs.browser_required }}
           PACKAGE_INTEGRATION_REQUIRED: ${{ needs.repository-admission.outputs.package_integration_required }}
           SCOPE_REASON: ${{ needs.repository-admission.outputs.reason }}
           ADMISSION_RESULT: ${{ needs.repository-admission.result }}
+          METADATA_FORMAT_RESULT: ${{ needs.metadata-format.result }}
           PACKAGE_RESULT: ${{ needs.package-authority.result }}
           LINUX_RESULT: ${{ needs.linux-verification.result }}
           WINDOWS_RESULT: ${{ needs.windows-portability.result }}
@@ -313,7 +344,7 @@ jobs:
           INTEGRATION_RESULT: ${{ needs.browser-integration.result }}
         run: node scripts/certifyBrowser.ts
       - name: Save verified source package evidence
-        if: ${{ success() && needs.repository-admission.outputs.browser_required == 'true' && needs.repository-admission.outputs.package_integration_required == 'true' }}
+        if: ${{ success() && needs.repository-admission.outputs.full_source_certification == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: verified-source-packages-attempt-${{ github.run_attempt }}

@@ -80,104 +80,219 @@ function classifyGitFixture(options: Parameters<typeof createGitFixture>[0]) {
   }
 }
 
-describe("browser changed-path classification", () => {
-  it("skips browser certification for documentation-only changes", () => {
-    expect(classifyChangedPaths(["README.md", "docs/releasing.md"]).browserRequired).toBe(false);
-  });
+const cheap = {
+  packageAuthorityRequired: false,
+  linuxVerificationRequired: false,
+  windowsPortabilityRequired: false,
+  browserRequired: false,
+  packageIntegrationRequired: false,
+  fullSourceCertification: false,
+};
+const full = {
+  packageAuthorityRequired: true,
+  linuxVerificationRequired: true,
+  windowsPortabilityRequired: true,
+  browserRequired: true,
+  packageIntegrationRequired: true,
+  fullSourceCertification: true,
+};
+// Linux (and therefore the package authority it consumes) only.
+const linuxOnly = { ...cheap, packageAuthorityRequired: true, linuxVerificationRequired: true };
 
-  it("skips browser certification for release-candidate integrity-only changes", () => {
-    expect(
-      classifyChangedPaths([
-        ".changeset/candidate.md",
-        "config/release-candidates/0.1.0-beta.9.json",
-        "config/release-blockers.json",
-        "scripts/release-candidate-history.ts",
-        "scripts/release-candidate-lifecycle.test.ts",
-        ".github/workflows/release-candidate.yml",
-      ]).browserRequired,
-    ).toBe(false);
-  });
-
-  it("skips browser certification for browser-free package verification changes", () => {
-    expect(classifyChangedPaths(["scripts/verify-packages.ts"]).browserRequired).toBe(false);
+describe("verification ownership by path class", () => {
+  it.each([
+    ["documentation", ["docs/geometry.md", "README.md"]],
+    ["release documentation", ["docs/releasing.md"]],
+    [
+      "audit JSON and its documentation",
+      ["docs/test-architecture-and-performance.md", "config/test-performance-after.json"],
+    ],
+    ["audit JSON only", ["config/test-performance-before.json"]],
+    ["candidate record only", ["config/release-candidates/0.1.0-beta.15.json"]],
+    ["changeset only", [".changeset/quiet-gallery.md"]],
+    [
+      "docs with record and changeset",
+      ["docs/a.md", ".changeset/b.md", "config/release-candidates/1.json"],
+    ],
+  ])("requires no heavy owner for %s", (_label, paths) => {
+    expect(classifyChangedPaths(paths)).toMatchObject(cheap);
+    expect(classifyChangedPaths(paths).reason).toMatch(/metadata/);
   });
 
   it.each([
-    ["Core source", "packages/core/src/index.ts"],
-    ["Vue source", "packages/vue/src/index.ts"],
-    ["lab", "apps/lab/src/App.vue"],
-    ["E2E test", "e2e/sheet.spec.ts"],
-    ["Playwright config", "playwright.config.ts"],
-    ["lockfile", "pnpm-lock.yaml"],
-    ["root manifest", "package.json"],
-    ["Verify workflow", ".github/workflows/verify.yml"],
-    ["unknown path", "future/new-authority.toml"],
-  ])("requires browser certification for %s changes", (_label, path) => {
-    expect(classifyChangedPaths([path]).browserRequired).toBe(true);
+    "scripts/release-candidate-history.ts",
+    "scripts/release-candidate-record.ts",
+    "scripts/release-candidate-verifier.test.ts",
+    "scripts/sourceVerification.ts",
+    "scripts/sourceVerificationRecord.test.ts",
+    "config/release-blockers.json",
+    ".github/workflows/release-candidate.yml",
+  ])("runs only Linux tooling verification for %s", (path) => {
+    expect(classifyChangedPaths([path])).toMatchObject(linuxOnly);
   });
 
-  it("fails closed for an empty path set", () => {
-    expect(classifyChangedPaths([]).browserRequired).toBe(true);
+  it.each([
+    "scripts/pnpm-cli.test.ts",
+    "scripts/release-package-assembly.test.ts",
+    "scripts/verify-packages.ts",
+  ])("adds Windows portability without integration for %s", (path) => {
+    expect(classifyChangedPaths([path])).toMatchObject({
+      ...linuxOnly,
+      windowsPortabilityRequired: true,
+      browserRequired: false,
+      packageIntegrationRequired: false,
+    });
   });
-});
 
-describe("independent source and package browser ownership", () => {
-  it.each(["config/test-performance-before.json", "config/test-performance-after.json"])(
-    "keeps measured audit evidence browser-irrelevant: %s",
-    (path) => {
-      expect(classifyChangedPaths([path])).toMatchObject({
-        browserRequired: false,
-        packageIntegrationRequired: false,
-      });
-      expect(classifyChangedPaths([path, "packages/core/src/math.ts"])).toMatchObject({
-        browserRequired: true,
-        packageIntegrationRequired: true,
-      });
-    },
-  );
   it.each([
     "scripts/release-package-assembly.ts",
     "scripts/pack-packages.ts",
     "scripts/pnpm-cli.ts",
+    "scripts/packedArchive.ts",
+  ])("requires authority, Linux, Windows and integration for package assembly %s", (path) => {
+    expect(classifyChangedPaths([path])).toMatchObject({
+      ...linuxOnly,
+      windowsPortabilityRequired: true,
+      packageIntegrationRequired: true,
+      browserRequired: false,
+      fullSourceCertification: false,
+    });
+  });
+
+  it.each([
     "scripts/verifyPackagesBrowser.ts",
+    "scripts/certifySurfacePreferences.ts",
     "e2e/media-preview.spec.ts",
     "fixture-e2e/router.spec.ts",
     "fixtures/packed-consumers/package.template.json",
-  ])("certifies integration only for %s", (path) => {
+  ])("requires integration with its Linux static owners for %s", (path) => {
     expect(classifyChangedPaths([path])).toMatchObject({
-      browserRequired: false,
+      ...linuxOnly,
       packageIntegrationRequired: true,
+      windowsPortabilityRequired: false,
+      browserRequired: false,
     });
   });
-  it("keeps lab-only tests out of packed certification", () => {
-    expect(classifyChangedPaths(["e2e/stacked-deck.spec.ts", "e2e/helpers.ts"])).toMatchObject({
-      browserRequired: true,
+
+  it.each(["e2e/stacked-deck.spec.ts", "e2e/helpers.ts"])(
+    "keeps lab-only E2E %s out of packed certification and Windows",
+    (path) => {
+      expect(classifyChangedPaths([path])).toMatchObject({
+        ...linuxOnly,
+        browserRequired: true,
+        packageIntegrationRequired: false,
+        windowsPortabilityRequired: false,
+      });
+    },
+  );
+
+  it.each([
+    ["Core source", "packages/core/src/math.ts"],
+    ["Vue source", "packages/vue/src/media-gallery/use-media-gallery.ts"],
+    ["Vue component", "packages/vue/src/MediaGalleryDialog.vue"],
+    ["package manifest", "packages/core/package.json"],
+    ["shared CSS", "shared.css"],
+    ["lab", "apps/lab/src/App.vue"],
+    ["lockfile", "pnpm-lock.yaml"],
+    ["root manifest", "package.json"],
+    ["Playwright config", "playwright.config.ts"],
+    ["Verify workflow", ".github/workflows/verify.yml"],
+    ["classifier itself", "scripts/classify-browser-change.ts"],
+    ["certification gate", "scripts/certifyBrowser.ts"],
+    ["other config", "config/test-performance-selection.json"],
+    ["other changeset file", ".changeset/config.json"],
+    ["unknown path", "future/new-authority.toml"],
+    ["nested non-doc Markdown", "apps/lab/NOTES.md"],
+  ])("fails closed to every owner for %s", (_label, path) => {
+    expect(classifyChangedPaths([path])).toMatchObject(full);
+  });
+
+  it("treats packaged Markdown as package input but never as browser input", () => {
+    expect(classifyChangedPaths(["packages/vue/README.md"])).toMatchObject({
+      ...linuxOnly,
+      windowsPortabilityRequired: true,
+      browserRequired: false,
       packageIntegrationRequired: false,
     });
   });
-  it.each([
-    { paths: [] },
-    { paths: ["future/config.json"] },
-    { paths: ["config/test-performance-selection.json"] },
-    { paths: ["packages/core/src/math.ts"] },
-    { paths: ["packages/vue/src/media-gallery/use-media-gallery.ts"] },
-    { paths: ["shared.css"] },
-    { paths: ["pnpm-lock.yaml"] },
-    { paths: ["playwright.config.ts"] },
-    { paths: ["scripts/classify-browser-change.ts"] },
-  ])("fails closed for shared or unknown ownership: %j", ({ paths }) => {
-    expect(classifyChangedPaths(paths)).toMatchObject({
-      browserRequired: true,
+
+  it("fails closed for an empty path set", () => {
+    expect(classifyChangedPaths([])).toMatchObject(full);
+  });
+
+  it("normalizes Windows and dot-relative spellings before classifying", () => {
+    expect(
+      classifyChangedPaths([".\\docs\\a.md", "./config/test-performance-after.json"]),
+    ).toMatchObject(cheap);
+    expect(classifyChangedPaths(["packages\\core\\src\\math.ts"])).toMatchObject(full);
+  });
+
+  it("does not let lookalike paths borrow a safe class", () => {
+    for (const path of [
+      "docs/a.md.js",
+      "docs/script.ts",
+      "config/release-candidates/nested/x.json",
+      "config/release-candidates/x.js",
+      "config/test-performance-after.json.bak",
+      "scripts/release-candidate-history.ts.bak",
+      ".changeset/pre.json",
+    ])
+      expect(classifyChangedPaths([path])).toMatchObject(full);
+  });
+});
+
+describe("mixed changes take the union", () => {
+  it("never lets cheap files downgrade runtime files", () => {
+    expect(
+      classifyChangedPaths(["docs/gallery.md", "packages/vue/src/MediaGalleryDialog.vue"]),
+    ).toMatchObject(full);
+    expect(
+      classifyChangedPaths(["config/test-performance-after.json", "e2e/sheet.spec.ts"]),
+    ).toMatchObject({ ...linuxOnly, browserRequired: true });
+  });
+  it("unions a candidate record with package assembly", () => {
+    expect(
+      classifyChangedPaths([
+        "config/release-candidates/0.1.0-beta.15.json",
+        "scripts/release-package-assembly.ts",
+      ]),
+    ).toMatchObject({
+      ...linuxOnly,
+      windowsPortabilityRequired: true,
       packageIntegrationRequired: true,
     });
   });
-  it("unions both owners across a mixed change", () => {
+  it("assembles full certification only from every owner", () => {
     expect(
       classifyChangedPaths(["e2e/sheet.spec.ts", "scripts/pack-packages.ts", "docs/geometry.md"]),
-    ).toMatchObject({ browserRequired: true, packageIntegrationRequired: true });
+    ).toMatchObject({
+      browserRequired: true,
+      packageIntegrationRequired: true,
+      windowsPortabilityRequired: true,
+      fullSourceCertification: true,
+    });
     expect(
-      classifyChangedPaths(["docs/geometry.md", "config/release-candidates/0.1.0-beta.14.json"]),
-    ).toMatchObject({ browserRequired: false, packageIntegrationRequired: false });
+      classifyChangedPaths(["e2e/sheet.spec.ts", "scripts/release-candidate.ts"]),
+    ).toMatchObject({ fullSourceCertification: false, windowsPortabilityRequired: false });
+  });
+  it("reports the paths that triggered each owner", () => {
+    const result = classifyChangedPaths(["docs/a.md", "scripts/pnpm-cli.test.ts", "e2e/a.spec.ts"]);
+    expect(result.triggers.windowsPortabilityRequired).toEqual(["scripts/pnpm-cli.test.ts"]);
+    expect(result.triggers.browserRequired).toEqual(["e2e/a.spec.ts"]);
+    expect(result.triggers.linuxVerificationRequired).toEqual([
+      "scripts/pnpm-cli.test.ts",
+      "e2e/a.spec.ts",
+    ]);
+    expect(result.reason).toMatch(/Linux verification.*Windows portability.*Source browsers/);
+  });
+  it("maintains owner dependencies for every classified single path", () => {
+    for (const path of ["docs/a.md", "e2e/a.spec.ts", "scripts/pack-packages.ts", "x/unknown.ts"]) {
+      const r = classifyChangedPaths([path]);
+      expect(r.packageAuthorityRequired).toBe(r.linuxVerificationRequired);
+      expect(
+        r.linuxVerificationRequired || !(r.browserRequired || r.packageIntegrationRequired),
+      ).toBe(true);
+    }
   });
 });
 
@@ -290,5 +405,65 @@ describe("real Git rename classification", () => {
     expect(classification.changedPaths).toEqual(
       expect.arrayContaining(["docs/old.md", "docs/new.md"]),
     );
+  });
+});
+
+describe("every unprovable change scope requires the full source matrix", () => {
+  const everything = {
+    packageAuthorityRequired: true,
+    linuxVerificationRequired: true,
+    windowsPortabilityRequired: true,
+    browserRequired: true,
+    packageIntegrationRequired: true,
+    fullSourceCertification: true,
+  };
+  it("covers invalid, missing and uninspectable Git diffs", () => {
+    expect(classifyGitRange(sha("0"), sha("b"), gitForDiff(["README.md"]))).toMatchObject(
+      everything,
+    );
+    expect(classifyGitRange("main", sha("b"), gitForDiff(["README.md"]))).toMatchObject(everything);
+    expect(
+      classifyGitRange(sha("a"), sha("b"), () => {
+        throw new Error("commit unavailable");
+      }),
+    ).toMatchObject(everything);
+    expect(classifyGitRange(sha("a"), sha("b"), gitForDiff([]))).toMatchObject(everything);
+  });
+  it("covers manual workflow dispatch, unknown events and missing push SHAs", () => {
+    const gitCommand = gitForDiff(["README.md"]);
+    for (const event of [
+      { eventName: "workflow_dispatch", eventPayload: {} },
+      { eventName: "schedule", eventPayload: {} },
+      { eventName: undefined, eventPayload: undefined },
+      { eventName: "push", eventPayload: { after: sha("b") } },
+      { eventName: "pull_request", eventPayload: { pull_request: {} } },
+    ])
+      expect(classifyGitHubEvent({ ...event, git: gitCommand })).toMatchObject(everything);
+  });
+  it("lets a cheap push stay cheap and a runtime pull request take the full matrix", () => {
+    expect(
+      classifyGitHubEvent({
+        eventName: "push",
+        eventPayload: { before: sha("a"), after: sha("b") },
+        git: gitForDiff([
+          "docs/test-architecture-and-performance.md",
+          "config/test-performance-after.json",
+        ]),
+      }),
+    ).toMatchObject({
+      packageAuthorityRequired: false,
+      linuxVerificationRequired: false,
+      windowsPortabilityRequired: false,
+      browserRequired: false,
+      packageIntegrationRequired: false,
+      fullSourceCertification: false,
+    });
+    expect(
+      classifyGitHubEvent({
+        eventName: "pull_request",
+        eventPayload: { pull_request: { base: { sha: sha("a") }, head: { sha: sha("b") } } },
+        git: gitForDiff(["docs/a.md", "packages/vue/src/index.ts"]),
+      }),
+    ).toMatchObject(everything);
   });
 });

@@ -3,6 +3,8 @@ import { relative, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { sourceVerificationJobs } from "./sourceVerification.ts";
+
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
 function jobBlock(workflow: string, job: string): string {
@@ -175,8 +177,61 @@ describe("Verify browser CI contracts", () => {
     expect(certification).toContain("run: node scripts/certifyBrowser.ts");
     expect(certification).toContain("name: verified-source-packages");
     expect(certification).toContain(
-      "success() && needs.repository-admission.outputs.browser_required == 'true' && needs.repository-admission.outputs.package_integration_required == 'true'",
+      "success() && needs.repository-admission.outputs.full_source_certification == 'true'",
     );
+    expect(certification).toContain("METADATA_FORMAT_RESULT:");
+  });
+
+  it("gates every verification owner on its own classification output", async () => {
+    const workflow = await workflowSource();
+    const admission = jobBlock(workflow, "repository-admission");
+    const gates: Record<string, string> = {
+      "package-authority": "package_authority_required",
+      "linux-verification": "linux_verification_required",
+      "windows-portability": "windows_portability_required",
+      chromium: "browser_required",
+      "cross-browser": "browser_required",
+      "browser-integration": "package_integration_required",
+    };
+    for (const [job, output] of Object.entries(gates)) {
+      const block = jobBlock(workflow, job);
+      expect(block).toContain("needs.repository-admission.result == 'success'");
+      expect(block).toContain(`needs.repository-admission.outputs.${output} == 'true'`);
+      expect(admission).toContain(`${output}: ${"$"}{{ steps.classify.outputs.${output} }}`);
+    }
+    const certification = jobBlock(workflow, "browser-certification");
+    for (const variable of [
+      "PACKAGE_AUTHORITY_REQUIRED",
+      "LINUX_REQUIRED",
+      "WINDOWS_REQUIRED",
+      "BROWSER_REQUIRED",
+      "PACKAGE_INTEGRATION_REQUIRED",
+    ])
+      expect(certification).toContain(`${variable}: `);
+    // The admission gates stay unconditional and the cheap path adds nothing to source jobs.
+    expect(admission).not.toMatch(/^s+if:/m);
+    expect(admission).toContain("full_source_certification:");
+  });
+
+  it("keeps the repository-wide format gate on lightweight runs only", async () => {
+    const format = jobBlock(await workflowSource(), "metadata-format");
+    expect(format).toContain("linux_verification_required == 'false'");
+    expect(format).toContain("run: pnpm format:check");
+    expect(format).not.toMatch(/build:packages|playwright/);
+    expect(jobBlock(await workflowSource(), "linux-verification")).toContain("pnpm format:check");
+  });
+
+  it("only full-matrix runs produce candidate-eligible source evidence", async () => {
+    const workflow = await workflowSource();
+    const certification = jobBlock(workflow, "browser-certification");
+    expect(certification).toContain(
+      "if: ${{ needs.repository-admission.outputs.full_source_certification == 'true' && needs.linux-verification.result == 'success' }}",
+    );
+    // Candidate preparation names these exact jobs; the workflow must still publish every one.
+    for (const name of sourceVerificationJobs.filter(
+      (job) => !/^(Chromium|Interoperability) /.test(job),
+    ))
+      expect(workflow).toContain(`name: ${name}`);
   });
 });
 

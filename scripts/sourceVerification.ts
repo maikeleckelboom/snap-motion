@@ -97,6 +97,42 @@ export function assertSourceEvidence(
   }
 }
 
+interface SourceJob {
+  readonly name: string;
+  readonly conclusion: string | null;
+}
+
+/**
+ * A lightweight (metadata-only) Verify run also concludes success but skips owners, and it can
+ * share a SHA with a full run. Only a run whose job snapshot is the complete matrix qualifies.
+ */
+export function selectFullSourceRun(
+  runs: readonly SourceWorkflowRun[],
+  sourceCommit: string,
+  branch: string,
+  jobsFor: (run: SourceWorkflowRun) => readonly SourceJob[],
+): SourceWorkflowRun {
+  let lastFailure = "";
+  for (const candidate of runs) {
+    if (
+      candidate.head_sha !== sourceCommit ||
+      candidate.head_branch !== branch ||
+      !["push", "workflow_dispatch"].includes(candidate.event) ||
+      candidate.conclusion !== "success"
+    )
+      continue;
+    try {
+      assertSourceWorkflow(candidate, sourceCommit, branch, jobsFor(candidate));
+      return candidate;
+    } catch (error) {
+      lastFailure = error instanceof Error ? error.message : String(error);
+    }
+  }
+  throw new Error(
+    `Push source ${sourceCommit} and wait for complete GitHub Verify before preparing a candidate. No successful Verify run at this SHA is a full source certification; lightweight and partial runs never qualify.${lastFailure ? ` Last rejection: ${lastFailure}` : ""} No local verification bypass is supported.`,
+  );
+}
+
 function githubJson<T>(path: string): T {
   return JSON.parse(
     execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
@@ -116,23 +152,15 @@ export async function fetchVerifiedSource(
   const runs = githubJson<{ workflow_runs: SourceWorkflowRun[] }>(
     `repos/${repository}/actions/workflows/verify.yml/runs?head_sha=${sourceCommit}&status=success&per_page=100`,
   ).workflow_runs;
-  const run = runs.find(
+  const run = selectFullSourceRun(
+    runs,
+    sourceCommit,
+    branch,
     (candidate) =>
-      candidate.head_sha === sourceCommit &&
-      candidate.head_branch === branch &&
-      ["push", "workflow_dispatch"].includes(candidate.event) &&
-      candidate.conclusion === "success",
+      githubJson<{ jobs: SourceJob[] }>(
+        `repos/${repository}/actions/runs/${candidate.id}/attempts/${candidate.run_attempt}/jobs?per_page=100`,
+      ).jobs,
   );
-  if (!run)
-    throw new Error(
-      `Push source ${sourceCommit} and wait for complete GitHub Verify before preparing a candidate. No local verification bypass is supported.`,
-    );
-  // GitHub's current-attempt snapshot can retain earlier successful owners at this same SHA.
-  // Require the complete successful matrix and this attempt's final-gate artifact together.
-  const jobs = githubJson<{ jobs: { name: string; conclusion: string | null }[] }>(
-    `repos/${repository}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,
-  ).jobs;
-  assertSourceWorkflow(run, sourceCommit, branch, jobs);
   const name = `verified-source-packages-attempt-${run.run_attempt}`;
   const artifacts = githubJson<{
     artifacts: { id: number; name: string; expired: boolean; digest: string }[];
