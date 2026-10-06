@@ -27,6 +27,13 @@ export interface CandidateRecord {
   readonly verification: {
     readonly command: string;
     readonly passed: true;
+    readonly github?: {
+      readonly runId: number;
+      readonly runAttempt: number;
+      readonly artifactId: number;
+      readonly artifactDigest: string;
+      readonly url: string;
+    };
   };
 }
 
@@ -113,6 +120,28 @@ export function parseCandidateRecord(source: string, label: string): CandidateRe
   if (verification.passed !== true) {
     return fail(`${label}.verification.passed`, "expected true.");
   }
+  let github: CandidateRecord["verification"]["github"];
+  if (verification.github !== undefined) {
+    const authority = object(verification.github, `${label}.verification.github`);
+    for (const key of ["runId", "runAttempt", "artifactId"] as const) {
+      if (!Number.isSafeInteger(authority[key]) || (authority[key] as number) <= 0)
+        return fail(`${label}.verification.github.${key}`, "expected a positive integer.");
+    }
+    const digest = string(authority.artifactDigest, `${label}.verification.github.artifactDigest`);
+    const url = string(authority.url, `${label}.verification.github.url`);
+    if (
+      !/^sha256:[0-9a-f]{64}$/.test(digest) ||
+      url !== `https://github.com/maikeleckelboom/snap-motion/actions/runs/${authority.runId}`
+    )
+      return fail(`${label}.verification.github`, "invalid GitHub artifact provenance.");
+    github = {
+      runId: authority.runId as number,
+      runAttempt: authority.runAttempt as number,
+      artifactId: authority.artifactId as number,
+      artifactDigest: digest,
+      url,
+    };
+  }
   if (!Array.isArray(record.packages) || record.packages.length === 0) {
     return fail(`${label}.packages`, "expected at least one package.");
   }
@@ -143,6 +172,7 @@ export function parseCandidateRecord(source: string, label: string): CandidateRe
     verification: {
       command: string(verification.command, `${label}.verification.command`),
       passed: true,
+      ...(github === undefined ? {} : { github }),
     },
     packages,
     private: record.private,

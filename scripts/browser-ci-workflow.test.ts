@@ -52,7 +52,7 @@ describe("Verify browser CI contracts", () => {
     expect(manifest.scripts["verify:packages:browser"]).toContain("build:packages");
   });
 
-  it("shards only Chromium and runs every interoperability project together", async () => {
+  it("runs measured Chromium groups and independent engines with version-matched containers", async () => {
     const workflow = await workflowSource();
     const chromium = jobBlock(workflow, "chromium");
     const crossBrowser = jobBlock(workflow, "cross-browser");
@@ -60,72 +60,79 @@ describe("Verify browser CI contracts", () => {
     const playwrightVersion = workspace.match(
       /^\s*"?@playwright\/test"?:\s*(\d+\.\d+\.\d+)\s*$/m,
     )?.[1];
-
     expect(playwrightVersion).toBeDefined();
-    expect(chromium).toContain("timeout-minutes: 12");
-    expect(chromium).toContain("shard: [1, 2]");
-    expect(chromium).toContain("playwright install --with-deps chromium");
-    expect(chromium).toContain("--project=chromium");
-    expect(chromium).toContain("--shard=${{ matrix.shard }}/2");
-    expect(chromium).toContain("--workers=1");
-    expect(crossBrowser).toContain(
-      `image: mcr.microsoft.com/playwright:v${playwrightVersion}-noble`,
-    );
-    expect(crossBrowser).toContain("options: --user 1001");
-    expect(crossBrowser).toContain("timeout-minutes: 15");
-    expect(crossBrowser).not.toMatch(/playwright\s+install(?:-deps)?\b/);
-    for (const project of ["firefox", "webkit", "webkit-stacked-deck"]) {
-      expect(crossBrowser).toContain(`--project=${project}`);
+    expect(chromium).toContain("group: [general, deck, direct]");
+    expect(chromium).toContain("SNAP_MOTION_BROWSER_GROUP:");
+    expect(crossBrowser).toContain("project: [firefox, webkit, webkit-stacked-deck]");
+    for (const job of [chromium, crossBrowser, jobBlock(workflow, "browser-integration")]) {
+      expect(job).toContain("image: mcr.microsoft.com/playwright:v" + playwrightVersion + "-noble");
+      expect(job).toContain("options: --user 1001");
+      expect(job).not.toMatch(/playwright\s+install(?:-deps)?\b/);
     }
-    expect(crossBrowser).toContain("--workers=1");
-    expect(crossBrowser).not.toContain("--shard=");
-    for (const conditionalJob of [chromium, crossBrowser]) {
-      expect(conditionalJob).toContain(
-        "needs.repository-admission.outputs.browser_required == 'true'",
-      );
+    for (const job of [chromium, crossBrowser]) {
+      expect(job).toContain("--workers=2");
+      expect(job).not.toContain("--shard=");
+      expect(job).toContain("--reporter=line,json");
+      expect(job).toContain("node scripts/reportBrowserTiming.ts");
+      expect(job).toContain("needs.repository-admission.outputs.browser_required == 'true'");
     }
   });
 
-  it("shares browser installation and package build across integration contracts", async () => {
+  it("reuses one archive authority through static and browser consumers", async () => {
     const workflow = await workflowSource();
+    const linux = jobBlock(workflow, "linux-verification");
     const integration = jobBlock(workflow, "browser-integration");
-
-    expect(occurrences(integration, "playwright install --with-deps chromium firefox webkit")).toBe(
-      1,
+    expect(linux).toContain("name: prepared-package-authority");
+    expect(linux).toContain("packages/core/dist");
+    expect(linux).toContain("packages/vue/dist");
+    expect(linux).toContain(".artifacts/packages");
+    expect(linux).toContain("include-hidden-files: true");
+    expect(integration).toContain("needs: [repository-admission, linux-verification]");
+    expect(integration).toContain(
+      "artifact-ids: ${{ needs.linux-verification.outputs.package_artifact }}",
     );
-    expect(occurrences(integration, "run: pnpm build:packages")).toBe(1);
+    expect(integration).not.toContain("run: pnpm build:packages");
+    expect(integration).not.toContain("run: pnpm pack:packages");
     expect(integration).toContain("pnpm build:preview:prepared");
     expect(integration).toContain("pnpm build:fixtures:prepared");
-    expect(integration).toContain("pnpm pack:packages:prepared");
-    expect(integration).toContain("name: Certify production preview");
-    expect(integration).toContain("name: Certify framework fixtures");
-    expect(integration).toContain("name: Certify packed Nuxt build and hydration");
     expect(integration).toContain("pnpm verify:packages:browser:prepared");
-    expect(workflow).not.toContain("playwright merge-reports");
-    expect(workflow).not.toContain("browser-report:");
-    expect(workflow).toContain("playwright-chromium-${{ matrix.shard }}-of-2-attempt-");
-    expect(workflow).toContain("playwright-cross-browser-attempt-");
-    expect(workflow).toContain("playwright-preview-attempt-");
-    expect(workflow).toContain("playwright-fixtures-attempt-");
+    expect(integration).toContain("package_integration_required == 'true'");
+    expect(integration).toContain("playwright.preview.config.ts");
+    expect(integration).toContain("playwright.fixtures.config.ts");
   });
 
-  it("publishes one stable browser certification that fails closed", async () => {
-    const workflow = await workflowSource();
-    const certification = jobBlock(workflow, "browser-certification");
-
+  it("publishes one fail-closed browser gate and source evidence only after the complete matrix", async () => {
+    const certification = jobBlock(await workflowSource(), "browser-certification");
     expect(certification).toContain("name: Browser certification");
     expect(certification).toContain("if: ${{ always() }}");
     expect(certification).toContain("timeout-minutes: 2");
-    expect(certification).toContain("- repository-admission");
-    expect(certification).toContain("- chromium");
-    expect(certification).toContain("- cross-browser");
-    expect(certification).toContain("- browser-integration");
-    expect(certification).toContain('ADMISSION_RESULT" != "success"');
-    expect(certification).toContain('BROWSER_REQUIRED" = "false"');
-    expect(certification).toContain('CHROMIUM_RESULT" = "skipped"');
-    expect(certification).toContain('BROWSER_REQUIRED" = "true"');
-    expect(certification).toContain('CHROMIUM_RESULT" = "success"');
-    expect(certification).toContain('certified" != "true"');
+    const dependencies = certification.slice(
+      certification.indexOf("    needs:"),
+      certification.indexOf("    runs-on:"),
+    );
+    for (const job of [
+      "repository-admission",
+      "linux-verification",
+      "windows-portability",
+      "chromium",
+      "cross-browser",
+      "browser-integration",
+    ])
+      expect(dependencies).toContain(job);
+    for (const result of [
+      "ADMISSION",
+      "LINUX",
+      "WINDOWS",
+      "CHROMIUM",
+      "CROSS_BROWSER",
+      "INTEGRATION",
+    ])
+      expect(certification).toContain(result + "_RESULT:");
+    expect(certification).toContain("run: node scripts/certifyBrowser.ts");
+    expect(certification).toContain("name: verified-source-packages");
+    expect(certification).toContain(
+      "success() && needs.repository-admission.outputs.browser_required == 'true' && needs.repository-admission.outputs.package_integration_required == 'true'",
+    );
   });
 });
 

@@ -7,6 +7,17 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "sourceVerificationRecord.test.ts",
+    "reportCiTiming.ts",
+    "sourceVerification.ts",
+    "sourceVerification.test.ts",
+    "browserCertification.ts",
+    "browserCertification.test.ts",
+    "browserOwnership.test.ts",
+    "certifyBrowser.ts",
+    "browserTiming.ts",
+    "browserTiming.test.ts",
+    "reportBrowserTiming.ts",
     "certifySurfacePreferences.ts",
     "sheetContentVisual.ts",
     "browser-change-classifier.test.ts",

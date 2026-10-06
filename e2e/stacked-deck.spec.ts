@@ -382,6 +382,7 @@ async function settleControlledTraversal(
   exchange: "shuffle" | "direct",
   traced: boolean,
 ) {
+  let completed = false;
   for (let elapsed = 0; elapsed < 6_000; elapsed += 64) {
     await page.clock.runFor(64);
     const done = traced
@@ -391,8 +392,12 @@ async function settleControlledTraversal(
               .stackedDeckTraversalTrace?.done,
         )
       : (await viewport(page).getAttribute("data-phase")) === "idle";
-    if (done) break;
+    if (done) {
+      completed = true;
+      break;
+    }
   }
+  expect(completed, "the controlled spring must settle within its virtual frame budget").toBe(true);
   await expectCarouselAt(viewport(page), targetId);
   if (!traced) return;
   const trace = await readTraversalTrace(page);
@@ -945,6 +950,7 @@ test("both exchange variants complete repeated revolutions without drift or shel
     await expectCarouselAt(stage, IDS[0]);
     for (let step = 1; step <= 7; step += 1) {
       if (step === 1) await installTraversalTrace(page);
+      await expect(page.getByTestId("stacked-deck-next")).toBeEnabled();
       await page.getByTestId("stacked-deck-next").dispatchEvent("click");
       await settleControlledTraversal(page, IDS[step % IDS.length]!, exchange, step === 1);
       const frame = await readFrame(page);
@@ -956,6 +962,7 @@ test("both exchange variants complete repeated revolutions without drift or shel
     await expectCarouselAt(stage, IDS[0]);
     for (let step = 1; step <= 7; step += 1) {
       if (step === 1) await installTraversalTrace(page);
+      await expect(page.getByTestId("stacked-deck-previous")).toBeEnabled();
       await page.getByTestId("stacked-deck-previous").dispatchEvent("click");
       await settleControlledTraversal(
         page,

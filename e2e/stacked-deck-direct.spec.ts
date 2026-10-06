@@ -1,5 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve as resolvePath } from "node:path";
+import { writeFile } from "node:fs/promises";
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
@@ -260,17 +259,7 @@ async function runRapidDirectChain(
   if (ownsTrace) {
     const trace = await stopDirectRafTrace(page);
     const testInfo = test.info();
-    const directory = resolvePath(
-      import.meta.dirname,
-      "..",
-      ".artifacts",
-      "stacked-deck-rapid-chain",
-    );
-    await mkdir(directory, { recursive: true });
-    const artifact = join(
-      directory,
-      `${testInfo.project.name}-${testInfo.title.replaceAll(/[^a-z\d]+/gi, "-").slice(0, 80)}-${testInfo.repeatEachIndex}-${trace[0]?.revision ?? 0}.json`,
-    );
+    const artifact = testInfo.outputPath(`rapid-chain-${trace[0]?.revision ?? 0}.json`);
     await writeFile(artifact, `${JSON.stringify({ result, trace }, null, 2)}\n`);
     const review = expectDirectTraceCoherent(trace);
     await writeFile(artifact, `${JSON.stringify({ result, review, trace }, null, 2)}\n`);
@@ -539,15 +528,8 @@ test("Direct gives identical fresh and chained hands the same transaction zero",
     };
   }
 
-  const directory = resolvePath(
-    import.meta.dirname,
-    "..",
-    ".artifacts",
-    "stacked-deck-chained-takeover",
-  );
-  await mkdir(directory, { recursive: true });
   await writeFile(
-    join(directory, `post-fix-${testInfo.project.name}.json`),
+    testInfo.outputPath("chained-takeover.json"),
     `${JSON.stringify(report, null, 2)}\n`,
   );
 });
@@ -1125,17 +1107,7 @@ test("Direct deterministic heavy abuse retains every concurrent release and reco
     cycle += 1;
   }
   const trace = await stopDirectRafTrace(page);
-  const artifactDirectory = resolvePath(
-    import.meta.dirname,
-    "..",
-    ".artifacts",
-    "stacked-deck-multi-landing",
-  );
-  await mkdir(artifactDirectory, { recursive: true });
-  const artifactPath = join(
-    artifactDirectory,
-    `deterministic-stress-${testInfo.project.name}-${testInfo.repeatEachIndex}.json`,
-  );
+  const artifactPath = testInfo.outputPath("deterministic-stress.json");
   // Persist the raw evidence before evaluating it so a failed invariant still leaves the two
   // offending frames available for diagnosis.
   await writeFile(artifactPath, `${JSON.stringify({ gestures, trace }, null, 2)}\n`);
@@ -1948,16 +1920,8 @@ test("Direct hands one shell over continuously and passes it behind only between
     };
   }
 
-  const directory = resolvePath(
-    import.meta.dirname,
-    "..",
-    ".artifacts",
-    "stacked-deck-direct-review",
-    "release-trace",
-  );
-  await mkdir(directory, { recursive: true });
   await writeFile(
-    join(directory, `${testInfo.project.name}.json`),
+    testInfo.outputPath("release-trace.json"),
     `${JSON.stringify(report, null, 2)}\n`,
   );
 });
@@ -2394,16 +2358,8 @@ test("Direct visual authority only ever advances, however fast the hand is", asy
     };
   }
 
-  const directory = resolvePath(
-    import.meta.dirname,
-    "..",
-    ".artifacts",
-    "stacked-deck-direct-review",
-    "authority-trace",
-  );
-  await mkdir(directory, { recursive: true });
   await writeFile(
-    join(directory, `${testInfo.project.name}.json`),
+    testInfo.outputPath("authority-trace.json"),
     `${JSON.stringify(report, null, 2)}
 `,
   );

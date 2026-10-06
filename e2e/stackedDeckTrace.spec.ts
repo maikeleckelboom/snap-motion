@@ -1,5 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -362,21 +361,8 @@ for (const recorderFirst of [true, false]) {
     await step(250);
     await step();
     const trace = await stopDirectRafTrace(page);
-    const artifactDirectory = join(
-      import.meta.dirname,
-      "..",
-      ".artifacts",
-      "stacked-deck-multi-landing",
-    );
     const evidence = JSON.stringify({ seed, deltas, recorderFirst, trace }, null, 2);
-    await mkdir(artifactDirectory, { recursive: true });
-    await writeFile(
-      join(
-        artifactDirectory,
-        `publication-clock-${testInfo.project.name}-${seed}-${testInfo.repeatEachIndex}.json`,
-      ),
-      `${evidence}\n`,
-    );
+    await writeFile(testInfo.outputPath(`publication-clock-${seed}.json`), `${evidence}\n`);
     await testInfo.attach("direct-publication-clock", {
       body: Buffer.from(evidence),
       contentType: "application/json",

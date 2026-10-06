@@ -1,9 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { chromiumScope, interoperabilitySpecs } from "./config/browserOwnership";
+
 const mediaPreviewSpec = "media-preview.spec.ts";
-const showcaseSmokeSpec = "showcase-smoke.spec.ts";
-const stackedDeckAuditSpecs = ["stackedDeckConsumer.spec.ts", "stackedDeckTrace.spec.ts"];
-const sheetSpecs = ["sheet.spec.ts", "sheetContent.spec.ts"];
 const stackedDeckSpec = "stacked-deck.spec.ts";
 const stackedDeckDirectSpec = "stacked-deck-direct.spec.ts";
 const stackedDeckPileSpec = "stacked-deck-pile.spec.ts";
@@ -19,7 +18,7 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   failOnFlakyTests: Boolean(process.env.CI),
-  workers: process.env.CI ? 1 : undefined,
+  workers: 2,
   reporter: process.env.CI ? [["line"], ["blob"]] : "list",
   use: {
     baseURL: testUrl,
@@ -28,46 +27,38 @@ export default defineConfig({
     video: "off",
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "chromium",
+      ...chromiumScope(process.env.SNAP_MOTION_BROWSER_GROUP),
+      use: { ...devices["Desktop Chrome"] },
+    },
     {
       name: "firefox",
-      testMatch: [
-        showcaseSmokeSpec,
-        ...stackedDeckAuditSpecs,
-        ...sheetSpecs,
-        "surfaceState.spec.ts",
-        "galleryTakeover.spec.ts",
-      ],
+      testMatch: interoperabilitySpecs,
       use: { ...devices["Desktop Firefox"] },
     },
     {
       name: "webkit",
-      testMatch: [
-        showcaseSmokeSpec,
-        ...stackedDeckAuditSpecs,
-        ...sheetSpecs,
-        "surfaceState.spec.ts",
-        "galleryTakeover.spec.ts",
-      ],
+      testMatch: interoperabilitySpecs,
       use: { ...devices["Desktop Safari"] },
     },
     {
       name: "webkit-stacked-deck",
       grep: stackedDeckWebKitSmoke,
       testMatch: stackedDeckSpec,
-      workers: process.env.CI ? 1 : 2,
+      workers: 2,
       use: { ...devices["Desktop Safari"] },
     },
     {
       name: "webkit-stacked-deck-direct",
       testMatch: stackedDeckDirectSpec,
-      workers: 1,
+      workers: 2,
       use: { ...devices["Desktop Safari"] },
     },
     {
       name: "webkit-stacked-deck-pile",
       testMatch: stackedDeckPileSpec,
-      workers: 1,
+      workers: 2,
       use: { ...devices["Desktop Safari"] },
     },
   ],
