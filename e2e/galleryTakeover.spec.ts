@@ -2,6 +2,16 @@ import { expect, test } from "@playwright/test";
 
 import { openLabDemo } from "./helpers";
 
+interface MixedAspectTakeoverResult {
+  readonly distance: number;
+  readonly samples: readonly {
+    readonly state: string | null;
+    readonly jump: number;
+    readonly movement: number;
+    readonly same: boolean;
+  }[];
+}
+
 test("compounded programmatic retargets and reversals retain a painted physical corridor", async ({
   page,
 }) => {
@@ -317,58 +327,75 @@ test("mixed-aspect images retain their nodes and positions through snap-back tak
   await page.getByTestId("snap-motion-media-gallery-shell").evaluate(async (element) => {
     await Promise.all(element.getAnimations().map((animation) => animation.finished));
   });
-  const result = await dialog.evaluate(async (element) => {
-    const viewport = element.querySelector<HTMLElement>(
-      '[data-testid="snap-motion-media-gallery-viewport"]',
-    )!;
-    const rect = viewport.getBoundingClientRect();
-    const frame = () =>
-      new Promise<void>((resolve) =>
-        element.ownerDocument.defaultView!.requestAnimationFrame(() => resolve()),
-      );
-    let time = performance.now();
-    const send = (type: string, delta: number) => {
-      const event = new PointerEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        pointerType: "mouse",
-        pointerId: 77,
-        button: 0,
-        clientX: rect.left + rect.width / 2 + delta,
-        clientY: rect.top + rect.height / 2,
-      });
-      Object.defineProperty(event, "timeStamp", { value: time });
-      viewport.dispatchEvent(event);
-    };
-    send("pointerdown", 0);
-    time += 240;
-    send("pointermove", -15);
-    send("pointerup", -15);
-    await frame();
-    const samples: { state: string | null; jump: number; movement: number; same: boolean }[] = [];
-    for (const id of ["landscape-overview", "wide-timeline"]) {
-      const image = element.querySelector<HTMLImageElement>(`[data-item-id="${id}"] img`)!;
-      const before = image.getBoundingClientRect().x;
-      const state = element.getAttribute("data-track-state");
+  // Finish the native dialog entrance first. The track uses rAF; its intermediate takeover
+  // frames must not depend on a busy WebKit runner delivering one frame after the spring ends.
+  await page.clock.install();
+  await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 100));
+  await dialog.evaluate((element) => {
+    const run = async (): Promise<MixedAspectTakeoverResult> => {
+      const viewport = element.querySelector<HTMLElement>(
+        '[data-testid="snap-motion-media-gallery-viewport"]',
+      )!;
+      const rect = viewport.getBoundingClientRect();
+      const frame = () =>
+        new Promise<void>((resolve) =>
+          element.ownerDocument.defaultView!.requestAnimationFrame(() => resolve()),
+        );
+      let time = performance.now();
+      const send = (type: string, delta: number) => {
+        const event = new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerType: "mouse",
+          pointerId: 77,
+          button: 0,
+          clientX: rect.left + rect.width / 2 + delta,
+          clientY: rect.top + rect.height / 2,
+        });
+        Object.defineProperty(event, "timeStamp", { value: time });
+        viewport.dispatchEvent(event);
+      };
       send("pointerdown", 0);
-      await Promise.resolve();
-      const after = image.getBoundingClientRect().x;
-      send("pointermove", -rect.width * 0.25);
-      await Promise.resolve();
-      const movement = image.getBoundingClientRect().x - after;
       time += 240;
-      send("pointerup", -rect.width * 0.25);
-      samples.push({ state, jump: after - before, movement, same: image.isConnected });
+      send("pointermove", -15);
+      send("pointerup", -15);
       await frame();
-    }
-    return { samples, distance: rect.width * 0.25 };
+      const samples: { state: string | null; jump: number; movement: number; same: boolean }[] = [];
+      for (const id of ["landscape-overview", "wide-timeline"]) {
+        const image = element.querySelector<HTMLImageElement>(`[data-item-id="${id}"] img`)!;
+        const before = image.getBoundingClientRect().x;
+        const state = element.getAttribute("data-track-state");
+        send("pointerdown", 0);
+        await Promise.resolve();
+        const after = image.getBoundingClientRect().x;
+        send("pointermove", -rect.width * 0.25);
+        await Promise.resolve();
+        const movement = image.getBoundingClientRect().x - after;
+        time += 240;
+        send("pointerup", -rect.width * 0.25);
+        samples.push({ state, jump: after - before, movement, same: image.isConnected });
+        await frame();
+      }
+      return { samples, distance: rect.width * 0.25 };
+    };
+    // Start the coroutine before returning, so the first controlled frame is already requested.
+    (
+      window as typeof window & { mixedAspectTakeover: Promise<MixedAspectTakeoverResult> }
+    ).mixedAspectTakeover = run();
   });
+  await page.clock.runFor(64);
+  const result = await page.evaluate(
+    () =>
+      (window as typeof window & { mixedAspectTakeover: Promise<MixedAspectTakeoverResult> })
+        .mixedAspectTakeover,
+  );
   for (const sample of result.samples) {
     expect(sample.state).toBe("settling");
     expect(Math.abs(sample.jump)).toBeLessThan(0.1);
     expect(sample.movement).toBeCloseTo(-result.distance, 0);
     expect(sample.same).toBe(true);
   }
+  await page.clock.runFor(600);
   await expect(dialog).toHaveAttribute("data-track-state", "idle");
   await expect(dialog).toHaveAttribute("data-settled-id", "tall-document");
   await expect(page.getByTestId("snap-motion-media-gallery-title")).toHaveText("Tall document");

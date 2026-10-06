@@ -113,6 +113,16 @@ frame, closes for 32ms, and reopens without transport-time drift. Its continuity
 assertion tightens from 160px to 0.1px. Advancing past both obsolete and current
 completion times still proves the reopened dialog survives and returns focus.
 
+Repeated CI also exposed a Gallery mixed-aspect snap-back takeover race: one native
+rAF sometimes arrived after settlement. The original test reproduced two failures
+in ten WebKit/two-worker runs. Its native WAAPI dialog entrance still finishes in
+real time; the track coroutine then requests all three controlled rAF frames before
+the test advances 64ms. Every original settling-state, 0.1px continuity, movement,
+node-identity, final rebase and title assertion remains. Thirty focused repetitions
+across three engines passed; two full-spec repetitions added 34 passes and eight
+existing skips, with no failures/retries. This affected concurrency defect was fixed,
+not dismissed as an unrelated flake.
+
 Playwright controls rAF/performance clocks; it does not accelerate native WAAPI or
 CSS animation timelines. The deck's bounded spring uses rAF, and these tests read
 the actual DOM, while dedicated real-time paint witnesses retain compositor proof.
