@@ -128,6 +128,15 @@ const labHref = import.meta.env.BASE_URL;
   font-size: 0.7rem;
 }
 
+/* Forced colours drop the indicator's fill, so the current section is underlined instead. */
+@media (forced-colors: active) {
+  .bar-nav a[aria-current="location"] {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.4em;
+  }
+}
+
 .bar-lab {
   display: flex;
   flex: none;

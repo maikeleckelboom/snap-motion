@@ -98,6 +98,14 @@ const id = useId();
   outline-color: var(--paper);
   box-shadow: 0 0 0 2px var(--focus);
 }
+/* Forced colours erase the fill that marks the pressed segment, so use the system highlight. */
+@media (forced-colors: active) {
+  .segmented-options button[aria-pressed="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
 @media (max-width: 30rem) {
   .segmented-options {
     display: grid;

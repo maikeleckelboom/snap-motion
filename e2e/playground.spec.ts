@@ -2,7 +2,12 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { playgroundSections } from "../apps/lab/src/playground/sections";
 import { MOTION_PRESETS } from "../packages/core/src/index";
-import { dragSyntheticPointerBy, expectCarouselAt, expectSheetOpenAt } from "./helpers";
+import {
+  dragMouseBy,
+  dragSyntheticPointerBy,
+  expectCarouselAt,
+  expectSheetOpenAt,
+} from "./helpers";
 import {
   duplicateIds,
   editor,
@@ -66,6 +71,23 @@ test.describe("public Playground page", () => {
     await expect(page).toHaveTitle("Snap Motion Playground");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
+
+  for (const { id } of playgroundSections) {
+    test(`a cold deep link to #${id} lands on that section`, async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.goto(`./playground/#${id}`);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(page.getByTestId("coverflow-viewport")).toHaveAttribute("data-phase", "idle");
+      await expect
+        .poll(async () =>
+          section(page, id).evaluate((element) => Math.round(element.getBoundingClientRect().top)),
+        )
+        .toBeLessThan(120);
+      expect(
+        await section(page, id).evaluate((element) => element.getBoundingClientRect().top),
+      ).toBeGreaterThanOrEqual(-2);
+    });
+  }
 
   test("leaves the engineering Lab at its root with its query URLs", async ({ page }) => {
     await page.goto("./");
@@ -144,6 +166,65 @@ test.describe("live surfaces", () => {
     await expectCarouselAt(page.getByTestId("stacked-deck-viewport"), "team");
     await expect(page.getByTestId("media-lightbox")).not.toBeVisible();
     await expect(page.getByTestId("sheet")).not.toBeVisible();
+  });
+
+  test("a pointer drag moves only the surface it started on", async ({ page }) => {
+    await openPlayground(page);
+    const coverflow = page.getByTestId("coverflow-viewport");
+    await dragMouseBy(page, coverflow, -420, 0, { steps: 12 });
+    await expect(coverflow).toHaveAttribute("data-phase", "idle");
+    expect(await coverflow.getAttribute("data-active-id")).not.toBe("map");
+
+    await expectCarouselAt(page.getByTestId("stacked-deck-viewport"), "map");
+    await expect(page.getByTestId("paged-grid")).toHaveAttribute("data-active-id", "page-1");
+    await expect(page.getByTestId("media-lightbox")).not.toBeVisible();
+
+    const deck = page.getByTestId("stacked-deck-viewport");
+    await dragMouseBy(page, deck, -260, 0, { steps: 12 });
+    await expect(deck).toHaveAttribute("data-phase", "idle");
+    await expect(page.getByTestId("paged-grid")).toHaveAttribute("data-active-id", "page-1");
+  });
+
+  test("a surface's Inspect control opens its own gallery and returns focus", async ({ page }) => {
+    await openPlayground(page);
+    for (const [id, testid] of [
+      ["coverflow", "coverflow-inspect"],
+      ["stacked-deck", "stacked-deck-inspect"],
+    ] as const) {
+      const inspect = section(page, id).getByTestId(testid);
+      await inspect.scrollIntoViewIfNeeded();
+      await expect(inspect).toBeEnabled();
+      await inspect.click();
+      const dialog = section(page, id).locator("dialog[open]");
+      await expect(dialog).toBeVisible();
+      expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(
+        true,
+      );
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      await expect(inspect).toBeFocused();
+    }
+  });
+
+  test("modals do not touch history and closed galleries load no full images", async ({ page }) => {
+    await openPlayground(page);
+    const history = () => page.evaluate(() => window.history.length);
+    const start = await history();
+    // Closed dialogs hold no media: images appear only when a gallery opens.
+    await expect(page.locator("dialog img")).toHaveCount(0);
+
+    await page.getByTestId("open-lightbox").scrollIntoViewIfNeeded();
+    await page.getByTestId("open-lightbox").click();
+    await expect(page.getByTestId("media-lightbox")).toBeVisible();
+    expect(await page.locator("dialog[open] img").count()).toBeGreaterThan(0);
+    await page.keyboard.press("Escape");
+    await page.getByTestId("open-sheet").scrollIntoViewIfNeeded();
+    await page.getByTestId("open-sheet").click();
+    await expectSheetOpenAt(page.getByTestId("sheet"), "comfortable");
+    await page.keyboard.press("Escape");
+
+    expect(await history()).toBe(start);
+    await expect(page.locator("dialog img")).toHaveCount(0);
   });
 
   test("arrow keys move only the surface that owns focus", async ({ page }) => {

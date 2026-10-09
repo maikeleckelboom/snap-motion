@@ -230,6 +230,13 @@ async function closeEditor() {
   transition: transform 160ms ease;
 }
 
+/* Forced colours drop the dot's fill; the "Modified (n)" text already carries the state. */
+@media (forced-colors: active) {
+  .tuning-state[data-modified="true"] .tuning-dot {
+    border: 2px solid CanvasText;
+  }
+}
+
 .tuning-customize[aria-expanded="true"] .tuning-chevron {
   transform: rotate(180deg);
 }

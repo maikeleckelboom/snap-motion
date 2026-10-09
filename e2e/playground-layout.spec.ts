@@ -323,6 +323,50 @@ test.describe("automated accessibility certification", () => {
     await expectNoAxeViolations(page, "sheet open");
   });
 
+  test("a surface's own inspection gallery passes axe inside the page", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openPlayground(page);
+    await section(page, "coverflow").getByTestId("coverflow-inspect").click();
+    await expect(section(page, "coverflow").locator("dialog[open]")).toBeVisible();
+    await expectNoAxeViolations(page, "coverflow inspection gallery open");
+  });
+
+  test("forced colours keep the pressed segment and the current section distinguishable", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== "chromium", "Forced-colours emulation is verified in Chromium.");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.emulateMedia({ forcedColors: "active" });
+    await openPlayground(page);
+    const paint = (selector: string) =>
+      page
+        .locator(selector)
+        .first()
+        .evaluate((element) => {
+          const style = getComputedStyle(element);
+          return `${style.backgroundColor}|${style.color}|${style.textDecorationLine}`;
+        });
+
+    const pressed = section(page, "coverflow").getByTestId("preset-balanced");
+    const other = section(page, "coverflow").getByTestId("preset-tight");
+    await expect(pressed).toHaveAttribute("aria-pressed", "true");
+    const pressedPaint = await pressed.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return `${style.backgroundColor}|${style.color}`;
+    });
+    const otherPaint = await other.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return `${style.backgroundColor}|${style.color}`;
+    });
+    expect(pressedPaint).not.toBe(otherPaint);
+
+    await page.getByTestId("nav-paged-grid").click();
+    await expect(page.getByTestId("nav-paged-grid")).toHaveAttribute("aria-current", "location");
+    expect(await paint('[data-testid="nav-paged-grid"]')).toContain("underline");
+    expect(await paint('[data-testid="nav-sheet"]')).not.toContain("underline");
+  });
+
   test("the page passes axe on a phone and at 200% zoom", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openPlayground(page);
