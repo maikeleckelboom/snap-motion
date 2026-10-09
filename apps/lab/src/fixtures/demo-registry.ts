@@ -1,4 +1,3 @@
-import { STACKED_DECK_ANCHOR_SKIP } from "@snap-motion/core";
 import type { Component } from "vue";
 
 import AdaptiveSupportingPaneDemo from "@/demos/AdaptiveSupportingPaneDemo.vue";
@@ -16,7 +15,10 @@ import StackedDeckOverflowFixture from "@/demos/stacked-deck-overflow-fixture.vu
 import StackedDeckDemo from "@/demos/StackedDeckDemo.vue";
 import VariableRailFixture from "@/demos/VariableRailFixture.vue";
 
-import type { InapplicablePhysicsSetting, LabPhysicsSettings } from "./lab-types";
+import {
+  stackedDeckNotApplicablePhysics,
+  type NotApplicablePhysics,
+} from "./surface-applicability";
 
 export type DemoAudience = "showcase" | "fixture";
 export type DemoGroup = "Spatial" | "Media" | "Surfaces" | "Certification" | "Geometry";
@@ -42,7 +44,7 @@ export interface LabDemo {
   group: DemoGroup;
   id: string;
   label: string;
-  notApplicablePhysics?: Partial<Record<keyof LabPhysicsSettings, InapplicablePhysicsSetting>>;
+  notApplicablePhysics?: NotApplicablePhysics;
 }
 
 export const demos = [
@@ -76,12 +78,7 @@ export const demos = [
     group: "Spatial",
     audience: "showcase",
     component: StackedDeckDemo,
-    notApplicablePhysics: {
-      maxAnchorSkip: {
-        effectiveValue: STACKED_DECK_ANCHOR_SKIP,
-        reason: `Fixed at ${STACKED_DECK_ANCHOR_SKIP} by the stacked deck: one interaction exchanges one adjacent screen. Other surfaces keep using the stored value.`,
-      },
-    },
+    notApplicablePhysics: stackedDeckNotApplicablePhysics,
     capabilities: {
       motionPreference: true,
       physics: true,
