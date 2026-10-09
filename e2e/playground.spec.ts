@@ -1,0 +1,666 @@
+import { expect, test, type Page } from "@playwright/test";
+
+import { playgroundSections } from "../apps/lab/src/playground/sections";
+import { MOTION_PRESETS } from "../packages/core/src/index";
+import { dragSyntheticPointerBy, expectCarouselAt, expectSheetOpenAt } from "./helpers";
+import {
+  duplicateIds,
+  editor,
+  expectEveryBarShows,
+  expectedFieldValues,
+  field,
+  openEditor,
+  openPlayground,
+  presetLabels,
+  presetNames,
+  scrollY,
+  section,
+  sectionIds,
+  tuningState,
+} from "./playgroundHelpers";
+
+const collectedErrors = new WeakMap<Page, string[]>();
+
+test.beforeEach(async ({ page }) => {
+  const errors: string[] = [];
+  collectedErrors.set(page, errors);
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    // A controller that rejects a configuration throws inside a Vue watcher, which Vue reports as a
+    // warning before the patch that follows fails.
+    if (message.type() === "error" || /\[Vue warn\]/.test(message.text()))
+      errors.push(`${message.type()}: ${message.text()}`);
+  });
+});
+
+test.afterEach(async ({ page }) => {
+  expect(collectedErrors.get(page) ?? []).toEqual([]);
+});
+
+test.describe("public Playground page", () => {
+  test("is served at /playground/ with one page heading and ordered sections", async ({ page }) => {
+    await openPlayground(page);
+
+    await expect(page).toHaveTitle("Snap Motion Playground");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    await expect(page.getByRole("banner")).toHaveCount(1);
+    await expect(page.getByRole("main")).toHaveCount(1);
+    await expect(page.getByRole("contentinfo")).toHaveCount(1);
+
+    const titles = await page.getByRole("heading", { level: 2 }).allTextContents();
+    expect(titles).toEqual([...playgroundSections.map(({ title }) => title), "Under the hood"]);
+
+    const nav = page.getByRole("navigation", { name: "Playground sections" });
+    await expect(nav.getByRole("link")).toHaveCount(5);
+    for (const [index, { id }] of playgroundSections.entries()) {
+      await expect(nav.getByRole("link").nth(index)).toHaveAttribute("href", `#${id}`);
+      await expect(section(page, id)).toHaveCount(1);
+    }
+  });
+
+  test("redirects /playground to the directory entry instead of falling through to the Lab", async ({
+    page,
+  }) => {
+    await page.goto("./playground");
+    expect(new URL(page.url()).pathname).toMatch(/\/playground\/$/);
+    await expect(page).toHaveTitle("Snap Motion Playground");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  });
+
+  test("leaves the engineering Lab at its root with its query URLs", async ({ page }) => {
+    await page.goto("./");
+    await expect(page.locator(".lab-app")).toBeVisible();
+    await expect(page.locator("#panel-coverflow")).toBeVisible();
+
+    await page.goto("./?demo=sheet&view=workbench");
+    await expect(page.locator("#panel-sheet")).toBeVisible();
+    await expect(page.getByText("Advanced physics", { exact: true })).toBeVisible();
+
+    await page.goto("./?view=fixtures");
+    await expect(page.locator("#panel-defaults")).toBeVisible();
+  });
+
+  test("renders the five real surfaces without Lab-only chrome", async ({ page }) => {
+    await openPlayground(page);
+
+    await expect(section(page, "coverflow").getByTestId("coverflow-viewport")).toBeVisible();
+    await expect(section(page, "stacked-deck").getByTestId("stacked-deck-viewport")).toBeVisible();
+    await expect(section(page, "paged-grid").getByTestId("paged-grid")).toBeVisible();
+    await expect(
+      section(page, "gallery").locator("button[data-testid^='media-thumbnail-']"),
+    ).toHaveCount(6);
+    await expect(section(page, "sheet").getByTestId("open-sheet")).toBeVisible();
+
+    // Telemetry, test rails and non-functional controls belong to the Lab.
+    await expect(page.getByTestId("diagnostics")).toHaveCount(0);
+    await expect(page.getByTestId("media-test-rail")).toHaveCount(0);
+    await expect(page.locator("[data-testid^='slide-action-']")).toHaveCount(0);
+    await expect(page.getByTestId("caption-action")).toHaveCount(0);
+    await expect(section(page, "paged-grid").getByRole("button", { name: "Inspect" })).toHaveCount(
+      0,
+    );
+    await expect(page.getByTestId("stacked-deck-two-items")).toHaveCount(0);
+  });
+
+  test("gives every section a secondary Workbench path that is not required to tune", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    for (const { id, workbench, title } of playgroundSections) {
+      const link = section(page, id).getByRole("link", {
+        name: `Inspect ${title} in the Workbench`,
+      });
+      await expect(link).toHaveAttribute(
+        "href",
+        new RegExp(`\\?demo=${workbench}&view=workbench$`),
+      );
+    }
+    await section(page, "paged-grid")
+      .getByRole("link", { name: /Workbench/ })
+      .click();
+    await expect(page.locator("#panel-grid")).toBeVisible();
+    await expect(page.getByText("Advanced physics", { exact: true })).toBeVisible();
+  });
+});
+
+test.describe("live surfaces", () => {
+  test("every surface responds and keeps its own state", async ({ page }) => {
+    await openPlayground(page);
+
+    await section(page, "coverflow").getByTestId("coverflow-next").click();
+    await section(page, "coverflow").getByTestId("coverflow-next").click();
+    await expectCarouselAt(page.getByTestId("coverflow-viewport"), "settings");
+
+    await section(page, "stacked-deck").getByTestId("stacked-deck-next").click();
+    await expectCarouselAt(page.getByTestId("stacked-deck-viewport"), "team");
+
+    const grid = page.getByTestId("paged-grid");
+    await grid.focus();
+    await page.keyboard.press("ArrowRight");
+    await expectCarouselAt(grid, "page-2");
+
+    // Each surface kept the position it was driven to; none was moved by another.
+    await expectCarouselAt(page.getByTestId("coverflow-viewport"), "settings");
+    await expectCarouselAt(page.getByTestId("stacked-deck-viewport"), "team");
+    await expect(page.getByTestId("media-lightbox")).not.toBeVisible();
+    await expect(page.getByTestId("sheet")).not.toBeVisible();
+  });
+
+  test("arrow keys move only the surface that owns focus", async ({ page }) => {
+    await openPlayground(page);
+
+    await page.getByTestId("coverflow-viewport").focus();
+    await page.keyboard.press("ArrowRight");
+    await expectCarouselAt(page.getByTestId("coverflow-viewport"), "team");
+    await expectCarouselAt(page.getByTestId("stacked-deck-viewport"), "map");
+    await expect(page.getByTestId("paged-grid")).toHaveAttribute("data-active-id", "page-1");
+
+    await page.getByTestId("stacked-deck-viewport").focus();
+    await page.keyboard.press("ArrowLeft");
+    await expectCarouselAt(page.getByTestId("stacked-deck-viewport"), "project");
+    await expectCarouselAt(page.getByTestId("coverflow-viewport"), "team");
+  });
+
+  test("Stacked Deck switches between Shuffle and Direct and keeps exchanging", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    const shuffle = page.getByTestId("stacked-deck-exchange-shuffle");
+    const direct = page.getByTestId("stacked-deck-exchange-direct");
+    await expect(shuffle).toHaveAttribute("aria-pressed", "true");
+    await expect(direct).toHaveAttribute("aria-pressed", "false");
+
+    await direct.click();
+    await expect(direct).toHaveAttribute("aria-pressed", "true");
+    await expect(shuffle).toHaveAttribute("aria-pressed", "false");
+    await expect(section(page, "stacked-deck")).toContainText("stays attached to the point");
+
+    await page.getByTestId("stacked-deck-next").click();
+    await expectCarouselAt(page.getByTestId("stacked-deck-viewport"), "team");
+  });
+
+  test("Paged Grid re-measures around rows, columns, gap and item count", async ({ page }) => {
+    await openPlayground(page);
+    const grid = page.getByTestId("paged-grid");
+    await expect(grid).toHaveAttribute("data-page-count", "3");
+
+    await page.getByTestId("grid-rows").fill("1");
+    await page.getByTestId("grid-columns").fill("3");
+    await expect(grid).toHaveAttribute("data-rows", "1");
+    await expect(grid).toHaveAttribute("data-columns", "3");
+    await expect(grid).toHaveAttribute("data-page-count", "3");
+
+    await page.getByTestId("add-grid-item").click();
+    await expect(section(page, "paged-grid")).toContainText("10 items");
+    await expect(grid).toHaveAttribute("data-page-count", "4");
+    await expect(grid).toHaveAttribute("data-phase", "idle");
+  });
+
+  test("Gallery opens from a thumbnail, contains focus and returns it", async ({ page }) => {
+    await openPlayground(page);
+    const thumbnail = page.getByTestId("media-thumbnail-long-range");
+    await thumbnail.scrollIntoViewIfNeeded();
+    const before = await scrollY(page);
+
+    await thumbnail.click();
+    const dialog = page.getByTestId("media-lightbox");
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute("data-open-state", "open");
+    await expectCarouselAt(page.getByTestId("media-carousel"), "long-range");
+    await expect(page.getByTestId("media-title")).toHaveText("Long range");
+    await expect(page.getByTestId("media-count")).toHaveText("2 / 6");
+    await expect(page.getByTestId("close-lightbox")).toBeFocused();
+
+    // Tab stays inside the modal; the page behind it is inert.
+    for (let press = 0; press < 14; press += 1) {
+      await page.keyboard.press("Tab");
+      expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(
+        true,
+      );
+    }
+    // Wheel over a modal does not scroll the page behind it.
+    await dialog.hover();
+    await page.mouse.wheel(0, 600);
+    expect(await scrollY(page)).toBe(before);
+
+    await page.getByTestId("media-next").click();
+    await expectCarouselAt(page.getByTestId("media-carousel"), "moon-over-ridges");
+    await expect(page.getByTestId("media-count")).toHaveText("3 / 6");
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    // Focus returns to the control that opened it, and the page is where the visitor left it.
+    await expect(thumbnail).toBeFocused();
+    expect(Math.abs((await scrollY(page)) - before)).toBeLessThanOrEqual(2);
+  });
+
+  test("Gallery decodes every plate", async ({ page }) => {
+    await openPlayground(page);
+    await page.getByTestId("open-lightbox").scrollIntoViewIfNeeded();
+    await page.getByTestId("open-lightbox").click();
+    const carousel = page.getByTestId("media-carousel");
+    const ids = await page
+      .locator("[data-testid^='media-thumbnail-image-']")
+      .evaluateAll((images) =>
+        images.map((image) =>
+          image.getAttribute("data-testid")!.replace("media-thumbnail-image-", ""),
+        ),
+      );
+    expect(ids).toHaveLength(6);
+    for (const [index, id] of ids.entries()) {
+      if (index > 0) await page.getByTestId("media-next").click();
+      await expectCarouselAt(carousel, id);
+      await expect(page.getByTestId(`media-frame-${id}`)).toHaveAttribute(
+        "data-media-state",
+        "loaded",
+      );
+      const natural = await page
+        .getByTestId(`media-image-${id}`)
+        .evaluate((image: HTMLImageElement) => image.naturalWidth);
+      expect(natural).toBeGreaterThan(0);
+    }
+  });
+
+  test("Sheet opens on its chosen side, keeps the page still and returns focus", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    const opener = page.getByTestId("open-sheet");
+    await opener.scrollIntoViewIfNeeded();
+    const before = await scrollY(page);
+
+    await expect(opener).toHaveText("Open bottom sheet");
+    await opener.click();
+    const dialog = page.getByTestId("sheet");
+    await expectSheetOpenAt(dialog, "comfortable");
+    await dialog.hover();
+    await page.mouse.wheel(0, 600);
+    expect(await scrollY(page)).toBe(before);
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    await expect(opener).toBeFocused();
+    expect(Math.abs((await scrollY(page)) - before)).toBeLessThanOrEqual(2);
+
+    await page.getByTestId("sheet-side-left").click();
+    await expect(page.getByTestId("sheet-side-left")).toHaveAttribute("aria-pressed", "true");
+    await expect(opener).toHaveText("Open left sheet");
+    await opener.click();
+    await expectSheetOpenAt(dialog, "open");
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+  });
+
+  test("a held drag on the Grid edge follows the shared elasticity from any section", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    const grid = page.getByTestId("paged-grid");
+
+    async function heldOverdrag(): Promise<number> {
+      let held = Number.NaN;
+      await dragSyntheticPointerBy(page, grid, 240, 0, {
+        beforeRelease: async () => {
+          await page.evaluate(
+            () =>
+              new Promise<void>((resolve) =>
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+              ),
+          );
+          held = await grid
+            .locator(".page-track")
+            .evaluate((track) => new DOMMatrix(getComputedStyle(track).transform).m41);
+        },
+        steps: 8,
+      });
+      await expectCarouselAt(grid, "page-1");
+      return held;
+    }
+
+    const balanced = await heldOverdrag();
+    expect(balanced).toBeGreaterThan(8);
+
+    // The edit is made in the Sheet section's editor, not next to the Grid.
+    await openEditor(page, "sheet");
+    await field(page, "Elastic limit").fill("0");
+    await field(page, "Elastic limit").blur();
+    await expect(tuningState(page, "paged-grid")).toHaveText("Balanced · Modified (1)");
+    expect(await heldOverdrag()).toBe(0);
+
+    await section(page, "paged-grid").getByTestId("preset-loose").click();
+    await expectEveryBarShows(page, "Loose · Preset");
+    expect(await heldOverdrag()).toBeGreaterThan(balanced);
+  });
+});
+
+test.describe("shared Motion Tuning", () => {
+  test("every section shows the same preset and a preset change reaches them all", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    await expectEveryBarShows(page, "Balanced · Preset");
+
+    for (const name of presetNames) {
+      // Click in a different section each time: any bar is a valid entry point.
+      const entry = sectionIds[presetNames.indexOf(name) % sectionIds.length]!;
+      await section(page, entry).getByTestId(`preset-${name}`).click();
+      await expectEveryBarShows(page, `${presetLabels[name]} · Preset`);
+      for (const id of sectionIds) {
+        for (const other of presetNames) {
+          await expect(section(page, id).getByTestId(`preset-${other}`)).toHaveAttribute(
+            "aria-pressed",
+            String(other === name),
+          );
+        }
+      }
+    }
+  });
+
+  test("the editor shows exactly the selected preset's engine values", async ({ page }) => {
+    await openPlayground(page);
+    await openEditor(page, "coverflow");
+    for (const name of presetNames) {
+      await section(page, "coverflow").getByTestId(`preset-${name}`).click();
+      for (const [label, value] of Object.entries(expectedFieldValues(name))) {
+        await expect(field(page, label)).toHaveValue(String(value));
+      }
+    }
+    // Tight stays the package default; Balanced stays the lab's starting choice.
+    expect(MOTION_PRESETS.tight.spring.stiffness).toBe(520);
+  });
+
+  test("only one detailed editor exists, and each section keeps its own entry point", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    await expect(editor(page)).toHaveCount(0);
+
+    for (const id of ["coverflow", "paged-grid", "gallery"]) {
+      await openEditor(page, id);
+      await expect(editor(page)).toHaveCount(1);
+      await expect(section(page, id).getByTestId("tuning-panel")).toHaveCount(1);
+      for (const other of sectionIds.filter((candidate) => candidate !== id)) {
+        await expect(section(page, other).getByTestId("tuning-customize")).toHaveAttribute(
+          "aria-expanded",
+          "false",
+        );
+      }
+    }
+
+    await section(page, "gallery").getByTestId("tuning-customize").click();
+    await expect(editor(page)).toHaveCount(0);
+  });
+
+  test("Close editor returns focus to Customize", async ({ page }) => {
+    await openPlayground(page);
+    await openEditor(page, "stacked-deck");
+    await editor(page).getByRole("button", { name: "Close editor" }).click();
+    await expect(editor(page)).toHaveCount(0);
+    await expect(section(page, "stacked-deck").getByTestId("tuning-customize")).toBeFocused();
+  });
+
+  test("edits mark every section Modified, Reset restores exactly, and a preset replaces edits", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    for (const id of sectionIds)
+      await expect(section(page, id).getByTestId("tuning-reset")).toBeDisabled();
+
+    await openEditor(page, "coverflow");
+    await field(page, "Stiffness").fill("500");
+    await field(page, "Damping").fill("30");
+    await expectEveryBarShows(page, "Balanced · Modified (2)");
+    for (const id of sectionIds)
+      await expect(section(page, id).getByTestId("tuning-reset")).toBeEnabled();
+
+    await section(page, "sheet").getByTestId("tuning-reset").click();
+    await expectEveryBarShows(page, "Balanced · Preset");
+    await expect(field(page, "Stiffness")).toHaveValue("400");
+    await expect(field(page, "Damping")).toHaveValue("36");
+
+    await field(page, "Mass").fill("2");
+    await expectEveryBarShows(page, "Balanced · Modified (1)");
+    await section(page, "gallery").getByTestId("preset-heavy").click();
+    await expectEveryBarShows(page, "Heavy · Preset");
+    await expect(field(page, "Mass")).toHaveValue(String(MOTION_PRESETS.heavy.spring.mass));
+  });
+
+  test("numeric entry validates, bounds, discards and reflects a slider", async ({ page }) => {
+    await openPlayground(page);
+    await openEditor(page, "coverflow");
+    const stiffness = field(page, "Stiffness");
+    const slider = editor(page).getByRole("slider", { name: "Stiffness slider", exact: true });
+
+    await stiffness.fill("");
+    await expect(page.getByTestId("physics-error-stiffness")).toBeVisible();
+    await expect(tuningState(page, "coverflow")).toHaveText("Balanced · Preset");
+
+    await stiffness.fill("99999");
+    await expect(page.getByTestId("physics-error-stiffness")).toBeVisible();
+    await stiffness.blur();
+    await expect(stiffness).toHaveValue("900");
+    await expect(slider).toHaveValue("900");
+    await expect(tuningState(page, "coverflow")).toHaveText("Balanced · Modified (1)");
+
+    await stiffness.fill("12");
+    await stiffness.press("Escape");
+    await expect(stiffness).toHaveValue("900");
+
+    await slider.focus();
+    await slider.press("Home");
+    await expect(stiffness).toHaveValue("50");
+    await expect(slider).toHaveValue("50");
+
+    // Integer-only field: a fractional skip is never accepted.
+    const skip = field(page, "Maximum skip");
+    await skip.fill("2.5");
+    await expect(page.getByTestId("physics-error-maxAnchorSkip")).toBeVisible();
+    await skip.blur();
+    await expect(skip).toHaveValue("2");
+  });
+
+  test("Stacked Deck's fixed skip is explained while the stored value stays shared", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    await openEditor(page, "coverflow");
+    await field(page, "Maximum skip").fill("3");
+    await field(page, "Maximum skip").blur();
+    await expectEveryBarShows(page, "Balanced · Modified (1)");
+
+    await openEditor(page, "stacked-deck");
+    const skip = field(page, "Maximum skip");
+    await expect(skip).toBeDisabled();
+    await expect(skip).toHaveValue("1");
+    await expect(page.getByTestId("physics-note-maxAnchorSkip")).toContainText("Fixed at 1");
+    await expect(page.getByTestId("physics-note-maxAnchorSkip")).toContainText("Stored value: 3");
+    await expect(editor(page).getByRole("slider", { name: "Maximum skip slider" })).toHaveCount(0);
+
+    // Another surface still reads and edits the stored value.
+    await openEditor(page, "paged-grid");
+    await expect(field(page, "Maximum skip")).toBeEnabled();
+    await expect(field(page, "Maximum skip")).toHaveValue("3");
+  });
+
+  test("live edits reach mounted surfaces without remounting any of them", async ({ page }) => {
+    await openPlayground(page);
+    const roots = [
+      ".coverflow-demo",
+      ".stacked-deck-demo",
+      ".grid-demo",
+      ".media-demo",
+      ".sheet-demo",
+    ];
+    for (const selector of roots) {
+      await page.locator(selector).evaluate((element) => {
+        (element as HTMLElement).dataset.mountProbe = "original";
+      });
+    }
+    const thumbnails = await page.locator(".media-thumbnail-visual img").elementHandles();
+
+    await section(page, "gallery").getByTestId("preset-loose").click();
+    await openEditor(page, "sheet");
+    await field(page, "Stiffness").fill("333");
+    await section(page, "coverflow").getByTestId("preset-heavy").click();
+    await expectEveryBarShows(page, "Heavy · Preset");
+
+    for (const selector of roots) {
+      await expect(page.locator(selector)).toHaveAttribute("data-mount-probe", "original");
+    }
+    const after = await page.locator(".media-thumbnail-visual img").elementHandles();
+    expect(after).toHaveLength(thumbnails.length);
+    for (const [index, handle] of thumbnails.entries()) {
+      expect(await handle.evaluate((node, other) => node === other, after[index])).toBe(true);
+    }
+  });
+
+  test("tuning controls keep focus while the configuration changes", async ({ page }) => {
+    await openPlayground(page);
+    const heavy = section(page, "paged-grid").getByTestId("preset-heavy");
+    await heavy.focus();
+    await page.keyboard.press("Enter");
+    await expectEveryBarShows(page, "Heavy · Preset");
+    await expect(heavy).toBeFocused();
+
+    await openEditor(page, "paged-grid");
+    const stiffness = field(page, "Stiffness");
+    await stiffness.click();
+    await stiffness.press("ControlOrMeta+a");
+    await page.keyboard.type("450");
+    await expect(stiffness).toBeFocused();
+    await expect(tuningState(page, "paged-grid")).toHaveText("Heavy · Modified (1)");
+    await expect(stiffness).toHaveValue("450");
+  });
+});
+
+test.describe("reduced motion", () => {
+  test("a system reduced-motion preference is stated and can be overridden", async ({ page }) => {
+    await openPlayground(page, "reduce");
+    for (const id of sectionIds)
+      await expect(section(page, id).getByRole("note")).toContainText("Reduced motion is on");
+
+    await openEditor(page, "coverflow");
+    await expect(page.getByTestId("spring-preview")).toHaveAttribute("data-skipped", "true");
+    await expect(page.getByTestId("motion-system")).toHaveAttribute("aria-pressed", "true");
+
+    await section(page, "gallery").getByRole("button", { name: "Play full motion" }).click();
+    for (const id of sectionIds) await expect(section(page, id).getByRole("note")).toHaveCount(0);
+    await expect(page.getByTestId("motion-full")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("spring-preview")).toHaveAttribute("data-skipped", "false");
+    await expect(page.getByTestId("coverflow-viewport")).toHaveAttribute(
+      "data-reduced-motion",
+      "false",
+    );
+  });
+
+  test("full motion springs, and Reduced resolves the same target without them", async ({
+    page,
+  }) => {
+    await openPlayground(page, "no-preference");
+    for (const id of sectionIds) await expect(section(page, id).getByRole("note")).toHaveCount(0);
+
+    const coverflow = page.getByTestId("coverflow-viewport");
+    await expect(coverflow).toHaveAttribute("data-reduced-motion", "false");
+    await section(page, "coverflow").getByTestId("coverflow-next").click();
+    await expectCarouselAt(coverflow, "team");
+
+    await openEditor(page, "coverflow");
+    await page.getByTestId("motion-reduced").click();
+    await expect(coverflow).toHaveAttribute("data-reduced-motion", "true");
+    for (const id of sectionIds)
+      await expect(section(page, id).getByRole("note")).toContainText("Reduced motion is on");
+    await section(page, "coverflow").getByTestId("coverflow-next").click();
+    await expectCarouselAt(coverflow, "settings");
+  });
+
+  test("the spring preview describes the spring and states its limits", async ({ page }) => {
+    await openPlayground(page, "no-preference");
+    await openEditor(page, "coverflow");
+    const readout = page.getByTestId("spring-readout");
+    await expect(readout).toContainText(/Settles in \d+\.\d{2} s/);
+
+    await field(page, "Damping").fill("6");
+    await expect(readout).toContainText(/Overshoot \d+%/);
+    await field(page, "Damping").fill("100");
+    await expect(readout).toContainText("No overshoot");
+    await expect(page.getByTestId("spring-preview")).toContainText("Release velocity");
+  });
+});
+
+test.describe("document structure", () => {
+  test("keeps every id unique while editors and modals are open", async ({ page }) => {
+    await openPlayground(page);
+    expect(await duplicateIds(page)).toEqual([]);
+
+    await openEditor(page, "paged-grid");
+    expect(await duplicateIds(page)).toEqual([]);
+
+    await page.getByTestId("open-lightbox").click();
+    await expect(page.getByTestId("media-lightbox")).toBeVisible();
+    expect(await duplicateIds(page)).toEqual([]);
+    await page.keyboard.press("Escape");
+
+    await page.getByTestId("open-sheet").click();
+    await expectSheetOpenAt(page.getByTestId("sheet"), "comfortable");
+    expect(await duplicateIds(page)).toEqual([]);
+  });
+
+  test("section navigation uses real anchors and browser history", async ({ page }) => {
+    await openPlayground(page);
+    const start = await scrollY(page);
+
+    await page.getByTestId("nav-paged-grid").click();
+    await expect(page).toHaveURL(/#paged-grid$/);
+    const top = await section(page, "paged-grid").evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    expect(top).toBeGreaterThanOrEqual(0);
+    expect(top).toBeLessThan(120);
+    await expect(page.getByTestId("nav-paged-grid")).toHaveAttribute("aria-current", "location");
+
+    await page.getByTestId("nav-sheet").click();
+    await expect(page).toHaveURL(/#sheet$/);
+
+    await page.goBack();
+    await expect(page).toHaveURL(/#paged-grid$/);
+    await page.goBack();
+    await expect(page).not.toHaveURL(/#/);
+    await expect.poll(() => scrollY(page)).toBeLessThan(start + 40);
+    await page.goForward();
+    await expect(page).toHaveURL(/#paged-grid$/);
+  });
+
+  test("shows visible keyboard focus on the page's own controls", async ({ page, browserName }) => {
+    await openPlayground(page);
+    const skip = page.getByRole("link", { name: "Skip to the demonstrations" });
+    // WebKit keeps links out of the Tab order unless the user opts in, so reach it directly there.
+    if (browserName === "webkit") await skip.focus();
+    else await page.keyboard.press("Tab");
+    await expect(skip).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/#coverflow$/);
+
+    for (const locator of [
+      section(page, "coverflow").getByTestId("preset-tight"),
+      section(page, "coverflow").getByTestId("tuning-customize"),
+    ]) {
+      await locator.focus();
+      await page.keyboard.press("Shift+Tab");
+      await page.keyboard.press("Tab");
+      await expect(locator).toBeFocused();
+      const outline = await locator.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { width: Number.parseFloat(style.outlineWidth), style: style.outlineStyle };
+      });
+      expect(outline.style).not.toBe("none");
+      expect(outline.width).toBeGreaterThanOrEqual(2);
+    }
+
+    // Customize is a real disclosure button operable from the keyboard.
+    const customize = section(page, "coverflow").getByTestId("tuning-customize");
+    await customize.focus();
+    await page.keyboard.press("Enter");
+    await expect(customize).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Space");
+    await expect(customize).toHaveAttribute("aria-expanded", "false");
+  });
+});

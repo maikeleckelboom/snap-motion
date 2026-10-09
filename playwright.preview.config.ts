@@ -1,8 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { previewSpecs } from "./config/browserOwnership";
+
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "media-preview.spec.ts",
+  testMatch: previewSpecs,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   failOnFlakyTests: Boolean(process.env.CI),

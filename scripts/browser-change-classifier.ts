@@ -92,6 +92,7 @@ const integrationPaths = new Set([
   "scripts/verifyPackagesBrowser.ts",
   "scripts/certifySurfacePreferences.ts",
   "e2e/media-preview.spec.ts",
+  "e2e/playground-preview.spec.ts",
 ]);
 
 function normalizedPath(path: string): string {

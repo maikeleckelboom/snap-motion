@@ -2,9 +2,9 @@ import { readdir } from "node:fs/promises";
 
 import { expect, it } from "vitest";
 
-import { chromiumScope } from "../config/browserOwnership.ts";
+import { chromiumScope, previewSpecs } from "../config/browserOwnership.ts";
 
-it("partitions every source spec exactly once and never admits the production-preview spec", async () => {
+it("partitions every source spec exactly once and never admits a production-preview spec", async () => {
   const files = (await readdir(new URL("../e2e/", import.meta.url))).filter((file) =>
     file.endsWith(".spec.ts"),
   );
@@ -17,7 +17,7 @@ it("partitions every source spec exactly once and never admits the production-pr
   });
   const selected = groups.flat();
   expect(selected.toSorted()).toEqual(
-    files.filter((file) => file !== "media-preview.spec.ts").toSorted(),
+    files.filter((file) => !previewSpecs.includes(file)).toSorted(),
   );
   expect(new Set(selected).size).toBe(selected.length);
 });

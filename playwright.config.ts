@@ -1,8 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { chromiumScope, interoperabilitySpecs } from "./config/browserOwnership";
+import { chromiumScope, interoperabilitySpecs, previewSpecs } from "./config/browserOwnership";
 
-const mediaPreviewSpec = "media-preview.spec.ts";
 const stackedDeckSpec = "stacked-deck.spec.ts";
 const stackedDeckDirectSpec = "stacked-deck-direct.spec.ts";
 const stackedDeckPileSpec = "stacked-deck-pile.spec.ts";
@@ -13,7 +12,7 @@ const testUrl = `http://127.0.0.1:${testPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: mediaPreviewSpec,
+  testIgnore: previewSpecs,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,

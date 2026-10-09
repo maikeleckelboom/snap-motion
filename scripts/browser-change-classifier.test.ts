@@ -163,6 +163,7 @@ describe("verification ownership by path class", () => {
     "scripts/verifyPackagesBrowser.ts",
     "scripts/certifySurfacePreferences.ts",
     "e2e/media-preview.spec.ts",
+    "e2e/playground-preview.spec.ts",
     "fixture-e2e/router.spec.ts",
     "fixtures/packed-consumers/package.template.json",
   ])("requires integration with its Linux static owners for %s", (path) => {
