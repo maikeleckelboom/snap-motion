@@ -538,10 +538,12 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
   margin-inline-start: 0;
 }
 
+/* No frame: the tiles are the surface. The clip keeps the tiles' own corner radius so a dragged page
+   leaves the viewport on the same curve it was drawn with. */
 .is-playground .grid-viewport {
-  border: 1px solid var(--pg-line);
-  border-radius: 0.9rem;
-  background: var(--pg-panel);
+  border: 0;
+  border-radius: 0.6rem;
+  background: transparent;
 }
 
 .is-playground .grid-item {
