@@ -77,11 +77,47 @@ function certificationMediaPlugin(): Plugin {
   };
 }
 
+/**
+ * The Playground is a directory entry (`playground/index.html`). A static host such as Cloudflare
+ * Pages redirects `/playground` to `/playground/` itself; the dev and preview servers would
+ * otherwise fall through to the Lab's single-page fallback, so they redirect the same way.
+ */
+function playgroundTrailingSlashPlugin(): Plugin {
+  const redirect =
+    (base: string) => (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+      const url = new URL(request.url ?? "/", "http://snap-motion.local");
+      if (url.pathname !== `${base}playground`) {
+        next();
+        return;
+      }
+      response.statusCode = 308;
+      response.setHeader("Location", `${base}playground/${url.search}`);
+      response.end();
+    };
+
+  return {
+    name: "snap-motion-playground-trailing-slash",
+    configurePreviewServer(server) {
+      server.middlewares.use(redirect(server.config.base));
+    },
+    configureServer(server) {
+      server.middlewares.use(redirect(server.config.base));
+    },
+  };
+}
+
 export default defineConfig(({ command }) => ({
   build: {
     assetsInlineLimit: 0,
+    rolldownOptions: {
+      input: {
+        // `index` keeps the Lab's emitted asset names unchanged.
+        index: fileURLToPath(new URL("./index.html", import.meta.url)),
+        playground: fileURLToPath(new URL("./playground/index.html", import.meta.url)),
+      },
+    },
   },
-  plugins: [certificationMediaPlugin(), vue()],
+  plugins: [certificationMediaPlugin(), playgroundTrailingSlashPlugin(), vue()],
   resolve: {
     alias: [
       { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
