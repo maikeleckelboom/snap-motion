@@ -1917,6 +1917,37 @@ onBeforeUnmount(() => {
   .is-playground .fixture-thumbnail-copy {
     padding: 0 0.1rem;
   }
+
+  /*
+   * On a phone the viewer takes the full width and the arrows move to a row beneath it, instead of
+   * squeezing a 16:10 box between two arrow columns. Item positions are horizontal-only, so a taller
+   * stage changes no geometry the carousel measures.
+   */
+  .is-playground .carousel-frame {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    row-gap: 0.75rem;
+  }
+
+  .is-playground .carousel-viewport {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    inline-size: 100%;
+    block-size: 100%;
+    aspect-ratio: auto;
+  }
+
+  .is-playground .previous-control {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .is-playground .next-control {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
