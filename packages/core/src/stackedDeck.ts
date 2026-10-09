@@ -300,6 +300,19 @@ const CROSSOVER_CLEARANCE = 2;
 const PILE_OCCLUSION_ENTER = 0.25;
 const PILE_OCCLUSION_EXIT = 0.75;
 const PILE_OCCLUDED_SCALE = 0.72;
+/**
+ * How far into the Direct under-card's route it has finished withdrawing, as pile progress, and how
+ * far from the end it starts tucking back. Between the two it stands exactly clear of the target,
+ * from 0.35 to 0.65: a frame that steps over the midpoint, where depth changes, still lands with
+ * the two bodies apart unless it skips that whole stretch.
+ */
+const NEUTRAL_COVER_WITHDRAWN = 0.35;
+/**
+ * Narrowest the withdrawn under-card may become, as a scale. Never reached by a target rising from
+ * the pile; it only keeps a target still landing far out from squeezing the body to nothing, which
+ * would be hiding it rather than moving it.
+ */
+const NEUTRAL_COVER_MINIMUM_SCALE = 0.3;
 // These are scalar choreography coordinates. Raw pointer axes never select a pile route or handoff.
 const TUNING_NUMBER_KEYS = [
   "cardWidth",
@@ -1006,63 +1019,63 @@ function moveDirectPose(
   pose.role = destination.role;
 }
 
+/** Half the lateral reach of one transformed body: its scaled width plus what its lean lifts. */
+function bodyHalfReach(pose: StackedDeckPose, tuning: StackedDeckTuning): number {
+  const radians = Math.abs(pose.rotate) * (Math.PI / 180);
+  return (
+    (pose.scale * (tuning.cardWidth * Math.cos(radians) + tuning.cardHeight * Math.sin(radians))) /
+    2
+  );
+}
+
 /**
  * Carries the canonical Direct under-card through a scalar-only physical depth exchange.
  *
  * The backward target begins behind this body, so the two cannot exchange paint while the held
- * source is absent. The under-card first recedes without losing opacity, then travels beyond the
- * whole pile while physically small. It changes depth only there, returns inside the target, and
- * finally expands into its destination slot. The route is continuous, reversible, and independent
- * of raw hand Y.
+ * source is absent. The under-card therefore slides out from over the target while it recedes, in
+ * one movement, stands exactly clear of it while depth changes, and tucks back beneath it into its
+ * destination slot. It recedes only as far as the room between the target's edge and the held
+ * card's edge requires, so an ordinary drag carries it in the held card's shadow, background
+ * material stays within what the pile shows at rest, and it stays a card rather than a token
+ * throughout. The route is continuous, reversible, and independent of raw hand Y.
  */
 function moveDirectNeutralCover(
   pose: MutableStackedDeckPose,
   destination: StackedDeckPose,
   cover: StackedDeckPose,
   progress: number,
-  itemCount: number,
   tuning: StackedDeckTuning,
 ): void {
   const sourceLayer = pose.layer;
   const side = Math.sign(pose.translateX || destination.translateX || 1);
-  // Small enough that the opaque body can leave the compact pile without sweeping a card-sized
-  // material face across it, but deliberately non-zero: this is recession, never hiding.
-  const clearScale = Math.min(pose.scale, (2 * tuning.pileOffsetX) / tuning.cardWidth);
-
-  Object.assign(projectionDestinationPose, pose);
-  movePoseGeometry(projectionDestinationPose, destination, PILE_OCCLUSION_ENTER);
-  projectionDestinationPose.scale = clearScale;
-
-  Object.assign(shufflePairPose, projectionDestinationPose);
-  shufflePairPose.translateX = side * wholePileClearSeparation(itemCount, tuning);
-
-  if (progress <= PILE_OCCLUSION_ENTER) {
-    movePoseGeometry(pose, destination, progress);
-    pose.scale = mix(pose.scale, clearScale, smoothstep(progress / PILE_OCCLUSION_ENTER));
-  } else if (progress <= AUTHORITY_MIDPOINT) {
-    Object.assign(pose, projectionDestinationPose);
-    movePoseGeometry(
-      pose,
-      shufflePairPose,
-      smoothstep((progress - PILE_OCCLUSION_ENTER) / (AUTHORITY_MIDPOINT - PILE_OCCLUSION_ENTER)),
-    );
-  } else if (progress <= PILE_OCCLUSION_EXIT) {
-    Object.assign(pose, shufflePairPose);
-    setOccludedPilePose(occludedPilePose, cover);
-    movePoseGeometry(
-      pose,
-      occludedPilePose,
-      smoothstep((progress - AUTHORITY_MIDPOINT) / (PILE_OCCLUSION_EXIT - AUTHORITY_MIDPOINT)),
-    );
-  } else {
-    setOccludedPilePose(pose, cover);
-    movePoseGeometry(
-      pose,
-      destination,
-      smoothstep((progress - PILE_OCCLUSION_EXIT) / (1 - PILE_OCCLUSION_EXIT)),
-    );
-  }
-
+  movePoseGeometry(pose, destination, progress);
+  const halfReach = bodyHalfReach(pose, tuning);
+  const unitReach = halfReach / pose.scale;
+  // Edges measured outward along the side this shell sits on. The inner one must end exactly clear
+  // of the body the target renders on this frame; the outer one stays where a hand at this scalar
+  // travel holds the source's outer edge, so a card dragged out from under an ordinary horizontal
+  // hand is carried in the held card's own shadow rather than swept out past it. Hand travel is
+  // read back from pile progress alone, never from the raw pointer.
+  const inner = side * pose.translateX - halfReach;
+  const outer = side * pose.translateX + halfReach;
+  const innerLimit = side * cover.translateX + bodyHalfReach(cover, tuning) + CROSSOVER_CLEARANCE;
+  const handTravel = 0.5 - Math.sin(Math.asin(1 - 2 * progress) / 3);
+  const outerLimit = Math.max(
+    handTravel * tuning.motionPitch + tuning.cardWidth / 2,
+    innerLimit + 2 * unitReach * NEUTRAL_COVER_MINIMUM_SCALE,
+  );
+  // Zero at both exact endpoints, unit across the whole stretch where depth may change, and flat at
+  // every join, so withdrawal, recession, and return are one continuous movement.
+  const withdrawal =
+    smoothstep(progress / NEUTRAL_COVER_WITHDRAWN) *
+    smoothstep((1 - progress) / NEUTRAL_COVER_WITHDRAWN);
+  const innerShift = (innerLimit - inner) * withdrawal;
+  const outerShift = (outerLimit - outer) * withdrawal;
+  // The body recedes by exactly as much as its two edges close in, and never grows past its pile
+  // scale where the corridor is wider than it is.
+  const recession = Math.max(0, innerShift - outerShift) / 2;
+  pose.scale -= recession / unitReach;
+  pose.translateX += side * (innerShift - recession);
   pose.layer = progress < AUTHORITY_MIDPOINT ? sourceLayer + 1 : destination.layer;
 }
 
@@ -1245,12 +1258,14 @@ function setDirectExchange(
   // crossover. Keep the source above subordinate material until their coordinated depth exchange:
   // the neutral cover then remains below it on both sides, while other changing ranks are covered
   // by the target. This rank depends on pile progress, never on the released hand's raw axes.
-  // With three cards the neutral shell keeps the same folded depth, so it never crosses the
-  // source's rank and needs no intermediate ordering.
+  // With three cards there is no deeper pile to hand depth to: the source and the neutral cover
+  // come to rest as the new top's two mirrored neighbours, whose order is the deck's to choose. The
+  // source keeps the rank it already holds over that shell until the exchange is complete, so the
+  // two never exchange paint on the way; otherwise the neutral cover's sub-rank would lift it over
+  // the source at the midpoint, wherever the two happen to overlap.
   if (
-    itemCount > 3 &&
     targetNeedsClearCrossover &&
-    pileProgress < AUTHORITY_MIDPOINT &&
+    pileProgress < (itemCount === 3 ? 1 - TRAVERSAL_EPSILON : AUTHORITY_MIDPOINT) &&
     outgoing.layer < TARGET_LAYER
   ) {
     outgoing.layer = TARGET_LAYER;
@@ -1260,7 +1275,7 @@ function setDirectExchange(
     const pose = output.poses[index]!;
     setRingPose(resetPose(directDestinationPose), targetIndex, index, itemCount, tuning);
     if (targetNeedsClearCrossover && index === neutralCoverIndex) {
-      moveDirectNeutralCover(pose, directDestinationPose, target, pileProgress, itemCount, tuning);
+      moveDirectNeutralCover(pose, directDestinationPose, target, pileProgress, tuning);
       continue;
     }
     // Every remaining subordinate shell enters the target's footprint before changing depth, then

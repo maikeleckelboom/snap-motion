@@ -100,14 +100,19 @@ Direct keeps semantic direction and physical paint authority separate in one con
 Scalar travel alone selects the target, endpoint rings, and every non-held pose. Raw vertical travel
 moves only the hand-owned source; it is never a deck-layout or paint-authority input. The forward
 ring neighbour is the canonical under-card at neutral. Reversing toward the opposite neighbour
-continuously recedes that under-card to a non-zero scale, carries the opaque body clear of the
-complete pile, changes its depth there, and returns it beneath the target before it expands into its
-destination slot. Every other subordinate shell changes destination depth only inside the target's
-physical occlusion. This same scalar choreography is physically valid even when the held source is
-completely absent from the deck centre. Direction and target still change immediately across cyclic
-and two-item topology; neither raw Y nor target landing lifetime selects between choreographies. A
-return retraces the same geometry and a committed release continues from it because both retain the
-raw release vector.
+slides that under-card out from over the target while it recedes, in one movement. Its outer edge
+stays where an ordinary horizontal hand holds the source's outer edge at that scalar travel, so in
+that drag it is carried in the held card's shadow and exposes no more material than the pile does at
+rest; it recedes only as far as the room between that edge and the target's requires. It stands
+exactly clear of the target's rendered body across a stretch either side of the midpoint, changes
+its depth there, and tucks back beneath the target into its exact destination slot. With three
+cards the departing source keeps its rank over that shell until the exchange completes, because
+their final order is free and they may overlap where it would otherwise change. Every other
+subordinate shell changes destination depth only inside the target's physical occlusion. This same
+scalar choreography is physically valid even when the held source is completely absent from the
+deck centre. Direction and target still change immediately across cyclic and two-item topology;
+neither raw Y nor target landing lifetime selects between choreographies. A return retraces the same
+geometry and a committed release continues from it because both retain the raw release vector.
 
 If the directed target is itself an unfinished landing, Direct first resolves that target on its
 own landing clock. As the body approaches the deck, its actual continuous centre coverage admits the

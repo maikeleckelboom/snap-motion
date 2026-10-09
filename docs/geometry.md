@@ -318,9 +318,10 @@ begins only after the adjacent-card transaction envelope has been consumed.
 
 For each adjacent exchange, Direct derives source and destination ring poses but does not hide an
 invalid deck behind the held shell. Scalar travel alone moves the target and pile. The canonical
-under-card recedes without disappearing, travels physically clear of the complete pile before its
-depth changes, and returns beneath the target; every other subordinate shell changes depth only
-inside the target's physical occlusion. Raw Y cannot select or perturb any of those poses or layers.
+under-card withdraws sideways and recedes in one movement, carried in the held card's shadow under
+an ordinary horizontal hand, stands physically clear of the target before its depth changes, and
+tucks back beneath it; every other subordinate shell changes depth only inside the target's
+physical occlusion. Raw Y cannot select or perturb any of those poses or layers.
 
 A committed raw shell can be far from its compact destination. Parking owns one bounded
 presentation settlement from the exact release X/Y into the exact destination pose. The shell keeps

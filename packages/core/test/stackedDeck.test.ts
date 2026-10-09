@@ -46,6 +46,67 @@ function bodySeparation(
   return Math.abs(left.translateX - right.translateX) - cardHalfWidth(left) - cardHalfWidth(right);
 }
 
+/** Direct pile progress for a held distance: the projection's own reveal of scalar travel. */
+function pileReveal(distance: number) {
+  return distance * distance * (3 - 2 * distance);
+}
+
+/** Half the lateral reach of one transformed card body under any profile. */
+function cardHalfReach(pose: Pick<StackedDeckPose, "scale" | "rotate">, tuning: StackedDeckTuning) {
+  const radians = Math.abs(pose.rotate) * (Math.PI / 180);
+  return (
+    (pose.scale * (tuning.cardWidth * Math.cos(radians) + tuning.cardHeight * Math.sin(radians))) /
+    2
+  );
+}
+
+/**
+ * Exact gap between two transformed card bodies along their best separating axis, from the four
+ * edge normals of the two rotated rectangles. Negative wherever they share material.
+ */
+function rotatedBodyGap(
+  first: StackedDeckPose,
+  second: StackedDeckPose,
+  tuning: StackedDeckTuning,
+) {
+  const corners = (pose: StackedDeckPose) => {
+    const radians = (pose.rotate * Math.PI) / 180;
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
+    const halfWidth = (tuning.cardWidth * pose.scale) / 2;
+    const halfHeight = (tuning.cardHeight * pose.scale) / 2;
+    return [
+      [-halfWidth, -halfHeight],
+      [halfWidth, -halfHeight],
+      [halfWidth, halfHeight],
+      [-halfWidth, halfHeight],
+    ].map(([x, y]) => [
+      pose.translateX + x! * cosine - y! * sine,
+      pose.translateY + x! * sine + y! * cosine,
+    ]);
+  };
+  const firstCorners = corners(first);
+  const secondCorners = corners(second);
+  let gap = Number.NEGATIVE_INFINITY;
+  for (const body of [firstCorners, secondCorners]) {
+    for (let edge = 0; edge < 2; edge += 1) {
+      const [fromX, fromY] = body[edge]!;
+      const [toX, toY] = body[edge + 1]!;
+      const length = Math.hypot(toX! - fromX!, toY! - fromY!);
+      const project = (points: number[][]) =>
+        points.map(([x, y]) => (x! * -(toY! - fromY!) + y! * (toX! - fromX!)) / length);
+      const firstAxis = project(firstCorners);
+      const secondAxis = project(secondCorners);
+      gap = Math.max(
+        gap,
+        Math.min(...secondAxis) - Math.max(...firstAxis),
+        Math.min(...firstAxis) - Math.max(...secondAxis),
+      );
+    }
+  }
+  return gap;
+}
+
 function cardBounds(pose: StackedDeckPose, tuning: StackedDeckTuning) {
   const radians = (pose.rotate * Math.PI) / 180;
   const cosine = Math.abs(Math.cos(radians));
@@ -1608,6 +1669,261 @@ describe("Direct stacked deck projection", () => {
       // Deliberately one sequence. Splitting this at zero omits the only consecutive pair capable
       // of proving that an exposed pile did not exchange material when direction changed.
       expectEveryPaintSwapSafe(frames);
+    }
+  });
+
+  /**
+   * The backward under-card crossover, measured where it is exposed: the held source is carried
+   * vertically clear of the deck, so nothing covers either body while depth changes.
+   */
+  const crossoverProfiles = [
+    ["compact", resolveStackedDeckTuning({ stageWidth: 375, stageHeight: 520 })],
+    ["medium", resolveStackedDeckTuning({ stageWidth: 760, stageHeight: 620 })],
+    ["wide", WIDE_TUNING],
+  ] as const;
+
+  function exposedBackwardFrame(
+    tuning: StackedDeckTuning,
+    itemCount: number,
+    originIndex: number,
+    distance: number,
+    translateY = tuning.cardHeight + Math.max(32, tuning.cardHeight * 0.12),
+  ) {
+    const targetIndex = resolveStackedDeckNeighbor(originIndex, -1, itemCount);
+    return resolveStackedDeckFrame(
+      {
+        itemCount,
+        traversal:
+          distance === 0
+            ? traversal({
+                authoritativeIndex: originIndex,
+                segmentOriginIndex: originIndex,
+                settledIndex: originIndex,
+                visualTopIndex: originIndex,
+              })
+            : segmentForCount(originIndex, -1, distance, itemCount),
+        tuning,
+        direct: {
+          direction: -1,
+          originIndex,
+          phase: "held",
+          settlement: 0,
+          signedTravel: -distance,
+          targetIndex,
+          translateX: distance * tuning.motionPitch,
+          translateY,
+        },
+      },
+      createStackedDeckFrame(itemCount),
+    ).poses.map((pose) => ({ ...pose }));
+  }
+
+  it("withdraws the backward under-card in the held card's shadow, just clear, then beneath", () => {
+    const samples = Array.from({ length: 399 }, (_unused, index) => (index + 1) / 400);
+    for (const [profile, tuning] of crossoverProfiles) {
+      for (const itemCount of [3, 5, 7]) {
+        for (const originIndex of [1, 0]) {
+          const label = `${profile} ${itemCount} cards from ${originIndex}`;
+          const coverIndex = resolveStackedDeckNeighbor(originIndex, 1, itemCount);
+          const targetIndex = resolveStackedDeckNeighbor(originIndex, -1, itemCount);
+          const rest = exposedBackwardFrame(tuning, itemCount, originIndex, 0);
+          const frames = samples.map((distance) =>
+            exposedBackwardFrame(tuning, itemCount, originIndex, distance),
+          );
+          const covers = frames.map((poses) => poses[coverIndex]!);
+          const restCover = rest[coverIndex]!;
+          const apex = covers.reduce((far, cover) =>
+            cover.translateX > far.translateX ? cover : far,
+          );
+          const smallest = Math.min(...covers.map((cover) => cover.scale));
+
+          // A card throughout, several times the near-vanishing body the shell once became, and
+          // never swept further out than that body's own route reached.
+          expect(smallest / restCover.scale, `${label} recession`).toBeGreaterThan(0.33);
+          for (const cover of covers) {
+            expect(cover.translateX + cardHalfReach(cover, tuning), `${label} reach`).toBeLessThan(
+              1.08 * tuning.cardWidth,
+            );
+          }
+
+          // Withdrawal and recession are one movement: on the way out, the share of the lateral
+          // excursion already made never falls far behind the share of scale already given up. A
+          // shell that shrank in place and only then travelled would be fully receded with nothing
+          // travelled.
+          const recededIndex = covers.findIndex((cover) => cover.scale === smallest);
+          for (let index = 0; index <= recededIndex; index += 1) {
+            const cover = covers[index]!;
+            const travelled =
+              (cover.translateX - restCover.translateX) / (apex.translateX - restCover.translateX);
+            const receded = (restCover.scale - cover.scale) / (restCover.scale - smallest);
+            expect(travelled - receded, `${label} at ${samples[index]}`).toBeGreaterThan(-0.3);
+          }
+
+          // Under an ordinary horizontal hand it is carried in the held card's shadow: until it
+          // has gone beneath the target it never reaches past the held card's outer edge further
+          // than one of its own resting edges already does, so it exposes no material the pile
+          // does not at rest.
+          const destinationCover = exposedBackwardFrame(tuning, itemCount, originIndex, 1)[
+            coverIndex
+          ]!;
+          const restOuter = Math.max(
+            restCover.translateX + cardHalfReach(restCover, tuning),
+            destinationCover.translateX + cardHalfReach(destinationCover, tuning),
+          );
+          for (const distance of samples.filter((sample) => pileReveal(sample) < 0.5)) {
+            const poses = exposedBackwardFrame(tuning, itemCount, originIndex, distance, 0);
+            const cover = poses[coverIndex]!;
+            const source = poses[originIndex]!;
+            expect(
+              cover.translateX + cardHalfReach(cover, tuning),
+              `${label} outer edge at ${distance}`,
+            ).toBeLessThanOrEqual(
+              Math.max(restOuter, source.translateX + cardHalfReach(source, tuning)) + 1e-6,
+            );
+          }
+
+          frames.forEach((poses, index) => {
+            const distance = samples[index]!;
+            const cover = poses[coverIndex]!;
+            const target = poses[targetIndex]!;
+            // Above the target until the midpoint, beneath it after: one depth change.
+            expect(cover.layer > target.layer, `${label} order at ${distance}`).toBe(
+              pileReveal(distance) < 0.5,
+            );
+            if (index === 0) return;
+            const previous = frames[index - 1]![coverIndex]!;
+            expect(
+              Math.abs(cover.translateX - previous.translateX),
+              `${label} lateral step at ${distance}`,
+            ).toBeLessThan(0.015 * tuning.cardWidth);
+            expect(Math.abs(cover.scale - previous.scale), `${label} scale step`).toBeLessThan(
+              0.01,
+            );
+          });
+
+          // Exactly clear across a whole stretch either side of that change, so a frame that
+          // steps over the midpoint lands with the two bodies apart on both sides of it.
+          const crossingGaps = frames
+            .filter((_poses, index) => samples[index]! >= 0.4 && samples[index]! <= 0.6)
+            .map((poses) => rotatedBodyGap(poses[coverIndex]!, poses[targetIndex]!, tuning));
+          expect(crossingGaps.length, `${label} crossing samples`).toBeGreaterThan(70);
+          expect(Math.min(...crossingGaps), `${label} clearance`).toBeGreaterThanOrEqual(1.99);
+
+          // Exact at both ends: the source rest just after the hand moves, the destination ring
+          // at a whole pitch.
+          const departed = exposedBackwardFrame(tuning, itemCount, originIndex, 1e-9)[coverIndex]!;
+          expect(poseGeometry(departed).translateX).toBeCloseTo(restCover.translateX, 6);
+          expect(poseGeometry(departed).scale).toBeCloseTo(restCover.scale, 6);
+          const arrived = exposedBackwardFrame(tuning, itemCount, originIndex, 1)[coverIndex]!;
+          const destination = resolveStackedDeckFrame(
+            {
+              itemCount,
+              traversal: traversal({
+                authoritativeIndex: targetIndex,
+                segmentOriginIndex: targetIndex,
+                settledIndex: targetIndex,
+                visualTopIndex: targetIndex,
+              }),
+              tuning,
+            },
+            createStackedDeckFrame(itemCount),
+          ).poses[coverIndex]!;
+          expect(poseGeometry(arrived)).toEqual(poseGeometry(destination));
+          expect(arrived.layer).toBe(destination.layer);
+
+          // Raw hand Y owns the source alone.
+          for (const distance of [0.2, 0.45, 0.5, 0.55, 0.8]) {
+            const unexposed = exposedBackwardFrame(tuning, itemCount, originIndex, distance, 0);
+            const exposed = frames[Math.round(distance * 400) - 1]!;
+            expect(unexposed[coverIndex]).toEqual(exposed[coverIndex]);
+            expect(unexposed[targetIndex]).toEqual(exposed[targetIndex]);
+          }
+        }
+      }
+    }
+  });
+
+  it("keeps the backward crossover physical through slow drags, pauses, and reversals", () => {
+    const checkpoints = [0, -0.3, -0.48, -0.4, -0.53, -0.47, -0.62, -0.38, -0.9, -0.55, -1, 0];
+    for (const [profile, tuning] of crossoverProfiles) {
+      for (const itemCount of [2, 3, 5, 7]) {
+        const travels: number[] = [];
+        let prior = 0;
+        for (const checkpoint of checkpoints) {
+          const steps = Math.max(1, Math.ceil(Math.abs(checkpoint - prior) * 200));
+          for (let step = 1; step <= steps; step += 1) {
+            travels.push(prior + ((checkpoint - prior) * step) / steps);
+          }
+          // A paused hand renders the same frame again; nothing may move or swap while it waits.
+          travels.push(checkpoint, checkpoint);
+          prior = checkpoint;
+        }
+        const frames = travels.map((travel) => ({
+          poses: exposedBackwardFrame(tuning, itemCount, 1 % itemCount, Math.abs(travel)),
+          progress: travel,
+        }));
+        for (let index = 1; index < frames.length; index += 1) {
+          if (travels[index] !== travels[index - 1]) continue;
+          expect(frames[index]!.poses, `${profile} ${itemCount} paused`).toEqual(
+            frames[index - 1]!.poses,
+          );
+        }
+        // One physical frame per scalar, whichever way the hand arrived at it.
+        const firstArrival = new Map<number, StackedDeckPose[]>();
+        for (const frame of frames) {
+          if (!firstArrival.has(frame.progress)) firstArrival.set(frame.progress, frame.poses);
+        }
+        for (const frame of frames) {
+          expect(frame.poses, `${profile} ${itemCount} at ${frame.progress}`).toEqual(
+            firstArrival.get(frame.progress),
+          );
+        }
+        expectEveryPaintSwapSafe(frames, tuning);
+        // Two items have no under-card to withdraw, since the only other card is the target
+        // itself; with more, the withdrawn under-card still stays a card.
+        expect(
+          Math.min(...frames.flatMap((frame) => frame.poses.map((pose) => pose.scale))),
+          `${profile} ${itemCount} smallest body`,
+        ).toBeGreaterThan(itemCount === 2 ? 0.9 : 0.3);
+      }
+    }
+  });
+
+  it("never lets an autonomous exchange lift the neutral cover over its departing source", () => {
+    for (const [profile, tuning] of crossoverProfiles) {
+      for (const itemCount of [3, 5, 7]) {
+        for (const direction of [-1, 1] as const) {
+          const originIndex = 1;
+          const targetIndex = resolveStackedDeckNeighbor(originIndex, direction, itemCount);
+          const frames = Array.from({ length: 499 }, (_unused, index) => {
+            const distance = (index + 1) / 500;
+            return {
+              poses: resolveStackedDeckFrame(
+                {
+                  direct: {
+                    direction,
+                    originIndex,
+                    settlement: 0,
+                    signedTravel: direction * distance,
+                    targetIndex,
+                    translateX: 0,
+                    translateY: 0,
+                  },
+                  itemCount,
+                  traversal: segmentForCount(originIndex, direction, distance, itemCount),
+                  tuning,
+                },
+                createStackedDeckFrame(itemCount),
+              ).poses.map((pose) => ({ ...pose })),
+              progress: direction * distance,
+            };
+          });
+          // With three cards the source swings clear of the target exactly where the neutral cover
+          // has to stand, so the two may never exchange paint on the way.
+          expect(frames.length, `${profile} ${itemCount} ${direction}`).toBe(499);
+          expectEveryPaintSwapSafe(frames, tuning);
+        }
+      }
     }
   });
 
