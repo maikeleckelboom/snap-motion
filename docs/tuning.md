@@ -1,5 +1,8 @@
 # Tuning in the lab
 
+This page covers the engineering Lab. The public Playground at `/playground/` exposes the same
+shared configuration to visitors; see [Tuning in the Playground](#tuning-in-the-playground) below.
+
 Run `pnpm dev` and choose one interaction surface. The default Showcase keeps the interaction as the
 primary decision. Select **Workbench** or **Inspect motion** to use the same surface with compact live
 telemetry; expand **Advanced physics** for grouped tuning and **Full diagnostics** for surface-specific
@@ -59,3 +62,28 @@ Compact telemetry exposes phase, active or visual item, rendered position, and v
 diagnostics retain intended target, semantic ID, bounds, viewport, extent, reduced-motion state,
 pointer ownership, animation status, and surface-specific values. Measured anchors have a separate
 disclosure. All remain lab-only observability and are not part of reusable primitives.
+
+## Tuning in the Playground
+
+`pnpm dev` also serves the public page at `/playground/`; `pnpm build` emits it beside the Lab as
+`playground/index.html`, so it works under any base (the preview gate uses `/snap-motion/`).
+
+Every section has a **Motion tuning** bar under its stage: the Tight, Balanced, Heavy and Loose
+presets, the selected base preset with **Preset** or **Modified (n)**, **Reset**, and **Customize**.
+The bars are views of one configuration owned by `useSharedPhysics`, the same owner the Lab uses, so a
+change made in any section moves all five surfaces and every bar agrees. Modified counts every shared
+value against the base preset, including values a surface fixes or ignores. Choosing a preset replaces
+manual edits and unfinished drafts; Balanced is the starting choice and Tight remains the package
+default.
+
+**Customize** opens the five parameter groups (Spring, Release, Boundaries, Buttons & keys, Settling
+precision) below that section's bar, using the same fields, validation and ranges as the Lab's
+Workbench. One editor is open at a time, so ids, drafts and focus have a single owner; opening
+another section's editor closes the first and keeps the control you pressed where it was. Stacked Deck
+shows **Maximum skip = 1** as fixed and names the shared stored value other surfaces still use.
+
+The **spring response** plot samples the engine's own spring stepper and rest rule for one card-width
+move from rest. It shows the spring alone: release velocity, elastic edges and reduced motion are not
+part of it, and it is dimmed while reduced motion is on. Reduced motion (the system preference, or
+the editor's **Motion preference** override) skips the spring settle, so Spring and Settling
+precision edits are not visible; drag-time and release behavior still follow the settings.

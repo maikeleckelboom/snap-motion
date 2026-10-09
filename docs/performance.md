@@ -69,3 +69,37 @@ tools. Record main-thread long tasks, layout reads, Vue updates, retained listen
 playback while dragging, interrupting springs, resizing, opening dialogs repeatedly, and exercising
 an intentionally large Stacked Deck. Update architecture only when traces show unnecessary
 frame-level reactive work.
+
+## Public Playground measurements
+
+The Playground mounts all five surfaces on one page, so its cost was measured rather than assumed.
+Production build under `/snap-motion/`, Chromium, 390 × 844 touch viewport, median of five runs; the
+Lab Showcase with Coverflow alone is the reference.
+
+| Metric                     | Playground (5 surfaces) |     Lab (1 surface) |
+| -------------------------- | ----------------------: | ------------------: |
+| FCP / LCP, native CPU      |                  216 ms |               96 ms |
+| Blocking time, native CPU  |                  108 ms |                0 ms |
+| FCP / LCP, 4× CPU slowdown |                1,184 ms |              396 ms |
+| Blocking time, 4× slowdown |                  964 ms |              267 ms |
+| Layout shift (CLS)         |                   0.000 |               0.000 |
+| JS transferred (gzip)      |                 131 KiB |             141 KiB |
+| CSS transferred (gzip)     |                16.8 KiB |            17.5 KiB |
+| Media transferred (gzip)   |      30 KiB (11 images) |                   0 |
+| DOM nodes / JS heap        |          1,008 / 4.5 MB |        545 / 2.8 MB |
+| Coverflow drag, p95 frame  |     16.8 ms (0 > 33 ms) | 16.8 ms (0 > 33 ms) |
+
+Five mounted surfaces drag as smoothly as one, and the shared code is not larger than the Lab's: both
+entries share one chunk. Startup is the only cost, and a CPU profile attributes it to the first
+document layout, forced by the first surface that measures its width (about 765 ms at 4× slowdown for
+the whole page, against 158 ms for the Lab). Bisecting it showed no single cause: hiding any one stage
+saves at most about 220 ms at 4×, closed dialogs are 243 of 1,008 nodes and cost no layout, and
+removing the `:has()` rules, containment, `backdrop-filter`, 3D transforms, `will-change` or the
+scrollbar gutter changed nothing measurable.
+
+Deferring offscreen sections would remove roughly 40% of that startup but would have to reserve a
+placeholder height for every demo; a wrong height moves anchor targets and a surface's measured
+geometry. That risk is not justified by a 0.2 s first paint on desktop-class hardware, so every
+surface mounts eagerly and keeps its state for the life of the page. The one deferral that is safe is
+applied: the below-the-fold Gallery thumbnails use `loading="lazy"` and `decoding="async"` in public
+presentation (transfer fell from 42 to 30 KiB), while the Lab's fixtures load exactly as before.

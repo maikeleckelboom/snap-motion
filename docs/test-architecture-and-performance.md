@@ -217,7 +217,7 @@ typecheck over the spec.
 | Release tooling and its tests (`release-candidate*`, `sourceVerification*`, `verify-release-candidate`, `release-blockers.json`, `release-candidate.yml`) | package authority, Linux               |
 | `pnpm-cli.test`, `release-package-assembly.test`, `verify-packages`, `packages/**/*.md`                                                                   | adds Windows                           |
 | `pack-packages`, `release-package-assembly`, `pnpm-cli`, `packedArchive`                                                                                  | authority, Linux, Windows, integration |
-| `verifyPackagesBrowser`, `certifySurfacePreferences`, `e2e/media-preview.spec.ts`, `fixture-e2e/**`, `fixtures/packed-consumers/**`                       | authority, Linux, integration          |
+| `verifyPackagesBrowser`, `certifySurfacePreferences`, `e2e/{media,playground}-preview.spec.ts`, `fixture-e2e/**`, `fixtures/packed-consumers/**`          | authority, Linux, integration          |
 | other `e2e/**`                                                                                                                                            | authority, Linux, source browsers      |
 | everything else (source, manifests, lockfile, config, CI, classifier, unknown, nested Markdown)                                                           | every owner                            |
 
