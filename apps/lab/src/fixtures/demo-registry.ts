@@ -16,7 +16,7 @@ import StackedDeckOverflowFixture from "@/demos/stacked-deck-overflow-fixture.vu
 import StackedDeckDemo from "@/demos/StackedDeckDemo.vue";
 import VariableRailFixture from "@/demos/VariableRailFixture.vue";
 
-import type { LabPhysicsSettings } from "./lab-types";
+import type { InapplicablePhysicsSetting, LabPhysicsSettings } from "./lab-types";
 
 export type DemoAudience = "showcase" | "fixture";
 export type DemoGroup = "Spatial" | "Media" | "Surfaces" | "Certification" | "Geometry";
@@ -42,7 +42,7 @@ export interface LabDemo {
   group: DemoGroup;
   id: string;
   label: string;
-  notApplicablePhysics?: Partial<Record<keyof LabPhysicsSettings, string>>;
+  notApplicablePhysics?: Partial<Record<keyof LabPhysicsSettings, InapplicablePhysicsSetting>>;
 }
 
 export const demos = [
@@ -77,7 +77,10 @@ export const demos = [
     audience: "showcase",
     component: StackedDeckDemo,
     notApplicablePhysics: {
-      maxAnchorSkip: `Fixed at ${STACKED_DECK_ANCHOR_SKIP} by the stacked deck: one interaction exchanges one adjacent screen. Other surfaces keep using the stored value.`,
+      maxAnchorSkip: {
+        effectiveValue: STACKED_DECK_ANCHOR_SKIP,
+        reason: `Fixed at ${STACKED_DECK_ANCHOR_SKIP} by the stacked deck: one interaction exchanges one adjacent screen. Other surfaces keep using the stored value.`,
+      },
     },
     capabilities: {
       motionPreference: true,

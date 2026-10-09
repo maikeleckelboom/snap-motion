@@ -16,6 +16,17 @@ export interface LabPhysicsSettings {
   stiffness: number;
 }
 
+/**
+ * A shared physics setting a surface does not take from the lab. The stored value stays untouched
+ * so every other surface keeps using it.
+ */
+export interface InapplicablePhysicsSetting {
+  /** Shown beside the disabled control and announced as its description. */
+  reason: string;
+  /** The value the surface uses instead, when it fixes one; displayed in place of the stored value. */
+  effectiveValue?: number;
+}
+
 export interface LabDiagnostics {
   nearestId?: string;
   anchors: readonly SnapAnchor<string>[];

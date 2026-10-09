@@ -1,14 +1,29 @@
 <script setup lang="ts">
-import type { LabPhysicsSettings, LabPresetName } from "@/fixtures/lab-types";
+import { computed, reactive, watch } from "vue";
+
+import type {
+  InapplicablePhysicsSetting,
+  LabPhysicsSettings,
+  LabPresetName,
+} from "@/fixtures/lab-types";
+import {
+  normalizePhysicsDraft,
+  parsePhysicsDraft,
+  physicsParameters,
+  type PhysicsKey,
+  type PhysicsParameter,
+} from "@/fixtures/physics-parameters";
 
 const props = defineProps<{
   modelValue: LabPhysicsSettings;
+  /** Shared settings that differ from the selected preset, counted across every surface. */
+  modifiedCount: number;
   preset: LabPresetName;
   /**
    * Controls the active surface does not consume, keyed by setting and explained in place. The
    * stored value stays untouched so every other surface keeps using it.
    */
-  notApplicable?: Partial<Record<keyof LabPhysicsSettings, string>>;
+  notApplicable?: Partial<Record<PhysicsKey, InapplicablePhysicsSetting>>;
 }>();
 
 const emit = defineEmits<{
@@ -17,63 +32,6 @@ const emit = defineEmits<{
   "update:preset": [value: LabPresetName];
 }>();
 
-interface NumericControl {
-  key: keyof LabPhysicsSettings;
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-  unit?: string;
-}
-
-const controls: NumericControl[] = [
-  { key: "stiffness", label: "Stiffness", min: 50, max: 900, step: 5 },
-  { key: "damping", label: "Damping", min: 1, max: 100, step: 1 },
-  { key: "mass", label: "Mass", min: 0.1, max: 4, step: 0.05 },
-  { key: "restSpeed", label: "Rest speed", min: 0.1, max: 20, step: 0.1, unit: "px/s" },
-  { key: "restDistance", label: "Rest distance", min: 0.01, max: 5, step: 0.01, unit: "px" },
-  {
-    key: "projectionSeconds",
-    label: "Projection",
-    min: 0,
-    max: 0.5,
-    step: 0.01,
-    unit: "s",
-  },
-  {
-    key: "flingVelocity",
-    label: "Fling threshold",
-    min: 100,
-    max: 3_000,
-    step: 25,
-    unit: "px/s",
-  },
-  { key: "maxAnchorSkip", label: "Maximum skip", min: 1, max: 5, step: 1 },
-  {
-    key: "elasticResistance",
-    label: "Elastic resistance",
-    min: 1,
-    max: 8,
-    step: 0.05,
-  },
-  {
-    key: "maxElasticDistance",
-    label: "Elastic limit",
-    min: 0,
-    max: 160,
-    step: 2,
-    unit: "px",
-  },
-  {
-    key: "programmaticImpulse",
-    label: "Control impulse",
-    min: 0,
-    max: 2_500,
-    step: 25,
-    unit: "px/s",
-  },
-];
-
 const presetNames: { label: string; value: LabPresetName }[] = [
   { label: "Tight", value: "tight" },
   { label: "Balanced", value: "balanced" },
@@ -81,16 +39,91 @@ const presetNames: { label: string; value: LabPresetName }[] = [
   { label: "Loose", value: "loose" },
 ];
 
-function updateNumber(key: keyof LabPhysicsSettings, event: Event) {
+/**
+ * Text typed into a field and not yet settled by Enter, blur or Escape. A draft is emitted only while
+ * it parses to a supported value, so an empty, malformed or out-of-range entry never leaves this
+ * component. A field without a draft shows the committed value.
+ */
+const drafts = reactive<Partial<Record<PhysicsKey, string>>>({});
+let lastEmitted: LabPhysicsSettings | undefined;
+
+const presetState = computed(() => {
+  const label = presetNames.find(({ value }) => value === props.preset)?.label ?? props.preset;
+  return `${label} · ${props.modifiedCount === 0 ? "Preset" : `Modified (${props.modifiedCount})`}`;
+});
+
+const fields = computed(() =>
+  physicsParameters.map((parameter) => {
+    const draft = drafts[parameter.key];
+    const inapplicable = props.notApplicable?.[parameter.key];
+    return {
+      inapplicable,
+      invalid: draft !== undefined && parsePhysicsDraft(parameter, draft) === undefined,
+      parameter,
+      // A surface that fixes a setting shows the value it uses; the stored one is in the note.
+      value: draft ?? inapplicable?.effectiveValue ?? props.modelValue[parameter.key],
+    };
+  }),
+);
+
+// A preset, a reset or any other writer replaces the settings object; open drafts yield to it.
+watch(
+  () => props.modelValue,
+  (settings) => {
+    if (settings === lastEmitted) return;
+    for (const { key } of physicsParameters) delete drafts[key];
+  },
+);
+
+function invalidDraftText(parameter: PhysicsParameter) {
+  const unit = parameter.unit ? ` ${parameter.unit}` : "";
+  const kind = parameter.integer ? "a whole number" : "a number";
+  return `Enter ${kind} from ${parameter.min} to ${parameter.max}${unit}. Still using ${props.modelValue[parameter.key]}${unit}.`;
+}
+
+function describedBy(key: PhysicsKey, invalid: boolean, inapplicable: boolean) {
+  const ids = [
+    ...(invalid ? [`physics-error-${key}`] : []),
+    ...(inapplicable ? [`physics-note-${key}`] : []),
+  ];
+  return ids.length > 0 ? ids.join(" ") : undefined;
+}
+
+function commitValue(key: PhysicsKey, value: number) {
+  if (value === props.modelValue[key]) return;
+  lastEmitted = { ...props.modelValue, [key]: value };
+  emit("update:modelValue", lastEmitted);
+}
+
+function editDraft(parameter: PhysicsParameter, event: Event) {
   const target = event.currentTarget;
   if (!(target instanceof HTMLInputElement)) {
     return;
   }
 
-  emit("update:modelValue", {
-    ...props.modelValue,
-    [key]: target.valueAsNumber,
-  });
+  // A number input reports malformed text as an empty value, which stays an incomplete draft.
+  drafts[parameter.key] = target.value;
+  const value = parsePhysicsDraft(parameter, target.value);
+  if (value !== undefined) commitValue(parameter.key, value);
+}
+
+/** Enter and blur: keep a supported value, bound a finite one, and otherwise keep the committed one. */
+function settleDraft(parameter: PhysicsParameter) {
+  const draft = drafts[parameter.key];
+  if (draft === undefined) return;
+  delete drafts[parameter.key];
+  const value = normalizePhysicsDraft(parameter, draft);
+  if (value !== undefined) commitValue(parameter.key, value);
+}
+
+function onFieldKeydown(parameter: PhysicsParameter, event: KeyboardEvent) {
+  if (event.key === "Enter") {
+    settleDraft(parameter);
+  } else if (event.key === "Escape" && drafts[parameter.key] !== undefined) {
+    // Valid keystrokes were already applied live, so the committed value is the shared one.
+    event.preventDefault();
+    delete drafts[parameter.key];
+  }
 }
 
 function updatePreset(event: Event) {
@@ -112,46 +145,71 @@ function updatePreset(event: Event) {
       <button type="button" class="reset-button" @click="emit('reset')">Reset to preset</button>
     </div>
 
-    <label class="preset-control">
-      <span>Preset</span>
-      <select :value="preset" @change="updatePreset">
-        <option v-for="item in presetNames" :key="item.value" :value="item.value">
-          {{ item.label }}
-        </option>
-      </select>
-    </label>
+    <div class="preset-block">
+      <label class="preset-control">
+        <span>Preset</span>
+        <select aria-describedby="physics-preset-state" :value="preset" @change="updatePreset">
+          <option v-for="item in presetNames" :key="item.value" :value="item.value">
+            {{ item.label }}
+          </option>
+        </select>
+      </label>
+      <p
+        id="physics-preset-state"
+        class="preset-state"
+        :data-modified="modifiedCount > 0 ? 'true' : 'false'"
+        data-testid="physics-preset-state"
+        role="status"
+      >
+        {{ presetState }}
+      </p>
+    </div>
 
     <div class="physics-fields">
       <label
-        v-for="control in controls"
-        :key="control.key"
+        v-for="field in fields"
+        :key="field.parameter.key"
         class="physics-field"
-        :class="{ inapplicable: notApplicable?.[control.key] !== undefined }"
+        :class="{ inapplicable: field.inapplicable !== undefined }"
       >
-        <span>{{ control.label }}</span>
+        <span>{{ field.parameter.label }}</span>
         <span class="physics-value tabular">
           <input
             :aria-describedby="
-              notApplicable?.[control.key] === undefined ? undefined : `physics-note-${control.key}`
+              describedBy(field.parameter.key, field.invalid, field.inapplicable !== undefined)
             "
-            :aria-label="control.label"
-            :disabled="notApplicable?.[control.key] !== undefined"
-            :max="control.max"
-            :min="control.min"
-            :step="control.step"
-            :value="modelValue[control.key]"
+            :aria-invalid="field.invalid ? 'true' : undefined"
+            :aria-label="field.parameter.label"
+            :disabled="field.inapplicable !== undefined"
+            :max="field.parameter.max"
+            :min="field.parameter.min"
+            :step="field.parameter.step"
+            :value="field.value"
             type="number"
-            @input="updateNumber(control.key, $event)"
+            @blur="settleDraft(field.parameter)"
+            @input="editDraft(field.parameter, $event)"
+            @keydown="onFieldKeydown(field.parameter, $event)"
           />
-          <small v-if="control.unit">{{ control.unit }}</small>
+          <small v-if="field.parameter.unit">{{ field.parameter.unit }}</small>
         </span>
         <small
-          v-if="notApplicable?.[control.key] !== undefined"
-          :id="`physics-note-${control.key}`"
-          class="physics-note"
-          :data-testid="`physics-note-${control.key}`"
+          v-if="field.invalid"
+          :id="`physics-error-${field.parameter.key}`"
+          class="physics-error"
+          :data-testid="`physics-error-${field.parameter.key}`"
         >
-          {{ notApplicable[control.key] }}
+          {{ invalidDraftText(field.parameter) }}
+        </small>
+        <small
+          v-if="field.inapplicable"
+          :id="`physics-note-${field.parameter.key}`"
+          class="physics-note"
+          :data-testid="`physics-note-${field.parameter.key}`"
+        >
+          {{ field.inapplicable.reason }}
+          <template v-if="field.inapplicable.effectiveValue !== undefined">
+            Stored value: {{ modelValue[field.parameter.key] }}.
+          </template>
         </small>
       </label>
     </div>
@@ -200,9 +258,23 @@ h2 {
   font-size: 0.82rem;
 }
 
-.preset-control {
+.preset-block {
+  display: grid;
+  gap: 0.4rem;
   padding-block-end: 0.85rem;
   border-block-end: 1px solid var(--line);
+}
+
+.preset-state {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: end;
+}
+
+.preset-state[data-modified="true"] {
+  color: var(--ink);
 }
 
 select,
@@ -224,6 +296,11 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
+input[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
 .physics-fields {
   display: grid;
   gap: 0.55rem;
@@ -241,23 +318,20 @@ input {
   font-size: 0.68rem;
 }
 
-.physics-field.inapplicable {
-  grid-template-areas: "label value" "note note";
-}
-
-.physics-field.inapplicable > :first-child {
-  grid-area: label;
-}
-
-.physics-field.inapplicable > .physics-value {
-  grid-area: value;
+.physics-note,
+.physics-error {
+  grid-column: 1 / -1;
+  font-size: 0.68rem;
+  line-height: 1.35;
 }
 
 .physics-note {
-  grid-area: note;
   color: var(--muted);
-  font-size: 0.68rem;
-  line-height: 1.35;
+}
+
+.physics-error {
+  color: var(--danger);
+  font-weight: 700;
 }
 
 input:disabled {

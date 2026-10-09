@@ -12,8 +12,14 @@ import {
   type LabLocation,
   type LabView,
 } from "@/fixtures/demo-registry";
-import { settingsFromPreset } from "@/fixtures/lab-settings";
-import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fixtures/lab-types";
+import { isLabPresetName, settingsFromPreset } from "@/fixtures/lab-settings";
+import type {
+  InapplicablePhysicsSetting,
+  LabPhysicsSettings,
+  LabPresetName,
+  ReducedMotionMode,
+} from "@/fixtures/lab-types";
+import { modifiedPhysicsKeys, unsupportedPhysicsSetting } from "@/fixtures/physics-parameters";
 
 interface LabParams {
   demo?: string;
@@ -26,6 +32,11 @@ const fixtureGroups: DemoGroup[] = ["Certification", "Geometry"];
 const labParams = useUrlSearchParams<LabParams>("history", { write: true, writeMode: "replace" });
 const preset = ref<LabPresetName>("balanced");
 const settings = shallowRef<LabPhysicsSettings>(settingsFromPreset(preset.value));
+// Derived, never stored: every shared setting that differs from the selected preset, including
+// settings the active surface fixes or ignores, because every other surface still uses them.
+const modifiedPhysics = computed(() =>
+  modifiedPhysicsKeys(settings.value, settingsFromPreset(preset.value)),
+);
 const stageWidth = ref(1_120);
 const reducedMotionMode = ref<ReducedMotionMode>("system");
 const stackedDeckExchange = computed(() =>
@@ -75,9 +86,9 @@ const activeComponentProps = computed<Record<string, unknown>>(() => {
 
   return props;
 });
-const notApplicableControls = computed<Partial<Record<keyof LabPhysicsSettings, string>>>(() =>
-  "notApplicablePhysics" in activeDemo.value ? activeDemo.value.notApplicablePhysics : {},
-);
+const notApplicableControls = computed<
+  Partial<Record<keyof LabPhysicsSettings, InapplicablePhysicsSetting>>
+>(() => ("notApplicablePhysics" in activeDemo.value ? activeDemo.value.notApplicablePhysics : {}));
 
 watch(
   () => [labParams.demo, labParams.view] as const,
@@ -128,13 +139,21 @@ function selectView(nextView: LabView) {
   });
 }
 
+function updateSettings(next: LabPhysicsSettings) {
+  // The fields commit only supported values. Every other writer is held to the same contract: a
+  // controller throws on a value it cannot use, and the surface it drives stops responding.
+  if (unsupportedPhysicsSetting(next) !== undefined) return;
+  settings.value = next;
+}
+
 function applyPreset(name: LabPresetName) {
+  if (!isLabPresetName(name)) return;
   preset.value = name;
   settings.value = settingsFromPreset(name);
 }
 
 function resetPreset() {
-  settings.value = settingsFromPreset(preset.value);
+  if (modifiedPhysics.value.length > 0) settings.value = settingsFromPreset(preset.value);
 }
 </script>
 
@@ -271,10 +290,11 @@ function resetPreset() {
           <summary>Advanced physics</summary>
           <PhysicsControls
             :model-value="settings"
+            :modified-count="modifiedPhysics.length"
             :not-applicable="notApplicableControls"
             :preset="preset"
             @reset="resetPreset"
-            @update:model-value="settings = $event"
+            @update:model-value="updateSettings"
             @update:preset="applyPreset"
           />
         </details>

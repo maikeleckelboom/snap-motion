@@ -6,6 +6,10 @@ import {
 
 import type { LabPhysicsSettings, LabPresetName } from "./lab-types";
 
+export function isLabPresetName(value: unknown): value is LabPresetName {
+  return typeof value === "string" && Object.hasOwn(MOTION_PRESETS, value);
+}
+
 export function settingsFromPreset(name: LabPresetName): LabPhysicsSettings {
   const preset = MOTION_PRESETS[name as MotionPresetName];
   const minimumElasticity = preset.elasticity.min;

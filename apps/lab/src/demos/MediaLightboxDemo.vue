@@ -432,6 +432,20 @@ function onDialogSurfaceClick(event: MouseEvent) {
   }
 }
 
+// The lab replaces its settings object on every accepted edit, so a new object is the whole change.
+// A settle in flight keeps its target and continues from its current position on the new spring.
+watch(
+  () => props.settings,
+  (settings) => {
+    motion.configure({
+      elasticity: symmetricElasticityFromSettings(settings),
+      programmaticImpulse: settings.programmaticImpulse,
+      releasePolicy: carouselReleaseFromSettings(settings),
+      spring: springFromSettings(settings),
+    });
+  },
+);
+
 watch(fixtureMode, async () => {
   mediaTransform.reset({ animated: false });
   await nextTick();
