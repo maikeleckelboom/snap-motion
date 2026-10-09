@@ -140,6 +140,19 @@ See the [official clock documentation](https://playwright.dev/docs/clock).
 - Development follows focused test, affected suite, fast checks, then one final
   source gate. Release materialization is a separate operation.
 
+## Playground certification
+
+The public Playground adds three specs. `playground.spec.ts` runs on Chromium, Firefox and WebKit
+(it joins the interoperability set) and covers navigation and the trailing-slash redirect, cold deep
+links, the five live surfaces and their independent state, shared presets, the single detailed editor,
+numeric validation, Reset, Stacked Deck's fixed skip, reduced motion, keyboard use, modal focus and
+scroll restoration, and history. `playground-layout.spec.ts` is Chromium-only and covers the seven
+required widths, stage stability while an editor opens, wheel and touch scrolling, touch targets, axe
+(at rest, with each modal, on a phone and at 200% and 400% zoom), forced colours, layout shift, and
+scroll lock against real scrollbars. `playground-preview.spec.ts` runs the built page under
+`/snap-motion/` in the preview gate with `media-preview.spec.ts`; `previewSpecs` in
+`config/browserOwnership.ts` is the single list that keeps both out of the source browser groups.
+
 ## Implemented ownership and artifact reuse
 
 Chromium has three deterministic, disjoint file groups: general (122 tests), deck

@@ -25,6 +25,11 @@ adds tuning and diagnostics for the same surfaces, while Fixtures exposes determ
 and certification harnesses. See [CONTRIBUTING.md](CONTRIBUTING.md) for the serve-only boundary that
 keeps build and release validation on the distributable artifacts.
 
+The same server also serves the public Playground at `/playground/`: one scrollable page with all five
+surfaces, a Motion Tuning bar per section over one shared configuration, and the full parameter editor.
+It is a second Vite HTML entry beside the Lab, builds into the same output, and works under a non-root
+base. See [docs/tuning.md](docs/tuning.md).
+
 Import the minimal structural stylesheet once in an application entry:
 
 ```ts
