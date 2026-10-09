@@ -391,6 +391,91 @@ test.describe("automated accessibility certification", () => {
   });
 });
 
+test.describe("document-level listeners", () => {
+  test("dialogs, editors, presets and inspections leave no listener behind", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== "chromium", "Listener inventories use the Chromium protocol.");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openPlayground(page);
+    const client = await page.context().newCDPSession(page);
+
+    async function inventory() {
+      const result: Record<string, Record<string, number>> = {};
+      for (const target of ["window", "document", "document.documentElement", "document.body"]) {
+        const { result: handle } = await client.send("Runtime.evaluate", { expression: target });
+        const { listeners } = await client.send("DOMDebugger.getEventListeners", {
+          objectId: handle.objectId!,
+        });
+        const byType: Record<string, number> = {};
+        for (const { type } of listeners) byType[type] = (byType[type] ?? 0) + 1;
+        result[target] = byType;
+      }
+      return result;
+    }
+
+    async function cycle() {
+      const lightbox = page.getByTestId("media-lightbox");
+      await page.getByTestId("open-lightbox").scrollIntoViewIfNeeded();
+      await page.getByTestId("open-lightbox").click();
+      await expect(lightbox).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(lightbox).not.toBeVisible();
+
+      const sheet = page.getByTestId("sheet");
+      await page.getByTestId("open-sheet").scrollIntoViewIfNeeded();
+      await page.getByTestId("open-sheet").click();
+      await expectSheetOpenAt(sheet, "comfortable");
+      await page.keyboard.press("Escape");
+      await expect(sheet).not.toBeVisible();
+
+      for (const id of sectionIds) {
+        await section(page, id).getByTestId("tuning-customize").click();
+        await expect(editor(page)).toHaveCount(1);
+      }
+      await section(page, "sheet").getByTestId("tuning-customize").click();
+      await expect(editor(page)).toHaveCount(0);
+      for (const preset of ["heavy", "loose", "tight", "balanced"])
+        await section(page, "coverflow").getByTestId(`preset-${preset}`).click();
+
+      const inspect = section(page, "coverflow").getByTestId("coverflow-inspect");
+      await inspect.scrollIntoViewIfNeeded();
+      await inspect.click();
+      await expect(section(page, "coverflow").locator("dialog[open]")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(section(page, "coverflow").locator("dialog[open]")).toHaveCount(0);
+    }
+
+    // A closing dialog briefly holds a document-level focus listener until its `close` event is
+    // consumed, so measure only a settled page: two consecutive inventories must agree.
+    async function settledInventory() {
+      let previous = JSON.stringify(await inventory());
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+            ),
+        );
+        const next = JSON.stringify(await inventory());
+        if (next === previous) return JSON.parse(next) as Awaited<ReturnType<typeof inventory>>;
+        previous = next;
+      }
+      throw new Error("The page's document-level listeners never settled.");
+    }
+
+    // The first interaction makes the test harness install its own page-level listeners.
+    await cycle();
+    const before = await settledInventory();
+    // Five mounted surfaces own their own gesture listeners; this proves they hold a fixed set.
+    expect(before.window?.pointerdown ?? 0).toBeLessThanOrEqual(1);
+    expect(before.document?.focus ?? 0).toBe(0);
+    for (let run = 0; run < 3; run += 1) await cycle();
+    expect(await settledInventory()).toEqual(before);
+  });
+});
+
 test.describe("layout stability", () => {
   test("does not shift during load, editor use or preset changes", async ({
     page,

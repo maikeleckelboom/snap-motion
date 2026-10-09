@@ -83,7 +83,7 @@ Lab Showcase with Coverflow alone is the reference.
 | FCP / LCP, 4× CPU slowdown |                1,184 ms |              396 ms |
 | Blocking time, 4× slowdown |                  964 ms |              267 ms |
 | Layout shift (CLS)         |                   0.000 |               0.000 |
-| JS transferred (gzip)      |                 131 KiB |             141 KiB |
+| JS transferred (gzip)      |                 130 KiB |             141 KiB |
 | CSS transferred (gzip)     |                16.8 KiB |            17.5 KiB |
 | Media transferred (gzip)   |      30 KiB (11 images) |                   0 |
 | DOM nodes / JS heap        |          1,008 / 4.5 MB |        545 / 2.8 MB |
@@ -103,3 +103,10 @@ geometry. That risk is not justified by a 0.2 s first paint on desktop-class har
 surface mounts eagerly and keeps its state for the life of the page. The one deferral that is safe is
 applied: the below-the-fold Gallery thumbnails use `loading="lazy"` and `decoding="async"` in public
 presentation (transfer fell from 42 to 30 KiB), while the Lab's fixtures load exactly as before.
+
+Document-level listeners are a fixed set. Each mounted surface holds its own window-level gesture
+listeners (five pointerup, pointermove, pointercancel,
+esize and orientationchange in all), and the
+page adds two keydown listeners on document for its dialogs. After repeated cycles of both modals, every
+editor, every preset and an inspection gallery, a settled page has exactly the same inventory; a closing
+dialog briefly holds one ocus listener until its close event is consumed, which the test waits out.
