@@ -82,26 +82,27 @@ function certificationMediaPlugin(): Plugin {
  * Pages redirects `/playground` to `/playground/` itself; the dev and preview servers would
  * otherwise fall through to the Lab's single-page fallback, so they redirect the same way.
  */
-function playgroundTrailingSlashPlugin(): Plugin {
-  const redirect =
-    (base: string) => (request: IncomingMessage, response: ServerResponse, next: () => void) => {
-      const url = new URL(request.url ?? "/", "http://snap-motion.local");
-      if (url.pathname !== `${base}playground`) {
-        next();
-        return;
-      }
-      response.statusCode = 308;
-      response.setHeader("Location", `${base}playground/${url.search}`);
-      response.end();
-    };
+function playgroundTrailingSlashMiddleware(base: string) {
+  return (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+    const url = new URL(request.url ?? "/", "http://snap-motion.local");
+    if (url.pathname !== `${base}playground`) {
+      next();
+      return;
+    }
+    response.statusCode = 308;
+    response.setHeader("Location", `${base}playground/${url.search}`);
+    response.end();
+  };
+}
 
+function playgroundTrailingSlashPlugin(): Plugin {
   return {
     name: "snap-motion-playground-trailing-slash",
     configurePreviewServer(server) {
-      server.middlewares.use(redirect(server.config.base));
+      server.middlewares.use(playgroundTrailingSlashMiddleware(server.config.base));
     },
     configureServer(server) {
-      server.middlewares.use(redirect(server.config.base));
+      server.middlewares.use(playgroundTrailingSlashMiddleware(server.config.base));
     },
   };
 }

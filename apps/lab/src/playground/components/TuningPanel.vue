@@ -42,6 +42,18 @@ const motionOptions: { label: string; value: ReducedMotionMode; testid: string }
           preset replaces your edits. Type an exact value or drag a slider; supported values apply
           live.
         </p>
+        <div class="motion-preference">
+          <SegmentedControl
+            v-model="tuning.motionMode.value"
+            label="Motion preference"
+            :options="motionOptions"
+          />
+          <p class="panel-foot-note">
+            System follows your device. Reduced motion skips the spring settle, so Spring and
+            Settling precision changes are not visible; drag-time and release behavior still follow
+            your settings.
+          </p>
+        </div>
       </div>
       <SpringPreview
         :settings="tuning.settings.value"
@@ -57,16 +69,6 @@ const motionOptions: { label: string; value: ReducedMotionMode; testid: string }
     />
 
     <div class="panel-foot">
-      <SegmentedControl
-        v-model="tuning.motionMode.value"
-        label="Motion preference"
-        :options="motionOptions"
-      />
-      <p class="panel-foot-note">
-        System follows your device. Reduced motion skips the spring settle, so Spring and Settling
-        precision changes are not visible; drag-time and release behavior still follow your
-        settings.
-      </p>
       <button class="panel-close" type="button" @click="emit('close')">Close editor</button>
     </div>
   </div>
@@ -93,6 +95,12 @@ const motionOptions: { label: string; value: ReducedMotionMode; testid: string }
 .panel-head-copy {
   display: grid;
   gap: 0.35rem;
+}
+
+.motion-preference {
+  display: grid;
+  gap: 0.5rem;
+  padding-block-start: 0.9rem;
 }
 
 @media (max-width: 52rem) {

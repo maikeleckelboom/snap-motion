@@ -580,8 +580,10 @@ onBeforeUnmount(() => {
               alt=""
               aria-hidden="true"
               :data-testid="`media-thumbnail-image-${fixture.id}`"
+              :decoding="labPresentation ? undefined : 'async'"
               draggable="false"
               :height="fixture.intrinsicSize.height"
+              :loading="labPresentation ? undefined : 'lazy'"
               :width="fixture.intrinsicSize.width"
             />
           </span>
@@ -1872,8 +1874,33 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
+/* The public dialog takes the page's warm neutrals instead of the Lab's blue-grey. */
+.is-playground .lightbox-dialog {
+  --lightbox-canvas: #0d0c0a;
+  --lightbox-surface: #14130f;
+  --lightbox-surface-raised: #1c1a15;
+  --lightbox-control-hover: #2a2721;
+  --lightbox-text: #f4f2ec;
+  --lightbox-text-secondary: #c4bfaf;
+  --lightbox-control-border: #7d7863;
+  --lightbox-separator: #4a463a;
+  --lightbox-focus: #8ab4ff;
+}
+
+.is-playground .stage-instrument {
+  border: 0;
+  background: transparent;
+}
+
 .is-playground .stage-readout {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: auto;
+  justify-content: start;
+  padding-inline: 0.25rem;
+  border-block-end: 0;
+}
+
+.is-playground .carousel-viewport {
+  border-color: var(--lightbox-separator);
 }
 
 @media (max-width: 42rem) {

@@ -635,6 +635,39 @@ function snapTo(id: SheetOpenSnapId) {
   flex-wrap: wrap;
   gap: 1rem 2.5rem;
 }
+
+/* The public sheet is a soft surface on the page's panel colour, rounded on its free edges. */
+.is-playground :deep(.snap-motion-sheet-panel) {
+  border: 0;
+  background: var(--pg-panel);
+  box-shadow: 0 0 0 1px rgb(21 20 15 / 0.12);
+}
+.is-playground :deep(.snap-motion-sheet-panel::after),
+.is-playground :deep(.snap-motion-sheet-viewport) {
+  background: var(--pg-panel);
+}
+.is-playground :deep(.snap-motion-sheet-panel[data-sheet-side="bottom"]) {
+  border-radius: 1.1rem 1.1rem 0 0;
+}
+.is-playground :deep(.snap-motion-sheet-panel[data-sheet-side="top"]) {
+  border-radius: 0 0 1.1rem 1.1rem;
+}
+.is-playground :deep(.snap-motion-sheet-panel[data-sheet-side="left"]) {
+  border-radius: 0 1.1rem 1.1rem 0;
+}
+.is-playground :deep(.snap-motion-sheet-panel[data-sheet-side="right"]) {
+  border-radius: 1.1rem 0 0 1.1rem;
+}
+/* The viewport paints its own background, so it must share the panel's rounded corners. */
+.is-playground :deep(.snap-motion-sheet-viewport) {
+  border-radius: inherit;
+}
+.is-playground :deep(.snap-motion-sheet-header) {
+  border-block-end-color: var(--pg-line);
+}
+.is-playground :deep(.snap-motion-sheet-handle) {
+  border-radius: 999px;
+}
 :global(html:has(.snap-motion-sheet[open])),
 :global(html:has(.snap-motion-sheet[open]) body) {
   overflow: hidden;
