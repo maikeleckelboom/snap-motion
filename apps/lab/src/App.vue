@@ -597,10 +597,6 @@ function resetPreset() {
     border-block-start: 1px solid var(--strong);
     border-inline-start: 0;
   }
-
-  .advanced-physics[open] :deep(.physics-fields) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 48rem) {
@@ -658,10 +654,6 @@ function resetPreset() {
 
   .inspect-motion {
     justify-self: start;
-  }
-
-  .advanced-physics[open] :deep(.physics-fields) {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

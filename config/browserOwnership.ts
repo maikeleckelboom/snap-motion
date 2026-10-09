@@ -9,6 +9,7 @@ export const chromiumDirectSpecs = [
   "stacked-deck-pile.spec.ts",
 ];
 export const interoperabilitySpecs = [
+  "lab-physics-settings.spec.ts",
   "showcase-smoke.spec.ts",
   "stackedDeckConsumer.spec.ts",
   "stackedDeckTrace.spec.ts",

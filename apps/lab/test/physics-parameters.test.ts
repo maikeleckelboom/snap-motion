@@ -6,6 +6,7 @@ import {
   modifiedPhysicsKeys,
   normalizePhysicsDraft,
   parsePhysicsDraft,
+  physicsGroups,
   physicsParameters,
   unsupportedPhysicsSetting,
   type PhysicsKey,
@@ -35,6 +36,40 @@ describe("physics parameter definitions", () => {
   it.each(presetNames)("hold every %s preset value as a supported setting", (name) => {
     expect(unsupportedPhysicsSetting(settingsFromPreset(name))).toBeUndefined();
   });
+
+  it("groups settings by engine responsibility, with only Spring and Release open initially", () => {
+    expect(
+      physicsGroups.filter(({ defaultOpen }) => defaultOpen).map(({ label }) => label),
+    ).toEqual(["Spring", "Release"]);
+    expect(
+      Object.fromEntries(
+        physicsGroups.map(({ label, key }) => [
+          label,
+          physicsParameters
+            .filter((candidate) => candidate.group === key)
+            .map((candidate) => candidate.key),
+        ]),
+      ),
+    ).toEqual({
+      Spring: ["stiffness", "damping", "mass"],
+      Release: ["projectionSeconds", "flingVelocity", "maxAnchorSkip"],
+      Boundaries: ["elasticResistance", "maxElasticDistance"],
+      "Buttons & keys": ["programmaticImpulse"],
+      "Settling precision": ["restSpeed", "restDistance"],
+    });
+    for (const candidate of physicsParameters) {
+      expect(physicsGroups.some(({ key }) => key === candidate.group)).toBe(true);
+      expect(candidate.description.trim()).not.toBe("");
+    }
+  });
+
+  it("keeps integer skip and completion thresholds numeric-only", () => {
+    expect(physicsParameters.filter(({ slider }) => !slider).map(({ key }) => key)).toEqual([
+      "restSpeed",
+      "restDistance",
+      "maxAnchorSkip",
+    ]);
+  });
 });
 
 describe("physics drafts", () => {
@@ -48,6 +83,8 @@ describe("physics drafts", () => {
     expect(parsePhysicsDraft(parameter("mass"), ".85")).toBe(0.85);
     expect(parsePhysicsDraft(parameter("flingVelocity"), "1e3")).toBe(1_000);
     expect(parsePhysicsDraft(skip, "4")).toBe(4);
+    expect(parsePhysicsDraft(parameter("stiffness"), "403.25")).toBe(403.25);
+    expect(parsePhysicsDraft(parameter("mass"), "0.851")).toBe(0.851);
   });
 
   it.each(["", " ", "-", ".", "1e", "abc", "0x10", "NaN", "Infinity", "1e400"])(

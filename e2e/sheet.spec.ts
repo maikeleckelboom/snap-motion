@@ -213,7 +213,10 @@ test.describe("multi-edge Sheet", () => {
       await expect(page.getByTestId("open-sheet")).toBeFocused();
     }
 
-    await setNumericInput(page.getByLabel("Fling threshold"), 100);
+    await setNumericInput(
+      page.getByRole("spinbutton", { name: "Fling threshold", exact: true }),
+      100,
+    );
     for (const side of ["top", "right", "bottom", "left"] as const) {
       const opened = await openSheet(page, side);
       const outward = physicalDrag(side, 180);

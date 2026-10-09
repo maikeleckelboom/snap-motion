@@ -1,5 +1,7 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+import { physicsGroups, physicsParameters } from "../apps/lab/src/fixtures/physics-parameters";
 import { MOTION_PRESETS } from "../packages/core/src/index";
 import { dragSyntheticPointerBy, expectCarouselAt, openLabDemo, setNumericInput } from "./helpers";
 
@@ -28,6 +30,15 @@ function field(page: Page, name: string) {
   return page.getByRole("spinbutton", { name, exact: true });
 }
 
+async function openPhysicsGroup(page: Page, name: string) {
+  const group = page
+    .locator(".physics-group")
+    .filter({ has: page.locator("summary", { hasText: name }) });
+  if (!(await group.evaluate((element) => (element as HTMLDetailsElement).open))) {
+    await group.locator("summary").click();
+  }
+}
+
 function presetState(page: Page) {
   return page.getByTestId("physics-preset-state");
 }
@@ -50,8 +61,14 @@ function presetFieldValues(name: PresetName): Record<string, number> {
 }
 
 async function expectFieldValues(page: Page, expected: Record<string, number>) {
+  for (const { label } of physicsGroups) await openPhysicsGroup(page, label);
   for (const [name, value] of Object.entries(expected)) {
     await expect(field(page, name)).toHaveValue(String(value));
+  }
+  for (const { label } of physicsParameters.filter(({ slider }) => slider)) {
+    await expect(page.getByRole("slider", { name: `${label} slider`, exact: true })).toHaveValue(
+      String(expected[label]),
+    );
   }
 }
 
@@ -117,6 +134,7 @@ test.describe("Gallery / Lightbox live configuration", () => {
     await expectCarouselAt(carousel, "extremely-wide");
     await closeLightbox(page);
 
+    await openPhysicsGroup(page, "Boundaries");
     await setNumericInput(field(page, "Elastic limit"), 0);
     await expect(presetState(page)).toHaveText("Balanced · Modified (1)");
     await openLightbox(page);
@@ -222,7 +240,7 @@ for (const surface of navigableSurfaces) {
       await damping.fill(draft);
       await expect(damping).toHaveAttribute("aria-invalid", "true");
       await expect(damping).toHaveAccessibleDescription(
-        "Enter a number from 1 to 100. Still using 36.",
+        "Enter a number from 1 to 100. Still using 36. Resistance to motion during settling.",
       );
       await expect(presetState(page)).toHaveText("Balanced · Preset");
     }
@@ -302,7 +320,9 @@ test("preset state counts every shared edit and Reset restores the exact preset"
   await expect(presetState(page)).toHaveText("Balanced · Preset");
 
   await setNumericInput(field(page, "Projection"), 0.3);
+  await openPhysicsGroup(page, "Boundaries");
   await setNumericInput(field(page, "Elastic resistance"), 2.35);
+  await openPhysicsGroup(page, "Buttons & keys");
   await setNumericInput(field(page, "Control impulse"), 1_000);
   await expect(presetState(page)).toHaveText("Balanced · Modified (3)");
   await page.getByRole("button", { name: "Reset to preset" }).click();
@@ -360,3 +380,264 @@ test("a fixed skip shows its effective value while the shared edit stays modifie
   await page.locator("#nav-coverflow").click();
   await expect(skip).toHaveValue("2");
 });
+
+test("physics groups preserve semantic membership and compact disclosure defaults", async ({
+  page,
+}) => {
+  await openLabDemo(page, "coverflow");
+  const editor = page.getByRole("region", { name: "Physics", exact: true });
+  for (const group of physicsGroups) {
+    const details = editor
+      .locator(".physics-group")
+      .filter({ has: page.locator("summary", { hasText: group.label }) });
+    await expect(details).toHaveJSProperty("open", group.defaultOpen);
+    if (!group.defaultOpen) await details.locator("summary").click();
+    const fields = editor.getByRole("group", { name: group.label, exact: true });
+    const members = physicsParameters.filter((parameter) => parameter.group === group.key);
+    await expect(fields.getByRole("spinbutton")).toHaveCount(members.length);
+    for (const parameter of members) {
+      await expect(
+        fields.getByRole("spinbutton", { name: parameter.label, exact: true }),
+      ).toHaveAccessibleDescription(parameter.description);
+    }
+  }
+  await expect(editor.getByRole("spinbutton")).toHaveCount(11);
+  await expect(editor.getByRole("slider")).toHaveCount(8);
+  for (const label of ["Maximum skip", "Rest speed", "Rest distance"]) {
+    await expect(editor.getByRole("slider", { name: `${label} slider`, exact: true })).toHaveCount(
+      0,
+    );
+  }
+});
+
+for (const parameter of physicsParameters.filter(({ slider }) => slider)) {
+  test(`${parameter.label} slider exposes limits, keyboard adjustment and exact numeric synchronization`, async ({
+    page,
+  }) => {
+    await openLabDemo(page, "coverflow");
+    await openPhysicsGroup(page, physicsGroups.find(({ key }) => key === parameter.group)!.label);
+    const slider = page.getByRole("slider", { name: `${parameter.label} slider`, exact: true });
+    const number = field(page, parameter.label);
+    await expect(slider).toHaveAccessibleName(`${parameter.label} slider`);
+    await expect(slider).toHaveAccessibleDescription(parameter.description);
+    await expect(slider).toHaveAttribute("min", String(parameter.min));
+    await expect(slider).toHaveAttribute("max", String(parameter.max));
+    await expect(slider).not.toHaveAttribute("aria-hidden", "true");
+    await expect(slider).not.toHaveAttribute("tabindex", "-1");
+    const original = Number(await number.inputValue());
+    await number.focus();
+    await page.keyboard.press("Tab");
+    await expect(slider).toBeFocused();
+    await expect(slider).toHaveValue(String(original));
+    expect(await slider.evaluate((input) => getComputedStyle(input).outlineStyle)).toBe("solid");
+    await slider.press("ArrowRight");
+    const increased = Number((original + parameter.step).toPrecision(12));
+    await expect(slider).toHaveValue(String(increased));
+    await expect(number).toHaveValue(String(increased));
+    await slider.press("Home");
+    await expect(number).toHaveValue(String(parameter.min));
+    await slider.press("PageUp");
+    await expect(number).toHaveValue(
+      String(Number((parameter.min + parameter.step * 10).toPrecision(12))),
+    );
+    await slider.press("End");
+    await expect(number).toHaveValue(String(parameter.max));
+    await slider.press("ArrowUp");
+    await expect(slider).toHaveValue(String(parameter.max));
+
+    // Numeric precision is independent of slider increments, including the thumb's actual value.
+    const precise = Number(
+      (parameter.min + (parameter.max - parameter.min) * 0.12345).toPrecision(12),
+    );
+    await number.fill(String(precise));
+    await expect(slider).toHaveValue(String(precise));
+    await expect(number).not.toHaveAttribute("aria-invalid");
+    expect(await number.evaluate((input: HTMLInputElement) => input.validity.valid)).toBe(true);
+    expect(await slider.evaluate((input: HTMLInputElement) => input.validity.valid)).toBe(true);
+    await number.press("Escape");
+    await expect(number).toHaveValue(String(precise));
+    await expect(presetState(page)).toHaveText("Balanced · Modified (1)");
+
+    // Exercise a real pointer edit as well as keyboard events.
+    await slider.click({ position: { x: 8, y: 12 } });
+    await expect
+      .poll(async () => Number(await number.inputValue()))
+      .toBe(Number(await slider.inputValue()));
+    await expect(page.getByTestId("coverflow-viewport")).toHaveAttribute("data-active-id", "map");
+  });
+}
+
+test("slider writes supersede unfinished numeric drafts, including same-value writes", async ({
+  page,
+}) => {
+  await openLabDemo(page, "coverflow");
+  const damping = field(page, "Damping");
+  const slider = page.getByRole("slider", { name: "Damping slider", exact: true });
+  for (const [draft, value] of [
+    ["", 60],
+    ["250", 60],
+    ["-5", 70],
+  ] as const) {
+    await damping.fill(draft);
+    await expect(damping).toHaveAttribute("aria-invalid", "true");
+    await expect(slider).toHaveAccessibleDescription(
+      `Enter a number from 1 to 100. Still using ${await slider.inputValue()}. Resistance to motion during settling.`,
+    );
+    // Keep the number focused so blur cannot resolve the draft before the slider writes.
+    await slider.evaluate((input: HTMLInputElement, next) => {
+      input.value = String(next);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, value);
+    await expect(damping).toBeFocused();
+    await expect(damping).toHaveValue(String(value));
+    await expect(slider).toHaveValue(String(value));
+    await expect(damping).not.toHaveAttribute("aria-invalid");
+    await damping.press("Enter");
+    await damping.blur();
+    await expect(damping).toHaveValue(String(value));
+    await expect(presetState(page)).toHaveText("Balanced · Modified (1)");
+  }
+  await damping.fill("72.3");
+  await damping.press("Escape");
+  await expect(damping).toHaveValue("72.3");
+  await expect(slider).toHaveValue("72.3");
+});
+
+test("preset replacements synchronize every field even while an incomplete draft has focus", async ({
+  page,
+}) => {
+  await openLabDemo(page, "coverflow");
+  await field(page, "Damping").fill("");
+  for (const name of ["tight", "balanced", "heavy", "loose"] as const) {
+    await field(page, "Damping").fill("250");
+    await page
+      .getByRole("combobox", { name: "Preset", exact: true })
+      .evaluate((select: HTMLSelectElement, next) => {
+        select.value = next;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }, name);
+    await expectFieldValues(page, presetFieldValues(name));
+    await field(page, "Damping").press("Enter");
+    await expect(presetState(page)).toHaveText(
+      `${name[0]!.toUpperCase()}${name.slice(1)} · Preset`,
+    );
+  }
+  // Reapplying the same preset must clear even an unchanged value's draft.
+  await openPhysicsGroup(page, "Settling precision");
+  await page.getByRole("combobox", { name: "Preset", exact: true }).selectOption("balanced");
+  await field(page, "Rest distance").fill("");
+  await page
+    .getByRole("combobox", { name: "Preset", exact: true })
+    .evaluate((select: HTMLSelectElement) => {
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  await expect(field(page, "Rest distance")).toHaveValue("0.6");
+  await expect(field(page, "Rest distance")).not.toHaveAttribute("aria-invalid");
+});
+
+for (const surface of navigableSurfaces) {
+  test(`${surface.demo} keeps its target through a live slider update during settling and preserves keyboard focus ownership`, async ({
+    page,
+  }) => {
+    await openLabDemo(page, surface.demo, "no-preference");
+    const viewport = page.getByTestId(surface.viewport);
+    await viewport.evaluate((element: HTMLElement) => {
+      element.dataset.mountProbe = "original";
+    });
+    const during = await page.evaluate(async (ids) => {
+      const stage = document.querySelector<HTMLElement>(`[data-testid="${ids.viewport}"]`)!;
+      const slider = document.querySelector<HTMLInputElement>(
+        'input[type="range"][aria-label="Damping slider"]',
+      )!;
+      document.querySelector<HTMLButtonElement>(`[data-testid="${ids.next}"]`)!.click();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const phase = stage.dataset.phase;
+      slider.value = "80";
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      return { phase, target: stage.dataset.activeId };
+    }, surface);
+    expect(during).toEqual({ phase: "settling", target: surface.advanced });
+    await expectCarouselAt(viewport, surface.advanced);
+    await expect(viewport).toHaveAttribute("data-mount-probe", "original");
+    await expect(field(page, "Damping")).toHaveValue("80");
+    await expect(presetState(page)).toHaveText("Balanced · Modified (1)");
+    await field(page, "Damping").focus();
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowRight");
+    await page.getByRole("slider", { name: "Damping slider", exact: true }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expectCarouselAt(viewport, surface.advanced);
+    await expect(field(page, "Damping")).toHaveValue("81");
+    await viewport.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expectCarouselAt(viewport, surface.start);
+  });
+}
+
+test("a live field edit preserves an unfinished sibling draft", async ({ page }) => {
+  await openLabDemo(page, "coverflow");
+  const damping = field(page, "Damping");
+  await damping.fill("");
+  await page
+    .getByRole("slider", { name: "Mass slider", exact: true })
+    .evaluate((input: HTMLInputElement) => {
+      input.value = "1.2";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  await expect(damping).toBeFocused();
+  await expect(damping).toHaveValue("");
+  await expect(damping).toHaveAttribute("aria-invalid", "true");
+  await expect(field(page, "Mass")).toHaveValue("1.2");
+  await damping.press("Escape");
+  await expect(damping).toHaveValue("36");
+  await expect(presetState(page)).toHaveText("Balanced · Modified (1)");
+});
+
+for (const width of [1440, 768, 390, 320]) {
+  test(`physics editor stays accessible and inside its host at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openLabDemo(page, "coverflow");
+    await field(page, "Stiffness").focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("slider", { name: "Stiffness slider", exact: true })).toBeFocused();
+    for (const { label } of physicsGroups) await openPhysicsGroup(page, label);
+    const editor = page.locator(".physics-controls");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    const measurements = await editor.evaluate((element) => {
+      const host = element.getBoundingClientRect();
+      return [...element.querySelectorAll<HTMLInputElement>("input")].map((input) => {
+        const box = input.getBoundingClientRect();
+        return {
+          left: box.left >= host.left,
+          right: box.right <= host.right,
+          width: box.width,
+          name: input.getAttribute("aria-label"),
+        };
+      });
+    });
+    expect(
+      measurements.every(
+        ({ left, right, width: controlWidth }) => left && right && controlWidth >= 24,
+      ),
+    ).toBe(true);
+    expect(new Set(measurements.map(({ name }) => name)).size).toBe(measurements.length);
+    const accessibility = await new AxeBuilder({ page }).include(".physics-controls").analyze();
+    expect(accessibility.violations).toEqual([]);
+    await field(page, "Damping").fill("250");
+    await expect(field(page, "Damping")).toHaveAttribute("aria-invalid", "true");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await field(page, "Damping").press("Escape");
+    // Supported extremes must fit the precise input and stay synchronized with the slider.
+    await field(page, "Fling threshold").fill("3000");
+    await expect(
+      page.getByRole("slider", { name: "Fling threshold slider", exact: true }),
+    ).toHaveValue("3000");
+    await page.getByRole("button", { name: "Reset to preset", exact: true }).click();
+    await expectFieldValues(page, presetFieldValues("balanced"));
+  });
+}

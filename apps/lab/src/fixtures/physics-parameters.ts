@@ -2,12 +2,26 @@ import type { LabPhysicsSettings } from "./lab-types";
 
 export type PhysicsKey = keyof LabPhysicsSettings;
 
+export const physicsGroups = [
+  { key: "spring", label: "Spring", defaultOpen: true },
+  { key: "release", label: "Release", defaultOpen: true },
+  { key: "boundaries", label: "Boundaries", defaultOpen: false },
+  { key: "controls", label: "Buttons & keys", defaultOpen: false },
+  { key: "settling", label: "Settling precision", defaultOpen: false },
+] as const;
+
+export type PhysicsGroupKey = (typeof physicsGroups)[number]["key"];
+
 export interface PhysicsParameter {
   key: PhysicsKey;
   label: string;
+  group: PhysicsGroupKey;
+  description: string;
   min: number;
   max: number;
+  /** Adjustment increment, not a restriction on supported decimal input. */
   step: number;
+  slider?: boolean;
   /** Only whole numbers are accepted: the engine rejects a fractional anchor skip. */
   integer?: boolean;
   unit?: string;
@@ -19,14 +33,62 @@ export interface PhysicsParameter {
  * reach the shared settings object.
  */
 export const physicsParameters: readonly PhysicsParameter[] = [
-  { key: "stiffness", label: "Stiffness", min: 50, max: 900, step: 5 },
-  { key: "damping", label: "Damping", min: 1, max: 100, step: 1 },
-  { key: "mass", label: "Mass", min: 0.1, max: 4, step: 0.05 },
-  { key: "restSpeed", label: "Rest speed", min: 0.1, max: 20, step: 0.1, unit: "px/s" },
-  { key: "restDistance", label: "Rest distance", min: 0.01, max: 5, step: 0.01, unit: "px" },
+  {
+    key: "stiffness",
+    label: "Stiffness",
+    group: "spring",
+    description: "Force pulling toward the target.",
+    min: 50,
+    max: 900,
+    step: 5,
+    slider: true,
+  },
+  {
+    key: "damping",
+    label: "Damping",
+    group: "spring",
+    description: "Resistance to motion during settling.",
+    min: 1,
+    max: 100,
+    step: 1,
+    slider: true,
+  },
+  {
+    key: "mass",
+    label: "Mass",
+    group: "spring",
+    description: "Inertia under the same spring forces.",
+    min: 0.1,
+    max: 4,
+    step: 0.05,
+    slider: true,
+  },
+  {
+    key: "restSpeed",
+    label: "Rest speed",
+    group: "settling",
+    description: "Speed threshold for completing a settle.",
+    min: 0.1,
+    max: 20,
+    step: 0.1,
+    unit: "px/s",
+  },
+  {
+    key: "restDistance",
+    label: "Rest distance",
+    group: "settling",
+    description: "Target distance threshold; both rest limits must be met.",
+    min: 0.01,
+    max: 5,
+    step: 0.01,
+    unit: "px",
+  },
   {
     key: "projectionSeconds",
     label: "Projection",
+    group: "release",
+    description: "Velocity look-ahead for a decisive fling.",
+    slider: true,
     min: 0,
     max: 0.5,
     step: 0.01,
@@ -35,15 +97,30 @@ export const physicsParameters: readonly PhysicsParameter[] = [
   {
     key: "flingVelocity",
     label: "Fling threshold",
+    group: "release",
+    description: "Release speed at which direction becomes decisive.",
+    slider: true,
     min: 100,
     max: 3_000,
     step: 25,
     unit: "px/s",
   },
-  { key: "maxAnchorSkip", label: "Maximum skip", min: 1, max: 5, step: 1, integer: true },
+  {
+    key: "maxAnchorSkip",
+    label: "Maximum skip",
+    group: "release",
+    description: "Caps anchor travel during a drag and its release.",
+    min: 1,
+    max: 5,
+    step: 1,
+    integer: true,
+  },
   {
     key: "elasticResistance",
     label: "Elastic resistance",
+    group: "boundaries",
+    description: "Higher values resist overdrag more strongly.",
+    slider: true,
     min: 1,
     max: 8,
     step: 0.05,
@@ -51,6 +128,9 @@ export const physicsParameters: readonly PhysicsParameter[] = [
   {
     key: "maxElasticDistance",
     label: "Elastic limit",
+    group: "boundaries",
+    description: "Visual overdrag limit beyond a legal edge.",
+    slider: true,
     min: 0,
     max: 160,
     step: 2,
@@ -59,6 +139,9 @@ export const physicsParameters: readonly PhysicsParameter[] = [
   {
     key: "programmaticImpulse",
     label: "Control impulse",
+    group: "controls",
+    description: "Directional velocity for button and keyboard moves.",
+    slider: true,
     min: 0,
     max: 2_500,
     step: 25,
