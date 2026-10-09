@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { createPagedGridGeometry } from "@snap-motion/core";
 import { useCarouselMotion } from "@snap-motion/vue/carousel";
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, useId, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
 import {
@@ -9,13 +9,22 @@ import {
   springFromSettings,
   symmetricElasticityFromSettings,
 } from "@/fixtures/lab-settings";
-import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
+import type { DemoPresentation, LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 
-const props = defineProps<{
-  reducedMotionOverride: boolean | undefined;
-  settings: LabPhysicsSettings;
-  stageWidth: number;
-}>();
+const props = withDefaults(
+  defineProps<{
+    presentation?: DemoPresentation;
+    reducedMotionOverride: boolean | undefined;
+    settings: LabPhysicsSettings;
+    stageWidth: number;
+  }>(),
+  { presentation: "lab" },
+);
+
+const labPresentation = computed(() => props.presentation === "lab");
+const instanceId = useId();
+const titleId = `${instanceId}-title`;
+const keyboardHelpId = `${instanceId}-keyboard-help`;
 
 interface GridItem {
   id: string;
@@ -113,6 +122,13 @@ const diagnostics = computed<LabDiagnostics>(() => {
   };
 });
 
+/** Public tiles carry a deterministic hue so a page of the collection reads as distinct items. */
+function plateStyle(item: GridItem) {
+  if (labPresentation.value) return undefined;
+  const number = Number(item.id.replace("item-", ""));
+  return { "--plate-hue": String((number * 47 + 190) % 360) };
+}
+
 function announce() {
   liveMessage.value = `Page ${currentPageIndex.value + 1} of ${pages.value.length}`;
 }
@@ -171,12 +187,12 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
 </script>
 
 <template>
-  <div class="grid-demo">
-    <section class="grid-tool" aria-labelledby="grid-title">
-      <header class="grid-tool-header">
+  <div class="grid-demo" :class="{ 'is-playground': !labPresentation }">
+    <section class="grid-tool" :aria-labelledby="labPresentation ? titleId : undefined">
+      <header v-if="labPresentation" class="grid-tool-header">
         <div>
           <p>Recovered interaction</p>
-          <h3 id="grid-title">Explicit pages, internal grids</h3>
+          <h3 :id="titleId">Explicit pages, internal grids</h3>
         </div>
         <div class="page-status tabular" aria-hidden="true">
           {{ currentPageIndex + 1 }} / {{ pages.length }}
@@ -201,6 +217,9 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
             step="2"
             type="number"
         /></label>
+        <span v-if="!labPresentation" aria-hidden="true" class="page-status tabular">
+          Page {{ currentPageIndex + 1 }} / {{ pages.length }}
+        </span>
         <span class="item-count tabular">{{ items.length }} items</span>
         <button data-testid="add-grid-item" type="button" @click="addItem">Add item</button>
         <button
@@ -214,7 +233,8 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
       </div>
 
       <div
-        aria-labelledby="grid-title"
+        :aria-label="labPresentation ? undefined : 'Paged grid'"
+        :aria-labelledby="labPresentation ? titleId : undefined"
         aria-roledescription="carousel"
         class="grid-stage"
         role="group"
@@ -238,7 +258,7 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
 
         <section
           ref="viewport"
-          aria-describedby="grid-keyboard-help"
+          :aria-describedby="keyboardHelpId"
           class="grid-viewport"
           data-testid="paged-grid"
           :data-active-id="currentPageId"
@@ -270,12 +290,13 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
                   :key="item.id"
                   class="grid-item"
                   :data-item-id="item.id"
+                  :style="plateStyle(item)"
                 >
                   <span class="tabular">{{
                     String(pageIndex * pageCapacity + itemIndex + 1).padStart(2, "0")
                   }}</span>
                   <strong>{{ item.label }}</strong>
-                  <button type="button">Inspect</button>
+                  <button v-if="labPresentation" type="button">Inspect</button>
                 </article>
               </div>
             </section>
@@ -297,14 +318,14 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
             <path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" />
           </svg>
         </button>
-        <p id="grid-keyboard-help" class="sr-only">
+        <p :id="keyboardHelpId" class="sr-only">
           Use Left and Right Arrow to move between pages. Use Home and End to jump.
         </p>
       </div>
       <p class="sr-only" aria-atomic="true" role="status">{{ liveMessage }}</p>
     </section>
 
-    <DiagnosticsPanel :diagnostics="diagnostics" />
+    <DiagnosticsPanel v-if="labPresentation" :diagnostics="diagnostics" />
   </div>
 </template>
 
@@ -467,10 +488,123 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
   font-size: 0.68rem;
 }
 
+/* Public presentation: labelled instrument fields, plate tiles, no Lab rules around the stage. */
+.is-playground .grid-tool {
+  padding-block: 0;
+  border-block: 0;
+  gap: 1rem;
+}
+
+.is-playground .fixture-controls {
+  align-items: end;
+  gap: 0.75rem 1rem;
+  padding-block: 0;
+  border-block: 0;
+}
+
+.is-playground .fixture-controls label {
+  gap: 0.35rem;
+  font-family: var(--pg-font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.is-playground .fixture-controls input {
+  inline-size: 4.75rem;
+  min-block-size: 2.75rem;
+  padding-inline: 0.6rem;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.is-playground .fixture-controls button {
+  min-block-size: 2.75rem;
+  padding-inline: 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.is-playground .page-status {
+  align-self: center;
+  margin-inline-start: auto;
+  font-family: var(--pg-font-mono);
+  font-size: 0.8rem;
+}
+
+.is-playground .item-count {
+  margin-inline-start: 0;
+}
+
+.is-playground .grid-viewport {
+  border: 1px solid var(--pg-line);
+  border-radius: 0.9rem;
+  background: var(--pg-panel);
+}
+
+.is-playground .grid-item {
+  grid-template-rows: auto 1fr;
+  padding: 0.85rem 1rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: linear-gradient(
+    150deg,
+    hsl(var(--plate-hue) 42% 90%),
+    hsl(calc(var(--plate-hue) + 26) 46% 78%)
+  );
+  color: #1d1b16;
+}
+
+.is-playground .grid-item > span {
+  color: rgb(29 27 22 / 0.62);
+  font-family: var(--pg-font-mono);
+  font-size: 0.72rem;
+}
+
+.is-playground .grid-item strong {
+  align-self: end;
+  font-size: clamp(0.95rem, 1.4vw, 1.2rem);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.is-playground .page-control {
+  border-radius: 999px;
+}
+
 @media (max-width: 42rem) {
   .fixture-controls {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Public: three fields on the first row, then status, then the two item actions. */
+  .is-playground .fixture-controls {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .is-playground .fixture-controls label {
+    grid-column: span 2;
+  }
+
+  .is-playground .fixture-controls label input {
+    inline-size: 100%;
+  }
+
+  .is-playground .fixture-controls .page-status {
+    grid-column: span 3;
+    margin-inline-start: 0;
+  }
+
+  .is-playground .fixture-controls .item-count {
+    grid-column: span 3;
+    justify-self: end;
+  }
+
+  .is-playground .fixture-controls button {
+    grid-column: span 3;
   }
 
   .item-count {

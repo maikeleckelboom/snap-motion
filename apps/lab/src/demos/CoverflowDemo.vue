@@ -10,6 +10,7 @@ import {
   type FocusReturnOptions,
   type MediaGalleryOpenRequestDetails,
 } from "@snap-motion/vue/media-gallery";
+import { createReusableTemplate } from "@vueuse/core";
 import { computed, nextTick, ref } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
@@ -18,16 +19,23 @@ import {
   springFromSettings,
   symmetricElasticityFromSettings,
 } from "@/fixtures/lab-settings";
-import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
+import type { DemoPresentation, LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 
 import { showcaseScreens, type ShowcaseScreen, type ShowcaseScreenId } from "./showcaseScreens";
 
-const props = defineProps<{
-  reducedMotionOverride: boolean | undefined;
-  settings: LabPhysicsSettings;
-  stageWidth: number;
-}>();
+const props = withDefaults(
+  defineProps<{
+    presentation?: DemoPresentation;
+    reducedMotionOverride: boolean | undefined;
+    settings: LabPhysicsSettings;
+    stageWidth: number;
+  }>(),
+  { presentation: "lab" },
+);
 
+const labPresentation = computed(() => props.presentation === "lab");
+// The step buttons live in the Lab header and in the public meta row; one definition serves both.
+const [DefineStepControls, StepControls] = createReusableTemplate();
 const screens = showcaseScreens;
 const rail = ref<CoverflowHandle<ShowcaseScreenId>>();
 const demoRoot = ref<HTMLElement>();
@@ -175,18 +183,11 @@ const diagnostics = computed<LabDiagnostics>(() => {
   <section
     ref="demoRoot"
     class="coverflow-demo"
-    aria-labelledby="coverflow-title"
+    :class="{ 'is-playground': !labPresentation }"
+    :aria-labelledby="labPresentation ? 'coverflow-title' : undefined"
     @keydown="rail?.onKeyDown($event)"
   >
-    <header class="coverflow-header">
-      <div>
-        <p class="eyebrow">Spatial carousel</p>
-        <h3 id="coverflow-title">One physical rail, continuous focus</h3>
-        <p class="lede">
-          Center face stays solid. Neighbors park in left/right rails with real perspective. Drag
-          and spring still own one scalar position.
-        </p>
-      </div>
+    <DefineStepControls>
       <div class="coverflow-controls">
         <button
           aria-label="Previous screen"
@@ -211,6 +212,18 @@ const diagnostics = computed<LabDiagnostics>(() => {
           </svg>
         </button>
       </div>
+    </DefineStepControls>
+
+    <header v-if="labPresentation" class="coverflow-header">
+      <div>
+        <p class="eyebrow">Spatial carousel</p>
+        <h3 id="coverflow-title">One physical rail, continuous focus</h3>
+        <p class="lede">
+          Center face stays solid. Neighbors park in left/right rails with real perspective. Drag
+          and spring still own one scalar position.
+        </p>
+      </div>
+      <StepControls />
     </header>
 
     <Coverflow
@@ -303,6 +316,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
     </Coverflow>
 
     <div class="coverflow-meta">
+      <StepControls v-if="!labPresentation" />
       <p>
         <span class="tabular" data-testid="coverflow-counter">{{ visualIndex + 1 }}</span>
         /
@@ -362,7 +376,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       </div>
     </div>
 
-    <DiagnosticsPanel :diagnostics="diagnostics" />
+    <DiagnosticsPanel v-if="labPresentation" :diagnostics="diagnostics" />
     <MediaGalleryDialog
       v-model:open="galleryOpen"
       v-model:active-id="galleryActiveId"
@@ -1040,6 +1054,20 @@ const diagnostics = computed<LabDiagnostics>(() => {
   background: #c9d2de;
   pointer-events: none;
   transition: none;
+}
+
+/* Public presentation: the page owns the headings, the stage takes the page's warm neutral. */
+.is-playground .coverflow-viewport {
+  background: linear-gradient(180deg, #ebe8df 0%, #ddd9cd 100%);
+}
+
+.is-playground .coverflow-meta {
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+}
+
+.is-playground .dot-indicator {
+  background: #bdb8a8;
 }
 
 @media (max-width: 48rem) {

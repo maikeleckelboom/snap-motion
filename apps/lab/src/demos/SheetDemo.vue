@@ -13,8 +13,9 @@ import {
 import { computed, ref, watch } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
+import SegmentedControl from "@/components/SegmentedControl.vue";
 import { springFromSettings } from "@/fixtures/lab-settings";
-import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
+import type { DemoPresentation, LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 
 type ContentMode = "prose" | "short" | "tall";
 type SnapMode = "custom" | "default";
@@ -24,11 +25,17 @@ interface SheetInstance {
   navigateTo: (id: SheetOpenSnapId) => boolean;
 }
 
-const props = defineProps<{
-  reducedMotionOverride: boolean | undefined;
-  settings: LabPhysicsSettings;
-  stageWidth: number;
-}>();
+const props = withDefaults(
+  defineProps<{
+    presentation?: DemoPresentation;
+    reducedMotionOverride: boolean | undefined;
+    settings: LabPhysicsSettings;
+    stageWidth: number;
+  }>(),
+  { presentation: "lab" },
+);
+
+const labPresentation = computed(() => props.presentation === "lab");
 
 const sheet = ref<SheetInstance>();
 const opener = ref<HTMLButtonElement>();
@@ -146,8 +153,8 @@ function snapTo(id: SheetOpenSnapId) {
 </script>
 
 <template>
-  <div class="sheet-demo">
-    <section class="sheet-launch">
+  <div class="sheet-demo" :class="{ 'is-playground': !labPresentation }">
+    <section v-if="labPresentation" class="sheet-launch">
       <div>
         <p>Multi-edge modal</p>
         <h3>One canonical closing coordinate, four physical sides</h3>
@@ -167,7 +174,85 @@ function snapTo(id: SheetOpenSnapId) {
       </button>
     </section>
 
-    <div class="sheet-fixture-controls" aria-label="Sheet fixture">
+    <section v-else class="sheet-stage" aria-label="Sheet launcher">
+      <svg
+        aria-hidden="true"
+        class="sheet-diagram"
+        :data-side="side"
+        viewBox="0 0 160 112"
+        width="160"
+        height="112"
+      >
+        <rect class="diagram-viewport" x="8" y="8" width="144" height="96" rx="6" />
+        <template v-if="side === 'top'">
+          <rect class="diagram-sheet" x="9" y="9" width="142" height="42" />
+          <rect class="diagram-handle" x="64" y="44" width="32" height="4" rx="2" />
+        </template>
+        <template v-else-if="side === 'bottom'">
+          <rect class="diagram-sheet" x="9" y="61" width="142" height="42" />
+          <rect class="diagram-handle" x="64" y="64" width="32" height="4" rx="2" />
+        </template>
+        <template v-else-if="side === 'left'">
+          <rect class="diagram-sheet" x="9" y="9" width="58" height="94" />
+          <rect class="diagram-handle" x="60" y="40" width="4" height="32" rx="2" />
+        </template>
+        <template v-else>
+          <rect class="diagram-sheet" x="93" y="9" width="58" height="94" />
+          <rect class="diagram-handle" x="96" y="40" width="4" height="32" rx="2" />
+        </template>
+      </svg>
+      <div class="sheet-stage-copy">
+        <p class="sheet-stage-title">Attached to the {{ side }} edge</p>
+        <p>
+          {{
+            horizontal
+              ? "A fixed-width surface that slides in from the side."
+              : "A full-width surface with snap points you can drag between."
+          }}
+        </p>
+      </div>
+      <button
+        ref="opener"
+        class="open-button"
+        data-testid="open-sheet"
+        type="button"
+        @click="openSheet"
+      >
+        Open {{ side }} sheet
+      </button>
+    </section>
+
+    <div v-if="!labPresentation" class="sheet-public-controls">
+      <SegmentedControl
+        v-model="side"
+        label="Physical side"
+        :options="[
+          { label: 'Top', value: 'top', testid: 'sheet-side-top' },
+          { label: 'Right', value: 'right', testid: 'sheet-side-right' },
+          { label: 'Bottom', value: 'bottom', testid: 'sheet-side-bottom' },
+          { label: 'Left', value: 'left', testid: 'sheet-side-left' },
+        ]"
+      />
+      <SegmentedControl
+        v-model="contentMode"
+        label="Content"
+        :options="[
+          { label: 'Tall scroll', value: 'tall', testid: 'sheet-content-tall' },
+          { label: 'Short', value: 'short', testid: 'sheet-content-short' },
+          { label: 'Prose', value: 'prose', testid: 'sheet-content-prose' },
+        ]"
+      />
+      <SegmentedControl
+        v-model="snapMode"
+        label="Snap points"
+        :options="[
+          { label: 'Axis default', value: 'default', testid: 'sheet-snap-default' },
+          { label: 'Custom extent', value: 'custom', testid: 'sheet-snap-custom' },
+        ]"
+      />
+    </div>
+
+    <div v-if="labPresentation" class="sheet-fixture-controls" aria-label="Sheet fixture">
       <label>
         <span>Physical side</span>
         <select v-model="side" data-testid="sheet-side-select">
@@ -194,14 +279,14 @@ function snapTo(id: SheetOpenSnapId) {
       </label>
     </div>
 
-    <div class="side-reference" aria-label="Sheet side mapping">
+    <div v-if="labPresentation" class="side-reference" aria-label="Sheet side mapping">
       <div><strong>Bottom</strong><span>Y · + · top handle</span></div>
       <div><strong>Top</strong><span>Y · − · bottom handle</span></div>
       <div><strong>Right</strong><span>X · + · left handle</span></div>
       <div><strong>Left</strong><span>X · − · right handle</span></div>
     </div>
 
-    <DiagnosticsPanel :diagnostics="diagnostics" />
+    <DiagnosticsPanel v-if="labPresentation" :diagnostics="diagnostics" />
 
     <Sheet
       ref="sheet"
@@ -222,8 +307,16 @@ function snapTo(id: SheetOpenSnapId) {
     >
       <template #title>
         <div class="sheet-title">
-          <p>{{ horizontal ? "Fixed-width surface" : "Full-bleed surface" }}</p>
-          <h2>Motion tuning notes</h2>
+          <p>
+            {{
+              labPresentation
+                ? horizontal
+                  ? "Fixed-width surface"
+                  : "Full-bleed surface"
+                : `${side} sheet`
+            }}
+          </p>
+          <h2>{{ labPresentation ? "Motion tuning notes" : "Motion notes" }}</h2>
         </div>
       </template>
 
@@ -254,9 +347,13 @@ function snapTo(id: SheetOpenSnapId) {
       </template>
 
       <div class="sheet-content">
-        <p class="sheet-lede">
+        <p v-if="labPresentation" class="sheet-lede">
           The handle owns primary-axis drag. This body remains a native vertical scrollport, while
           the surface and editorial measure stay independent.
+        </p>
+        <p v-else class="sheet-lede">
+          Drag the handle, throw it, or choose a snap point. Only the handle moves the sheet; this
+          body scrolls on its own.
         </p>
         <template v-if="contentMode === 'prose'">
           <p v-for="index in 5" :key="index">
@@ -266,6 +363,7 @@ function snapTo(id: SheetOpenSnapId) {
         </template>
         <template v-else-if="contentMode === 'tall'">
           <button
+            v-if="labPresentation"
             class="add-note"
             data-testid="add-sheet-note"
             type="button"
@@ -494,11 +592,63 @@ function snapTo(id: SheetOpenSnapId) {
   font-size: 0.78rem;
   line-height: 1.5;
 }
+.sheet-stage {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(1rem, 3vw, 2rem);
+  padding: clamp(1rem, 3vw, 2rem);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--paper);
+}
+.sheet-diagram {
+  inline-size: 10rem;
+  block-size: auto;
+}
+.diagram-viewport {
+  fill: var(--surface);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.diagram-sheet {
+  fill: var(--ink);
+}
+.diagram-handle {
+  fill: var(--paper);
+  opacity: 0.85;
+}
+.sheet-stage-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.sheet-stage-copy .sheet-stage-title {
+  margin-block-end: 0.25rem;
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.sheet-public-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2.5rem;
+}
 :global(html:has(.snap-motion-sheet[open])),
 :global(html:has(.snap-motion-sheet[open]) body) {
   overflow: hidden;
 }
 @media (max-width: 42rem) {
+  .sheet-stage {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .sheet-stage .open-button {
+    grid-column: 1 / -1;
+  }
+  .sheet-diagram {
+    inline-size: 6.5rem;
+  }
   .sheet-launch {
     grid-template-columns: minmax(0, 1fr);
   }

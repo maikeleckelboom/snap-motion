@@ -2,6 +2,13 @@ import type { SnapAnchor } from "@snap-motion/core";
 
 export type LabPresetName = "tight" | "balanced" | "heavy" | "loose";
 
+/**
+ * How a shared demo presents itself. `lab` is the engineering default: explanatory headings, test
+ * affordances and telemetry. `playground` is the public composition, where the host page owns the
+ * headings and the demo renders only the real surface and its own controls.
+ */
+export type DemoPresentation = "lab" | "playground";
+
 export interface LabPhysicsSettings {
   damping: number;
   elasticResistance: number;

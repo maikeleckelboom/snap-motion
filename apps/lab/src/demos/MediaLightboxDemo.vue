@@ -11,8 +11,8 @@ import {
   springFromSettings,
   symmetricElasticityFromSettings,
 } from "@/fixtures/lab-settings";
-import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
-import { mediaFixtures, type MediaFixture, type MediaFixtureId } from "@/fixtures/media";
+import type { DemoPresentation, LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
+import { mediaFixtures, type MediaFixture } from "@/fixtures/media";
 import { runMediaTransition, supportsMediaTransition } from "@/media-inspection/media-transition";
 import MediaZoomControls from "@/media-inspection/MediaZoomControls.vue";
 import { useMediaTransform } from "@/media-inspection/use-media-transform";
@@ -24,13 +24,23 @@ import {
 } from "@/utils/dialogFocus";
 
 type MediaLoadState = "pending" | "loaded" | "failed";
+type MediaFixtureId = string;
 
-const props = defineProps<{
-  inspectionMode: boolean;
-  reducedMotionOverride: boolean | undefined;
-  settings: LabPhysicsSettings;
-  stageWidth: number;
-}>();
+const props = withDefaults(
+  defineProps<{
+    inspectionMode: boolean;
+    /** The media this instance shows. Read once at setup: the set is fixed for the instance. */
+    media?: readonly MediaFixture[];
+    presentation?: DemoPresentation;
+    reducedMotionOverride: boolean | undefined;
+    settings: LabPhysicsSettings;
+    stageWidth: number;
+  }>(),
+  { media: () => mediaFixtures, presentation: "lab" },
+);
+
+const labPresentation = computed(() => props.presentation === "lab");
+const mediaItems: readonly MediaFixture[] = props.media;
 
 const dialog = ref<HTMLDialogElement>();
 const closeButton = ref<HTMLButtonElement>();
@@ -48,7 +58,11 @@ const directionMode = ref<"ltr" | "rtl">("ltr");
 const transitionMotionEnabled = ref(true);
 const isTransitioning = ref(false);
 const liveMessage = ref("");
-const titleId = `media-lightbox-title-${useId()}`;
+const instanceId = useId();
+const titleId = `media-lightbox-title-${instanceId}`;
+const keyboardHelpId = `${instanceId}-keyboard-help`;
+const captionTitleId = `${instanceId}-caption-title`;
+const ownershipTitleId = `${instanceId}-ownership-title`;
 const isOpen = ref(false);
 const reducedOverride = computed(() => props.reducedMotionOverride);
 const direction = computed(() => directionMode.value);
@@ -56,7 +70,7 @@ const { height: renderedStageHeight, width: renderedStageWidth } = useElementSiz
 const thumbnailElements = new Map<MediaFixtureId, HTMLElement>();
 const mediaTransitionElements = new Map<MediaFixtureId, HTMLElement>();
 const mediaPreloads = new Map(
-  mediaFixtures.map((fixture) => [
+  mediaItems.map((fixture) => [
     fixture.id,
     useImage({ decoding: "async", src: fixture.src }, { immediate: false, resetOnExecute: false }),
   ]),
@@ -76,14 +90,14 @@ const { start: startDelayedSourceTimer, stop: stopDelayedSourceTimer } = useTime
 );
 
 function createMediaLoadStates(): Record<MediaFixtureId, MediaLoadState> {
-  return Object.fromEntries(mediaFixtures.map((fixture) => [fixture.id, "pending"])) as Record<
+  return Object.fromEntries(mediaItems.map((fixture) => [fixture.id, "pending"])) as Record<
     MediaFixtureId,
     MediaLoadState
   >;
 }
 
 const visibleFixtures = computed(() =>
-  fixtureMode.value === "one" ? mediaFixtures.slice(0, 1) : mediaFixtures,
+  fixtureMode.value === "one" ? mediaItems.slice(0, 1) : mediaItems,
 );
 const fixtureIds = computed(() => visibleFixtures.value.map((fixture) => fixture.id));
 const initialGeometry = createFixedStageGeometry({
@@ -180,7 +194,7 @@ function resetMediaLoading() {
 }
 
 function fixtureLoadState(fixture: MediaFixture): MediaLoadState {
-  return mediaLoadStates.value[fixture.id];
+  return mediaLoadStates.value[fixture.id] ?? "pending";
 }
 
 function fixtureSourceReady(fixture: MediaFixture): boolean {
@@ -321,7 +335,7 @@ async function openLightbox(fixtureId?: MediaFixtureId) {
   const thumbnailOpener = fixtureId ? thumbnailElements.get(fixtureId) : undefined;
   const transitionSource =
     thumbnailOpener?.querySelector<HTMLElement>(".media-transition-surface") ?? undefined;
-  const fixture = fixtureId ? mediaFixtures.find(({ id }) => id === fixtureId) : undefined;
+  const fixture = fixtureId ? mediaItems.find(({ id }) => id === fixtureId) : undefined;
   storedOpener = thumbnailOpener ?? opener.value ?? captureFocusOpener(document);
   openedFromThumbnailId = fixtureId;
   if (fixtureId) selectFixtureImmediately(fixtureId);
@@ -342,7 +356,7 @@ async function openLightbox(fixtureId?: MediaFixtureId) {
     await runMediaTransition({
       destination: () =>
         destinationReady
-          ? mediaTransitionElements.get(fixtureId ?? semanticId.value ?? "regular")
+          ? mediaTransitionElements.get(fixtureId ?? semanticId.value ?? mediaItems[0]!.id)
           : undefined,
       document: target.ownerDocument,
       enabled: openingMotionReady,
@@ -475,8 +489,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="media-demo">
-    <section class="media-launch">
+  <div class="media-demo" :class="{ 'is-playground': !labPresentation }">
+    <section v-if="labPresentation" class="media-launch">
       <div>
         <p class="fixture-label">Reference modal</p>
         <h3>Contain media without surrendering stage geometry</h3>
@@ -495,6 +509,18 @@ onBeforeUnmount(() => {
         Open lightbox
       </button>
     </section>
+    <div v-else class="media-toolbar">
+      <p class="media-toolbar-count tabular">{{ visibleFixtures.length }} plates</p>
+      <button
+        ref="opener"
+        class="open-button"
+        data-testid="open-lightbox"
+        type="button"
+        @click="openLightbox()"
+      >
+        Open gallery
+      </button>
+    </div>
 
     <div v-if="props.inspectionMode" class="media-fixture-controls">
       <label class="fixture-mode">
@@ -529,7 +555,10 @@ onBeforeUnmount(() => {
       </label>
     </div>
 
-    <div class="fixture-index" aria-label="Included media fixtures">
+    <div
+      class="fixture-index"
+      :aria-label="labPresentation ? 'Included media fixtures' : 'Gallery thumbnails'"
+    >
       <button
         v-for="(fixture, index) in visibleFixtures"
         :key="fixture.id"
@@ -564,7 +593,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <DiagnosticsPanel :diagnostics="diagnostics" />
+    <DiagnosticsPanel v-if="labPresentation" :diagnostics="diagnostics" />
 
     <dialog
       ref="dialog"
@@ -581,10 +610,12 @@ onBeforeUnmount(() => {
       <div class="lightbox-shell" data-testid="media-lightbox-shell" :style="stageStyle">
         <header class="lightbox-header">
           <div class="lightbox-title">
-            <p class="lightbox-eyebrow">Media inspection</p>
+            <p class="lightbox-eyebrow">
+              {{ labPresentation ? "Media inspection" : "Gallery" }}
+            </p>
             <h2 :id="titleId" data-testid="media-title">{{ activeFixture?.title }}</h2>
           </div>
-          <dl class="header-diagnostics">
+          <dl v-if="labPresentation" class="header-diagnostics">
             <div>
               <dt>Fixture</dt>
               <dd class="tabular" data-testid="media-count">
@@ -596,6 +627,9 @@ onBeforeUnmount(() => {
               <dd class="tabular">{{ props.stageWidth }} px</dd>
             </div>
           </dl>
+          <p v-else class="lightbox-count tabular" data-testid="media-count">
+            {{ activeIndex + 1 }} / {{ visibleFixtures.length }}
+          </p>
           <button
             ref="closeButton"
             aria-label="Close media lightbox"
@@ -623,7 +657,7 @@ onBeforeUnmount(() => {
         >
           <div class="stage-instrument" data-testid="media-stage-instrument">
             <div class="stage-readout">
-              <span>Fixed-stage geometry</span>
+              <span v-if="labPresentation">Fixed-stage geometry</span>
               <MediaZoomControls
                 class="stage-zoom-controls"
                 :can-zoom-in="mediaTransform.canZoomIn.value"
@@ -634,7 +668,7 @@ onBeforeUnmount(() => {
                 @zoom-in="mediaTransform.zoomIn"
                 @zoom-out="mediaTransform.zoomOut"
               />
-              <span class="stage-dimensions">
+              <span v-if="labPresentation" class="stage-dimensions">
                 <span class="tabular">Target {{ props.stageWidth }} px</span>
                 <span class="tabular" data-testid="media-rendered-size">
                   Rendered {{ Math.round(renderedStageWidth) }} ×
@@ -673,7 +707,7 @@ onBeforeUnmount(() => {
 
               <section
                 ref="viewport"
-                aria-describedby="media-keyboard-help"
+                :aria-describedby="keyboardHelpId"
                 class="carousel-viewport"
                 data-testid="media-carousel"
                 :data-active-id="semanticId"
@@ -780,6 +814,7 @@ onBeforeUnmount(() => {
                         </div>
                       </div>
                       <button
+                        v-if="labPresentation"
                         aria-label="Inspect details"
                         class="slide-action"
                         :data-testid="`slide-action-${fixture.id}`"
@@ -838,7 +873,7 @@ onBeforeUnmount(() => {
                   />
                 </svg>
               </button>
-              <p id="media-keyboard-help" class="sr-only">
+              <p :id="keyboardHelpId" class="sr-only">
                 At fit, use Left and Right Arrow to move between items. When zoomed, Arrow keys pan
                 the media. Use Plus and Minus to zoom, or Zero to return to fit.
               </p>
@@ -850,14 +885,19 @@ onBeforeUnmount(() => {
         <footer class="lightbox-footer" data-testid="media-lightbox-footer">
           <section
             class="caption-rail"
-            aria-labelledby="caption-rail-title"
+            :aria-labelledby="captionTitleId"
             data-testid="media-caption-rail"
           >
             <div>
-              <p id="caption-rail-title" class="rail-label">Caption</p>
+              <p :id="captionTitleId" class="rail-label">Caption</p>
               <p class="caption-copy">{{ activeFixture?.description }}</p>
             </div>
-            <button class="caption-action" data-testid="caption-action" type="button">
+            <button
+              v-if="labPresentation"
+              class="caption-action"
+              data-testid="caption-action"
+              type="button"
+            >
               Caption details
             </button>
           </section>
@@ -865,14 +905,14 @@ onBeforeUnmount(() => {
           <section
             v-if="props.inspectionMode"
             class="test-rail"
-            aria-labelledby="ownership-rail-title"
+            :aria-labelledby="ownershipTitleId"
             data-testid="media-test-rail"
           >
             <div class="test-rail-intro">
-              <p id="ownership-rail-title" class="rail-label">Keyboard ownership test rail</p>
+              <p :id="ownershipTitleId" class="rail-label">Keyboard ownership test rail</p>
               <p>Interactive descendants retain their directional keys.</p>
             </div>
-            <div aria-labelledby="ownership-rail-title" class="ownership-probes" role="group">
+            <div :aria-labelledby="ownershipTitleId" class="ownership-probes" role="group">
               <label class="text-probe">
                 <span>Note</span>
                 <input aria-label="Caption note" data-testid="caption-input" type="text" />
@@ -1755,6 +1795,106 @@ onBeforeUnmount(() => {
 
   .test-rail {
     padding-block: 0.375rem;
+  }
+}
+
+/* Public presentation: a contact sheet of plates, and a dialog without geometry readouts. */
+.media-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.media-toolbar-count {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--pg-font-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.is-playground .open-button {
+  min-block-size: 2.75rem;
+  padding-inline: 1.1rem;
+  border-radius: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.is-playground .fixture-index {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+  border-block-end: 0;
+  background: none;
+}
+
+.is-playground .fixture-thumbnail {
+  gap: 0.6rem;
+  background: none;
+  font-size: 0.85rem;
+}
+
+.is-playground .media-thumbnail-visual {
+  border: 0;
+  border-radius: 0.75rem;
+  background: #e3dfd3;
+  transition: box-shadow 140ms ease;
+}
+
+.is-playground .fixture-thumbnail:hover .media-thumbnail-visual {
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+.is-playground .fixture-thumbnail-copy {
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  padding: 0 0.1rem;
+}
+
+.is-playground .fixture-thumbnail-copy strong {
+  color: var(--muted);
+  font-family: var(--pg-font-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.is-playground .fixture-thumbnail-copy span {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.lightbox-count {
+  margin: 0;
+  color: var(--lightbox-text-secondary);
+  font-family: var(--pg-font-mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.is-playground .stage-readout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 42rem) {
+  .is-playground .fixture-index {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .is-playground .fixture-thumbnail {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .is-playground .fixture-thumbnail-copy {
+    padding: 0 0.1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-playground .media-thumbnail-visual {
+    transition: none;
   }
 }
 

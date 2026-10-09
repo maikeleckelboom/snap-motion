@@ -14,27 +14,37 @@ import {
   type StackedDeckCardState,
   type StackedDeckHandle,
 } from "@snap-motion/vue/stacked-deck";
+import { createReusableTemplate } from "@vueuse/core";
 import { computed, nextTick, ref } from "vue";
 
 import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
+import SegmentedControl from "@/components/SegmentedControl.vue";
 import {
   deckReleaseFromSettings,
   springFromSettings,
   symmetricElasticityFromSettings,
 } from "@/fixtures/lab-settings";
-import type { LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
+import type { DemoPresentation, LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 
 import { showcaseScreens, type ShowcaseScreen, type ShowcaseScreenId } from "./showcaseScreens";
 
-const props = defineProps<{
-  exchange: StackedDeckExchange;
-  reducedMotionOverride: boolean | undefined;
-  settings: LabPhysicsSettings;
-  stageWidth: number;
-}>();
+const props = withDefaults(
+  defineProps<{
+    exchange: StackedDeckExchange;
+    presentation?: DemoPresentation;
+    reducedMotionOverride: boolean | undefined;
+    settings: LabPhysicsSettings;
+    stageWidth: number;
+  }>(),
+  { presentation: "lab" },
+);
 const emit = defineEmits<{
   (event: "exchangeChange", exchange: StackedDeckExchange): void;
 }>();
+
+const labPresentation = computed(() => props.presentation === "lab");
+// The step buttons live in the Lab header and in the public meta row; one definition serves both.
+const [DefineStepControls, StepControls] = createReusableTemplate();
 
 const twoItemMode = ref(false);
 const screens = computed<readonly ShowcaseScreen[]>(() =>
@@ -162,19 +172,12 @@ const diagnostics = computed<LabDiagnostics>(() => {
 <template>
   <section
     ref="demoRoot"
-    aria-labelledby="stacked-deck-title"
+    :aria-labelledby="labPresentation ? 'stacked-deck-title' : undefined"
     class="stacked-deck-demo"
+    :class="{ 'is-playground': !labPresentation }"
     @keydown="deck?.onKeyDown($event)"
   >
-    <header class="stacked-deck-header">
-      <div>
-        <h3 id="stacked-deck-title">One adjacent screen per cyclic exchange</h3>
-        <p class="lede">
-          Drag the top screen to reveal one adjacent screen. Every gesture, flick, or wheel burst
-          resolves one physical card, no matter how far it travels. Forward and backward continue
-          around the ring without a first or last card.
-        </p>
-      </div>
+    <DefineStepControls>
       <div class="stacked-deck-controls">
         <button
           aria-label="Previous screen"
@@ -199,6 +202,18 @@ const diagnostics = computed<LabDiagnostics>(() => {
           </svg>
         </button>
       </div>
+    </DefineStepControls>
+
+    <header v-if="labPresentation" class="stacked-deck-header">
+      <div>
+        <h3 id="stacked-deck-title">One adjacent screen per cyclic exchange</h3>
+        <p class="lede">
+          Drag the top screen to reveal one adjacent screen. Every gesture, flick, or wheel burst
+          resolves one physical card, no matter how far it travels. Forward and backward continue
+          around the ring without a first or last card.
+        </p>
+      </div>
+      <StepControls />
     </header>
 
     <StackedDeck
@@ -267,7 +282,25 @@ const diagnostics = computed<LabDiagnostics>(() => {
       </template>
     </StackedDeck>
 
-    <div aria-label="Stacked Deck exchange" class="stacked-deck-exchange" role="group">
+    <div v-if="!labPresentation" class="exchange-public">
+      <SegmentedControl
+        label="Exchange"
+        :model-value="exchange"
+        :options="[
+          { label: 'Shuffle', value: 'shuffle', testid: 'stacked-deck-exchange-shuffle' },
+          { label: 'Direct', value: 'direct', testid: 'stacked-deck-exchange-direct' },
+        ]"
+        @update:model-value="emit('exchangeChange', $event)"
+      />
+      <p class="exchange-note">
+        {{
+          exchange === "shuffle"
+            ? "The top card passes behind the pile."
+            : "The card stays attached to the point you grab, vertical movement included."
+        }}
+      </p>
+    </div>
+    <div v-else aria-label="Stacked Deck exchange" class="stacked-deck-exchange" role="group">
       <button
         :aria-pressed="exchange === 'shuffle'"
         data-testid="stacked-deck-exchange-shuffle"
@@ -286,7 +319,12 @@ const diagnostics = computed<LabDiagnostics>(() => {
       </button>
     </div>
 
-    <div aria-label="Stacked Deck item count" class="stacked-deck-exchange" role="group">
+    <div
+      v-if="labPresentation"
+      aria-label="Stacked Deck item count"
+      class="stacked-deck-exchange"
+      role="group"
+    >
       <button
         :aria-pressed="!twoItemMode"
         data-testid="stacked-deck-five-items"
@@ -306,6 +344,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
     </div>
 
     <div class="stacked-deck-meta">
+      <StepControls v-if="!labPresentation" />
       <p>
         <strong data-testid="stacked-deck-caption">{{ currentScreen.title }}</strong>
       </p>
@@ -329,7 +368,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
         </svg>
         <span>Inspect screen</span>
       </button>
-      <label class="stacked-deck-destination">
+      <label v-if="labPresentation" class="stacked-deck-destination">
         <span>Current screen</span>
         <select
           data-testid="stacked-deck-destination"
@@ -344,7 +383,7 @@ const diagnostics = computed<LabDiagnostics>(() => {
       </label>
     </div>
 
-    <DiagnosticsPanel :diagnostics="diagnostics" />
+    <DiagnosticsPanel v-if="labPresentation" :diagnostics="diagnostics" />
     <MediaGalleryDialog
       v-model:open="galleryOpen"
       v-model:active-id="galleryActiveId"
@@ -602,6 +641,38 @@ const diagnostics = computed<LabDiagnostics>(() => {
   color: var(--ink);
   font: inherit;
   font-size: 0.85rem;
+}
+
+/* Public presentation: the page owns the headings, the stage takes the page's warm neutral. */
+.is-playground .stacked-deck-backdrop {
+  background:
+    radial-gradient(circle at 50% 28%, rgb(255 255 255 / 0.65), transparent 56%),
+    linear-gradient(180deg, #ebe8df 0%, #ddd9cd 100%);
+}
+
+.exchange-public {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.6rem 1.5rem;
+}
+
+.exchange-note {
+  max-inline-size: 26rem;
+  margin: 0;
+  padding-block-end: 0.7rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.is-playground .stacked-deck-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.is-playground .stacked-deck-meta p {
+  flex: 1 1 8rem;
 }
 
 @media (max-width: 48rem) {

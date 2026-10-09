@@ -11,8 +11,12 @@ export type MediaFixtureId =
   | "transformed"
   | "delayed";
 
-export interface MediaFixture {
-  id: MediaFixtureId;
+/**
+ * One media item a lightbox can show. The Lab certifies its own fixtures below; the public
+ * Playground supplies representative media of the same shape.
+ */
+export interface MediaFixture<Id extends string = string> {
+  id: Id;
   title: string;
   description: string;
   intrinsicSize: {
@@ -23,7 +27,7 @@ export interface MediaFixture {
   mode: "regular" | "wide" | "tall" | "transformed" | "delayed";
 }
 
-export const mediaFixtures: MediaFixture[] = [
+export const mediaFixtures: MediaFixture<MediaFixtureId>[] = [
   {
     id: "regular",
     title: "Regular landscape",
