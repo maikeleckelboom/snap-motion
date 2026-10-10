@@ -1036,9 +1036,15 @@ function lockDocumentScroll() {
   lockedRoot = root;
   previousPaddingInlineEnd = root.style.paddingInlineEnd;
   const view = root.ownerDocument.defaultView;
-  const scrollbarWidth = Math.max(0, (view?.innerWidth ?? root.clientWidth) - root.clientWidth);
+  const style = view?.getComputedStyle(root);
+  // A document that reserves its scrollbar gutter keeps that space when scrolling is locked, so
+  // there is no width to give back. Padding it as well would narrow the page behind the modal.
+  const reservesGutter = /\bstable\b/.test(style?.getPropertyValue("scrollbar-gutter") ?? "");
+  const scrollbarWidth = reservesGutter
+    ? 0
+    : Math.max(0, (view?.innerWidth ?? root.clientWidth) - root.clientWidth);
   if (scrollbarWidth > 0) {
-    const currentPadding = Number.parseFloat(view?.getComputedStyle(root).paddingInlineEnd ?? "0");
+    const currentPadding = Number.parseFloat(style?.paddingInlineEnd ?? "0");
     root.style.paddingInlineEnd = `${currentPadding + scrollbarWidth}px`;
   }
   scrollLocked.value = true;

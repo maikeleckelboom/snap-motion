@@ -160,6 +160,13 @@ fallback. Focus and image guards resolve DOM ownership through each node's docum
 for iframe-realm and adopted-document nodes. Server markup reflects the supplied semantic ID and
 responsive image attributes while the native dialog opens only after mount.
 
+## Scroll lock
+
+Opening locks document scrolling. When that removes a classic scrollbar, the Gallery pads the root
+by the same width so the page behind it does not widen. A document that reserves its gutter with
+`scrollbar-gutter: stable` keeps that space while locked, so the Gallery adds no padding for it and
+the page behind the modal keeps its exact width.
+
 ## Runtime and theme boundary
 
 The entrypoint runtime graph contains Vue, VueUse listeners/measurement/scroll lock/timers, and the

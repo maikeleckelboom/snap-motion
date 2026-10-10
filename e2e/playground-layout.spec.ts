@@ -600,6 +600,20 @@ test.describe("scroll lock with real scrollbars", () => {
       await page.getByTestId("open-sheet").click();
       await expectSheetOpenAt(page.getByTestId("sheet"), "comfortable");
       expect(await measure()).toEqual(before);
+      await page.keyboard.press("Escape");
+      await expect(page.getByTestId("sheet")).not.toBeVisible();
+
+      // The package Gallery compensates for the scrollbar it removes. The page reserves its gutter
+      // (`scrollbar-gutter: stable`), so there is nothing to compensate for: padding the root as well
+      // would narrow every stage behind the modal by one scrollbar width.
+      const inspect = section(page, "coverflow").getByTestId("coverflow-inspect");
+      await inspect.scrollIntoViewIfNeeded();
+      await inspect.click();
+      await expect(section(page, "coverflow").locator("dialog[open]")).toBeVisible();
+      expect(await measure()).toEqual(before);
+      await page.keyboard.press("Escape");
+      await expect(section(page, "coverflow").locator("dialog[open]")).toHaveCount(0);
+      expect(await measure()).toEqual(before);
     } finally {
       await browser.close();
     }
