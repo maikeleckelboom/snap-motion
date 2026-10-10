@@ -500,8 +500,8 @@ test.describe("live surfaces", () => {
 
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
-    // Focus returns to the control that opened it, and the page is where the visitor left it.
-    await expect(thumbnail).toBeFocused();
+    // Thumbnail-origin navigation returns focus to the displayed plate; visible targets keep scroll.
+    await expect(page.getByTestId("media-thumbnail-moon-over-ridges")).toBeFocused();
     expect(Math.abs((await scrollY(page)) - before)).toBeLessThanOrEqual(2);
   });
 

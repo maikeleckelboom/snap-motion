@@ -57,8 +57,20 @@ export function maintainModalTabOrder(
   return true;
 }
 
+export function canRestoreFocus(target: HTMLElement | undefined): target is HTMLElement {
+  if (
+    !target?.isConnected ||
+    target.closest("[inert], [hidden], [aria-hidden='true']") ||
+    target.matches(":disabled, [aria-disabled='true']") ||
+    target.getClientRects().length === 0
+  )
+    return false;
+  const style = target.ownerDocument.defaultView?.getComputedStyle(target);
+  return style?.display !== "none" && style?.visibility !== "hidden";
+}
+
 export function restoreFocus(target: HTMLElement | undefined): boolean {
-  if (!target?.isConnected) return false;
+  if (!canRestoreFocus(target)) return false;
   target.focus({ preventScroll: true });
   return target === target.ownerDocument.activeElement;
 }

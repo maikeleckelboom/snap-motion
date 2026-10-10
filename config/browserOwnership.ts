@@ -24,6 +24,7 @@ export const interoperabilitySpecs = [
   "sheetContent.spec.ts",
   "surfaceState.spec.ts",
   "galleryTakeover.spec.ts",
+  "galleryReturn.spec.ts",
 ];
 
 export function chromiumScope(group: string | undefined): {

@@ -268,6 +268,10 @@ export function useMediaTransform(options: UseMediaTransformOptions) {
   });
 
   return {
+    interrupt() {
+      stopAnimation();
+      endPointerPan();
+    },
     canZoomIn,
     canZoomOut,
     isAnimating,

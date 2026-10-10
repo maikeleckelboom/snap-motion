@@ -13,11 +13,16 @@ import {
 } from "@/fixtures/lab-settings";
 import type { DemoPresentation, LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
 import { mediaFixtures, type MediaFixture } from "@/fixtures/media";
-import { runMediaTransition, supportsMediaTransition } from "@/media-inspection/media-transition";
+import {
+  cancelMediaTransition,
+  runMediaTransition,
+  supportsMediaTransition,
+} from "@/media-inspection/media-transition";
 import MediaZoomControls from "@/media-inspection/MediaZoomControls.vue";
 import { useMediaTransform } from "@/media-inspection/use-media-transform";
 import {
   captureFocusOpener,
+  canRestoreFocus,
   focusCloseButton,
   maintainModalTabOrder,
   restoreFocus,
@@ -56,7 +61,7 @@ const mediaIntrinsicSizes = ref<Partial<Record<MediaFixtureId, MediaSize>>>({});
 const fixtureMode = ref<"all" | "one">("all");
 const directionMode = ref<"ltr" | "rtl">("ltr");
 const transitionMotionEnabled = ref(true);
-const isTransitioning = ref(false);
+const preparingOpen = ref(false);
 const liveMessage = ref("");
 const instanceId = useId();
 const titleId = `media-lightbox-title-${instanceId}`;
@@ -68,6 +73,7 @@ const reducedOverride = computed(() => props.reducedMotionOverride);
 const direction = computed(() => directionMode.value);
 const { height: renderedStageHeight, width: renderedStageWidth } = useElementSize(viewport);
 const thumbnailElements = new Map<MediaFixtureId, HTMLElement>();
+const decodedThumbnails = new WeakSet<HTMLImageElement>();
 const mediaTransitionElements = new Map<MediaFixtureId, HTMLElement>();
 const mediaPreloads = new Map(
   mediaItems.map((fixture) => [
@@ -79,7 +85,10 @@ const transitionSupported = supportsMediaTransition(globalThis.document);
 let storedOpener: HTMLElement | undefined;
 let openedFromThumbnailId: MediaFixtureId | undefined;
 let focusRestoreFrame: number | undefined;
-let closeRequestedDuringTransition = false;
+let lifecycleGeneration = 0;
+let closingGeneration: number | undefined;
+let mounted = true;
+const nativeCloses: { generation: number; focus: HTMLElement | undefined }[] = [];
 
 const { start: startDelayedSourceTimer, stop: stopDelayedSourceTimer } = useTimeoutFn(
   () => {
@@ -206,7 +215,10 @@ function setMediaLoadState(fixture: MediaFixture, state: MediaLoadState) {
 }
 
 function isCurrentMediaLoad(image: HTMLImageElement): boolean {
-  return isOpen.value && Number(image.dataset.loadGeneration) === mediaLoadGeneration.value;
+  return (
+    (isOpen.value || preparingOpen.value) &&
+    Number(image.dataset.loadGeneration) === mediaLoadGeneration.value
+  );
 }
 
 async function onMediaLoad(fixture: MediaFixture, event: Event) {
@@ -284,6 +296,20 @@ function setThumbnailElement(fixtureId: MediaFixtureId, element: HTMLElement | n
   else thumbnailElements.delete(fixtureId);
 }
 
+async function onThumbnailLoad(event: Event) {
+  const image = event.currentTarget;
+  if (!(image instanceof HTMLImageElement)) return;
+  decodedThumbnails.delete(image);
+  const source = image.currentSrc;
+  try {
+    await image.decode();
+    if (image.isConnected && image.currentSrc === source && image.naturalWidth > 0)
+      decodedThumbnails.add(image);
+  } catch {
+    // A failed thumbnail is never a shared-element destination; normal modal closure still works.
+  }
+}
+
 function setMediaTransitionElement(fixtureId: MediaFixtureId, element: HTMLElement | null) {
   if (element) mediaTransitionElements.set(fixtureId, element);
   else mediaTransitionElements.delete(fixtureId);
@@ -328,9 +354,15 @@ function selectFixtureImmediately(fixtureId: MediaFixtureId) {
 
 async function openLightbox(fixtureId?: MediaFixtureId) {
   const target = dialog.value;
-  if (!target || target.open || isTransitioning.value) {
+  if (!target || target.open) {
     return;
   }
+  const generation = ++lifecycleGeneration;
+  closingGeneration = undefined;
+  cancelMediaTransition(target.ownerDocument);
+  if (focusRestoreFrame !== undefined) window.cancelAnimationFrame(focusRestoreFrame);
+  focusRestoreFrame = undefined;
+  const isCurrent = () => mounted && generation === lifecycleGeneration;
 
   const thumbnailOpener = fixtureId ? thumbnailElements.get(fixtureId) : undefined;
   const transitionSource =
@@ -339,8 +371,6 @@ async function openLightbox(fixtureId?: MediaFixtureId) {
   storedOpener = thumbnailOpener ?? opener.value ?? captureFocusOpener(document);
   openedFromThumbnailId = fixtureId;
   if (fixtureId) selectFixtureImmediately(fixtureId);
-  isTransitioning.value = true;
-
   try {
     const openingMotionReady =
       transitionMotionEnabled.value &&
@@ -349,76 +379,152 @@ async function openLightbox(fixtureId?: MediaFixtureId) {
       fixture !== undefined &&
       fixture.mode !== "delayed" &&
       (await preloadMediaForTransition(fixture));
+    if (!isCurrent()) return;
     let destinationReady = false;
 
     resetMediaLoading();
     mediaTransform.reset({ animated: false });
+    // Decode the actual destination while the native dialog is still hidden. The View Transition
+    // callback then contains only the state commit and Vue's DOM barrier, never a loading wait.
+    if (openingMotionReady && fixture) {
+      preparingOpen.value = true;
+      await nextTick();
+      await until(() => fixtureLoadState(fixture)).toMatch((state) => state !== "pending", {
+        timeout: 4_000,
+        throwOnTimeout: false,
+      });
+      if (!isCurrent()) return;
+      destinationReady = fixtureLoadState(fixture) === "loaded";
+    }
     await runMediaTransition({
       destination: () =>
         destinationReady
           ? mediaTransitionElements.get(fixtureId ?? semanticId.value ?? mediaItems[0]!.id)
           : undefined,
       document: target.ownerDocument,
-      enabled: openingMotionReady,
+      enabled: openingMotionReady && destinationReady,
+      isCurrent,
       reducedMotion: motion.reducedMotion.value,
       source: transitionSource,
       update: async () => {
         target.showModal();
         isOpen.value = true;
+        preparingOpen.value = false;
         startDelayedSourceTimer();
         await nextTick();
         if (fixtureId) selectFixtureImmediately(fixtureId);
-        if (openingMotionReady && fixture) {
-          await until(() => fixtureLoadState(fixture)).toMatch((state) => state !== "pending", {
-            timeout: 4_000,
-          });
-          destinationReady = fixtureLoadState(fixture) === "loaded";
-        }
         motion.remeasure();
         focusCloseButton(closeButton.value, target);
         announceCurrent();
       },
     });
   } finally {
-    isTransitioning.value = false;
-    if (closeRequestedDuringTransition && target.open) {
-      closeRequestedDuringTransition = false;
-      await closeLightbox();
-    }
+    if (isCurrent()) preparingOpen.value = false;
   }
+}
+
+function displayedMediaId(): MediaFixtureId | undefined {
+  const region = viewport.value?.getBoundingClientRect();
+  if (!region || region.width <= 0 || region.height <= 0) return;
+  const tolerance = 0.5 / Math.max(1, window.devicePixelRatio);
+  const viewportStyle = getComputedStyle(viewport.value!);
+  const left = region.left + parseFloat(viewportStyle.borderLeftWidth);
+  const right = region.right - parseFloat(viewportStyle.borderRightWidth);
+  const matches = visibleFixtures.value.filter((fixture) => {
+    const surface = mediaTransitionElements.get(fixture.id);
+    const slide = surface?.closest(".media-slide");
+    if (!surface?.isConnected || !slide || fixtureLoadState(fixture) !== "loaded") return false;
+    const box = slide.getBoundingClientRect();
+    return Math.abs(box.left - left) <= tolerance && Math.abs(box.right - right) <= tolerance;
+  });
+  return matches.length === 1 ? matches[0]!.id : undefined;
+}
+
+function visibleThumbnail(surface: HTMLElement | undefined) {
+  if (!surface?.isConnected || surface.getClientRects().length === 0) return false;
+  const box = surface.getBoundingClientRect();
+  const bar = document.querySelector<HTMLElement>(".pg-bar")?.getBoundingClientRect().bottom ?? 0;
+  return (
+    box.bottom > Math.max(0, bar) &&
+    box.top < window.innerHeight &&
+    box.right > 0 &&
+    box.left < window.innerWidth
+  );
 }
 
 async function closeLightbox() {
   const target = dialog.value;
-  if (!target?.open) return;
-  if (isTransitioning.value) {
-    closeRequestedDuringTransition = true;
-    return;
-  }
+  if (!target?.open || closingGeneration === lifecycleGeneration) return;
+  const generation = lifecycleGeneration;
+  closingGeneration = generation;
+  const isCurrent = () => mounted && generation === lifecycleGeneration;
+  cancelMediaTransition(target.ownerDocument);
+  const activeId = displayedMediaId();
   motion.interrupt();
-  mediaTransform.reset({ animated: false });
-  const activeId = semanticId.value;
-  const canReturnToThumbnail =
-    openedFromThumbnailId !== undefined && openedFromThumbnailId === activeId;
-  const source = canReturnToThumbnail ? mediaTransitionElements.get(activeId) : undefined;
-  isTransitioning.value = true;
+  mediaTransform.interrupt();
+  const thumbnail = thumbnailElements.get(activeId ?? motion.nearestId.value ?? "");
+  const focus =
+    openedFromThumbnailId !== undefined && canRestoreFocus(thumbnail)
+      ? thumbnail
+      : canRestoreFocus(storedOpener)
+        ? storedOpener
+        : opener.value;
+  const destination =
+    thumbnail?.querySelector<HTMLElement>(".media-transition-surface") ?? undefined;
+  const image = destination?.querySelector<HTMLImageElement>("img");
+  const destinationReady = Boolean(
+    activeId !== undefined &&
+    canRestoreFocus(thumbnail) &&
+    image?.complete &&
+    image.naturalWidth > 0 &&
+    decodedThumbnails.has(image),
+  );
+  const reveal =
+    openedFromThumbnailId !== undefined && destinationReady && !visibleThumbnail(destination);
+  const canReturnToThumbnail = destinationReady && (visibleThumbnail(destination) || reveal);
+  const mediaSource = activeId === undefined ? undefined : mediaTransitionElements.get(activeId);
+  // Native snapshots retain their own clip, but drop clipping inherited from ancestors. Capture the
+  // frame with zoom/pan inside it so the outgoing image cannot suddenly paint beyond the viewport.
+  const source = mediaTransform.isZoomed.value
+    ? (mediaSource?.closest<HTMLElement>(".media-frame") ?? undefined)
+    : mediaSource;
+  await nextTick();
+  if (!isCurrent()) return;
+
+  const close = async () => {
+    if (!isCurrent() || !target.open) return;
+    nativeCloses.push({ generation, focus });
+    target.close();
+    isOpen.value = false;
+    preparingOpen.value = false;
+    mediaTransform.reset({ animated: false });
+    await nextTick();
+    if (!isCurrent()) return;
+    if (reveal && thumbnail?.isConnected) {
+      const box = thumbnail.getBoundingClientRect();
+      const top =
+        (document.querySelector<HTMLElement>(".pg-bar")?.getBoundingClientRect().bottom ?? 0) + 8;
+      const delta =
+        box.bottom > window.innerHeight ? box.bottom - window.innerHeight + 8 : box.top - top;
+      window.scrollBy({ top: delta, behavior: "instant" });
+    }
+    if (!restoreFocus(focus)) restoreFocus(opener.value);
+  };
 
   try {
     await runMediaTransition({
       destination: () =>
-        canReturnToThumbnail
-          ? (thumbnailElements
-              .get(activeId)
-              ?.querySelector<HTMLElement>(".media-transition-surface") ?? undefined)
-          : undefined,
+        canReturnToThumbnail && visibleThumbnail(destination) ? destination : undefined,
       document: target.ownerDocument,
       enabled: transitionMotionEnabled.value && canReturnToThumbnail,
       reducedMotion: motion.reducedMotion.value,
       source,
-      update: () => target.close(),
+      isCurrent,
+      update: close,
     });
   } finally {
-    isTransitioning.value = false;
+    // Native API or update errors must not retain modal/focus ownership.
+    if (isCurrent() && target.open) await close();
   }
 }
 
@@ -428,15 +534,21 @@ function onCancel(event: Event) {
 }
 
 function onDialogClose() {
+  const closed = nativeCloses.shift();
+  if (dialog.value?.open || (closed && closed.generation !== lifecycleGeneration) || !mounted)
+    return;
   isOpen.value = false;
   mediaLoadGeneration.value += 1;
   mediaTransform.reset({ animated: false });
   stopDelayedSourceTimer();
-  const openerToRestore = storedOpener;
+  const openerToRestore = closed?.focus ?? storedOpener;
+  const generation = lifecycleGeneration;
   storedOpener = undefined;
   focusRestoreFrame = window.requestAnimationFrame(() => {
     focusRestoreFrame = undefined;
-    restoreFocus(openerToRestore);
+    if (mounted && generation === lifecycleGeneration && !dialog.value?.open) {
+      if (!restoreFocus(openerToRestore)) restoreFocus(opener.value);
+    }
   });
 }
 
@@ -476,6 +588,9 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
 });
 
 onBeforeUnmount(() => {
+  mounted = false;
+  lifecycleGeneration += 1;
+  if (dialog.value) cancelMediaTransition(dialog.value.ownerDocument);
   stopDelayedSourceTimer();
   if (dialog.value?.open) {
     dialog.value.close();
@@ -547,7 +662,7 @@ onBeforeUnmount(() => {
           type="checkbox"
         />
         <span>
-          Thumbnail opening motion
+          Thumbnail opening and return motion
           <small>{{
             transitionSupported ? "View Transition" : "Unavailable in this browser"
           }}</small>
@@ -585,6 +700,7 @@ onBeforeUnmount(() => {
               :height="fixture.intrinsicSize.height"
               :loading="labPresentation ? undefined : 'lazy'"
               :width="fixture.intrinsicSize.width"
+              @load="onThumbnailLoad"
             />
           </span>
         </span>
@@ -766,7 +882,7 @@ onBeforeUnmount(() => {
                             :style="mediaTransitionStyle(fixture)"
                           >
                             <img
-                              v-if="isOpen && fixtureSourceReady(fixture)"
+                              v-if="(isOpen || preparingOpen) && fixtureSourceReady(fixture)"
                               :alt="
                                 fixtureLoadState(fixture) === 'loaded' ? fixture.description : ''
                               "
@@ -1351,8 +1467,6 @@ onBeforeUnmount(() => {
   min-block-size: 0;
   max-block-size: 100%;
   aspect-ratio: 16 / 10;
-  border: 1px solid var(--lightbox-control-border);
-  background: var(--lightbox-surface-raised);
   overflow: clip;
   cursor: grab;
   container-type: size;
@@ -1899,10 +2013,6 @@ onBeforeUnmount(() => {
   border-block-end: 0;
 }
 
-.is-playground .carousel-viewport {
-  border-color: var(--lightbox-separator);
-}
-
 @media (max-width: 42rem) {
   .is-playground .fixture-index {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1965,6 +2075,10 @@ onBeforeUnmount(() => {
   z-index: 2147483647;
   animation-duration: 340ms;
   animation-timing-function: cubic-bezier(0.22, 0.8, 0.2, 1);
+}
+
+:global(::view-transition) {
+  pointer-events: none;
 }
 
 :global(::view-transition-old(root)),
