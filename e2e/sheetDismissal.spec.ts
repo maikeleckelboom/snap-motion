@@ -125,7 +125,12 @@ for (const width of [1280, 390]) {
     await openEditor(page, "sheet");
     await configure(page, springs.slow);
     await page.getByRole("button", { name: "Close editor", exact: true }).click();
-    await page.getByTestId("open-sheet").scrollIntoViewIfNeeded();
+    // Centre the opener so the click needs no scroll of its own. `scrollIntoViewIfNeeded` leaves it
+    // at the top edge when more page follows the Sheet, beneath the sticky header, and the harness
+    // would then scroll to uncover it: that is the harness moving the page, not the Sheet.
+    await page
+      .getByTestId("open-sheet")
+      .evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" }));
     const measure = () =>
       page.evaluate(() => ({
         scroll: scrollY,
