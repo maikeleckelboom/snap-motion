@@ -128,9 +128,8 @@ test("the built Studio loads on demand from the base and decodes every plate it 
   await expect
     .poll(() => plate.evaluate((image) => (image as HTMLImageElement).naturalWidth))
     .toBe(1_600);
-  expect(new URL((await plate.getAttribute("src"))!).pathname.startsWith("/snap-motion/")).toBe(
-    true,
-  );
+  const source = await plate.evaluate((image) => (image as HTMLImageElement).currentSrc);
+  expect(new URL(source).pathname.startsWith("/snap-motion/assets/")).toBe(true);
   expect(studioAssets().length).toBeGreaterThanOrEqual(beforeGallery);
 
   expect(failed).toEqual([]);
