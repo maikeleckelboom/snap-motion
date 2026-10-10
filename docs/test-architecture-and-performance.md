@@ -159,6 +159,9 @@ and compact tuning synchronization. Frame samples guard the sticky header throug
 and closing at phone/desktop sizes. The non-root production gate decodes all public screen plates,
 from their external asset URLs, alongside the preserved Gallery media. Mobile navigation also passes axe
 with its disclosure open. No historical motion assertion or tolerance was weakened for this pass.
+The navigation race check opens native `details` and selects an anchor before its queued `toggle`
+event, then requires immediate closure and normal reopening/Escape behavior. It reproduces the
+initial CI failure without a timer or a relaxed assertion.
 
 ## Implemented ownership and artifact reuse
 

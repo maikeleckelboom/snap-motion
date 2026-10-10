@@ -7,6 +7,7 @@ import { playgroundSections } from "../sections";
 const props = defineProps<{ activeId: string | undefined }>();
 const compact = useMediaQuery("(max-width: 52rem)");
 const menuOpen = ref(false);
+const sectionMenu = ref<HTMLDetailsElement>();
 const menuToggle = ref<HTMLElement>();
 const activeSection = computed(
   () => playgroundSections.find(({ id }) => id === props.activeId) ?? playgroundSections[0]!,
@@ -14,9 +15,16 @@ const activeSection = computed(
 function onToggle(event: Event) {
   if (compact.value) menuOpen.value = (event.currentTarget as HTMLDetailsElement).open;
 }
-function closeMenu() {
+function selectSection() {
   if (!compact.value) return;
   menuOpen.value = false;
+  // A native open can precede its queued toggle event. Close the disclosure directly even when
+  // Vue's model is still false, so a fast selection cannot leave the DOM open without an update.
+  if (sectionMenu.value) sectionMenu.value.open = false;
+}
+function closeMenu() {
+  if (!compact.value) return;
+  selectSection();
   menuToggle.value?.focus();
 }
 
@@ -33,6 +41,7 @@ const labHref = import.meta.env.BASE_URL;
 
       <nav aria-label="Playground sections" class="bar-nav">
         <details
+          ref="sectionMenu"
           class="section-menu"
           :open="!compact || menuOpen"
           @toggle="onToggle"
@@ -53,7 +62,7 @@ const labHref = import.meta.env.BASE_URL;
                 :aria-current="activeId === section.id ? 'location' : undefined"
                 :href="`#${section.id}`"
                 :data-testid="`nav-${section.id}`"
-                @click="menuOpen = false"
+                @click="selectSection"
               >
                 <span class="nav-number tabular">{{ section.number }}</span>
                 <span class="nav-label">{{ section.title }}</span>

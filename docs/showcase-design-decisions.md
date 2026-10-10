@@ -107,6 +107,10 @@ Cloudflare deployment or a merge to `main`.
   all five named anchor links. Escape returns focus to its summary; choosing an anchor closes the
   menu and uses native navigation/focus on the section. Cold hash links and natural scrolling remain.
   At wider sizes the same navigation tree is a horizontal list.
+- Closing the native disclosure writes its `open` property immediately as well as updating the Vue
+  model. The browser queues `toggle`, so rapid selection can arrive while the model is still false;
+  assigning false alone would produce no render and leave the native menu open. A controlled
+  regression opens and selects in one task, preserving the same close/focus contract as keyboard use.
 - The Playground Sheet locks only the root scrollport. Locking the body as well made it a new sticky
   containing scrollport, moving the header offscreen while the native modal was open and briefly
   exposing that position during closing. Frame sampling now guards the header through the complete

@@ -881,6 +881,29 @@ test.describe("reduced motion", () => {
 });
 
 test.describe("document structure", () => {
+  test("jump selection closes native disclosure before its deferred toggle event", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openPlayground(page);
+    const nav = page.getByRole("navigation", { name: "Playground sections" });
+    // Native disclosure state changes before its queued toggle event reaches Vue. Selecting an
+    // anchor in that interval must close the actual disclosure even when the model is still false.
+    await nav.evaluate((element) => {
+      element.querySelector<HTMLDetailsElement>("details")!.open = true;
+      element.querySelector<HTMLAnchorElement>('a[href="#stacked-deck"]')!.click();
+    });
+    await expect(page).toHaveURL(/#stacked-deck$/);
+    await expect(nav.locator("details")).toHaveJSProperty("open", false);
+    await expect(nav.getByRole("link")).toHaveCount(0);
+    const toggle = page.getByTestId("section-menu-toggle");
+    await toggle.press("Enter");
+    await expect(nav.getByRole("link")).toHaveCount(5);
+    await page.keyboard.press("Escape");
+    await expect(toggle).toBeFocused();
+    await expect(nav.getByRole("link")).toHaveCount(0);
+  });
+
   for (const width of [320, 375, 390, 430, 768]) {
     test(`named mobile navigation reaches every surface at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 844 });
