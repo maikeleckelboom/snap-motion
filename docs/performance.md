@@ -218,3 +218,83 @@ esize and orientationchange in all), and the
 page adds two keydown listeners on document for its dialogs. After repeated cycles of both modals, every
 editor, every preset and an inspection gallery, a settled page has exactly the same inventory; a closing
 dialog briefly holds one ocus listener until its close event is consumed, which the test waits out.
+
+## Motion Studio activation
+
+Section 06 mounts five more interactive surfaces, so it is not mounted at load: the page renders a
+light introduction (inline SVG, no images) and imports the workspace when the visitor opens it. The
+measurements below are from production builds under `/snap-motion/` on the same Windows host,
+Chromium, a 390 × 844 touch viewport, median of five cold contexts, native CPU and a 4× slowdown.
+Before is the starting commit `4199700`; after is this branch. Frame intervals come from four real
+mouse-drag round trips on a 1280 × 800 desktop. These are local samples, not a guarantee, and no
+physical phone was used. Raw logs and the measurement scripts stay uncommitted in
+`.artifacts/playground/integrated-studio/`.
+
+**Page load, Studio closed.** The cost the first five demonstrations pay for the sixth section's
+existence is its introduction and its tuning bar.
+
+| Metric                     |        Before | After, closed |         Change |
+| -------------------------- | ------------: | ------------: | -------------: |
+| LCP, native CPU            |        300 ms |        308 ms |  +8 ms (noise) |
+| Blocking time, native CPU  |        115 ms |        126 ms | +11 ms (noise) |
+| LCP, 4× CPU slowdown       |      1,488 ms |      1,584 ms |         +96 ms |
+| Blocking time, 4× slowdown |      1,189 ms |      1,237 ms |         +48 ms |
+| Layout shift               |        0.0000 |        0.0000 |              0 |
+| JS, recompressed gzip      |     133.9 KiB |     137.3 KiB |       +3.4 KiB |
+| CSS, recompressed gzip     |      17.5 KiB |      17.9 KiB |       +0.4 KiB |
+| Requests / media           | 16 / 43.5 KiB | 16 / 43.5 KiB |              0 |
+| DOM nodes                  |           787 |           889 |           +102 |
+| JS heap                    |        4.4 MB |        4.4 MB |              0 |
+| Page height                |      5,180 px |      6,201 px |      +1,021 px |
+
+The first five demonstrations are not more expensive to initialize: their code, their requests and
+their markup are unchanged. The added 3.4 KiB is the introduction, the section's data and its
+styling. At 4× the differences are inside the run-to-run spread seen in earlier measurements here.
+
+**Activation.** Opening the workspace is the only moment the Studio costs anything. Narrow means one
+view mounted (a phone); wide mounts the Grid, the Coverflow, the Deck, the Gallery and the Sheet.
+
+| Metric                               |        Narrow (390 px) | Wide (1280 px) |
+| ------------------------------------ | ---------------------: | -------------: |
+| Ready after the tap, native / 4× CPU |        170 ms / 733 ms |              - |
+| Extra blocking time, native / 4×     |          0 ms / 127 ms |              - |
+| Main-thread task time, native / 4×   |      +118 ms / +709 ms |              - |
+| JS loaded (chunk and its CSS), gzip  |               13.5 KiB |           same |
+| Media loaded, gzip                   | 11.4 KiB (16 requests) |           same |
+| DOM nodes                            |                   +210 |           +324 |
+| JS heap                              |                +1.4 MB |        +1.4 MB |
+| Document-level listeners             |                     +8 |            +20 |
+| Layout shift                         |                 0.0000 |         0.0000 |
+
+The activation path costs the visitor 13.5 KiB of script and style and 16 requests, and only when
+they ask for it. Warming the chunk on pointer-enter, focus or touch of the button hides the network
+part of that latency.
+
+**Interaction.** At native speed no frame exceeded 33 ms in any drag, before or after, with the Studio
+open or closed. At 4× slowdown, frames over 33.4 ms across the same four-round-trip drag (median of
+five):
+
+| Surface being dragged                   | Frames over 33.4 ms | p95 / worst frame |
+| --------------------------------------- | ------------------: | ----------------: |
+| Coverflow section, before the Studio    |                  19 |    33.3 / 66.7 ms |
+| Coverflow section, Studio closed        |                  18 |    33.3 / 66.8 ms |
+| Coverflow section, Studio open          |                  22 |    33.3 / 66.8 ms |
+| The Studio's own Coverflow, Studio open |                  37 |   33.4 / 166.8 ms |
+| The Studio's own Paged Grid             |                  14 |    16.8 / 83.4 ms |
+
+The Studio's Coverflow is the one surface that is measurably heavier when throttled. A trace of its
+longest tasks puts them on pointer press and release: an `UpdateLayoutTree` over roughly 760 elements
+(about the whole document; the drag sets the inherited `user-select` on the document root, which is
+consistent with that, though the trace does not prove it), then the Vue update the selection commit
+causes across the workspace (about 35-45 ms at 4×). It carries 12 cards, against the demonstration's
+5, and publishes per-card custom properties every frame. The sampled profile is dominated by
+`(program)`, not by script, so none of it is attributable to the Studio's own JavaScript. This is the
+cost of a 12-study spatial view on a throttled CPU more than of the composition; a collection that long
+on slow hardware should be reviewed on a physical device.
+
+**Ownership.** The workspace mounts one controller per surface and holds no timers. Over twelve
+cycles of Gallery, Sheet, selection, comparison and paging, with garbage collected before each
+sample, live DOM nodes (4,195), JS listeners (417) and documents (27) were flat after the first
+cycle, and the document-level listener inventory is asserted identical by `studio.spec.ts`. The heap
+rose from 5.3 to 6.3 MB over those cycles at a decreasing rate, consistent with warmed caches rather
+than retained objects, but it was not isolated further.
