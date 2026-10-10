@@ -113,8 +113,8 @@ Studio never collapses them, and never turns a frame into a selection.
    workspace only when none is.
 
 Stale asynchronous work cannot overwrite newer intent. The one asynchronous step the Studio owns,
-the Sheet-to-Gallery handoff, carries a generation that every later open, close and unmount
-invalidates.
+the Sheet-to-Gallery handoff, carries a generation that every later overlay open and unmount
+invalidates, and it re-checks that no overlay owns modality before it opens the Gallery.
 
 ## Gallery and Sheet: one modal owner
 
@@ -133,8 +133,15 @@ above an open Sheet, so the Studio does not do it.
 
 Focus returns to the control the visitor started from: Inspect, a plate chip, the front Coverflow
 card or the Deck (a card tap), and Details. If that control is unavailable the fallback is the
-active-study panel, which is always present. The document's scroll position is unchanged by either
-overlay, and both are reopenable the moment they have closed.
+active-study panel, which is always present; a spec removes the opener while the Gallery is open and
+checks that. The document's scroll position is unchanged by either overlay, and both are reopenable
+the moment they have closed.
+
+The openers are deliberately not disabled while a modal is open. The page behind a native modal is
+inert, and the model refuses a second overlay anyway. Disabling them made WebKit's native close
+restore focus to the opener's nearest focusable ancestor (the active-study panel) instead, which the
+dialog then treated as the application's own hand-off and left there. That was found by the
+cross-engine run and traced frame by frame before it was changed.
 
 ### Gallery View Transitions: not reproduced
 
@@ -223,6 +230,27 @@ on physical NVDA, VoiceOver or TalkBack setups.
   scrollbars, natural scrolling and touch, touch targets, and axe.
 - `e2e/playground-preview.spec.ts`: the built page under a non-root base, including the Studio's
   chunk and plates.
+
+## Changes outside the Studio
+
+Two things beyond `apps/lab/src/playground/studio/` changed, both found by this work's tests:
+
+- **`MediaGalleryDialog` and `scrollbar-gutter: stable`** (a package fix, patch changeset,
+  [media gallery](media-gallery.md#scroll-lock)). The dialog padded the document root by the
+  scrollbar width it removed, but a page that reserves its gutter keeps that space while locked, so
+  every surface behind the modal narrowed by one scrollbar width (985 to 970 px on the Playground's
+  existing Coverflow Gallery). The compensation now applies only to documents that do not reserve a
+  gutter; the existing scroll-lock layout test gained the package Gallery, failed before, and passes.
+- **`sheetDismissal.spec.ts`**, "public slow exit preserves sticky header, gutter and scroll
+  position at 390px". It scrolled the Sheet's opener into view and relied on the page ending soon
+  after, which kept the button clear of the sticky header. With a section below the Sheet the opener
+  sat at the top edge, beneath the header, and the harness scrolled to uncover it before clicking.
+  The test now centres the opener first. Every assertion is unchanged, and the Sheet's behaviour was
+  not involved.
+
+Section 06 also adds an id and `tabindex="-1"` to each section's Motion Tuning group so the Studio's
+indicator can link to it, a short navigation name (`navTitle`) for sections whose heading is too long
+for the bar, and `studio.spec.ts` to the cross-engine specs.
 
 ## Known limitations
 

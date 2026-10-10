@@ -574,6 +574,23 @@ test.describe("details and notes in the Sheet", () => {
     expect(await openDialogCount(page)).toBe(0);
   });
 
+  test("focus falls back to the active-study panel when the opener has gone", async ({ page }) => {
+    await openStudio(page);
+    await page.getByTestId("studio-plate-route").click();
+    await expectGalleryOpen(page, "Fold — Route");
+    // The control that opened the Gallery disappears while the modal is open.
+    await page.getByTestId("studio-plate-route").evaluate((chip) => chip.remove());
+    await page.keyboard.press("Escape");
+    await expectGalleryClosed(page);
+    await expect(studio.inspector(page)).toBeFocused();
+    // The workspace is still usable.
+    await page.getByTestId("studio-inspect").click();
+    await expectGalleryOpen(page, "Fold — Study plate");
+    await page.keyboard.press("Escape");
+    await expectGalleryClosed(page);
+    await expect(page.getByTestId("studio-inspect")).toBeFocused();
+  });
+
   test("another action can begin as soon as a dialog has closed", async ({ page }) => {
     await openStudio(page);
     for (let cycle = 0; cycle < 3; cycle += 1) {
@@ -866,6 +883,27 @@ test.describe("narrow layout", () => {
     await page.getByTestId("studio-toggle-compare").click();
     await page.getByTestId("studio-view-compare").click();
     await expect(page.getByTestId("studio-compare-single")).toBeVisible();
+  });
+
+  test("a note written on a phone survives every view change and reopening", async ({ page }) => {
+    await openStudio(page, { width: 390, height: 844 });
+    await page.getByTestId("studio-details").click();
+    const sheet = studio.sheet(page);
+    await expect(sheet).toHaveAttribute("data-sheet-side", "bottom");
+    await expect(sheet).toHaveAttribute("data-sheet-state", "open", { timeout: 8_000 });
+    await page.getByTestId("studio-note").fill("Keep the crease soft.");
+    await page.getByTestId("studio-note").press("Tab");
+    await page.getByRole("button", { name: "Close details" }).click();
+    await expectSheetClosed(page);
+    for (const view of ["explore", "compare", "browse"]) {
+      await page.getByTestId(`studio-view-${view}`).click();
+      await expect(page.getByTestId("studio-active-note")).toHaveText("Note Keep the crease soft.");
+    }
+    await expect(studio.tile(page, "fold")).toHaveAccessibleName(
+      "Fold, surface study, in comparison, has a note",
+    );
+    await page.getByTestId("studio-details").click();
+    await expect(page.getByTestId("studio-note")).toHaveValue("Keep the crease soft.");
   });
 
   test("a surface settling while the view changes does not lose the selection", async ({
