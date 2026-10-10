@@ -16,7 +16,6 @@ import {
   field,
   openEditor,
   openPlayground,
-  presetLabels,
   presetNames,
   scrollY,
   section,
@@ -43,6 +42,85 @@ test.afterEach(async ({ page }) => {
 });
 
 test.describe("public Playground page", () => {
+  test("uses original public screens with the established identities in both surfaces", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    const publicSources: string[][] = [];
+    for (const testid of ["coverflow-viewport", "stacked-deck-viewport"]) {
+      const images = page.getByTestId(testid).locator("img");
+      await expect(images).toHaveCount(5);
+      await expect
+        .poll(() =>
+          images.evaluateAll((nodes) =>
+            nodes.every((node) => (node as HTMLImageElement).naturalWidth > 0),
+          ),
+        )
+        .toBe(true);
+      publicSources.push(
+        await images.evaluateAll((nodes) =>
+          nodes.map((node) => (node as HTMLImageElement).currentSrc),
+        ),
+      );
+    }
+    expect(new Set(publicSources[0]).size).toBe(5);
+    expect(publicSources[1]).toEqual(publicSources[0]);
+    for (const source of publicSources[0]!) {
+      const asset = await page.request.get(source);
+      expect(asset.ok()).toBe(true);
+      const svg = await asset.text();
+      expect(svg).toContain("SNAP MOTION");
+      expect(svg).not.toMatch(/Yoot|Portaal|Project 24031|Werkruimte|Standaard project/i);
+    }
+    await expect(page.locator("body")).not.toContainText(/Yoot|Portaal|Project 24031|Werkruimte/);
+    for (const [id, title] of [
+      ["templates", "Collection library"],
+      ["project", "Sequence editor"],
+      ["map", "Motion atlas"],
+      ["team", "Signal monitor"],
+      ["settings", "Surface settings"],
+    ]) {
+      await section(page, "coverflow")
+        .getByRole("button", { name: new RegExp(`^${title},`) })
+        .click();
+      await expectCarouselAt(page.getByTestId("coverflow-viewport"), id!);
+      await expect(page.getByTestId("coverflow-caption")).toHaveText(title!);
+    }
+    for (const [id, title] of [
+      ["team", "Signal monitor"],
+      ["settings", "Surface settings"],
+      ["templates", "Collection library"],
+      ["project", "Sequence editor"],
+      ["map", "Motion atlas"],
+    ]) {
+      await page.getByTestId("stacked-deck-next").click();
+      await expectCarouselAt(page.getByTestId("stacked-deck-viewport"), id!);
+      await expect(page.getByTestId("stacked-deck-caption")).toHaveText(title!);
+    }
+  });
+
+  test("the Lab keeps its Yoot screens and screen inspection assets", async ({ page }) => {
+    await page.goto("./?demo=coverflow&view=showcase");
+    await expect(page.getByTestId("coverflow-viewport")).toContainText(
+      "Yoot Project Structuur V2.1",
+    );
+    await expect(page.getByTestId("coverflow-caption")).toHaveText("Locatie & planning");
+    await page.goto("./?demo=stacked-deck&view=showcase");
+    await expect(page.getByTestId("stacked-deck-caption")).toHaveText("Locatie & planning");
+    const sources = await page
+      .getByTestId("stacked-deck-viewport")
+      .locator("img")
+      .evaluateAll((images) => images.map((image) => (image as HTMLImageElement).src));
+    expect(sources).toHaveLength(5);
+    for (const source of sources) {
+      const response = await page.request.get(source);
+      expect(response.ok()).toBe(true);
+      const svg = await response.text();
+      expect(svg).toContain(">Y</text>");
+      expect(svg).not.toContain("SNAP MOTION");
+    }
+  });
+
   test("is served at /playground/ with one page heading and ordered sections", async ({ page }) => {
     await openPlayground(page);
 
@@ -74,6 +152,7 @@ test.describe("public Playground page", () => {
 
   for (const { id } of playgroundSections) {
     test(`a cold deep link to #${id} lands on that section`, async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.goto(`./playground/#${id}`);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -86,6 +165,9 @@ test.describe("public Playground page", () => {
       expect(
         await section(page, id).evaluate((element) => element.getBoundingClientRect().top),
       ).toBeGreaterThanOrEqual(-2);
+      await expect(page.getByTestId("section-menu-toggle")).toContainText(
+        playgroundSections.find((entry) => entry.id === id)!.title,
+      );
     });
   }
 
@@ -146,6 +228,114 @@ test.describe("public Playground page", () => {
 });
 
 test.describe("live surfaces", () => {
+  test("the public collection retains study identities when items and geometry change", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    const collection = section(page, "paged-grid");
+    const first = collection.locator('[data-item-id="item-1"]');
+    await expect(first).toContainText("Orbit");
+    await page.getByTestId("grid-rows").fill("3");
+    await page.getByTestId("grid-columns").fill("3");
+    await page.getByTestId("grid-gap").fill("8");
+    await expect(page.getByTestId("paged-grid")).toHaveAttribute("data-page-count", "1");
+    await page.getByTestId("add-grid-item").click();
+    await expect(page.getByTestId("paged-grid")).toHaveAttribute("data-page-count", "2");
+    await expect(first).toContainText("Orbit");
+    await page.getByTestId("grid-next").click();
+    await expectCarouselAt(page.getByTestId("paged-grid"), "page-2");
+    await expect(collection.locator('[data-item-id="item-10"]')).toContainText("Orbit");
+    await page.getByTestId("remove-grid-item").click();
+    await expectCarouselAt(page.getByTestId("paged-grid"), "page-1");
+    await expect(collection.locator('[data-item-id="item-10"]')).toHaveCount(0);
+    await expect(first).toContainText("Orbit");
+  });
+
+  test("Grid studies adapt to allocated cell width and keep their full accessible names", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    await page.getByTestId("grid-rows").fill("1");
+    await page.getByTestId("grid-columns").fill("3");
+    const cells = section(page, "paged-grid").locator(".grid-item");
+    // Fixed content-box boundary probes on real Grid cells, independent of the viewport.
+    for (const [index, width] of [95, 96, 97].entries()) {
+      const cell = cells.nth(index);
+      await cell.evaluate((element, value) => {
+        (element as HTMLElement).style.width = `${value}px`;
+      }, width);
+      expect(await cell.evaluate((element) => element.clientWidth)).toBe(width);
+      if (width < 96) await expect(cell.locator(".study-kind")).not.toBeVisible();
+      else await expect(cell.locator(".study-kind")).toBeVisible();
+    }
+    await expect(cells.nth(1).getByText("Traverse", { exact: true })).toHaveText("Traverse");
+    // The Sheet placement has no Grid query owner and keeps its complete presentation.
+    await expect(section(page, "sheet").locator(".study-kind").first()).toBeVisible();
+
+    await page.setViewportSize({ width: 320, height: 844 });
+    await cells.evaluateAll((elements) => {
+      for (const element of elements) (element as HTMLElement).style.removeProperty("width");
+    });
+    await page.getByTestId("grid-rows").fill("3");
+    await page.getByTestId("grid-columns").fill("4");
+    await expect(cells).toHaveCount(9);
+    const escaped = await cells.evaluateAll(
+      (elements) =>
+        elements.flatMap((element) => {
+          const bounds = element.getBoundingClientRect();
+          return [...element.querySelectorAll(".study-reference, svg, strong")].filter((child) => {
+            const box = child.getBoundingClientRect();
+            return (
+              box.left < bounds.left - 1 ||
+              box.right > bounds.right + 1 ||
+              box.bottom > bounds.bottom + 1
+            );
+          });
+        }).length,
+    );
+    expect(escaped).toBe(0);
+    await expect(cells.nth(1).getByText("Traverse", { exact: true })).toBeVisible();
+  });
+
+  test("public Sheet content works on all four edges with both snap policies", async ({ page }) => {
+    await openPlayground(page);
+    const dialog = page.getByTestId("sheet");
+    const opener = page.getByTestId("open-sheet");
+    for (const [side, mode] of [
+      ["bottom", "tall"],
+      ["left", "short"],
+      ["right", "prose"],
+      ["top", "tall"],
+    ] as const) {
+      await page.getByTestId(`sheet-side-${side}`).click();
+      await page.getByTestId(`sheet-content-${mode}`).click();
+      await page
+        .getByTestId(`sheet-snap-${side === "top" || side === "left" ? "custom" : "default"}`)
+        .click();
+      await opener.click();
+      await expectSheetOpenAt(dialog, side === "left" || side === "right" ? "open" : "comfortable");
+      await expect(dialog).toHaveAttribute("data-sheet-side", side);
+      await expect(dialog.locator(`[data-content-mode="${mode}"]`)).toBeVisible();
+      if (mode === "tall") {
+        await expect(dialog.getByRole("heading", { level: 3 })).toHaveCount(8);
+        const body = dialog.locator(".snap-motion-sheet-body");
+        expect(await body.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+        await body.evaluate((node) => {
+          node.scrollTop = node.scrollHeight;
+        });
+        await expect(dialog.getByTestId("final-note-row")).toBeInViewport();
+      } else if (mode === "short") {
+        const body = dialog.locator(".snap-motion-sheet-body");
+        expect(
+          await body.evaluate((node) => node.scrollHeight - node.clientHeight),
+        ).toBeLessThanOrEqual(1);
+      }
+      await page.keyboard.press("Escape");
+      await expect(dialog).not.toBeVisible();
+      await expect(opener).toBeFocused();
+    }
+  });
+
   test("every surface responds and keeps its own state", async ({ page }) => {
     await openPlayground(page);
 
@@ -404,27 +594,50 @@ test.describe("live surfaces", () => {
     await openEditor(page, "sheet");
     await field(page, "Elastic limit").fill("0");
     await field(page, "Elastic limit").blur();
-    await expect(tuningState(page, "paged-grid")).toHaveText("Balanced · Modified (1)");
+    await expect(tuningState(page, "paged-grid")).toHaveText("Modified (1)");
     expect(await heldOverdrag()).toBe(0);
 
     await section(page, "paged-grid").getByTestId("preset-loose").click();
-    await expectEveryBarShows(page, "Loose · Preset");
+    await expectEveryBarShows(page, "loose");
     expect(await heldOverdrag()).toBeGreaterThan(balanced);
   });
 });
 
 test.describe("shared Motion Tuning", () => {
+  test("collapsed tuning exposes presets and Customize without repeating editor detail", async ({
+    page,
+  }) => {
+    await openPlayground(page);
+    for (const id of sectionIds) {
+      const bar = section(page, id).getByRole("group", { name: "Motion tuning", exact: true });
+      await expect(bar.getByRole("button", { name: "Customize", exact: true })).toBeVisible();
+      await expect(bar.getByRole("button", { name: "Balanced", exact: true })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await expect(bar).not.toContainText(
+        /Stiffness|Between Tight and Loose|Shared by all five surfaces/,
+      );
+    }
+    await openEditor(page, "sheet");
+    await expect(editor(page)).toContainText("Between Tight and Loose");
+    await field(page, "Mass").fill("1.1");
+    for (const id of sectionIds) {
+      await expect(tuningState(page, id)).toBeVisible();
+      await expect(section(page, id).getByTestId("tuning-reset")).toBeVisible();
+    }
+  });
   test("every section shows the same preset and a preset change reaches them all", async ({
     page,
   }) => {
     await openPlayground(page);
-    await expectEveryBarShows(page, "Balanced · Preset");
+    await expectEveryBarShows(page, "balanced");
 
     for (const name of presetNames) {
       // Click in a different section each time: any bar is a valid entry point.
       const entry = sectionIds[presetNames.indexOf(name) % sectionIds.length]!;
       await section(page, entry).getByTestId(`preset-${name}`).click();
-      await expectEveryBarShows(page, `${presetLabels[name]} · Preset`);
+      await expectEveryBarShows(page, name);
       for (const id of sectionIds) {
         for (const other of presetNames) {
           await expect(section(page, id).getByTestId(`preset-${other}`)).toHaveAttribute(
@@ -489,19 +702,19 @@ test.describe("shared Motion Tuning", () => {
     await openEditor(page, "coverflow");
     await field(page, "Stiffness").fill("500");
     await field(page, "Damping").fill("30");
-    await expectEveryBarShows(page, "Balanced · Modified (2)");
+    await expectEveryBarShows(page, "balanced", 2);
     for (const id of sectionIds)
       await expect(section(page, id).getByTestId("tuning-reset")).toBeEnabled();
 
     await section(page, "sheet").getByTestId("tuning-reset").click();
-    await expectEveryBarShows(page, "Balanced · Preset");
+    await expectEveryBarShows(page, "balanced");
     await expect(field(page, "Stiffness")).toHaveValue("400");
     await expect(field(page, "Damping")).toHaveValue("36");
 
     await field(page, "Mass").fill("2");
-    await expectEveryBarShows(page, "Balanced · Modified (1)");
+    await expectEveryBarShows(page, "balanced", 1);
     await section(page, "gallery").getByTestId("preset-heavy").click();
-    await expectEveryBarShows(page, "Heavy · Preset");
+    await expectEveryBarShows(page, "heavy");
     await expect(field(page, "Mass")).toHaveValue(String(MOTION_PRESETS.heavy.spring.mass));
   });
 
@@ -513,14 +726,14 @@ test.describe("shared Motion Tuning", () => {
 
     await stiffness.fill("");
     await expect(page.getByTestId("physics-error-stiffness")).toBeVisible();
-    await expect(tuningState(page, "coverflow")).toHaveText("Balanced · Preset");
+    await expect(tuningState(page, "coverflow")).toHaveText("Preset");
 
     await stiffness.fill("99999");
     await expect(page.getByTestId("physics-error-stiffness")).toBeVisible();
     await stiffness.blur();
     await expect(stiffness).toHaveValue("900");
     await expect(slider).toHaveValue("900");
-    await expect(tuningState(page, "coverflow")).toHaveText("Balanced · Modified (1)");
+    await expect(tuningState(page, "coverflow")).toHaveText("Modified (1)");
 
     await stiffness.fill("12");
     await stiffness.press("Escape");
@@ -546,7 +759,7 @@ test.describe("shared Motion Tuning", () => {
     await openEditor(page, "coverflow");
     await field(page, "Maximum skip").fill("3");
     await field(page, "Maximum skip").blur();
-    await expectEveryBarShows(page, "Balanced · Modified (1)");
+    await expectEveryBarShows(page, "balanced", 1);
 
     await openEditor(page, "stacked-deck");
     const skip = field(page, "Maximum skip");
@@ -582,7 +795,7 @@ test.describe("shared Motion Tuning", () => {
     await openEditor(page, "sheet");
     await field(page, "Stiffness").fill("333");
     await section(page, "coverflow").getByTestId("preset-heavy").click();
-    await expectEveryBarShows(page, "Heavy · Preset");
+    await expectEveryBarShows(page, "heavy");
 
     for (const selector of roots) {
       await expect(page.locator(selector)).toHaveAttribute("data-mount-probe", "original");
@@ -599,7 +812,7 @@ test.describe("shared Motion Tuning", () => {
     const heavy = section(page, "paged-grid").getByTestId("preset-heavy");
     await heavy.focus();
     await page.keyboard.press("Enter");
-    await expectEveryBarShows(page, "Heavy · Preset");
+    await expectEveryBarShows(page, "heavy");
     await expect(heavy).toBeFocused();
 
     await openEditor(page, "paged-grid");
@@ -608,7 +821,7 @@ test.describe("shared Motion Tuning", () => {
     await stiffness.press("ControlOrMeta+a");
     await page.keyboard.type("450");
     await expect(stiffness).toBeFocused();
-    await expect(tuningState(page, "paged-grid")).toHaveText("Heavy · Modified (1)");
+    await expect(tuningState(page, "paged-grid")).toHaveText("Modified (1)");
     await expect(stiffness).toHaveValue("450");
   });
 });
@@ -668,6 +881,45 @@ test.describe("reduced motion", () => {
 });
 
 test.describe("document structure", () => {
+  for (const width of [320, 375, 390, 430, 768]) {
+    test(`named mobile navigation reaches every surface at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await openPlayground(page);
+      const toggle = page.getByTestId("section-menu-toggle");
+      const nav = page.getByRole("navigation", { name: "Playground sections" });
+      await expect(toggle).toHaveAccessibleName(/Jump to a component, current: Coverflow/);
+      for (const { id, title } of playgroundSections) {
+        await toggle.focus();
+        await toggle.press("Enter");
+        await expect(nav.getByRole("link")).toHaveCount(5);
+        const link = nav.getByRole("link", { name: new RegExp(title) });
+        await link.focus();
+        await link.press("Enter");
+        await expect(page).toHaveURL(new RegExp(`#${id}$`));
+        await expect(toggle).toContainText(title);
+        await expect(nav.getByRole("link")).toHaveCount(0);
+        await expect(section(page, id)).toBeFocused();
+      }
+      await toggle.focus();
+      await toggle.press("Space");
+      await expect(nav.getByRole("link")).toHaveCount(5);
+      await nav.getByRole("link").first().focus();
+      await page.keyboard.press("Escape");
+      await expect(toggle).toBeFocused();
+      await expect(nav.getByRole("link")).toHaveCount(0);
+      await page
+        .getByRole("banner")
+        .getByRole("link", { name: "Snap Motion", exact: true })
+        .click();
+      await expect(toggle).toContainText("Coverflow");
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ),
+      ).toBeLessThanOrEqual(0);
+    });
+  }
+
   test("keeps every id unique while editors and modals are open", async ({ page }) => {
     await openPlayground(page);
     expect(await duplicateIds(page)).toEqual([]);

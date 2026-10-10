@@ -3,7 +3,7 @@ import { computed, nextTick, ref, useId } from "vue";
 
 import SegmentedControl from "@/components/SegmentedControl.vue";
 
-import { presetLabel, presetNote, presetOptions, springSummary } from "../preset-facts";
+import { presetOptions } from "../preset-facts";
 import type { PlaygroundSectionId } from "../sections";
 import { usePlaygroundTuning } from "../tuning-context";
 import TuningPanel from "./TuningPanel.vue";
@@ -22,9 +22,8 @@ const panelId = `${id}-editor`;
 const customizeButton = ref<HTMLButtonElement>();
 const expanded = computed(() => tuning.expandedSection.value === props.sectionId);
 const modifiedCount = computed(() => tuning.modifiedKeys.value.length);
-const stateText = computed(
-  () =>
-    `${presetLabel(tuning.preset.value)} · ${modifiedCount.value === 0 ? "Preset" : `Modified (${modifiedCount.value})`}`,
+const stateText = computed(() =>
+  modifiedCount.value === 0 ? "Preset" : `Modified (${modifiedCount.value})`,
 );
 
 function toggle() {
@@ -40,16 +39,21 @@ async function closeEditor() {
 
 <template>
   <!-- A group, not a landmark: five identically named regions would be indistinguishable. -->
-  <div class="tuning" role="group" :aria-labelledby="`${id}-title`" :data-section="sectionId">
+  <div
+    class="tuning"
+    :class="{ 'is-modified': modifiedCount > 0 }"
+    role="group"
+    :aria-labelledby="`${id}-title`"
+    :data-section="sectionId"
+  >
     <div class="tuning-bar">
       <div class="tuning-head">
         <h3 :id="`${id}-title`" class="tuning-title">Motion tuning</h3>
-        <p :id="`${id}-scope`" class="tuning-scope">Shared by all five surfaces</p>
       </div>
 
       <SegmentedControl
         class="tuning-presets"
-        :described-by="`${id}-scope`"
+        described-by="shared-motion-scope"
         label="Base preset"
         label-hidden
         :model-value="tuning.preset.value"
@@ -93,11 +97,6 @@ async function closeEditor() {
       </button>
     </div>
 
-    <p class="tuning-note">
-      <span>{{ presetNote(tuning.preset.value) }}</span>
-      <span class="tabular">{{ springSummary(tuning.settings.value) }}</span>
-    </p>
-
     <p v-if="tuning.effectiveReducedMotion.value" class="tuning-reduced" role="note">
       Reduced motion is on, so surfaces settle without the spring. Spring and settling changes will
       not be visible.
@@ -138,18 +137,12 @@ async function closeEditor() {
   gap: 0.1rem;
 }
 
-.tuning-title,
-.tuning-scope {
+.tuning-title {
   font-family: var(--pg-font-mono);
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.tuning-scope {
-  color: var(--pg-muted);
-  font-weight: 500;
 }
 
 .tuning-presets {
@@ -182,6 +175,11 @@ async function closeEditor() {
 
 .tuning-state[data-modified="true"] {
   color: var(--pg-accent);
+}
+
+/* Selection is visible in the presets. The extra row appears only when edits need a Reset. */
+.tuning:not(.is-modified) .tuning-state-row {
+  display: none;
 }
 
 .tuning-state[data-modified="true"] .tuning-dot {
@@ -247,19 +245,6 @@ async function closeEditor() {
   }
 }
 
-.tuning-note {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.15rem 1.25rem;
-  color: var(--pg-muted);
-  font-size: 0.8rem;
-}
-
-.tuning-note span:last-child {
-  font-family: var(--pg-font-mono);
-  font-size: 0.74rem;
-}
-
 .tuning-reduced {
   padding: 0.7rem 0.9rem;
   border: 1px solid var(--pg-line);
@@ -299,37 +284,24 @@ async function closeEditor() {
   .tuning-bar {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
-      "head head"
+      "head customize"
       "presets presets"
-      "state customize";
-  }
-
-  .tuning-head {
-    grid-auto-flow: column;
-    justify-content: space-between;
-    align-items: baseline;
+      "state state";
+    gap: 0.6rem 1rem;
   }
 
   .tuning-presets {
     justify-self: stretch;
   }
-}
-
-@media (max-width: 30rem) {
-  .tuning-head {
-    grid-auto-flow: row;
-    justify-content: start;
+  .tuning-presets :deep(.segmented-options) {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    inline-size: 100%;
   }
-
-  .tuning-bar {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "head"
-      "presets"
-      "state"
-      "customize";
+  .tuning-presets :deep(.segmented-options button) {
+    padding-inline: 0.4rem;
   }
-
   .tuning-state-row {
     justify-content: space-between;
   }

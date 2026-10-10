@@ -70,7 +70,51 @@ playback while dragging, interrupting springs, resizing, opening dialogs repeate
 an intentionally large Stacked Deck. Update architecture only when traces show unnecessary
 frame-level reactive work.
 
-## Public Playground measurements
+## Product-polish comparison
+
+Measured from production builds on the same Windows host, Chromium, 390 × 844 touch viewport,
+median of five cold contexts per CPU setting. Baseline is the completed Playground before polish;
+after includes the five original SVG screens and the new public Grid/Sheet presentation.
+
+| Metric                         |           Before |            After |
+| ------------------------------ | ---------------: | ---------------: |
+| FCP / LCP, native CPU          |     200 / 200 ms |     204 / 272 ms |
+| Blocking time, native CPU      |            98 ms |           104 ms |
+| FCP / LCP, 4× CPU slowdown     | 1,176 / 1,176 ms | 1,684 / 1,684 ms |
+| Blocking time, 4× slowdown     |         1,009 ms |         1,267 ms |
+| Layout shift                   |           0.0000 |           0.0000 |
+| JS, recompressed gzip          |        129.6 KiB |        132.7 KiB |
+| CSS, recompressed gzip         |         16.9 KiB |         17.6 KiB |
+| Requested media, recompressed  |         30.4 KiB |         43.4 KiB |
+| DOM nodes                      |            1,009 |              805 |
+| JS heap, native CPU            |           4.5 MB |           5.1 MB |
+| Coverflow drag p95, native CPU |          16.8 ms |          16.7 ms |
+| Coverflow drag p95, 4× CPU     |          33.3 ms |          33.3 ms |
+
+Transfer values are response bodies recompressed locally with gzip, **not encoded network transfer**.
+All five public plates resolve as external assets. The totals include the browser's initial lazy-thumbnail selection, which can
+change when page sections become shorter. The five new plates total about 20 KiB of editable SVG
+source; their repeated use in both surfaces shares URLs. No font download or production dependency
+was added. The Lab's DOM remains 545 nodes; its shared bundle increases by about 2.5 KiB gzip because
+the two entries share demo presentation code. Public Coverflow plates use asynchronous decoding
+within reserved image bounds; this did not establish a measurable startup improvement.
+
+Frame intervals sample four real mouse-drag round trips on desktop; they do not certify continuous
+frame rate, input latency, a physical phone, or a high-refresh display. Native sampling had no frames
+over 33.4 ms before or after. At 4× slowdown the Playground had 20 such frames before and 18 after,
+with worst intervals of 50 ms and 100 ms respectively. These are local samples, not a performance
+guarantee. The first throttled measurement returned missing paint entries (zero); it was excluded
+and rerun after waiting for a real first-paint entry, with no concurrent browser work.
+
+The reduced DOM did not eliminate slower-device startup cost. Throttled first paint is roughly
+508 ms later in the final sample, with 258 ms more blocking time. Intermediate after-run medians
+ranged from 1.3 to 1.6 seconds, and the unchanged Lab also varied (416 ms baseline, 484 ms final).
+This is directional local evidence, not an isolated attribution to any one asset or style. Keep it as a human launch-review
+concern; the evidence does not justify changing mounting, geometry or the motion architecture in
+this presentation milestone. Raw before/after logs and screenshots remain uncommitted in
+`.artifacts/playground/polish/`.
+
+## Initial Public Playground measurements
 
 The Playground mounts all five surfaces on one page, so its cost was measured rather than assumed.
 Production build under `/snap-motion/`, Chromium, 390 × 844 touch viewport, median of five runs; the

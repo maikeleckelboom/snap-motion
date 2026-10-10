@@ -23,7 +23,8 @@ the experience linked from `maikel.site`:
 - **One shared configuration.** `useSharedPhysics` owns the selected base preset and the settings
   for both entries; sections never hold copies. Modified and Reset compare every shared value with
   the base preset, including values a surface fixes or ignores. Each section keeps visible presets,
-  state, Reset and Customize; a single detailed editor is open at a time, which keeps ids, drafts and
+  selected preset and Customize, plus Modified and Reset when edited; a single detailed editor is
+  open at a time, which keeps ids, drafts and
   focus unambiguous. Stacked Deck still fixes Maximum skip at 1 and says so.
 - The spring preview in the editor samples the engine's own spring stepper and rest rule for one
   card-width move; it states what it omits (release velocity, elastic edges, reduced motion).
@@ -58,16 +59,57 @@ the experience linked from `maikel.site`:
   stage alone is about half the screen. Pulling the presets above the demo's own controls would
   recover at most that control row (100–200 px) while separating a demo's controls from its stage, so
   stage-first stands. The intro and section header are compact enough that the first stage begins at
-  about y = 536 on a 390 × 844 screen, and the e2e suite asserts it begins above y = 600.
+  about y = 497 on a 390 × 844 screen after the product polish (previously 536), and the e2e suite
+  asserts it begins above y = 600.
 - Keep Tight, Balanced, Heavy and Loose with their exact engine values. Balanced stays the lab's
   initial choice; Tight stays the package default. Future preset descriptions need a hands-on feel
   check, defensible perceptual copy and no absolute overshoot claims. Stacked Deck's adjacent-only
   travel is independent of the selected preset.
 - Pre-launch polish includes representative Gallery imagery and removal or replacement of
   non-functional public Grid Inspect controls. Retain extreme-media, focus and inert-state
-  certification scenarios. These are later milestones, outside M1.
+  certification scenarios. The public presentation replacements are now complete; the Lab fixtures
+  remain independent.
 
 M0 is accepted: Gallery live settings, safe numeric drafts, global preset modification state and
 effective fixed skip. Preserve these corrections through M1 (grouped Workbench editor), M2 (Showcase
 tuning), M3 (hierarchy/mobile shell) and M4 (visual consistency). No milestone implies release,
 Cloudflare deployment or a merge to `main`.
+
+## Public product polish
+
+- The warm page, generous vertical sections, system font stack, Gallery illustrations and dark
+  viewer remain. Typography uses a compact number/category line above each H2 instead of a separate
+  oversized number column. The hero describes interruption and live tuning directly.
+- Coverflow and Stacked Deck accept optional `screenContent` presentation data. The Lab default is
+  still `showcaseScreens`, including its Yoot visuals; only the Playground supplies `demoScreens`.
+  The stable `templates`, `project`, `map`, `team`, `settings` ring and all controller geometry remain.
+- Five original Snap Motion Studio plates depict a collection library, sequence editor, motion
+  atlas, signal monitor and surface settings. Light and dark compositions, large graphic motifs and
+  restrained rust/blue-grey accents distinguish partly covered or rotated cards. These are software
+  illustrations, not additional nested applications. Their displayed readings are illustrative;
+  the separate Spring Response continues to run the real engine.
+- `node scripts/generatePlaygroundScreens.ts` reproduces the five editable SVG assets locally.
+  Their combined source is about 20 KiB. They share the page's visual language without remote
+  assets, font downloads or added production dependencies. Coverflow contains the whole plate
+  within its existing card bounds; no motion geometry changed.
+- Public Grid items pair a name and path type with a geometric drawing. The Sheet launch preview
+  reuses these items, and its tall notes, short summary and prose are distinct content modes. Lab
+  content and certification controls still take their existing presentation path.
+- Grid cells own an inline-size container named `motion-study`. Below 6rem (96px), the tile drops
+  secondary metadata and uses a single-line name, retaining the full text for accessibility and a
+  native title. That threshold reserves the name plus padding and a small margin; it prevents tall
+  stacks of broken words at four columns on a 320px page. Wider cells and the unqueried Sheet
+  placement keep the complete presentation. Real-cell probes at 95/96/97px pass in all three browsers.
+- Collapsed tuning shows four presets and Customize. Modified/Reset appear when needed; the
+  repeated preset explanation and numeric summary live in the expanded editor. All eleven settings,
+  precise inputs, shared state, exact Reset and fixed Deck constraints remain available.
+- Below 52rem, the sticky navigation uses a native disclosure with the current component name and
+  all five named anchor links. Escape returns focus to its summary; choosing an anchor closes the
+  menu and uses native navigation/focus on the section. Cold hash links and natural scrolling remain.
+  At wider sizes the same navigation tree is a horizontal list.
+- The Playground Sheet locks only the root scrollport. Locking the body as well made it a new sticky
+  containing scrollport, moving the header offscreen while the native modal was open and briefly
+  exposing that position during closing. Frame sampling now guards the header through the complete
+  lifecycle. The Lab retains its previous scroll-lock rule.
+- No core/Vue source, preset definition, package API or release boundary changed. Design evidence
+  and sampled performance logs are private, uncommitted artifacts in `.artifacts/playground/polish/`.

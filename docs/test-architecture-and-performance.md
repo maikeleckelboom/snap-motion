@@ -153,6 +153,13 @@ scroll lock against real scrollbars. `playground-preview.spec.ts` runs the built
 `/snap-motion/` in the preview gate with `media-preview.spec.ts`; `previewSpecs` in
 `config/browserOwnership.ts` is the single list that keeps both out of the source browser groups.
 
+Product-polish coverage adds public screen identities/assets and separate Lab Yoot fixtures, named
+mobile jump navigation at 320/375/390/430/768px, public Grid item continuity and Sheet content/edges,
+and compact tuning synchronization. Frame samples guard the sticky header throughout Sheet opening
+and closing at phone/desktop sizes. The non-root production gate decodes all public screen plates,
+from their external asset URLs, alongside the preserved Gallery media. Mobile navigation also passes axe
+with its disclosure open. No historical motion assertion or tolerance was weakened for this pass.
+
 ## Implemented ownership and artifact reuse
 
 Chromium has three deterministic, disjoint file groups: general (122 tests), deck

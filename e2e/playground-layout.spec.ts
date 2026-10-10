@@ -127,6 +127,10 @@ test.describe("responsive composition", () => {
     await page.setViewportSize({ width: 320, height: 640 });
     await openPlayground(page);
     const nav = page.getByRole("navigation", { name: "Playground sections" });
+    const toggle = page.getByTestId("section-menu-toggle");
+    await expect(toggle).toContainText("Coverflow");
+    await expect(nav.getByRole("link")).toHaveCount(0);
+    await toggle.click();
     const list = nav.getByRole("list");
     expect(await list.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     for (const link of await nav.getByRole("link").all()) {
@@ -136,9 +140,7 @@ test.describe("responsive composition", () => {
       expect(box.x + box.width).toBeLessThanOrEqual(320);
       expect(box.width).toBeGreaterThanOrEqual(24);
     }
-    // The intro names them where the bar can only number them.
-    const index = page.getByRole("navigation", { name: "Five surfaces" });
-    await expect(index.getByRole("link")).toHaveText([
+    await expect(nav.getByRole("link")).toHaveText([
       /Coverflow/,
       /Stacked Deck/,
       /Paged Grid/,
@@ -146,8 +148,10 @@ test.describe("responsive composition", () => {
       /Sheet/,
     ]);
 
-    await index.getByRole("link", { name: /Paged Grid/ }).click();
+    await nav.getByRole("link", { name: /Paged Grid/ }).click();
     await expect(page).toHaveURL(/#paged-grid$/);
+    await expect(nav.getByRole("link")).toHaveCount(0);
+    await expect(toggle).toContainText("Paged Grid");
     const top = await section(page, "paged-grid").evaluate(
       (element) => element.getBoundingClientRect().top,
     );
@@ -155,12 +159,12 @@ test.describe("responsive composition", () => {
     expect(top).toBeLessThan(100);
   });
 
-  test("the desktop bar names the sections, so the intro index is not repeated", async ({
+  test("the desktop bar names the sections without repeating navigation in the intro", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openPlayground(page);
-    await expect(page.getByRole("navigation", { name: "Five surfaces" })).toBeHidden();
+    await expect(page.getByRole("navigation", { name: "Five surfaces" })).toHaveCount(0);
     await expect(
       page
         .getByRole("navigation", { name: "Playground sections" })
@@ -370,6 +374,9 @@ test.describe("automated accessibility certification", () => {
   test("the page passes axe on a phone and at 200% zoom", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openPlayground(page);
+    await page.getByTestId("section-menu-toggle").click();
+    await expectNoAxeViolations(page, "playground mobile navigation open");
+    await page.keyboard.press("Escape");
     await openEditor(page, "paged-grid");
     await expectNoAxeViolations(page, "playground mobile with an editor");
     for (const zoom of [2, 4]) {
@@ -477,6 +484,42 @@ test.describe("document-level listeners", () => {
 });
 
 test.describe("layout stability", () => {
+  for (const width of [390, 1440]) {
+    test(`the sticky header stays anchored through Sheet opening and closing at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openPlayground(page, "no-preference");
+      await page.getByTestId("open-sheet").scrollIntoViewIfNeeded();
+      const initialScroll = await scrollY(page);
+      const header = page.getByRole("banner");
+      await expect(header).toBeInViewport();
+      await page.evaluate(() => {
+        const positions: number[] = [];
+        Reflect.set(window, "sheetHeaderPositions", positions);
+        Reflect.set(window, "sampleSheetHeader", true);
+        function sample() {
+          positions.push(document.querySelector(".pg-bar")!.getBoundingClientRect().top);
+          if (Reflect.get(window, "sampleSheetHeader")) requestAnimationFrame(sample);
+        }
+        requestAnimationFrame(sample);
+      });
+      await page.getByTestId("open-sheet").click();
+      await expectSheetOpenAt(page.getByTestId("sheet"), "comfortable");
+      await expect(header).toBeInViewport();
+      await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+      await expect(page.getByTestId("sheet")).not.toBeVisible();
+      await expect(page.getByTestId("open-sheet")).toBeFocused();
+      const positions = await page.evaluate(() => {
+        Reflect.set(window, "sampleSheetHeader", false);
+        return Reflect.get(window, "sheetHeaderPositions") as number[];
+      });
+      expect(positions.length).toBeGreaterThan(2);
+      expect(positions.every((top) => Math.abs(top) <= 1)).toBe(true);
+      expect(await scrollY(page)).toBe(initialScroll);
+    });
+  }
+
   test("does not shift during load, editor use or preset changes", async ({
     page,
     browserName,

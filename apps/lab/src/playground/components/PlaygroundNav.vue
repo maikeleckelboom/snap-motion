@@ -1,7 +1,24 @@
 <script setup lang="ts">
+import { useMediaQuery } from "@vueuse/core";
+import { computed, ref } from "vue";
+
 import { playgroundSections } from "../sections";
 
-defineProps<{ activeId: string | undefined }>();
+const props = defineProps<{ activeId: string | undefined }>();
+const compact = useMediaQuery("(max-width: 52rem)");
+const menuOpen = ref(false);
+const menuToggle = ref<HTMLElement>();
+const activeSection = computed(
+  () => playgroundSections.find(({ id }) => id === props.activeId) ?? playgroundSections[0]!,
+);
+function onToggle(event: Event) {
+  if (compact.value) menuOpen.value = (event.currentTarget as HTMLDetailsElement).open;
+}
+function closeMenu() {
+  if (!compact.value) return;
+  menuOpen.value = false;
+  menuToggle.value?.focus();
+}
 
 const labHref = import.meta.env.BASE_URL;
 </script>
@@ -15,18 +32,35 @@ const labHref = import.meta.env.BASE_URL;
       </a>
 
       <nav aria-label="Playground sections" class="bar-nav">
-        <ol>
-          <li v-for="section in playgroundSections" :key="section.id">
-            <a
-              :aria-current="activeId === section.id ? 'location' : undefined"
-              :href="`#${section.id}`"
-              :data-testid="`nav-${section.id}`"
-            >
-              <span class="nav-number tabular">{{ section.number }}</span>
-              <span class="nav-label">{{ section.title }}</span>
-            </a>
-          </li>
-        </ol>
+        <details
+          class="section-menu"
+          :open="!compact || menuOpen"
+          @toggle="onToggle"
+          @keydown.esc.stop.prevent="closeMenu"
+        >
+          <summary
+            ref="menuToggle"
+            :aria-label="`Jump to a component, current: ${activeSection.title}`"
+            data-testid="section-menu-toggle"
+          >
+            <span class="nav-number tabular">{{ activeSection.number }}</span>
+            <span>{{ activeSection.title }}</span>
+            <span aria-hidden="true" class="menu-chevron">⌄</span>
+          </summary>
+          <ol>
+            <li v-for="section in playgroundSections" :key="section.id">
+              <a
+                :aria-current="activeId === section.id ? 'location' : undefined"
+                :href="`#${section.id}`"
+                :data-testid="`nav-${section.id}`"
+                @click="menuOpen = false"
+              >
+                <span class="nav-number tabular">{{ section.number }}</span>
+                <span class="nav-label">{{ section.title }}</span>
+              </a>
+            </li>
+          </ol>
+        </details>
       </nav>
 
       <a class="bar-lab" :href="labHref">Engineering Lab</a>
@@ -81,12 +115,25 @@ const labHref = import.meta.env.BASE_URL;
 
 .bar-nav {
   min-inline-size: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.section-menu {
+  block-size: 100%;
+}
+.section-menu summary {
+  display: none;
 }
 
 .bar-nav ol {
   display: flex;
   block-size: 100%;
   align-items: stretch;
+  min-block-size: var(--pg-bar-height);
+}
+.bar-nav li {
+  display: flex;
 }
 
 .bar-nav a {
@@ -94,7 +141,7 @@ const labHref = import.meta.env.BASE_URL;
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  block-size: 100%;
+  block-size: auto;
   padding-inline: clamp(0.5rem, 1.2vw, 0.9rem);
   color: var(--pg-muted);
   font-size: 0.85rem;
@@ -150,37 +197,69 @@ const labHref = import.meta.env.BASE_URL;
   color: var(--pg-ink);
 }
 
-/* Narrow screens keep all five anchors visible as numbers; the intro lists their names. */
+/* A native disclosure keeps names and real anchors, without a second navigation tree. */
 @media (max-width: 52rem) {
-  .nav-label {
+  .bar-nav {
+    position: relative;
+    align-self: center;
+    margin-inline-start: auto;
+  }
+  .section-menu summary {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-block-size: 2.75rem;
+    padding-inline: 0.65rem;
+    border: 1px solid var(--pg-line);
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+  }
+  .section-menu summary::-webkit-details-marker {
+    display: none;
+  }
+  .menu-chevron {
+    margin-inline-start: 0.4rem;
+  }
+  .bar-nav ol {
     position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+    inset-block-start: calc(100% + 0.5rem);
+    inset-inline-end: 0;
+    display: grid;
+    inline-size: 15rem;
+    block-size: auto;
+    min-block-size: 0;
+    padding: 0.4rem;
+    border: 1px solid var(--pg-line);
+    border-radius: 0.65rem;
+    background: var(--pg-panel);
+    box-shadow: 0 8px 24px rgb(21 20 15 / 0.12);
   }
-
   .bar-nav a {
-    min-inline-size: 2.75rem;
-    justify-content: center;
-    padding-inline: 0.3rem;
+    min-block-size: 2.75rem;
+    gap: 0.8rem;
+    padding-inline: 0.75rem;
+    border-radius: 0.3rem;
   }
-
+  .bar-nav a:hover,
+  .bar-nav a[aria-current="location"] {
+    background: var(--pg-bg);
+  }
   .bar-nav a[aria-current="location"]::after {
-    inset-inline: 0.5rem;
+    display: none;
   }
 }
 
 @media (max-width: 40rem) {
-  /* Visually hidden, not removed, so the brand link keeps its accessible name. */
-  .bar-name {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+  .bar-brand {
+    font-size: 0.82rem;
+    gap: 0.4rem;
+  }
+  .bar-mark {
+    inline-size: 1.65rem;
+    block-size: 1.65rem;
   }
 
   .bar-lab {

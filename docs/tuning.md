@@ -69,7 +69,8 @@ disclosure. All remain lab-only observability and are not part of reusable primi
 `playground/index.html`, so it works under any base (the preview gate uses `/snap-motion/`).
 
 Every section has a **Motion tuning** bar under its stage: the Tight, Balanced, Heavy and Loose
-presets, the selected base preset with **Preset** or **Modified (n)**, **Reset**, and **Customize**.
+presets with the selected base pressed, and **Customize**. **Modified (n)** and **Reset** appear when
+settings differ from the selected preset. Preset descriptions and numeric summaries are in the editor.
 The bars are views of one configuration owned by `useSharedPhysics`, the same owner the Lab uses, so a
 change made in any section moves all five surfaces and every bar agrees. Modified counts every shared
 value against the base preset, including values a surface fixes or ignores. Choosing a preset replaces

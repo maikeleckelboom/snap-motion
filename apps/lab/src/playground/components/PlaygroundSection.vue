@@ -14,10 +14,12 @@ const workbenchHref = computed(
 </script>
 
 <template>
-  <section :id="section.id" class="pg-section" :aria-labelledby="titleId">
+  <section :id="section.id" class="pg-section" :aria-labelledby="titleId" tabindex="-1">
     <header class="section-head">
-      <p class="section-number tabular" aria-hidden="true">{{ section.number }}</p>
       <div class="section-title">
+        <p class="section-number">
+          <span class="tabular">{{ section.number }}</span> / {{ section.category }}
+        </p>
         <h2 :id="titleId" tabindex="-1">{{ section.title }}</h2>
         <p class="section-summary">{{ section.summary }}</p>
       </div>
@@ -51,7 +53,7 @@ const workbenchHref = computed(
 
 .section-head {
   display: grid;
-  grid-template-columns: 4.5rem minmax(0, 1fr) minmax(12rem, 16rem);
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 16rem);
   align-items: start;
   gap: 0.75rem clamp(1rem, 3vw, 2rem);
 }
@@ -59,10 +61,11 @@ const workbenchHref = computed(
 .section-number {
   color: var(--pg-muted);
   font-family: var(--pg-font-mono);
-  font-size: clamp(1.4rem, 2.4vw, 1.9rem);
-  font-weight: 300;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .section-title {
@@ -140,12 +143,7 @@ const workbenchHref = computed(
 
 @media (max-width: 62rem) {
   .section-head {
-    grid-template-columns: 3rem minmax(0, 1fr);
-  }
-
-  .section-hints {
-    grid-column: 2;
-    grid-auto-flow: row;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 
@@ -154,27 +152,12 @@ const workbenchHref = computed(
     padding-block-start: 1.5rem;
   }
 
-  /* The number sits on the title's line, so the stage is not pushed down by a lone "01". */
   .section-head {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas:
-      "number title"
-      "hints  hints";
-    gap: 0.5rem 0.75rem;
-    align-items: baseline;
-  }
-
-  .section-number {
-    grid-area: number;
-    font-size: 1.1rem;
-  }
-
-  .section-title {
-    grid-area: title;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
   }
 
   .section-hints {
-    grid-area: hints;
     display: flex;
     flex-wrap: wrap;
     gap: 0.2rem 1rem;

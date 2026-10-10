@@ -7,6 +7,7 @@ import SegmentedControl from "@/components/SegmentedControl.vue";
 import type { ReducedMotionMode } from "@/fixtures/lab-types";
 import { stackedDeckNotApplicablePhysics } from "@/fixtures/surface-applicability";
 
+import { presetLabel, presetNote, springSummary } from "../preset-facts";
 import type { PlaygroundSectionId } from "../sections";
 import { usePlaygroundTuning } from "../tuning-context";
 import SpringPreview from "./SpringPreview.vue";
@@ -38,9 +39,12 @@ const motionOptions: { label: string; value: ReducedMotionMode; testid: string }
       <div class="panel-head-copy">
         <h4 :id="`${id}-title`">Customize motion</h4>
         <p>
-          Every value is shared by all five surfaces, so a change here moves them all. Choosing a
-          preset replaces your edits. Type an exact value or drag a slider; supported values apply
-          live.
+          Adjust all five surfaces from here. Drag a slider or enter an exact value; valid changes
+          apply immediately. Choosing a preset replaces your edits.
+        </p>
+        <p class="panel-preset">
+          <strong>{{ presetLabel(tuning.preset.value) }}</strong> ·
+          {{ presetNote(tuning.preset.value) }}<br />{{ springSummary(tuning.settings.value) }}
         </p>
         <div class="motion-preference">
           <SegmentedControl
@@ -49,9 +53,8 @@ const motionOptions: { label: string; value: ReducedMotionMode; testid: string }
             :options="motionOptions"
           />
           <p class="panel-foot-note">
-            System follows your device. Reduced motion skips the spring settle, so Spring and
-            Settling precision changes are not visible; drag-time and release behavior still follow
-            your settings.
+            System follows your device preference. Reduced skips spring settling; dragging and
+            release still use your settings.
           </p>
         </div>
       </div>

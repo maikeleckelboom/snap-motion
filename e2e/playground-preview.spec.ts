@@ -44,6 +44,33 @@ test("the built playground resolves every asset under a non-root base", async ({
     )
     .toBe(true);
 
+  // Public screen plates decode from external assets under the same production base.
+  for (const id of ["coverflow", "stacked-deck"] as const) {
+    const plates = page
+      .getByTestId(id === "coverflow" ? "coverflow-viewport" : "stacked-deck-viewport")
+      .locator("img");
+    await expect(plates).toHaveCount(5);
+    const sources = await plates.evaluateAll(async (images) =>
+      Promise.all(
+        images.map(async (element) => {
+          const image = element as HTMLImageElement;
+          await image.decode();
+          return {
+            source: image.src,
+            width: image.naturalWidth,
+            text: await (await fetch(image.src)).text(),
+          };
+        }),
+      ),
+    );
+    for (const { source, width, text } of sources) {
+      expect(width).toBe(1600);
+      expect(new URL(source).pathname.startsWith("/snap-motion/assets/")).toBe(true);
+      expect(text).toContain("SNAP MOTION");
+      expect(text).not.toMatch(/Yoot|Portaal/);
+    }
+  }
+
   expect(failed).toEqual([]);
   expect(errors).toEqual([]);
 });
@@ -54,8 +81,13 @@ test("the built playground is fully interactive and shares one configuration", a
   await expectCarouselAt(page.getByTestId("coverflow-viewport"), "team");
 
   await section(page, "stacked-deck").getByTestId("preset-heavy").click();
-  for (const { id } of playgroundSections)
-    await expect(tuningState(page, id)).toHaveText("Heavy · Preset");
+  for (const { id } of playgroundSections) {
+    await expect(tuningState(page, id)).toHaveText("Preset");
+    await expect(section(page, id).getByTestId("preset-heavy")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  }
 
   await section(page, "paged-grid").getByTestId("tuning-customize").click();
   await expect(page.getByRole("spinbutton", { name: "Stiffness", exact: true })).toHaveValue("360");

@@ -51,8 +51,16 @@ export async function openEditor(page: Page, id: string) {
   await expect(customize).toHaveAttribute("aria-expanded", "true");
 }
 
-export async function expectEveryBarShows(page: Page, text: string) {
-  for (const id of sectionIds) await expect(tuningState(page, id)).toHaveText(text);
+export async function expectEveryBarShows(page: Page, preset: PresetName, modifiedCount = 0) {
+  for (const id of sectionIds) {
+    await expect(tuningState(page, id)).toHaveText(
+      modifiedCount === 0 ? "Preset" : `Modified (${modifiedCount})`,
+    );
+    await expect(section(page, id).getByTestId(`preset-${preset}`)).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  }
 }
 
 export function expectedFieldValues(name: PresetName): Record<string, number> {
