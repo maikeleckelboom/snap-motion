@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1000 700" role="img" aria-label="Cascade study plate: five horizontal bars offset in a stagger, the middle one in rust">
+  <style>text{font-family:Arial,Helvetica,sans-serif} .mono{font-family:Consolas,monospace;letter-spacing:3px}</style>
+  <rect x="0" y="0" width="1000" height="700" rx="0" fill="#ded4bb"/>
+  <text x="60" y="74" font-size="24" fill="#232527" font-weight="400" class="mono">11 / STUDY</text><text x="940" y="74" font-size="24" fill="#232527" font-weight="400" class="mono" text-anchor="end">SEQUENCE</text>
+  <g transform="translate(100 80)"><rect x="120" y="105" width="540" height="54" rx="8" fill="#232527"/><rect x="172" y="179" width="540" height="54" rx="8" fill="#f0ece0"/><rect x="224" y="253" width="540" height="54" rx="8" fill="#b84924"/><rect x="276" y="327" width="540" height="54" rx="8" fill="#f0ece0"/><rect x="328" y="401" width="540" height="54" rx="8" fill="#232527"/></g>
+  <text x="60" y="604" font-size="92" fill="#232527" font-weight="700">Cascade</text><text x="63" y="652" font-size="30" fill="#5b5a53" font-weight="400">Staggered sequence</text>
+  <circle cx="920" cy="622" r="11" fill="#b84924"/>
+</svg>

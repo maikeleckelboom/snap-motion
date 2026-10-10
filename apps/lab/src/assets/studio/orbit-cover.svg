@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1000 700" role="img" aria-label="Orbit study plate: a dark disc overlapped by a lighter disc, with a small rust satellite on a thin ring">
+  <style>text{font-family:Arial,Helvetica,sans-serif} .mono{font-family:Consolas,monospace;letter-spacing:3px}</style>
+  <rect x="0" y="0" width="1000" height="700" rx="0" fill="#e6b091"/>
+  <text x="60" y="74" font-size="24" fill="#232527" font-weight="400" class="mono">01 / STUDY</text><text x="940" y="74" font-size="24" fill="#232527" font-weight="400" class="mono" text-anchor="end">PATH</text>
+  <g transform="translate(100 80)"><circle cx="500" cy="270" r="150" fill="none" stroke="#232527" stroke-opacity="0.35" stroke-width="4"/><circle cx="470" cy="280" r="112" fill="#232527"/><circle cx="538" cy="232" r="84" fill="#f4dbce"/><circle cx="623" cy="184" r="22" fill="#b84924"/></g>
+  <text x="60" y="604" font-size="92" fill="#232527" font-weight="700">Orbit</text><text x="63" y="652" font-size="30" fill="#5e4f47" font-weight="400">Circular path</text>
+  <circle cx="920" cy="622" r="11" fill="#b84924"/>
+</svg>

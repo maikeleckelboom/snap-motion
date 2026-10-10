@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1000 700" role="img" aria-label="Step study plate: a rising staircase of blocks with one rust step">
+  <style>text{font-family:Arial,Helvetica,sans-serif} .mono{font-family:Consolas,monospace;letter-spacing:3px}</style>
+  <rect x="0" y="0" width="1000" height="700" rx="0" fill="#cbd3d9"/>
+  <text x="60" y="74" font-size="24" fill="#232527" font-weight="400" class="mono">09 / STUDY</text><text x="940" y="74" font-size="24" fill="#232527" font-weight="400" class="mono" text-anchor="end">SEQUENCE</text>
+  <g transform="translate(100 80)"><rect x="140" y="370" width="112" height="80" rx="6" fill="#232527"/><rect x="268" y="308" width="112" height="142" rx="6" fill="#e8ebee"/><rect x="396" y="246" width="112" height="204" rx="6" fill="#232527"/><rect x="524" y="184" width="112" height="266" rx="6" fill="#b84924"/><rect x="652" y="122" width="112" height="328" rx="6" fill="#232527"/></g>
+  <text x="60" y="604" font-size="92" fill="#232527" font-weight="700">Step</text><text x="63" y="652" font-size="30" fill="#55595c" font-weight="400">Anchor sequence</text>
+  <circle cx="920" cy="622" r="11" fill="#b84924"/>
+</svg>

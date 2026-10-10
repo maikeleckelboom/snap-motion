@@ -9,6 +9,7 @@
   "include": [
     "../config/browserLaunch.ts",
     "generatePlaygroundScreens.ts",
+    "generateStudioPlates.ts",
     "sourceVerificationRecord.test.ts",
     "reportCiTiming.ts",
     "sourceVerification.ts",
