@@ -70,6 +70,36 @@ describe("coverflow kinetic focus", () => {
 });
 
 describe("coverflow responsive tuning", () => {
+  it("keeps every card in a five-card rail painted through the last step and edge overshoot", () => {
+    for (const stageWidth of [320, 850, 1120]) {
+      const tuning = resolveCoverflowTuning({ stageWidth });
+      for (const reducedMotion of [false, true]) {
+        for (const selectedPosition of [-0.25, 3, 3.049, 3.051, 3.25, 3.75, 4, 4.25]) {
+          for (let index = 0; index < 5; index++) {
+            const presentation = resolveCoverflowPresentation({
+              ...tuning,
+              progress: index - selectedPosition,
+              reducedMotion,
+            });
+            expect(presentation.visible, `card ${index + 1} at ${selectedPosition}`).toBe(true);
+            expect(presentation.opacity).toBeGreaterThan(0);
+          }
+        }
+      }
+    }
+  });
+
+  it("honors an explicit narrower presentation cutoff", () => {
+    const tuning = resolveCoverflowTuning({ stageWidth: 850 });
+    const presentation = resolveCoverflowPresentation({
+      ...tuning,
+      hideAfter: 3.05,
+      progress: 3.051,
+    });
+    expect(presentation.visible).toBe(false);
+    expect(presentation.opacity).toBe(0);
+  });
+
   it.each([
     [320, 280, 196, 224, 95],
     [850, 340, 238, 272, 116],
@@ -85,7 +115,7 @@ describe("coverflow responsive tuning", () => {
       perspective: 900,
       maxRotateY: 62,
       sideDepth: -300,
-      hideAfter: 3.05,
+      hideAfter: 4.5,
     });
   });
 

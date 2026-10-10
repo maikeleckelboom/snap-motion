@@ -235,7 +235,8 @@ export function resolveCoverflowTuning(options: ResolveCoverflowTuningOptions): 
     sideDepth: -300 * cameraScale,
     // Steep enough to foreshorten the parked cards; a shallow wall lets panels tile.
     maxRotateY: 62,
-    hideAfter: 3.05,
+    // A five-card rail spans four slots; retain another half slot for elastic edge travel.
+    hideAfter: 4.5,
   };
 }
 

@@ -228,6 +228,53 @@ test.describe("public Playground page", () => {
 });
 
 test.describe("live surfaces", () => {
+  for (const width of [1280, 390]) {
+    test(`five-card Coverflow keeps its rail painted from card 4 through card 5 at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await openPlayground(page, "no-preference");
+      const rail = page.getByTestId("coverflow-viewport");
+      const cards = rail.locator(".snap-motion-coverflow-card");
+      const painted = async () => {
+        await expect(cards).toHaveCount(5);
+        await expect(rail.locator('[data-visible="true"]')).toHaveCount(5);
+        await expect(cards.first()).toHaveCSS("visibility", "visible");
+        await expect(cards.last()).toHaveCSS("visibility", "visible");
+      };
+      await section(page, "coverflow")
+        .getByRole("button", { name: "Signal monitor, 4 of 5", exact: true })
+        .click();
+      await expectCarouselAt(rail, "team");
+      await painted();
+      const pitch = -Number(await rail.getAttribute("data-position")) / 3;
+      await dragSyntheticPointerBy(page, rail, -pitch * 0.1, 0, {
+        steps: 3,
+        stepDelay: 0,
+        eventIntervalMs: 50,
+        beforeRelease: painted,
+      });
+      await expectCarouselAt(rail, "team");
+      await section(page, "coverflow")
+        .getByRole("button", { name: "Surface settings, 5 of 5", exact: true })
+        .click();
+      await expectCarouselAt(rail, "settings");
+      await painted();
+      const endPosition = Number(await rail.getAttribute("data-position"));
+      await dragSyntheticPointerBy(page, rail, -240, 0, {
+        steps: 6,
+        stepDelay: 0,
+        eventIntervalMs: 50,
+        async beforeRelease() {
+          expect(Number(await rail.getAttribute("data-position"))).toBeLessThan(endPosition);
+          await painted();
+        },
+      });
+      await expectCarouselAt(rail, "settings");
+      await painted();
+    });
+  }
+
   test("the public collection retains study identities when items and geometry change", async ({
     page,
   }) => {
