@@ -33,6 +33,25 @@ the experience linked from `maikel.site`:
 - Documentation and installation are not presented as ready: the packages remain private beta
   candidates. Deployment and `main` stay out of scope for this work.
 
+## Composition: the Motion Studio
+
+Section 06 composes the five surfaces into one believable product instead of adding a sixth
+demonstration. It is described in [Motion Studio](motion-studio.md); the decisions that matter here:
+
+- It composes the public components and composables (`Coverflow`, `StackedDeck`,
+  `MediaGalleryDialog`, `Sheet`, and the carousel motion with `createPagedGridGeometry`). It mounts
+  none of the five demonstration wrappers, owns no motion logic, and adds no package API.
+- One application model owns the active study, the ordered comparison, the Deck's cursor, notes and
+  the single overlay owner. The Deck's card must belong to the comparison; the active study need not,
+  so selecting outside the comparison never adds it or retargets the Deck.
+- Surfaces are controlled, followers adopt exactly, and the Coverflow travels on its own spring when
+  another surface asks it to. Overlays synchronize the active study once, on close.
+- It reads the page's one shared physics configuration and the page's Deck exchange; it has no
+  settings of its own. Section 06 carries the standard Motion Tuning bar like every other section.
+- It loads on demand behind a light introduction, so the page above it costs what it did before.
+- The Gallery and the Sheet never own modality together, and the Studio does not reproduce the
+  Gallery section's View Transition (see the document for the reasons).
+
 ## Lab decisions (still in force)
 
 - **Showcase:** experience and customize motion. **Workbench:** technical tuning and diagnostics.

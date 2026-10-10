@@ -153,6 +153,17 @@ scroll lock against real scrollbars. `playground-preview.spec.ts` runs the built
 `/snap-motion/` in the preview gate with `media-preview.spec.ts`; `previewSpecs` in
 `config/browserOwnership.ts` is the single list that keeps both out of the source browser groups.
 
+The Motion Studio (section 06) adds two Chromium specs and one cross-engine spec, all defaulting to
+the general group. `studio.spec.ts` joins `interoperabilitySpecs`, so Firefox and WebKit run it: the
+activation boundary, one selection across the surfaces, the comparison's states, the Gallery and Sheet
+lifecycles with the Sheet-to-Gallery handoff, shared physics by held elastic overdrag, reduced motion,
+keyboard use, the narrow layout and interruption (the listener-balance test is Chromium-only).
+`studio-layout.spec.ts` is Chromium-only: the seven widths with every overlay, stability while views
+change, real-scrollbar scroll lock, wheel and touch, touch targets, and axe. The activation test
+asserts the workspace's code and plates are not requested until the visitor opens it. Unit tests
+(`studio-catalog`, `studio-model`, `studio-physics`) pin the catalog's identity, the selection,
+comparison, edit and overlay rules, and the physics mapping with no browser.
+
 Product-polish coverage adds public screen identities/assets and separate Lab Yoot fixtures, named
 mobile jump navigation at 320/375/390/430/768px, public Grid item continuity and Sheet content/edges,
 and compact tuning synchronization. Frame samples guard the sticky header throughout Sheet opening

@@ -16,6 +16,7 @@ export const previewSpecs = ["media-preview.spec.ts", "playground-preview.spec.t
 export const interoperabilitySpecs = [
   "lab-physics-settings.spec.ts",
   "playground.spec.ts",
+  "studio.spec.ts",
   "showcase-smoke.spec.ts",
   "stackedDeckConsumer.spec.ts",
   "stackedDeckTrace.spec.ts",

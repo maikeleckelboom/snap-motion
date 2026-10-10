@@ -42,6 +42,10 @@ a spring-response preview helps connect a value to its effect.
 The Playground combines reusable package surfaces with application compositions. The
 [component guide](docs/components.md) documents the public exports behind the demonstrations.
 
+A sixth section, **Motion Studio**, puts them to work together: browse a collection, explore it
+spatially, compare studies on a deck, inspect their plates and keep a note, all on one selection and
+one set of motion settings. It loads when you open it. See [Motion Studio](docs/motion-studio.md).
+
 ## Between input and rest
 
 Snap Motion is a personal engineering project by [Maikel Eckelboom](https://github.com/maikeleckelboom).

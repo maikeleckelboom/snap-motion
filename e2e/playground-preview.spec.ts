@@ -75,6 +75,68 @@ test("the built playground resolves every asset under a non-root base", async ({
   expect(errors).toEqual([]);
 });
 
+test("the built Studio loads on demand from the base and decodes every plate it shows", async ({
+  page,
+}) => {
+  const requested: string[] = [];
+  const failed: string[] = [];
+  const errors: string[] = [];
+  page.on("request", (request) => requested.push(request.url()));
+  page.on("requestfailed", (request) => failed.push(`failed ${request.url()}`));
+  page.on("response", (response) => {
+    if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`);
+  });
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+
+  await openPlayground(page);
+  // Nothing of the workspace is fetched until the visitor opens it.
+  const studioAssets = () =>
+    requested.filter((url) => /StudioWorkspace|-(cover|route|timing)-[\w-]+\.svg/.test(url));
+  expect(studioAssets()).toEqual([]);
+
+  await page.getByTestId("studio-activate").click();
+  await expect(page.getByTestId("studio-workspace")).toBeVisible();
+  await expect(page.getByTestId("studio-coverflow")).toHaveAttribute("data-phase", "idle");
+  const loaded = studioAssets();
+  expect(loaded.some((url) => /StudioWorkspace-[\w-]+\.js/.test(url))).toBe(true);
+  expect(loaded.every((url) => new URL(url).pathname.startsWith("/snap-motion/assets/"))).toBe(
+    true,
+  );
+
+  // Every cover the Coverflow, the Grid and the Deck show decodes from its built URL.
+  const covers = page.locator("#studio img[src*='-cover-']");
+  await expect.poll(() => covers.count()).toBeGreaterThan(24);
+  await expect
+    .poll(() =>
+      covers.evaluateAll((images) =>
+        images.every((image) => (image as HTMLImageElement).naturalWidth === 1_600),
+      ),
+    )
+    .toBe(true);
+
+  // The Gallery's plates come from the same base, and only the plates it is showing are fetched.
+  const beforeGallery = loaded.length;
+  await page.getByTestId("studio-plate-timing").click();
+  const gallery = page.getByTestId("studio-gallery");
+  await expect(gallery).toBeVisible();
+  await expect(gallery.getByTestId("snap-motion-media-gallery-title")).toHaveText("Fold — Timing");
+  const plate = gallery.locator("img[src*='fold-timing']").first();
+  await expect(plate).toBeVisible();
+  await expect
+    .poll(() => plate.evaluate((image) => (image as HTMLImageElement).naturalWidth))
+    .toBe(1_600);
+  expect(new URL((await plate.getAttribute("src"))!).pathname.startsWith("/snap-motion/")).toBe(
+    true,
+  );
+  expect(studioAssets().length).toBeGreaterThanOrEqual(beforeGallery);
+
+  expect(failed).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test("the built playground is fully interactive and shares one configuration", async ({ page }) => {
   await openPlayground(page);
   await section(page, "coverflow").getByTestId("coverflow-next").click();
