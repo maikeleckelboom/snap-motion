@@ -49,6 +49,7 @@ import {
   type SheetViewportPolicy,
 } from "../sheet-policy";
 import type { SheetDiagnostics } from "../sheetDiagnostics";
+import { sheetExitPaintOutset, sheetVisuallyDismissed } from "../sheetDismissal";
 import { useSheetMotion, type SheetViewportDimensions } from "../use-sheet-motion";
 import SheetSnapPicker from "./SheetSnapPicker.vue";
 
@@ -379,6 +380,47 @@ function completeClose() {
   });
   target.close();
 }
+
+watch(
+  [motion.position, motion.sheetState, motion.side],
+  () => {
+    const target = dialog.value;
+    const surface = panel.value;
+    if (
+      !mounted ||
+      !target?.open ||
+      !surface ||
+      motion.sheetState.value !== "closing" ||
+      motion.visiblePrimaryExtent.value > 0 ||
+      (closingGeneration !== undefined && closingGeneration !== lifecycleGeneration)
+    )
+      return;
+    const clip = target.getBoundingClientRect();
+    // Detached/SSR and non-rendering test environments cannot establish a visual boundary.
+    if (clip.width <= 0 || clip.height <= 0) return;
+    const view = target.ownerDocument.defaultView;
+    if (!view) return;
+    const paintOutset = sheetExitPaintOutset(view.getComputedStyle(surface), motion.side.value);
+    if (
+      !sheetVisuallyDismissed(
+        motion.side.value,
+        surface.getBoundingClientRect(),
+        clip,
+        paintOutset,
+        view.devicePixelRatio,
+      )
+    )
+      return;
+    // The DOM has published this closing frame. Terminate the invisible tail through the existing
+    // controller generation boundary, then remeasure while closing to its exact hidden anchor.
+    // The continuation paints only towards the attached edge; the dialog clips it outside here.
+    motion.interrupt();
+    motion.remeasure();
+    motion.sheetState.value = "closed";
+    completeClose();
+  },
+  { flush: "post" },
+);
 
 /** Immediate host-swap path: no exit animation and no focus return to an unmounting trigger. */
 function closeForPresentationChange() {

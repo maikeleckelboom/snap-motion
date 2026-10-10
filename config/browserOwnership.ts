@@ -20,6 +20,7 @@ export const interoperabilitySpecs = [
   "stackedDeckConsumer.spec.ts",
   "stackedDeckTrace.spec.ts",
   "sheet.spec.ts",
+  "sheetDismissal.spec.ts",
   "sheetContent.spec.ts",
   "surfaceState.spec.ts",
   "galleryTakeover.spec.ts",

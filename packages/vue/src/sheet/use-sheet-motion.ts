@@ -421,7 +421,9 @@ export function useSheetMotion<Id extends string = SheetOpenSnapId>(
     },
     onChange(snapshot) {
       if (snapshot.phase === "dragging") sheetState.value = "dragging";
-      else if (
+      else if (snapshot.phase === "settling" && snapshot.target?.id === HIDDEN_SNAP_ID) {
+        sheetState.value = "closing";
+      } else if (
         snapshot.phase === "settling" &&
         sheetState.value !== "opening" &&
         sheetState.value !== "closing"
