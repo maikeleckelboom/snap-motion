@@ -94,6 +94,7 @@ defineExpose({
     class="studio-region studio-compare"
     :aria-labelledby="titleId"
     data-testid="studio-compare"
+    role="group"
     @keydown="deck?.onKeyDown($event)"
   >
     <header class="region-head">
@@ -528,7 +529,7 @@ defineExpose({
 .tray-remove {
   display: grid;
   place-items: center;
-  inline-size: 2.5rem;
+  inline-size: 2.75rem;
   border-inline-start: 1px solid var(--pg-line);
   color: var(--pg-muted);
 }

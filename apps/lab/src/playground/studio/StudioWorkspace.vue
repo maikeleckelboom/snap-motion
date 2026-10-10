@@ -521,7 +521,7 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
 }
 
 .studio-button {
-  min-block-size: 2.5rem;
+  min-block-size: 2.75rem;
   padding: 0.35rem 0.95rem;
   border-radius: 0.5rem;
   font-size: 0.9rem;

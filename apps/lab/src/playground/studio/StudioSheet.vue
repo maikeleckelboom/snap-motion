@@ -115,8 +115,8 @@ function onNoteBlur() {
         </div>
       </div>
 
-      <section class="details-section" aria-labelledby="studio-sheet-comparison">
-        <h3 id="studio-sheet-comparison" class="details-heading">Comparison</h3>
+      <section class="details-section" role="group" aria-labelledby="studio-sheet-comparison">
+        <h3 id="studio-sheet-comparison" class="details-heading">Compare</h3>
         <p class="details-line" data-testid="studio-sheet-membership">
           {{
             compared
@@ -140,7 +140,7 @@ function onNoteBlur() {
         </p>
       </section>
 
-      <section class="details-section" aria-labelledby="studio-sheet-note-heading">
+      <section class="details-section" role="group" aria-labelledby="studio-sheet-note-heading">
         <h3 id="studio-sheet-note-heading" class="details-heading">Note</h3>
         <label class="sr-only" :for="noteId">Note for {{ study.name }}</label>
         <textarea
@@ -164,7 +164,7 @@ function onNoteBlur() {
         </p>
       </section>
 
-      <section class="details-section" aria-labelledby="studio-sheet-attributes">
+      <section class="details-section" role="group" aria-labelledby="studio-sheet-attributes">
         <h3 id="studio-sheet-attributes" class="details-heading">Attributes</h3>
         <dl class="attributes">
           <div v-for="attribute in study.attributes" :key="attribute.label">
@@ -174,7 +174,7 @@ function onNoteBlur() {
         </dl>
       </section>
 
-      <section class="details-section" aria-labelledby="studio-sheet-plates">
+      <section class="details-section" role="group" aria-labelledby="studio-sheet-plates">
         <h3 id="studio-sheet-plates" class="details-heading">Plates</h3>
         <ul class="plates">
           <li v-for="media in study.media" :key="media.id">

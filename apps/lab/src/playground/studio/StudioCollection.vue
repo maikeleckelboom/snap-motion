@@ -255,6 +255,7 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
     class="studio-region studio-browse"
     :aria-labelledby="titleId"
     data-testid="studio-browse"
+    role="group"
   >
     <header class="region-head">
       <div>
@@ -448,6 +449,14 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
   min-block-size: 2.25rem;
   padding-inline: 0.8rem;
   font-size: 0.85rem;
+}
+
+/* A finger needs 44px; these controls' own sizes would otherwise beat the page's coarse-pointer rule. */
+@media (pointer: coarse) {
+  .filter button,
+  .density :deep(.segmented-options button) {
+    min-block-size: 2.75rem;
+  }
 }
 
 .grid-stage {

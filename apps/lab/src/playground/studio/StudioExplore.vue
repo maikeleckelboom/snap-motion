@@ -70,6 +70,7 @@ defineExpose({
     class="studio-region studio-explore"
     :aria-labelledby="titleId"
     data-testid="studio-explore"
+    role="group"
     @keydown="rail?.onKeyDown($event)"
   >
     <header class="region-head">

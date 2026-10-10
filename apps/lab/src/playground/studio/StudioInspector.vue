@@ -36,6 +36,7 @@ defineExpose({ detailsButton, inspectButton, root });
     class="studio-region studio-inspector"
     :aria-labelledby="titleId"
     data-testid="studio-inspector"
+    role="group"
     tabindex="-1"
   >
     <p class="region-kicker">Active study</p>
