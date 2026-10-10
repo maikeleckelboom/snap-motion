@@ -42,8 +42,20 @@ Other Gallery tests still exercise delayed loading, active motion, resize and in
 Vue, preset definitions, media fixtures and the Lab implementation remain unchanged in this
 product-polish milestone.
 
-Reapplying resistance on a held remeasurement remains an independent engine follow-up. A future
-fix should define the raw/presented drag-coordinate contract and certify actual resize and decode
-measurements while held. The improved readiness check must not be treated as proof that this
-engine behavior has been fixed. The controlled probe, before/after JSON and first-failure evidence
-remain uncommitted in `.artifacts/playground/polish/`.
+At the product-polish boundary, reapplying resistance remained an independent engine follow-up.
+The improved readiness check alone did not prove that engine behavior fixed. Original evidence
+remains uncommitted in `.artifacts/playground/polish/`.
+
+## Final integration correction
+
+The controller now retains raw held travel independently of its resisted presentation. Remeasurement
+rebases both the drag origin and raw travel by the same semantic-coordinate delta, then constrains
+raw travel once under the new bounds. Repeating an unchanged measurement is idempotent. New pointer
+samples, release policy, springs and preset values retain their existing contracts.
+
+A deterministic regression failed before the correction (48px became 18.46px) and passes afterwards.
+It covers five repeated measurements, coordinate rebasing, a subsequent pointer sample and release.
+A real Gallery browser regression changes the delayed fixture's source while holding a stationary
+240px Loose overdrag, admits its decode, waits for rendered remeasurement and verifies unchanged
+position and retained dragging ownership. The fixture comparison still awaits decoded geometry;
+its original displacement, target and mount-identity assertions remain.

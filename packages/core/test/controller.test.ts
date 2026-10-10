@@ -79,6 +79,28 @@ describe("SnapController", () => {
     expect(lockedController.position).toBe(-100);
   });
 
+  it("remeasures raw held travel once across unchanged and rebased elastic geometry", () => {
+    const { controller } = createController({
+      elasticity: { max: { resistance: 2, maxDistance: 80 }, min: false },
+    });
+    controller.beginDrag();
+    controller.dragBy(240);
+    const resisted = controller.position;
+    const measurement = { anchors, bounds: { min: -300, max: 0 } };
+    for (let repeat = 0; repeat < 5; repeat++) {
+      controller.remeasure(measurement);
+      expect(controller.position).toBe(resisted);
+      expect(controller.snapshot.phase).toBe("dragging");
+    }
+    const shifted = anchors.map((anchor) => ({ ...anchor, position: anchor.position + 30 }));
+    controller.remeasure({ anchors: shifted, bounds: { min: -270, max: 30 }, rebaseFromId: "a" });
+    expect(controller.position).toBeCloseTo(resisted + 30, 10);
+    controller.dragBy(240);
+    expect(controller.position).toBeCloseTo(resisted + 30, 10);
+    controller.release(0);
+    expect(controller.currentTarget?.id).toBe("a");
+  });
+
   it("retains elasticity only at the physical gallery boundary", () => {
     const { controller } = createController({ releasePolicy: { maxAnchorSkip: 1 } });
 

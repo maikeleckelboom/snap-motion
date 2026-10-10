@@ -100,9 +100,8 @@ async function closeLightbox(page: Page) {
  */
 async function heldEdgeOverdrag(page: Page): Promise<number> {
   const carousel = page.getByTestId("media-carousel");
-  // Every decode remeasures the carousel, including the deliberately delayed fixture. Compare
-  // elasticity only after those layout writes finish; a remeasurement during overdrag would
-  // reapply edge resistance to an already resisted position (an independent baseline behavior).
+  // Compare settled decoded geometry. Raw held travel also survives a late decode remeasurement;
+  // the dedicated regression below covers that independent lifecycle.
   const images = carousel.getByTestId(/^media-image-/);
   await expect(images).toHaveCount(5);
   await expect
@@ -129,6 +128,58 @@ async function heldEdgeOverdrag(page: Page): Promise<number> {
 test.describe("Gallery / Lightbox live configuration", () => {
   test.beforeEach(async ({ page }) => {
     await openLabDemo(page, "media", "no-preference");
+  });
+
+  test("a late media decode preserves resisted travel beneath a stationary held pointer", async ({
+    page,
+  }) => {
+    let releaseDecode!: () => void;
+    const decodeGate = new Promise<void>((resolve) => {
+      releaseDecode = resolve;
+    });
+    await page.route("**/*", async (route) => {
+      if (
+        route.request().resourceType() === "image" &&
+        route.request().url().includes("held-decode")
+      )
+        await decodeGate;
+      await route.continue();
+    });
+    await page.getByLabel("Preset").selectOption("loose");
+    await openLightbox(page);
+    const carousel = page.getByTestId("media-carousel");
+    const delayed = page.getByTestId("media-image-delayed");
+    await expect(delayed).toHaveAttribute("data-media-state", "loaded");
+    await expect(page.getByTestId("media-image-regular")).toHaveAttribute(
+      "data-media-state",
+      "loaded",
+    );
+    await nextFrame(page);
+    await dragSyntheticPointerBy(page, carousel, 240, 0, {
+      steps: 8,
+      beforeRelease: async () => {
+        const before = Number.parseFloat((await page.getByTestId("position").textContent())!);
+        expect(before).toBeGreaterThan(40);
+        await delayed.evaluate((image: HTMLImageElement) => {
+          image.dataset.probeDecoded = "false";
+          image.addEventListener(
+            "load",
+            async () => {
+              await image.decode();
+              image.dataset.probeDecoded = "true";
+            },
+            { once: true },
+          );
+          image.src += "?held-decode";
+        });
+        releaseDecode();
+        await expect(delayed).toHaveAttribute("data-probe-decoded", "true");
+        await nextFrame(page);
+        expect(Number.parseFloat((await page.getByTestId("position").textContent())!)).toBe(before);
+        await expect(carousel).toHaveAttribute("data-phase", "dragging");
+      },
+    });
+    await expectCarouselAt(carousel, "regular");
   });
 
   test("parameter and preset edits reach the mounted controller without a remount", async ({

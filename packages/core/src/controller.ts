@@ -110,6 +110,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
   #playback: AnimationPlaybackControls | null = null;
   #animationGeneration = 0;
   #dragStartPosition = 0;
+  #rawDragPosition = 0;
   #dragAnchorId: Id | null = null;
   #disposed = false;
 
@@ -249,6 +250,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
     this.#phase = "dragging";
     this.#velocity = 0;
     this.#dragStartPosition = this.#position;
+    this.#rawDragPosition = this.#position;
     this.#dragAnchorId = dragAnchor?.id ?? null;
     this.#target = null;
     this.#emit();
@@ -399,8 +401,9 @@ export class SnapController<Id extends SemanticId = SemanticId> {
           ? (nextAnchor?.position ?? 0) - (previousAnchor?.position ?? 0)
           : coordinateDelta;
       this.#dragStartPosition += anchorDelta;
+      this.#rawDragPosition += anchorDelta;
       this.#dragAnchorId = nextAnchor?.id ?? null;
-      this.#position = this.#constrainDragPosition(previousPosition + anchorDelta);
+      this.#position = this.#constrainDragPosition(this.#rawDragPosition);
       this.#phase = "dragging";
       this.#velocity = 0;
       this.#target = null;
@@ -472,6 +475,7 @@ export class SnapController<Id extends SemanticId = SemanticId> {
   }
 
   #writeDragPosition(rawPosition: number): void {
+    this.#rawDragPosition = rawPosition;
     this.#position = this.#constrainDragPosition(rawPosition);
     this.#velocity = 0;
     this.#active = nearestAnchor<Id>(
