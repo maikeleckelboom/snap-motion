@@ -22,6 +22,7 @@
     "test:browser:stacked-deck": "playwright test stacked-deck stackedDeck --project=chromium --project=firefox --project=webkit --project=webkit-stacked-deck",
     "test:browser:stacked-deck:extended": "playwright test --project=webkit-stacked-deck-direct --project=webkit-stacked-deck-pile",
     "test:browser:sheet": "playwright test sheet --project=chromium --project=firefox --project=webkit",
+    "test:browser:studio": "playwright test studio --project=chromium --project=firefox-studio --project=webkit-studio",
     "test:timing:ci": "node scripts/reportCiTiming.ts",
     "visual:stacked-deck": "node scripts/runStackedDeckVisual.ts",
     "visual:stacked-deck:direct": "node scripts/runStackedDeckDirectVisual.ts",

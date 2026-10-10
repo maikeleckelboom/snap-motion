@@ -65,11 +65,13 @@ describe("Verify browser CI contracts", () => {
       /^\s*"?@playwright\/test"?:\s*(\d+\.\d+\.\d+)\s*$/m,
     )?.[1];
     expect(playwrightVersion).toBeDefined();
-    expect(chromium).toContain("group: [general, deck, direct]");
+    expect(chromium).toContain("group: [general, deck, direct, studio]");
     expect(chromium).toContain("SNAP_MOTION_BROWSER_GROUP:");
     for (const project of [
       "firefox",
       "webkit",
+      "firefox-studio",
+      "webkit-studio",
       "webkit-stacked-deck",
       "webkit-stacked-deck-direct",
       "webkit-stacked-deck-pile",

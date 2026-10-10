@@ -13,10 +13,16 @@ export const chromiumDirectSpecs = [
  * development server. They belong to the preview gate (`playwright.preview.config.ts`) alone.
  */
 export const previewSpecs = ["media-preview.spec.ts", "playground-preview.spec.ts"];
+/**
+ * The Motion Studio's browser specs. They compose five surfaces and three overlays, so they own
+ * their own parallel job on each engine instead of lengthening the general ones past their limits.
+ * `studio-layout.spec.ts` is Chromium-only; `studio.spec.ts` is the one cross-engine spec.
+ */
+export const chromiumStudioSpecs = ["studio.spec.ts", "studio-layout.spec.ts"];
+export const interoperabilityStudioSpecs = ["studio.spec.ts"];
 export const interoperabilitySpecs = [
   "lab-physics-settings.spec.ts",
   "playground.spec.ts",
-  "studio.spec.ts",
   "showcase-smoke.spec.ts",
   "stackedDeckConsumer.spec.ts",
   "stackedDeckTrace.spec.ts",
@@ -34,8 +40,16 @@ export function chromiumScope(group: string | undefined): {
 } {
   if (group === undefined || group === "all") return {};
   if (group === "general")
-    return { testIgnore: [...previewSpecs, ...chromiumDeckSpecs, ...chromiumDirectSpecs] };
+    return {
+      testIgnore: [
+        ...previewSpecs,
+        ...chromiumDeckSpecs,
+        ...chromiumDirectSpecs,
+        ...chromiumStudioSpecs,
+      ],
+    };
   if (group === "deck") return { testMatch: chromiumDeckSpecs };
   if (group === "direct") return { testMatch: chromiumDirectSpecs };
+  if (group === "studio") return { testMatch: chromiumStudioSpecs };
   throw new Error(`Unknown Chromium browser group: ${group}`);
 }

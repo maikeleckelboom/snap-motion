@@ -231,9 +231,16 @@ on physical NVDA, VoiceOver or TalkBack setups.
 - `e2e/playground-preview.spec.ts`: the built page under a non-root base, including the Studio's
   chunk and plates.
 
+In CI the two Studio specs are not part of the general owners. Chromium runs both as the `studio`
+group (72 tests); Firefox and WebKit each run `studio.spec.ts` alone (48 tests) as `firefox-studio`
+and `webkit-studio`. They are separate parallel jobs because the first push put every Studio test
+into the general jobs, and Chromium general and WebKit general were cancelled at their time limits
+(see [test architecture](test-architecture-and-performance.md#playground-certification)).
+
 ## Changes outside the Studio
 
-Two things beyond `apps/lab/src/playground/studio/` changed, both found by this work's tests:
+Three things beyond `apps/lab/src/playground/studio/` changed. The first two were found by this
+work's tests:
 
 - **`MediaGalleryDialog` and `scrollbar-gutter: stable`** (a package fix, patch changeset,
   [media gallery](media-gallery.md#scroll-lock)). The dialog padded the document root by the
@@ -248,9 +255,14 @@ Two things beyond `apps/lab/src/playground/studio/` changed, both found by this 
   The test now centres the opener first. Every assertion is unchanged, and the Sheet's behaviour was
   not involved.
 
+- **Browser CI ownership.** `config/browserOwnership.ts`, `playwright.config.ts`,
+  `.github/workflows/verify.yml` and `scripts/sourceVerification.ts` gained the three Studio owners
+  above, with their unit tests. `sourceVerification.ts` lists the owners a candidate source must have
+  passed, so a source SHA from before this branch no longer qualifies for candidate preparation.
+
 Section 06 also adds an id and `tabindex="-1"` to each section's Motion Tuning group so the Studio's
-indicator can link to it, a short navigation name (`navTitle`) for sections whose heading is too long
-for the bar, and `studio.spec.ts` to the cross-engine specs.
+indicator can link to it, and a short navigation name (`navTitle`) for sections whose heading is too
+long for the bar.
 
 ## Known limitations
 

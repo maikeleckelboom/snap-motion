@@ -1,7 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
 import { webkitLaunchOptions } from "./config/browserLaunch";
-import { chromiumScope, interoperabilitySpecs, previewSpecs } from "./config/browserOwnership";
+import {
+  chromiumScope,
+  interoperabilitySpecs,
+  interoperabilityStudioSpecs,
+  previewSpecs,
+} from "./config/browserOwnership";
 
 const stackedDeckSpec = "stacked-deck.spec.ts";
 const stackedDeckDirectSpec = "stacked-deck-direct.spec.ts";
@@ -40,6 +45,16 @@ export default defineConfig({
     {
       name: "webkit",
       testMatch: interoperabilitySpecs,
+      use: { ...devices["Desktop Safari"], launchOptions: webkitLaunchOptions },
+    },
+    {
+      name: "firefox-studio",
+      testMatch: interoperabilityStudioSpecs,
+      use: { ...devices["Desktop Firefox"] },
+    },
+    {
+      name: "webkit-studio",
+      testMatch: interoperabilityStudioSpecs,
       use: { ...devices["Desktop Safari"], launchOptions: webkitLaunchOptions },
     },
     {

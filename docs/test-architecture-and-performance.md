@@ -153,16 +153,26 @@ scroll lock against real scrollbars. `playground-preview.spec.ts` runs the built
 `/snap-motion/` in the preview gate with `media-preview.spec.ts`; `previewSpecs` in
 `config/browserOwnership.ts` is the single list that keeps both out of the source browser groups.
 
-The Motion Studio (section 06) adds two Chromium specs and one cross-engine spec, all defaulting to
-the general group. `studio.spec.ts` joins `interoperabilitySpecs`, so Firefox and WebKit run it: the
-activation boundary, one selection across the surfaces, the comparison's states, the Gallery and Sheet
-lifecycles with the Sheet-to-Gallery handoff, shared physics by held elastic overdrag, reduced motion,
-keyboard use, the narrow layout and interruption (the listener-balance test is Chromium-only).
-`studio-layout.spec.ts` is Chromium-only: the seven widths with every overlay, stability while views
-change, real-scrollbar scroll lock, wheel and touch, touch targets, and axe. The activation test
-asserts the workspace's code and plates are not requested until the visitor opens it. Unit tests
-(`studio-catalog`, `studio-model`, `studio-physics`) pin the catalog's identity, the selection,
-comparison, edit and overlay rules, and the physics mapping with no browser.
+The Motion Studio (section 06) adds two Chromium specs, one of which also runs on Firefox and WebKit.
+`studio.spec.ts` covers the activation boundary, one selection across the surfaces, the comparison's
+states, the Gallery and Sheet lifecycles with the Sheet-to-Gallery handoff, shared physics by held
+elastic overdrag, reduced motion, keyboard use, the narrow layout and interruption (the
+listener-balance test is Chromium-only). `studio-layout.spec.ts` is Chromium-only: the seven widths
+with every overlay, stability while views change, real-scrollbar scroll lock, wheel and touch, touch
+targets, and axe. The activation test asserts the workspace's code and plates are not requested until
+the visitor opens it. Unit tests (`studio-catalog`, `studio-model`, `studio-physics`) pin the
+catalog's identity, the selection, comparison, edit and overlay rules, and the physics mapping with
+no browser.
+
+These specs own their own jobs. The first push left them in the general owners, which added 72
+Chromium, 48 Firefox and 48 WebKit tests: Chromium general reached 338 tests and was cancelled by its
+6-minute limit at test 243 (367 s), WebKit general by its 8-minute limit (493 s against a 426 s
+baseline), and Firefox general finished in 357 s of 360 s (278 s before). Nothing had failed; the
+cancellations made the aggregate Browser certification fail closed, as designed. The limits are
+unchanged: `chromiumStudioSpecs` (group `studio`, 72 tests) and `interoperabilityStudioSpecs`
+(`firefox-studio` and `webkit-studio`, 48 tests each, 47 run and 1 skipped) are separate jobs, the general projects ignore
+them, and `browserOwnership.test.ts` asserts the partition on both sides. `pnpm test:browser:studio`
+runs the three owners locally.
 
 Product-polish coverage adds public screen identities/assets and separate Lab Yoot fixtures, named
 mobile jump navigation at 320/375/390/430/768px, public Grid item continuity and Sheet content/edges,
@@ -176,8 +186,9 @@ initial CI failure without a timer or a relaxed assertion.
 
 ## Implemented ownership and artifact reuse
 
-Chromium has three deterministic, disjoint file groups: general (122 tests), deck
-(42), and Direct/pile/reversal (44). New source specs default to general; no unknown
+Chromium has four deterministic, disjoint file groups: general, deck (42), Direct/pile/reversal
+(44), and the Motion Studio (72; added later, see Playground certification). The counts below
+describe the original three owners. New source specs default to general; no unknown
 spec silently falls out of certification. A unit test checks the complete file
 partition and production-preview exclusion. Firefox (55), WebKit interoperability
 (55), and WebKit cyclic deck (13) run as separate jobs. These owners use two workers

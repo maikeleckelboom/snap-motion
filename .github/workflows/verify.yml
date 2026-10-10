@@ -156,7 +156,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [general, deck, direct]
+        group: [general, deck, direct, studio]
     env:
       SNAP_MOTION_BROWSER_GROUP: ${{ matrix.group }}
       PLAYWRIGHT_JSON_OUTPUT_FILE: .artifacts/browser-${{ matrix.group }}.json
@@ -196,7 +196,8 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright:v1.61.1-noble
       options: --user 1001
-    # General WebKit includes the expanded Gallery and Sheet lifecycle witnesses.
+    # General WebKit includes the expanded Gallery and Sheet lifecycle witnesses. The Motion Studio's
+    # cross-engine spec has its own firefox-studio and webkit-studio owners.
     timeout-minutes: ${{ matrix.project == 'webkit' && 8 || 6 }}
     strategy:
       fail-fast: false
@@ -205,6 +206,10 @@ jobs:
           - project: firefox
             workers: 2
           - project: webkit
+            workers: 2
+          - project: firefox-studio
+            workers: 2
+          - project: webkit-studio
             workers: 2
           - project: webkit-stacked-deck
             workers: 2
