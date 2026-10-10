@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { webkitLaunchOptions } from "./config/browserLaunch";
 import { chromiumScope, interoperabilitySpecs, previewSpecs } from "./config/browserOwnership";
 
 const stackedDeckSpec = "stacked-deck.spec.ts";
@@ -39,26 +40,26 @@ export default defineConfig({
     {
       name: "webkit",
       testMatch: interoperabilitySpecs,
-      use: { ...devices["Desktop Safari"] },
+      use: { ...devices["Desktop Safari"], launchOptions: webkitLaunchOptions },
     },
     {
       name: "webkit-stacked-deck",
       grep: stackedDeckWebKitSmoke,
       testMatch: stackedDeckSpec,
       workers: 2,
-      use: { ...devices["Desktop Safari"] },
+      use: { ...devices["Desktop Safari"], launchOptions: webkitLaunchOptions },
     },
     {
       name: "webkit-stacked-deck-direct",
       testMatch: stackedDeckDirectSpec,
       workers: 2,
-      use: { ...devices["Desktop Safari"] },
+      use: { ...devices["Desktop Safari"], launchOptions: webkitLaunchOptions },
     },
     {
       name: "webkit-stacked-deck-pile",
       testMatch: stackedDeckPileSpec,
       workers: 2,
-      use: { ...devices["Desktop Safari"] },
+      use: { ...devices["Desktop Safari"], launchOptions: webkitLaunchOptions },
     },
   ],
   webServer: {

@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 
 import { chromium, firefox, webkit, expect } from "@playwright/test";
 
+import { webkitLaunchOptions } from "../config/browserLaunch.ts";
 import { certifySurfacePreferences } from "./certifySurfacePreferences.ts";
 import { resolveRepositoryPnpm, runPnpmSync } from "./pnpm-cli.ts";
 
@@ -95,11 +96,7 @@ async function certifyNuxtHydration(cwd: string): Promise<void> {
     for (const engine of [chromium, firefox, webkit]) {
       const probeBrowser = await engine.launch({
         headless: true,
-        // Windows WebKit's default software path flattens Coverflow's shared 3D camera.
-        // Certify its actual perspective geometry with compositing enabled, still headless.
-        ...(process.platform === "win32" && engine === webkit
-          ? { ignoreDefaultArgs: ["--disable-accelerated-compositing"] }
-          : {}),
+        ...(engine === webkit ? webkitLaunchOptions : {}),
       });
       try {
         await certifySurfacePreferences(probeBrowser, url);

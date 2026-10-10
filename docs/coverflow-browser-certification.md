@@ -11,5 +11,9 @@ Removing only `--disable-accelerated-compositing` restored 196.48px, matching Ch
 No Coverflow source, camera, dimensions, or geometry assertions were changed.
 
 The existing packed preference matrix remains the regression: every wide full-motion
-cell requires both side cards to expose more than 40px. This launch correction is
-limited to that packed surface certification and is independent of gallery navigation.
+cell requires both side cards to expose more than 40px. Source WebKit projects now share
+the same Windows launch options through `config/browserLaunch.ts`. The software path also
+crashed ordinary native Gallery closure on both the approved and updated A → A cases.
+Compositing restored both, and the updated general-button close/focus smoke passed ten
+consecutive times. The native API, application behavior and assertions remain enabled.
+Linux launch options are unchanged.
