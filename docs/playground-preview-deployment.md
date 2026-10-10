@@ -40,10 +40,10 @@ With the pinned tools and frozen dependencies installed:
 ```sh
 pnpm build:packages
 pnpm --filter @snap-motion/lab build
-pnpm --filter @snap-motion/lab exec vite preview --host 127.0.0.1 --port 4175 --strictPort
+pnpm --filter @snap-motion/lab exec vite preview --host 127.0.0.1 --port 4176 --strictPort
 ```
 
-Open `http://127.0.0.1:4175/playground/` for the built public application. The repository's final
+Open `http://127.0.0.1:4176/playground/` for the built public application. The repository's final
 `pnpm verify` also checks the separate non-root-base build and packed package consumers.
 
 ## Interaction acceptance
