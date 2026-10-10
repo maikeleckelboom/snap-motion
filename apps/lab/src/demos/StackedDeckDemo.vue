@@ -32,6 +32,7 @@ const props = withDefaults(
   defineProps<{
     exchange: StackedDeckExchange;
     presentation?: DemoPresentation;
+    screenContent?: readonly ShowcaseScreen[];
     reducedMotionOverride: boolean | undefined;
     settings: LabPhysicsSettings;
     stageWidth: number;
@@ -47,14 +48,15 @@ const labPresentation = computed(() => props.presentation === "lab");
 const [DefineStepControls, StepControls] = createReusableTemplate();
 
 const twoItemMode = ref(false);
+const sourceScreens = computed(() => props.screenContent ?? showcaseScreens);
 const screens = computed<readonly ShowcaseScreen[]>(() =>
-  twoItemMode.value ? [showcaseScreens[3]!, showcaseScreens[4]!] : showcaseScreens,
+  twoItemMode.value ? [sourceScreens.value[3]!, sourceScreens.value[4]!] : sourceScreens.value,
 );
 const deck = ref<StackedDeckHandle<ShowcaseScreenId>>();
 const demoRoot = ref<HTMLElement>();
 const inspectControl = ref<HTMLButtonElement>();
 const galleryOpen = ref(false);
-const initialId = showcaseScreens[Math.floor(showcaseScreens.length / 2)]!.id;
+const initialId = sourceScreens.value[Math.floor(sourceScreens.value.length / 2)]!.id;
 const galleryActiveId = ref<ShowcaseScreenId>(initialId);
 const activeId = ref<ShowcaseScreenId>(initialId);
 

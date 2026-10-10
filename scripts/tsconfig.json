@@ -7,6 +7,7 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "generatePlaygroundScreens.ts",
     "sourceVerificationRecord.test.ts",
     "reportCiTiming.ts",
     "sourceVerification.ts",

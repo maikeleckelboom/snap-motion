@@ -26,6 +26,7 @@ import { showcaseScreens, type ShowcaseScreen, type ShowcaseScreenId } from "./s
 const props = withDefaults(
   defineProps<{
     presentation?: DemoPresentation;
+    screenContent?: readonly ShowcaseScreen[];
     reducedMotionOverride: boolean | undefined;
     settings: LabPhysicsSettings;
     stageWidth: number;
@@ -36,13 +37,15 @@ const props = withDefaults(
 const labPresentation = computed(() => props.presentation === "lab");
 // The step buttons live in the Lab header and in the public meta row; one definition serves both.
 const [DefineStepControls, StepControls] = createReusableTemplate();
-const screens = showcaseScreens;
+const screens = computed(() => props.screenContent ?? showcaseScreens);
 const rail = ref<CoverflowHandle<ShowcaseScreenId>>();
 const demoRoot = ref<HTMLElement>();
 const inspectControl = ref<HTMLButtonElement>();
 const galleryOpen = ref(false);
-const galleryActiveId = ref<ShowcaseScreenId>(screens[Math.floor(screens.length / 2)]!.id);
-const activeId = ref<ShowcaseScreenId>(screens[Math.floor(screens.length / 2)]!.id);
+const galleryActiveId = ref<ShowcaseScreenId>(
+  screens.value[Math.floor(screens.value.length / 2)]!.id,
+);
+const activeId = ref<ShowcaseScreenId>(galleryActiveId.value);
 const focusedPaginationIndex = ref<number | null>(null);
 
 const spring = computed(() => springFromSettings(props.settings));
@@ -59,12 +62,12 @@ const galleryFocusReturn = computed<FocusReturnOptions>(() => ({
 const railState = computed(() => rail.value?.state);
 const visualIndex = computed(() => railState.value?.visualIndex ?? 0);
 const settledIndex = computed(() => railState.value?.settledIndex ?? 0);
-const visualScreen = computed(() => screens[visualIndex.value] ?? screens[0]!);
-const settledScreen = computed(() => screens[settledIndex.value] ?? screens[0]!);
+const visualScreen = computed(() => screens.value[visualIndex.value] ?? screens.value[0]!);
+const settledScreen = computed(() => screens.value[settledIndex.value] ?? screens.value[0]!);
 const inspectEligible = computed(() => rail.value?.isInspectEligible(settledIndex.value) ?? false);
 
 const paginationDots = computed(() =>
-  screens.map((screen, index) => ({
+  screens.value.map((screen, index) => ({
     id: screen.id,
     title: screen.title,
     current: index === visualIndex.value,
@@ -108,7 +111,7 @@ function screenTheme(card: CoverflowCardState<ShowcaseScreen, ShowcaseScreenId>)
 }
 
 function openGallery(index: number) {
-  const id = screens[index]?.id;
+  const id = screens.value[index]?.id;
   if (galleryOpen.value || id === undefined || !rail.value?.synchronizeTo(id)) return;
   galleryActiveId.value = id;
   galleryOpen.value = true;
@@ -138,7 +141,8 @@ const diagnostics = computed<LabDiagnostics>(() => {
   const motion = surface?.diagnostics;
   const viewportSize = Math.max(1, surface?.root?.clientWidth ?? props.stageWidth);
   const targetId = motion?.targetId;
-  const targetIndex = targetId === undefined ? -1 : screens.findIndex((s) => s.id === targetId);
+  const targetIndex =
+    targetId === undefined ? -1 : screens.value.findIndex((s) => s.id === targetId);
   const focused = surface?.presentations[visualIndex.value];
   return {
     ...(focused === undefined
@@ -260,57 +264,70 @@ const diagnostics = computed<LabDiagnostics>(() => {
           :class="[`tone-${card.item.tone}`, `layout-${card.item.layout}`]"
           :style="screenTheme(card)"
         >
-          <header class="screen-top">
-            <div class="brand-row">
-              <span class="brand-mark">Y</span>
-              <div>
-                <p>{{ card.item.eyebrow }}</p>
-                <strong>{{ card.item.title }}</strong>
-              </div>
-            </div>
-            <div class="chrome-actions" aria-hidden="true">
-              <span />
-              <span />
-              <span class="avatar">MV</span>
-            </div>
-          </header>
-
-          <div class="screen-body">
-            <aside class="screen-nav" aria-hidden="true">
-              <span class="nav-pill" />
-              <span />
-              <span />
-              <span class="active-nav" />
-              <span />
-              <span />
-            </aside>
-
-            <div class="screen-main">
-              <div class="toolbar" aria-hidden="true">
-                <span class="search" />
-                <span class="chip" />
-                <span class="chip" />
-                <span class="cta" />
-              </div>
-
-              <div class="feature-card" aria-hidden="true">
-                <span class="feature-icon" />
+          <img
+            v-if="!labPresentation"
+            class="public-screen-image"
+            alt=""
+            aria-hidden="true"
+            decoding="async"
+            draggable="false"
+            :src="card.item.preview.src"
+            :width="card.item.preview.width"
+            :height="card.item.preview.height"
+          />
+          <template v-else>
+            <header class="screen-top">
+              <div class="brand-row">
+                <span class="brand-mark">Y</span>
                 <div>
-                  <strong>Yoot Project Structuur V2.1</strong>
-                  <p>Standaard projectstructuur met complete documentatie.</p>
+                  <p>{{ card.item.eyebrow }}</p>
+                  <strong>{{ card.item.title }}</strong>
                 </div>
-                <span class="ghost-btn">Bekijken</span>
               </div>
+              <div class="chrome-actions" aria-hidden="true">
+                <span />
+                <span />
+                <span class="avatar">MV</span>
+              </div>
+            </header>
 
-              <div class="card-grid" aria-hidden="true">
-                <span v-for="slot in 6" :key="slot" class="mini-card">
-                  <i />
-                  <b />
-                  <em />
-                </span>
+            <div class="screen-body">
+              <aside class="screen-nav" aria-hidden="true">
+                <span class="nav-pill" />
+                <span />
+                <span />
+                <span class="active-nav" />
+                <span />
+                <span />
+              </aside>
+
+              <div class="screen-main">
+                <div class="toolbar" aria-hidden="true">
+                  <span class="search" />
+                  <span class="chip" />
+                  <span class="chip" />
+                  <span class="cta" />
+                </div>
+
+                <div class="feature-card" aria-hidden="true">
+                  <span class="feature-icon" />
+                  <div>
+                    <strong>Yoot Project Structuur V2.1</strong>
+                    <p>Standaard projectstructuur met complete documentatie.</p>
+                  </div>
+                  <span class="ghost-btn">Bekijken</span>
+                </div>
+
+                <div class="card-grid" aria-hidden="true">
+                  <span v-for="slot in 6" :key="slot" class="mini-card">
+                    <i />
+                    <b />
+                    <em />
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          </template>
         </div>
       </template>
     </Coverflow>
@@ -1059,6 +1076,20 @@ const diagnostics = computed<LabDiagnostics>(() => {
 /* Public presentation: the page owns the headings, the stage takes the page's warm neutral. */
 .is-playground .coverflow-viewport {
   background: linear-gradient(180deg, #ebe8df 0%, #ddd9cd 100%);
+}
+
+.public-screen-image {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.is-playground .screen-chrome {
+  background: #f6f3ea;
+}
+.is-playground .tone-ink {
+  background: #232527;
 }
 
 .is-playground .coverflow-meta {

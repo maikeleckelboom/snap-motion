@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1000 625" role="img" aria-label="Snap Motion — Signal monitor">
+  <style>text{font-family:Arial,Helvetica,sans-serif} .mono{font-family:Consolas,monospace;letter-spacing:2px}</style>
+  <rect x="0" y="0" width="1000" height="625" rx="0" fill="#232527"/>
+  <rect x="28" y="24" width="40" height="40" rx="8" fill="#e7b48d"/><text x="35" y="50" font-size="17" fill="#232527" font-weight="700">SM</text>
+  <text x="82" y="49" font-size="20" fill="#f6f3ea" font-weight="700">SNAP MOTION</text><text x="262" y="49" font-size="17" fill="#bdc1c3" font-weight="400">/ STUDIO</text>
+  <text x="780" y="49" font-size="18" fill="#f6f3ea" font-weight="400">04 / 05</text><circle cx="935" cy="44" r="5" fill="#e7b48d"/>
+  <rect x="28" y="82" width="944" height="1" rx="0" fill="#484b4c"/>
+  <text x="30" y="137" font-size="42" fill="#f6f3ea" font-weight="700">Signal monitor</text><text x="30" y="173" font-size="21" fill="#bdc1c3" font-weight="400">Return / Position over time</text><text x="824" y="138" font-size="18" fill="#e7b48d" font-weight="700">●  SETTLED</text>
+  <rect x="30" y="209" width="940" height="217" rx="8" fill="#2d3032"/><rect x="55" y="235" width="890" height="1" rx="0" fill="#484b4c"/><rect x="55" y="285" width="890" height="1" rx="0" fill="#484b4c"/><rect x="55" y="335" width="890" height="1" rx="0" fill="#484b4c"/><rect x="55" y="385" width="890" height="1" rx="0" fill="#484b4c"/>
+  <path d="M60 385 C85 385 90 233 140 241 S196 383 247 330 S294 249 351 280 S408 334 464 309 S521 288 577 300 S635 314 690 308 S770 307 830 308 H940" fill="none" stroke="#e7b48d" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="57" y="408" font-size="15" fill="#bdc1c3" font-weight="400">0.00 s</text><text x="879" y="408" font-size="15" fill="#bdc1c3" font-weight="400">1.50 s</text>
+  <rect x="30" y="449" width="302" height="98" rx="7" fill="#343638"/><text x="48" y="476" font-size="14" fill="#e7b48d" font-weight="400">PEAK</text><text x="48" y="519" font-size="34" fill="#f6f3ea" font-weight="700">1.18</text><text x="211" y="520" font-size="15" fill="#bdc1c3" font-weight="400">+18%</text><rect x="349" y="449" width="302" height="98" rx="7" fill="#343638"/><text x="367" y="476" font-size="14" fill="#e7b48d" font-weight="400">REST</text><text x="367" y="519" font-size="34" fill="#f6f3ea" font-weight="700">0.86 s</text><text x="530" y="520" font-size="15" fill="#bdc1c3" font-weight="400">Within threshold</text><rect x="668" y="449" width="302" height="98" rx="7" fill="#343638"/><text x="686" y="476" font-size="14" fill="#e7b48d" font-weight="400">TARGET</text><text x="686" y="519" font-size="34" fill="#f6f3ea" font-weight="700">1.00</text><text x="849" y="520" font-size="15" fill="#bdc1c3" font-weight="400">Position</text>
+  <rect x="28" y="579" width="944" height="1" rx="0" fill="#484b4c"/>
+  <text x="30" y="606" font-size="14" fill="#bdc1c3" font-weight="400">MOTION STUDIES</text><text x="785" y="606" font-size="14" fill="#f6f3ea" font-weight="400">SNAP / 04</text>
+  </svg>

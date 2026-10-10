@@ -10,6 +10,7 @@ import {
   symmetricElasticityFromSettings,
 } from "@/fixtures/lab-settings";
 import type { DemoPresentation, LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
+import StudyTile from "@/playground/components/StudyTile.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -121,13 +122,6 @@ const diagnostics = computed<LabDiagnostics>(() => {
     viewportSize: measured.viewportSize,
   };
 });
-
-/** Public tiles carry a deterministic hue so a page of the collection reads as distinct items. */
-function plateStyle(item: GridItem) {
-  if (labPresentation.value) return undefined;
-  const number = Number(item.id.replace("item-", ""));
-  return { "--plate-hue": String((number * 47 + 190) % 360) };
-}
 
 function announce() {
   liveMessage.value = `Page ${currentPageIndex.value + 1} of ${pages.value.length}`;
@@ -290,13 +284,15 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
                   :key="item.id"
                   class="grid-item"
                   :data-item-id="item.id"
-                  :style="plateStyle(item)"
                 >
-                  <span class="tabular">{{
-                    String(pageIndex * pageCapacity + itemIndex + 1).padStart(2, "0")
-                  }}</span>
-                  <strong>{{ item.label }}</strong>
-                  <button v-if="labPresentation" type="button">Inspect</button>
+                  <StudyTile v-if="!labPresentation" :item-id="item.id" />
+                  <template v-else>
+                    <span class="tabular">{{
+                      String(pageIndex * pageCapacity + itemIndex + 1).padStart(2, "0")
+                    }}</span>
+                    <strong>{{ item.label }}</strong>
+                    <button type="button">Inspect</button>
+                  </template>
                 </article>
               </div>
             </section>
@@ -547,29 +543,12 @@ watch([motion.nearestId, motion.phase], ([nearestId, phase], [previousId]) => {
 }
 
 .is-playground .grid-item {
-  grid-template-rows: auto 1fr;
-  padding: 0.85rem 1rem;
+  container: motion-study / inline-size;
+  display: block;
+  padding: 0;
   border: 0;
   border-radius: 0.6rem;
-  background: linear-gradient(
-    150deg,
-    hsl(var(--plate-hue) 42% 90%),
-    hsl(calc(var(--plate-hue) + 26) 46% 78%)
-  );
-  color: #1d1b16;
-}
-
-.is-playground .grid-item > span {
-  color: rgb(29 27 22 / 0.62);
-  font-family: var(--pg-font-mono);
-  font-size: 0.72rem;
-}
-
-.is-playground .grid-item strong {
-  align-self: end;
-  font-size: clamp(0.95rem, 1.4vw, 1.2rem);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  background: transparent;
 }
 
 .is-playground .page-control {

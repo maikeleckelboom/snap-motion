@@ -13,6 +13,7 @@ import type { LabPhysicsSettings, LabPresetName, ReducedMotionMode } from "@/fix
 
 import PlaygroundNav from "./components/PlaygroundNav.vue";
 import PlaygroundSection from "./components/PlaygroundSection.vue";
+import { playgroundScreens } from "./demoScreens";
 import { playgroundMedia } from "./gallery-media";
 import { presetLabel } from "./preset-facts";
 import { playgroundSections, type PlaygroundSectionId } from "./sections";
@@ -94,28 +95,22 @@ const repositoryHref = "https://github.com/maikeleckelboom/snap-motion";
   <main class="pg-main">
     <header id="top" class="intro">
       <p class="intro-eyebrow">Snap Motion · Playground</p>
-      <h1>Interactive surfaces driven by physics.</h1>
+      <h1>Motion you can interrupt and tune.</h1>
       <div class="intro-body">
         <p class="intro-lede">
-          Five real components. Grab them, throw them, interrupt them mid-flight, then change the
-          spring underneath. Nothing here is a recording.
+          Explore five interactive surfaces. Drag, reverse, switch presets and adjust the motion in
+          real time.
         </p>
-        <nav aria-label="Five surfaces" class="intro-index">
-          <ol>
-            <li v-for="section in playgroundSections" :key="section.id">
-              <a :href="`#${section.id}`">
-                <span class="tabular">{{ section.number }}</span>
-                {{ section.title }}
-              </a>
-            </li>
-          </ol>
-        </nav>
+        <p id="shared-motion-scope" class="intro-tuning">
+          One motion configuration, shared across all five. Tune it beneath any demo.
+        </p>
       </div>
     </header>
 
     <PlaygroundSection :section="sectionById.coverflow!">
       <CoverflowDemo
         presentation="playground"
+        :screen-content="playgroundScreens"
         :reduced-motion-override="reducedMotionOverride"
         :settings="physics.settings.value"
         :stage-width="STAGE_WIDTH"
@@ -126,6 +121,7 @@ const repositoryHref = "https://github.com/maikeleckelboom/snap-motion";
       <StackedDeckDemo
         :exchange="exchange"
         presentation="playground"
+        :screen-content="playgroundScreens"
         :reduced-motion-override="reducedMotionOverride"
         :settings="physics.settings.value"
         :stage-width="STAGE_WIDTH"
@@ -168,9 +164,9 @@ const repositoryHref = "https://github.com/maikeleckelboom/snap-motion";
       <h2 id="closing-title">Under the hood</h2>
       <div class="closing-copy">
         <p>
-          A framework-neutral core owns geometry, semantic state and physical position. A Vue
-          integration turns those mechanics into the five surfaces above, with Motion as the spring
-          driver.
+          Snap Motion separates where a surface is from where it is going. Its framework-neutral
+          core handles geometry and interaction; Vue components render the surfaces, with springs
+          powered by Motion.
         </p>
         <p>
           The packages are beta candidates and are not published to npm. Documentation is in
@@ -259,40 +255,11 @@ const repositoryHref = "https://github.com/maikeleckelboom/snap-motion";
   line-height: 1.5;
 }
 
-/* The sticky bar lists the sections on wider screens; the intro lists them where it cannot. */
-@media (min-width: 52.01rem) {
-  .intro-index {
-    display: none;
-  }
-}
-
-.intro-index ol {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1.25rem;
-}
-
-.intro-index a {
-  display: inline-flex;
-  gap: 0.45rem;
-  align-items: baseline;
-  padding-block: 0.35rem;
-  color: var(--pg-ink);
-  font-size: 0.9rem;
-  font-weight: 550;
-  text-decoration: underline;
-  text-decoration-color: var(--pg-line);
-  text-underline-offset: 0.25em;
-}
-
-.intro-index a:hover {
-  text-decoration-color: currentColor;
-}
-
-.intro-index a span {
+.intro-tuning {
+  max-inline-size: 32rem;
   color: var(--pg-muted);
-  font-family: var(--pg-font-mono);
-  font-size: 0.7rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
 }
 
 .closing {
@@ -373,15 +340,6 @@ const repositoryHref = "https://github.com/maikeleckelboom/snap-motion";
   .intro-lede {
     font-size: 0.98rem;
     line-height: 1.45;
-  }
-
-  .intro-index ol {
-    gap: 0 1rem;
-  }
-
-  .intro-index a {
-    padding-block: 0.3rem;
-    font-size: 0.85rem;
   }
 }
 

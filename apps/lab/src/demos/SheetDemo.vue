@@ -16,6 +16,8 @@ import DiagnosticsPanel from "@/components/DiagnosticsPanel.vue";
 import SegmentedControl from "@/components/SegmentedControl.vue";
 import { springFromSettings } from "@/fixtures/lab-settings";
 import type { DemoPresentation, LabDiagnostics, LabPhysicsSettings } from "@/fixtures/lab-types";
+import PlaygroundSheetContent from "@/playground/components/SheetContent.vue";
+import StudyTile from "@/playground/components/StudyTile.vue";
 
 type ContentMode = "prose" | "short" | "tall";
 type SnapMode = "custom" | "default";
@@ -175,51 +177,69 @@ function snapTo(id: SheetOpenSnapId) {
     </section>
 
     <section v-else class="sheet-stage" aria-label="Sheet launcher">
-      <svg
-        aria-hidden="true"
-        class="sheet-diagram"
-        :data-side="side"
-        viewBox="0 0 160 112"
-        width="160"
-        height="112"
-      >
-        <rect class="diagram-viewport" x="8" y="8" width="144" height="96" rx="6" />
-        <template v-if="side === 'top'">
-          <rect class="diagram-sheet" x="9" y="9" width="142" height="42" />
-          <rect class="diagram-handle" x="64" y="44" width="32" height="4" rx="2" />
-        </template>
-        <template v-else-if="side === 'bottom'">
-          <rect class="diagram-sheet" x="9" y="61" width="142" height="42" />
-          <rect class="diagram-handle" x="64" y="64" width="32" height="4" rx="2" />
-        </template>
-        <template v-else-if="side === 'left'">
-          <rect class="diagram-sheet" x="9" y="9" width="58" height="94" />
-          <rect class="diagram-handle" x="60" y="40" width="4" height="32" rx="2" />
-        </template>
-        <template v-else>
-          <rect class="diagram-sheet" x="93" y="9" width="58" height="94" />
-          <rect class="diagram-handle" x="96" y="40" width="4" height="32" rx="2" />
-        </template>
-      </svg>
-      <div class="sheet-stage-copy">
-        <p class="sheet-stage-title">Attached to the {{ side }} edge</p>
-        <p>
-          {{
-            horizontal
-              ? "A fixed-width surface that slides in from the side."
-              : "A full-width surface with snap points you can drag between."
-          }}
-        </p>
+      <div class="sheet-preview" aria-hidden="true">
+        <p class="preview-label">SNAP MOTION / COLLECTION</p>
+        <div class="preview-cards">
+          <StudyTile v-for="number in 3" :key="number" :item-id="`item-${number}`" />
+        </div>
+        <div class="preview-sheet" :data-side="side">
+          <i /><strong>{{
+            contentMode === "tall"
+              ? "Field notes"
+              : contentMode === "short"
+                ? "Study summary"
+                : "Reading room"
+          }}</strong
+          ><span>{{ horizontal ? "Slide in from the side" : "Drag between snap points" }}</span>
+        </div>
       </div>
-      <button
-        ref="opener"
-        class="open-button"
-        data-testid="open-sheet"
-        type="button"
-        @click="openSheet"
-      >
-        Open {{ side }} sheet
-      </button>
+      <div class="sheet-launch-detail">
+        <svg
+          aria-hidden="true"
+          class="sheet-diagram"
+          :data-side="side"
+          viewBox="0 0 160 112"
+          width="160"
+          height="112"
+        >
+          <rect class="diagram-viewport" x="8" y="8" width="144" height="96" rx="6" />
+          <template v-if="side === 'top'">
+            <rect class="diagram-sheet" x="9" y="9" width="142" height="42" />
+            <rect class="diagram-handle" x="64" y="44" width="32" height="4" rx="2" />
+          </template>
+          <template v-else-if="side === 'bottom'">
+            <rect class="diagram-sheet" x="9" y="61" width="142" height="42" />
+            <rect class="diagram-handle" x="64" y="64" width="32" height="4" rx="2" />
+          </template>
+          <template v-else-if="side === 'left'">
+            <rect class="diagram-sheet" x="9" y="9" width="58" height="94" />
+            <rect class="diagram-handle" x="60" y="40" width="4" height="32" rx="2" />
+          </template>
+          <template v-else>
+            <rect class="diagram-sheet" x="93" y="9" width="58" height="94" />
+            <rect class="diagram-handle" x="96" y="40" width="4" height="32" rx="2" />
+          </template>
+        </svg>
+        <div class="sheet-stage-copy">
+          <p class="sheet-stage-title">Attached to the {{ side }} edge</p>
+          <p>
+            {{
+              horizontal
+                ? "A fixed-width surface that slides in from the side."
+                : "A full-width surface with snap points you can drag between."
+            }}
+          </p>
+        </div>
+        <button
+          ref="opener"
+          class="open-button"
+          data-testid="open-sheet"
+          type="button"
+          @click="openSheet"
+        >
+          Open {{ side }} sheet
+        </button>
+      </div>
     </section>
 
     <div v-if="!labPresentation" class="sheet-public-controls">
@@ -316,7 +336,17 @@ function snapTo(id: SheetOpenSnapId) {
                 : `${side} sheet`
             }}
           </p>
-          <h2>{{ labPresentation ? "Motion tuning notes" : "Motion notes" }}</h2>
+          <h2>
+            {{
+              labPresentation
+                ? "Motion tuning notes"
+                : contentMode === "tall"
+                  ? "Field notes"
+                  : contentMode === "short"
+                    ? "Study summary"
+                    : "Reading room"
+            }}
+          </h2>
         </div>
       </template>
 
@@ -328,7 +358,7 @@ function snapTo(id: SheetOpenSnapId) {
 
       <template v-if="snapMode === 'custom'" #picker>
         <div class="custom-picker">
-          <p>Custom slot · visible extent</p>
+          <p>{{ labPresentation ? "Custom slot · visible extent" : "Choose a position" }}</p>
           <fieldset class="snap-actions">
             <legend class="sr-only">Sheet position</legend>
             <label v-for="point in snapPoints" :key="point.id">
@@ -346,7 +376,8 @@ function snapTo(id: SheetOpenSnapId) {
         </div>
       </template>
 
-      <div class="sheet-content">
+      <PlaygroundSheetContent v-if="!labPresentation" :mode="contentMode" />
+      <div v-else class="sheet-content">
         <p v-if="labPresentation" class="sheet-lede">
           The handle owns primary-axis drag. This body remains a native vertical scrollport, while
           the surface and editorial measure stay independent.
@@ -594,13 +625,92 @@ function snapTo(id: SheetOpenSnapId) {
 }
 .sheet-stage {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   align-items: center;
   gap: clamp(1rem, 3vw, 2rem);
   padding: clamp(1rem, 3vw, 2rem);
   border: 1px solid var(--line);
   border-radius: 1rem;
   background: var(--paper);
+}
+
+.sheet-launch-detail {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+}
+.sheet-launch-detail .open-button {
+  grid-column: 1 / -1;
+}
+.sheet-launch-detail .sheet-diagram {
+  inline-size: 6.5rem;
+}
+.sheet-preview {
+  position: relative;
+  min-block-size: 15rem;
+  padding: 1.25rem;
+  overflow: hidden;
+  border-radius: 0.6rem;
+  background: #e8e3d9;
+}
+.preview-label {
+  font-family: var(--pg-font-mono);
+  font-size: 0.65rem;
+  color: #5d5a53;
+}
+.preview-cards {
+  display: flex;
+  gap: 0.75rem;
+  padding-block-start: 1rem;
+}
+.preview-cards :deep(.study-tile) {
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 7rem;
+}
+.preview-sheet {
+  position: absolute;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1.25rem;
+  background: #232527;
+  color: #f6f3ea;
+  box-shadow: 0 4px 20px rgb(32 35 30 / 0.2);
+}
+.preview-sheet i {
+  inline-size: 2.5rem;
+  block-size: 3px;
+  background: #e7b48d;
+  border-radius: 2px;
+}
+.preview-sheet strong {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.preview-sheet span {
+  font-size: 0.75rem;
+  color: #e7b48d;
+}
+.preview-sheet[data-side="bottom"] {
+  inset: auto 0 0;
+  border-radius: 0.6rem 0.6rem 0 0;
+}
+.preview-sheet[data-side="top"] {
+  inset: 0 0 auto;
+  border-radius: 0 0 0.6rem 0.6rem;
+}
+.preview-sheet[data-side="left"] {
+  inset: 0 auto 0 0;
+  inline-size: 70%;
+  align-content: center;
+  border-radius: 0 0.6rem 0.6rem 0;
+}
+.preview-sheet[data-side="right"] {
+  inset: 0 0 0 auto;
+  inline-size: 70%;
+  align-content: center;
+  border-radius: 0.6rem 0 0 0.6rem;
 }
 .sheet-diagram {
   inline-size: 10rem;
@@ -668,13 +778,17 @@ function snapTo(id: SheetOpenSnapId) {
 .is-playground :deep(.snap-motion-sheet-handle) {
   border-radius: 999px;
 }
-:global(html:has(.snap-motion-sheet[open])),
-:global(html:has(.snap-motion-sheet[open]) body) {
+:global(html:has(.snap-motion-sheet[open])) {
+  overflow: hidden;
+}
+/* Preserve the Lab's lock. On the Playground only the root scrollport is locked: making body
+   scrollable would detach the sticky navigation until the native dialog finishes closing. */
+:global(html:has(.sheet-demo:not(.is-playground) .snap-motion-sheet[open]) body) {
   overflow: hidden;
 }
 @media (max-width: 42rem) {
   .sheet-stage {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
   .sheet-stage .open-button {
     grid-column: 1 / -1;
