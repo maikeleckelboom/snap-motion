@@ -46,6 +46,7 @@
     "runStackedDeckVisual.ts",
     "stackedDeckDirectStrips.ts",
     "stackedDeckVisualArtifacts.test.ts",
+    "stackedDeckPileGeometry.test.ts",
     "stackedDeckVisualArtifacts.ts",
     "stackedDeckVisualRevision.ts",
     "stackedDeckVisualScenario.ts",

@@ -85,7 +85,10 @@ function isTrueRest(
 test.describe.configure({ timeout: 120_000 });
 
 test.beforeEach(async ({ page }, testInfo) => {
-  if (testInfo.title === FAST_ALTERNATING_DIRECT_PILE_TITLE) {
+  if (
+    testInfo.title === FAST_ALTERNATING_DIRECT_PILE_TITLE ||
+    testInfo.title.startsWith("autonomous Direct ")
+  ) {
     await page.clock.install();
   }
   await openLabDemo(page, "stacked-deck", "no-preference");
@@ -134,9 +137,7 @@ for (const scenario of [
   }, testInfo) => {
     const trace = await captureAutonomousPileScenario(page, scenario);
     await attachPileTrace(testInfo, trace);
-    expectPhysicallyValidPileTrace(trace, {
-      allowFrameRateSkippedOcclusion: testInfo.project.name.includes("webkit"),
-    });
+    expectPhysicallyValidPileTrace(trace);
   });
 }
 

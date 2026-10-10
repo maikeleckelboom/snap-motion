@@ -167,36 +167,50 @@ export function exposedModelArea(geometry: PileGeometry, index: number): number 
   return exposed;
 }
 
-function contains(quad: Polygon, point: Point): boolean {
-  for (let index = 0; index < quad.length; index += 1) {
-    const start = quad[index]!;
-    const edge = subtract(quad[(index + 1) % quad.length]!, start);
-    if (cross(edge, subtract(point, start)) < 0) return false;
-  }
-  return true;
+/** Raster material may touch a boundary cell, but cannot fill a cell wholly under a front shell. */
+export function rasterOcclusionHalfPlanes(
+  geometry: PileGeometry,
+  index: number,
+  devicePixelRatio: number,
+) {
+  const pixelSize = 1 / devicePixelRatio;
+  return inFront(geometry.dom, index).map((candidate) => {
+    const quad = domQuad(geometry, candidate);
+    return quad.map((start, edgeIndex) => {
+      const end = quad[(edgeIndex + 1) % quad.length]!;
+      const dx = end[0] - start[0];
+      const dy = end[1] - start[1];
+      return {
+        dx,
+        dy,
+        x: start[0],
+        y: start[1],
+        minimum: Math.min(0, -dy * pixelSize) + Math.min(0, dx * pixelSize),
+      };
+    });
+  });
 }
 
-/** Raster material may touch a boundary cell, but cannot fill a cell wholly under a front shell. */
 export function fullyOccludedRasterPixels(
   geometry: PileGeometry,
   index: number,
   pixels: readonly number[],
   rasterWidth: number,
   devicePixelRatio: number,
+  rasterOffset: Point = [0, 0],
 ): readonly Point[] {
-  const fronts = inFront(geometry.dom, index).map((candidate) => domQuad(geometry, candidate));
   const pixelSize = 1 / devicePixelRatio;
-  return pixels.flatMap((pixel) => {
-    const x = (pixel % rasterWidth) * pixelSize;
-    const y = Math.floor(pixel / rasterWidth) * pixelSize;
-    const cell: Polygon = [
-      [x, y],
-      [x + pixelSize, y],
-      [x + pixelSize, y + pixelSize],
-      [x, y + pixelSize],
-    ];
-    return fronts.some((front) => cell.every((corner) => contains(front, corner)))
-      ? [[x, y] as Point]
-      : [];
-  });
+  const fronts = rasterOcclusionHalfPlanes(geometry, index, devicePixelRatio);
+  const covered: Point[] = [];
+  for (const pixel of pixels) {
+    const x = (pixel % rasterWidth) * pixelSize - rasterOffset[0];
+    const y = Math.floor(pixel / rasterWidth) * pixelSize - rasterOffset[1];
+    if (
+      fronts.some((front) =>
+        front.every((edge) => edge.dx * (y - edge.y) - edge.dy * (x - edge.x) + edge.minimum >= 0),
+      )
+    )
+      covered.push([x, y]);
+  }
+  return covered;
 }

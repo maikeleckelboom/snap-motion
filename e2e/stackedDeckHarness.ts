@@ -291,6 +291,7 @@ export async function readFrame(page: Page) {
         const box = surface.getBoundingClientRect();
         const style = getComputedStyle(item);
         const surfaceStyle = getComputedStyle(surface);
+        const matrix = new DOMMatrixReadOnly(getComputedStyle(motion).transform);
         return {
           ariaCurrent: item.getAttribute("aria-current"),
           ariaHidden: item.getAttribute("aria-hidden"),
@@ -309,6 +310,9 @@ export async function readFrame(page: Page) {
           layer: Number(item.dataset.deckLayer),
           left: box.left,
           modelOpacity: Number(surface.dataset.opacity),
+          matrix: { a: matrix.a, b: matrix.b, c: matrix.c, d: matrix.d, e: matrix.e, f: matrix.f },
+          surfaceWidth: surface.offsetWidth,
+          surfaceHeight: surface.offsetHeight,
           motionClipPath: getComputedStyle(motion).clipPath,
           opacity: Number(style.opacity),
           pointerEvents: style.pointerEvents,
@@ -375,6 +379,9 @@ export async function readFrame(page: Page) {
       stageRight: stageBox.right,
       stageTop: stageBox.top,
       stageWidth: stageBox.width,
+      stageClientWidth: element.clientWidth,
+      stageClientHeight: element.clientHeight,
+      dpr: devicePixelRatio,
       visualTopIndex: Number(element.dataset.visualTopIndex),
       visualId: element.dataset.visualId ?? "",
       poses,

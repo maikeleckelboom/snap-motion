@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 
-import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 import { expectCarouselAt } from "./helpers";
 import {
@@ -12,6 +12,7 @@ import {
   readFrame,
   viewport,
 } from "./stackedDeckHarness";
+import { rasterOcclusionHalfPlanes, type PileGeometry } from "./stackedDeckPileGeometry";
 
 export type PileTraceDirection = -1 | 1;
 export type PileTraceExchange = "direct" | "shuffle";
@@ -203,10 +204,28 @@ export async function installHighContrastPileFixture(page: Page): Promise<void> 
   await expect(page.locator(".stacked-screen-image").first()).toBeHidden();
 }
 
-async function readPaintedPile(stage: Locator, stageCardWidth: number): Promise<PaintedPile> {
-  const screenshot = await stage.screenshot({ animations: "allow", type: "png" });
+async function readPaintedPile(
+  stage: Locator,
+  stageCardWidth: number,
+  geometry?: PileGeometry,
+): Promise<PaintedPile> {
+  const bounds = await stage.boundingBox();
+  if (!bounds) throw new Error("The pile has no rendered raster bounds.");
+  const dpr = await stage.page().evaluate(() => devicePixelRatio);
+  // Explicit integer CSS-pixel clip gives every engine the same known raster origin. WebKit's
+  // outward rounding of a fractional element clip otherwise offsets its pixels from DOM geometry.
+  const clip = {
+    x: Math.floor(bounds.x),
+    y: Math.floor(bounds.y),
+    width: Math.ceil(bounds.x + bounds.width) - Math.floor(bounds.x),
+    height: Math.ceil(bounds.y + bounds.height) - Math.floor(bounds.y),
+  };
+  const rasterOffset = [bounds.x - clip.x, bounds.y - clip.y] as const;
+  const screenshot = geometry
+    ? await stage.page().screenshot({ animations: "allow", type: "png", clip })
+    : await stage.screenshot({ animations: "allow", type: "png" });
   const painted = await stage.page().evaluate(
-    async ({ cardWidth, encoded, materials }) => {
+    async ({ cardWidth, encoded, materials, occlusion, deviceScale, offset }) => {
       const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
       const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }));
       const canvas = document.createElement("canvas");
@@ -218,15 +237,15 @@ async function readPaintedPile(stage: Locator, stageCardWidth: number): Promise<
       bitmap.close();
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
       const center = canvas.width / 2;
-      const centerHalfWidth = cardWidth * 0.06;
+      const centerHalfWidth = cardWidth * deviceScale * 0.06;
       const materialAt = (x: number, y: number) => {
-        const offset = (y * canvas.width + x) * 4;
+        const pixelOffset = (y * canvas.width + x) * 4;
         for (const material of materials) {
           if (
-            Math.abs(pixels[offset]! - material.color[0]) <= 2 &&
-            Math.abs(pixels[offset + 1]! - material.color[1]) <= 2 &&
-            Math.abs(pixels[offset + 2]! - material.color[2]) <= 2 &&
-            pixels[offset + 3]! >= 250
+            Math.abs(pixels[pixelOffset]! - material.color[0]) <= 2 &&
+            Math.abs(pixels[pixelOffset + 1]! - material.color[1]) <= 2 &&
+            Math.abs(pixels[pixelOffset + 2]! - material.color[2]) <= 2 &&
+            pixels[pixelOffset + 3]! >= 250
           ) {
             return material.id;
           }
@@ -245,6 +264,7 @@ async function readPaintedPile(stage: Locator, stageCardWidth: number): Promise<
             right: null as number | null,
             rightPixels: 0,
             top: null as number | null,
+            covered: [] as (readonly [number, number])[],
           },
         ]),
       );
@@ -254,6 +274,16 @@ async function readPaintedPile(stage: Locator, stageCardWidth: number): Promise<
           if (id === null) continue;
           const observation = mutable[id]!;
           observation.pixelCount += 1;
+          const px = x / deviceScale - offset[0];
+          const py = y / deviceScale - offset[1];
+          if (
+            occlusion[id]?.some((front) =>
+              front.every(
+                (edge) => edge.dx * (py - edge.y) - edge.dy * (px - edge.x) + edge.minimum >= 0,
+              ),
+            )
+          )
+            observation.covered.push([px, py]);
           observation.left = observation.left === null ? x : Math.min(observation.left, x);
           observation.right = observation.right === null ? x : Math.max(observation.right, x);
           observation.top = observation.top === null ? y : Math.min(observation.top, y);
@@ -266,8 +296,8 @@ async function readPaintedPile(stage: Locator, stageCardWidth: number): Promise<
       const stagePoints: StagePointOwner[] = [];
       for (const yRatio of [-0.25, 0, 0.25]) {
         for (const xRatio of [-0.5, -0.25, 0, 0.25, 0.5]) {
-          const x = Math.round(center + cardWidth * xRatio);
-          const y = Math.round(canvas.height / 2 + cardWidth * 0.625 * yRatio);
+          const x = Math.round(center + cardWidth * deviceScale * xRatio);
+          const y = Math.round(canvas.height / 2 + cardWidth * deviceScale * 0.625 * yRatio);
           stagePoints.push({ itemId: materialAt(x, y), x, y });
         }
       }
@@ -282,9 +312,58 @@ async function readPaintedPile(stage: Locator, stageCardWidth: number): Promise<
       cardWidth: stageCardWidth,
       encoded: screenshot.toString("base64"),
       materials: MATERIALS.map(({ color, id }) => ({ color, id })),
+      occlusion: Object.fromEntries(
+        MATERIALS.map((material, index) => [
+          material.id,
+          geometry ? rasterOcclusionHalfPlanes(geometry, index, dpr) : [],
+        ]),
+      ),
+      deviceScale: dpr,
+      offset: rasterOffset,
     },
   );
-  return painted;
+  if (geometry) {
+    for (const material of MATERIALS) {
+      const covered = painted.materials[material.id]!.covered;
+      if (covered.length > 0) {
+        const rasterPath = test.info().outputPath("pile-occlusion.png");
+        const geometryPath = test.info().outputPath("pile-occlusion.json");
+        await writeFile(rasterPath, screenshot);
+        await writeFile(
+          geometryPath,
+          JSON.stringify(
+            {
+              geometry,
+              bounds: await stage.boundingBox(),
+              covered,
+              rasterWidth: painted.width,
+              rasterHeight: painted.height,
+              dpr: await stage.page().evaluate(() => devicePixelRatio),
+            },
+            null,
+            2,
+          ),
+        );
+        await test
+          .info()
+          .attach("pile-occlusion-raster", { path: rasterPath, contentType: "image/png" });
+        await test.info().attach("pile-occlusion-geometry", {
+          path: geometryPath,
+          contentType: "application/json",
+        });
+      }
+      expect(covered, `${material.id} painted inside a physically covering front card`).toEqual([]);
+    }
+  }
+  return {
+    ...painted,
+    materials: Object.fromEntries(
+      Object.entries(painted.materials).map(([id, { covered: _covered, ...envelope }]) => [
+        id,
+        envelope,
+      ]),
+    ),
+  };
 }
 
 export async function capturePileSnapshot(page: Page): Promise<PileSnapshot> {
@@ -530,12 +609,38 @@ export async function captureAutonomousPileScenario(
   const stage = viewport(page);
   await page.getByTestId("stacked-deck-exchange-direct").click();
   await selectIndex(page, options.sourceIndex);
+  await stage.scrollIntoViewIfNeeded();
+  // Freeze the autonomous spring while pairing geometry with its raster capture. Otherwise the
+  // screenshot can describe a later frame than readFrame, including a skipped occlusion interval.
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 1000)));
   const destinationIndex =
     (options.sourceIndex + options.direction + STACKED_DECK_IDS.length) % STACKED_DECK_IDS.length;
   const frames: PileFrameTrace[] = [];
   const capture = async () => {
+    // Keep the entire raster clear of sticky chrome; locator auto-scrolling can leave it behind it.
+    await stage.evaluate((element) =>
+      element.scrollIntoView({ block: "center", behavior: "instant" }),
+    );
     const rendered = await readFrame(page);
-    const painted = await readPaintedPile(stage, rendered.cardWidth);
+    const geometry: PileGeometry = {
+      cardWidth: rendered.cardWidth,
+      cardHeight: rendered.poses[0]!.surfaceHeight,
+      stageWidth: rendered.stageClientWidth,
+      stageHeight: rendered.stageClientHeight,
+      poses: rendered.poses,
+      dom: rendered.poses.map((pose) => ({
+        layer: pose.layer,
+        matrix: pose.matrix,
+        opacity: pose.opacity,
+        visible: pose.visible,
+        width: pose.surfaceWidth,
+        height: pose.surfaceHeight,
+      })),
+    };
+    const painted = await readPaintedPile(stage, rendered.cardWidth, geometry);
+    const afterRaster = await readFrame(page);
+    expect(afterRaster.controllerPosition).toBe(rendered.controllerPosition);
+    expect(afterRaster.poses).toEqual(rendered.poses);
     frames.push(
       createPileFrameTrace(rendered, painted, {
         destinationIndex,
@@ -565,9 +670,7 @@ export async function captureAutonomousPileScenario(
     await page.keyboard.press(options.direction > 0 ? "ArrowRight" : "ArrowLeft");
   }
   for (let sample = 0; sample < 120; sample += 1) {
-    await page.evaluate(
-      () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
-    );
+    await page.clock.runFor(16);
     const rendered = await capture();
     if (
       frames.length >= 4 &&
@@ -581,10 +684,7 @@ export async function captureAutonomousPileScenario(
   return scenarioTrace("direct", options.sourceIndex, options.direction, frames);
 }
 
-export function expectPhysicallyValidPileTrace(
-  trace: PileScenarioTrace,
-  options: { readonly allowFrameRateSkippedOcclusion?: boolean } = {},
-): void {
+export function expectPhysicallyValidPileTrace(trace: PileScenarioTrace): void {
   const first = trace.frames[0]!;
   const last = trace.frames.at(-1)!;
   const switchingFirst = first.shells.find((shell) => shell.id === trace.switchingId)!;
@@ -605,7 +705,7 @@ export function expectPhysicallyValidPileTrace(
         return frame.physicalProgress - trace.frames[index]!.physicalProgress;
       }),
     );
-    expect(options.allowFrameRateSkippedOcclusion === true || maximumProgressStep > 0.5).toBe(true);
+    expect(maximumProgressStep).toBeGreaterThan(0.5);
     const paintedSides = switching
       .filter((shell) => shell.painted.pixelCount > visibleTolerance)
       .map((shell) => {
@@ -639,7 +739,10 @@ export function expectPhysicallyValidPileTrace(
       expect(wrongSidePixels).toBeLessThanOrEqual(visibleTolerance);
     }
   }
-  for (const id of trace.nonParticipatingIds) {
+  // A held source covers the pile throughout its scalar exchange. An autonomous source arcs away,
+  // exposing real under-card material beyond either rest. Its per-frame raster/DOM occlusion oracle
+  // above is authoritative; an endpoint-area envelope would incorrectly forbid that departure.
+  for (const id of first.interactionOrigin === "pointer" ? trace.nonParticipatingIds : []) {
     const endpointEnvelope = Math.max(
       first.shells.find((shell) => shell.id === id)!.painted.pixelCount,
       last.shells.find((shell) => shell.id === id)!.painted.pixelCount,
