@@ -95,11 +95,24 @@ async function closeLightbox(page: Page) {
 
 /**
  * Overdrag past the first media item, read while the pointer is still held. A held drag position
- * is a pure function of pointer travel and the configured elasticity, so the same gesture compares
- * two configurations without any timing.
+ * at fixed decoded geometry is a pure function of pointer travel and the configured elasticity,
+ * so the same gesture compares configurations without including startup remeasurement.
  */
 async function heldEdgeOverdrag(page: Page): Promise<number> {
   const carousel = page.getByTestId("media-carousel");
+  // Every decode remeasures the carousel, including the deliberately delayed fixture. Compare
+  // elasticity only after those layout writes finish; a remeasurement during overdrag would
+  // reapply edge resistance to an already resisted position (an independent baseline behavior).
+  const images = carousel.getByTestId(/^media-image-/);
+  await expect(images).toHaveCount(5);
+  await expect
+    .poll(() =>
+      images.evaluateAll((elements) =>
+        elements.map((image) => image.getAttribute("data-media-state")),
+      ),
+    )
+    .toEqual(Array(5).fill("loaded"));
+  await nextFrame(page);
   await expectCarouselAt(carousel, "regular");
   let held = Number.NaN;
   await dragSyntheticPointerBy(page, carousel, 240, 0, {
