@@ -462,6 +462,27 @@ defineExpose({
   border-color: var(--pg-ink);
 }
 
+/* A plus on the front card: the invitation, drawn with the page's own ink. */
+.empty-pile span:nth-child(3)::before,
+.empty-pile span:nth-child(3)::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  background: var(--pg-ink);
+  transform: translate(-50%, -50%);
+}
+
+.empty-pile span:nth-child(3)::before {
+  inline-size: 2rem;
+  block-size: 2px;
+}
+
+.empty-pile span:nth-child(3)::after {
+  inline-size: 2px;
+  block-size: 2rem;
+}
+
 .state-copy {
   display: grid;
   gap: 0.5rem;

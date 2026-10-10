@@ -25,8 +25,14 @@ const compared = computed(() => model.isCompared(study.value.id));
 const position = computed(() => model.comparisonIds.value.indexOf(study.value.id) + 1);
 const blocked = computed(() => !compared.value && model.comparisonFull.value);
 const note = computed(() => model.noteFor(study.value.id).trim());
-const overlayOwned = computed(() => model.overlay.value !== "none");
 
+/*
+ * These controls stay enabled while a modal is open. The page behind a native modal is inert, so
+ * nothing here can be operated, and the model refuses a second overlay anyway. Disabling an opener
+ * is worse than redundant: WebKit's native close restores focus to the opener only if it can take
+ * focus, and otherwise to its nearest focusable ancestor (this panel), which the dialog then treats
+ * as the application's own hand-off and leaves alone.
+ */
 defineExpose({ detailsButton, inspectButton, root });
 </script>
 
@@ -85,7 +91,7 @@ defineExpose({ detailsButton, inspectButton, root });
         class="studio-button"
         :class="compared ? '' : 'studio-button-primary'"
         data-testid="studio-toggle-compare"
-        :disabled="blocked || overlayOwned"
+        :disabled="blocked"
         type="button"
         @click="emit('toggleCompare')"
       >
@@ -95,7 +101,6 @@ defineExpose({ detailsButton, inspectButton, root });
         ref="inspectButton"
         class="studio-button"
         data-testid="studio-inspect"
-        :disabled="overlayOwned"
         type="button"
         @click="emit('inspect', undefined, inspectButton)"
       >
@@ -105,7 +110,6 @@ defineExpose({ detailsButton, inspectButton, root });
         ref="detailsButton"
         class="studio-button"
         data-testid="studio-details"
-        :disabled="overlayOwned"
         type="button"
         @click="emit('details')"
       >
@@ -128,7 +132,6 @@ defineExpose({ detailsButton, inspectButton, root });
           <button
             class="plate-chip"
             :data-testid="`studio-plate-${media.kind}`"
-            :disabled="overlayOwned"
             type="button"
             @click="emit('inspect', media.id, $event.currentTarget as HTMLElement)"
           >
@@ -270,6 +273,7 @@ defineExpose({ detailsButton, inspectButton, root });
 .inspector-detail {
   display: grid;
   gap: 1rem;
+  max-inline-size: 36rem;
   padding-block-start: 1rem;
   border-block-start: 1px solid var(--pg-line);
 }

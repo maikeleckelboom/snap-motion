@@ -20,7 +20,7 @@ import {
   type StudyCategoryId,
   type StudyId,
 } from "./studies";
-import { studioKey, type StudioSelectionOrigin } from "./studio-context";
+import { studioKey } from "./studio-context";
 import {
   MAX_COMPARISON,
   createStudioModel,
@@ -111,7 +111,7 @@ const galleryFocusReturn = computed<FocusReturnOptions>(() => ({
  * cannot tear the rail. Without a rail (a narrow layout showing another view) the model adopts the
  * selection directly, and the rail simply mounts on it later.
  */
-function chooseStudy(id: StudyId, _origin: StudioSelectionOrigin) {
+function chooseStudy(id: StudyId) {
   if (model.overlay.value !== "none" || model.activeId.value === id) return;
   if (explore.value?.travelTo(id)) return;
   model.select(id);
@@ -137,7 +137,7 @@ function makeActive(id: StudyId) {
   if (model.isCompared(id)) {
     model.selectFromDeck(id);
     explore.value?.travelTo(id);
-  } else chooseStudy(id, "deck");
+  } else chooseStudy(id);
 }
 
 // ---------------------------------------------------------------------------------- comparison
@@ -197,7 +197,11 @@ function setView(view: StudioView) {
 
 // ---------------------------------------------------------------------------------- overlays
 
+// Every open, and every unmount, invalidates a handoff still waiting for focus to settle.
+let handoffGeneration = 0;
+
 function openGallery(opener: HTMLElement | undefined, mediaId?: string) {
+  handoffGeneration += 1;
   galleryOpener.value = opener;
   return model.openGallery(mediaId);
 }
@@ -224,6 +228,7 @@ function onGalleryOpenRequest(_open: false, details: MediaGalleryOpenRequestDeta
 }
 
 function onDetails() {
+  handoffGeneration += 1;
   model.openSheet();
 }
 
@@ -235,15 +240,12 @@ function onSheetInspect(mediaId: string) {
   model.handOffToGallery(mediaId);
 }
 
-let handoffGeneration = 0;
-
 /** Resolves once focus has a stable owner after a native close, within the library's own window. */
 function focusSettled(target: HTMLElement | undefined): Promise<void> {
   return new Promise((resolve) => {
     let frames = 0;
     const tick = () => {
-      const document = target?.ownerDocument;
-      if (!target?.isConnected || document?.activeElement === target || ++frames >= 6) {
+      if (!target?.isConnected || target.ownerDocument.activeElement === target || ++frames >= 6) {
         resolve();
         return;
       }
@@ -311,7 +313,7 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
         class="area-browse"
         :reduced-motion-override="reducedMotionOverride"
         :settings="settings"
-        @choose="chooseStudy($event, 'grid')"
+        @choose="chooseStudy"
       />
       <StudioExplore
         v-if="wide || model.view.value === 'explore'"

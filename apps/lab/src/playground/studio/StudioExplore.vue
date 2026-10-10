@@ -175,7 +175,15 @@ defineExpose({
   border-radius: 999px;
 }
 
+/* The row can be taller than the rail needs: the stage fills it and the rail stays centred in it. */
+.studio-explore {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
 .studio-coverflow {
+  display: grid;
+  align-content: center;
+  block-size: 100%;
   border-radius: 0.9rem;
   background: var(--stage);
   cursor: grab;

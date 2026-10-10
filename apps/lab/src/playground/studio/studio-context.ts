@@ -4,8 +4,6 @@ import type { StudyId } from "./studies";
 import type { StudyCategoryId } from "./studies";
 import type { StudioModel } from "./studio-model";
 
-export type StudioSelectionOrigin = "grid" | "coverflow" | "deck" | "inspector" | "tray";
-
 /** What the Studio's surfaces read and ask for. The workspace owns the model and these actions. */
 export interface StudioContext {
   readonly model: StudioModel<StudyId, StudyCategoryId>;
