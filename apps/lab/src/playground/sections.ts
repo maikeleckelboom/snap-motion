@@ -1,4 +1,7 @@
-/** The five public sections, in page order. */
+/**
+ * The public sections, in page order: five single surfaces, then the Studio that composes them.
+ * `navTitle` is the short name the navigation uses when a section's heading is too long for it.
+ */
 export const playgroundSections = [
   {
     id: "coverflow",
@@ -45,7 +48,22 @@ export const playgroundSections = [
       "Bring content in from any edge. Drag between snap points while the body scrolls independently.",
     hints: ["Drag the handle", "Esc closes", "Pick a snap point"],
   },
+  {
+    id: "studio",
+    number: "06",
+    title: "Everything in motion",
+    navTitle: "Studio",
+    category: "Composition",
+    summary:
+      "One collection. Five connected interactions. Explore, compare, inspect and refine without losing your place.",
+    hints: ["Select anywhere", "Compare on the deck", "Details open in a sheet"],
+  },
 ] as const;
 
 export type PlaygroundSection = (typeof playgroundSections)[number];
 export type PlaygroundSectionId = PlaygroundSection["id"];
+
+/** The name the navigation shows for a section. */
+export function sectionNavTitle(section: PlaygroundSection): string {
+  return "navTitle" in section ? section.navTitle : section.title;
+}

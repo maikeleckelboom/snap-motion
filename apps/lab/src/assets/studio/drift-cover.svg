@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1000 700" role="img" aria-label="Drift study plate: scattered circles of different sizes trailing along a gentle wave">
   <style>text{font-family:Arial,Helvetica,sans-serif} .mono{font-family:Consolas,monospace;letter-spacing:3px}</style>
   <rect x="0" y="0" width="1000" height="700" rx="0" fill="#d9ccc8"/>
-  <text x="60" y="74" font-size="24" fill="#232527" font-weight="400" class="mono">05 / STUDY</text><text x="940" y="74" font-size="24" fill="#232527" font-weight="400" class="mono" text-anchor="end">RESPONSE</text>
+  <text x="60" y="74" font-size="24" fill="#232527" font-weight="400" class="mono">05 / STUDY</text>
   <g transform="translate(100 80)"><path d="M130 340 C151.7 310 215 175 260 160 C305 145 353.3 220 400 250 C446.7 280 491.7 350 540 340 C588.3 330 643.3 210 690 190 C736.7 170 798.3 215 820 220" fill="none" stroke="#232527" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.35" stroke-dasharray="3 14"/><circle cx="150" cy="335" r="48" fill="#232527"/><circle cx="262" cy="175" r="26" fill="#eee8e6"/><circle cx="360" cy="215" r="17" fill="#232527"/><circle cx="470" cy="305" r="34" fill="#eee8e6" stroke="#232527" stroke-width="4"/><circle cx="575" cy="345" r="21" fill="#232527"/><circle cx="690" cy="195" r="54" fill="#232527"/><circle cx="822" cy="222" r="24" fill="#b84924"/></g>
   <text x="60" y="604" font-size="92" fill="#232527" font-weight="700">Drift</text><text x="63" y="652" font-size="30" fill="#5a5757" font-weight="400">Free movement</text>
   <circle cx="920" cy="622" r="11" fill="#b84924"/>

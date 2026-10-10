@@ -2,7 +2,6 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
-  studyCategories,
   studyDefinitions,
   type StudyDefinition,
 } from "../apps/lab/src/playground/studio/studies.ts";
@@ -240,11 +239,11 @@ const motifs: Record<string, (soft: string) => string> = {
 function coverPlate(study: StudyDefinition, index: number) {
   const soft = mix(study.tone, "#ffffff", 0.55);
   const number = String(index + 1).padStart(2, "0");
-  const categoryLabel = studyCategories.find(({ id }) => id === study.category)!.label;
+  // The top-right corner is left clear: the Grid and the Coverflow place their own marks there.
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1000 700" role="img" aria-label="${escapeXml(`${study.name} study plate: ${study.motif}`)}">
   <style>text{font-family:Arial,Helvetica,sans-serif} .mono{font-family:Consolas,monospace;letter-spacing:3px}</style>
   ${rect(0, 0, 1000, 700, study.tone)}
-  ${text(60, 74, `${number} / STUDY`, 24, ink, 400, ' class="mono"')}${text(940, 74, categoryLabel.toUpperCase(), 24, ink, 400, ' class="mono" text-anchor="end"')}
+  ${text(60, 74, `${number} / STUDY`, 24, ink, 400, ' class="mono"')}
   <g transform="translate(100 80)">${motifs[study.id]!(soft)}</g>
   ${text(60, 604, escapeXml(study.name), 92, ink, 700)}${text(63, 652, escapeXml(study.kind), 30, mix(ink, study.tone, 0.3))}
   ${circle(920, 622, 11, rust)}

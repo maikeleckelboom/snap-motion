@@ -121,7 +121,7 @@ test.describe("responsive composition", () => {
     expect(box!.height).toBeGreaterThan(200);
   });
 
-  test("keeps all five sections reachable on a phone without a horizontal nav strip", async ({
+  test("keeps every section reachable on a phone without a horizontal nav strip", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 320, height: 640 });
@@ -146,6 +146,7 @@ test.describe("responsive composition", () => {
       /Paged Grid/,
       /Gallery/,
       /Sheet/,
+      /Studio/,
     ]);
 
     await nav.getByRole("link", { name: /Paged Grid/ }).click();
@@ -441,7 +442,10 @@ test.describe("document-level listeners", () => {
         await section(page, id).getByTestId("tuning-customize").click();
         await expect(editor(page)).toHaveCount(1);
       }
-      await section(page, "sheet").getByTestId("tuning-customize").click();
+      // The last section's editor is the one still open; its own Customize closes it.
+      await section(page, sectionIds[sectionIds.length - 1]!)
+        .getByTestId("tuning-customize")
+        .click();
       await expect(editor(page)).toHaveCount(0);
       for (const preset of ["heavy", "loose", "tight", "balanced"])
         await section(page, "coverflow").getByTestId(`preset-${preset}`).click();

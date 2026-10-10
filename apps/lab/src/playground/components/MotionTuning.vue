@@ -40,11 +40,13 @@ async function closeEditor() {
 <template>
   <!-- A group, not a landmark: five identically named regions would be indistinguishable. -->
   <div
+    :id="`${sectionId}-tuning`"
     class="tuning"
     :class="{ 'is-modified': modifiedCount > 0 }"
     role="group"
     :aria-labelledby="`${id}-title`"
     :data-section="sectionId"
+    tabindex="-1"
   >
     <div class="tuning-bar">
       <div class="tuning-head">

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1000 700" role="img" aria-label="Settle study plate: concentric rings shrinking toward a rust core">
   <style>text{font-family:Arial,Helvetica,sans-serif} .mono{font-family:Consolas,monospace;letter-spacing:3px}</style>
   <rect x="0" y="0" width="1000" height="700" rx="0" fill="#bec9d0"/>
-  <text x="60" y="74" font-size="24" fill="#232527" font-weight="400" class="mono">12 / STUDY</text><text x="940" y="74" font-size="24" fill="#232527" font-weight="400" class="mono" text-anchor="end">RESPONSE</text>
+  <text x="60" y="74" font-size="24" fill="#232527" font-weight="400" class="mono">12 / STUDY</text>
   <g transform="translate(100 80)"><circle cx="500" cy="270" r="200" fill="none" stroke="#232527" stroke-opacity="0.25" stroke-width="4"/><circle cx="500" cy="270" r="154" fill="none" stroke="#232527" stroke-opacity="0.45" stroke-width="7"/><circle cx="500" cy="270" r="110" fill="none" stroke="#232527" stroke-opacity="0.7" stroke-width="12"/><circle cx="500" cy="270" r="70" fill="none" stroke="#232527" stroke-width="18"/><circle cx="500" cy="270" r="34" fill="#b84924"/><circle cx="500" cy="270" r="12" fill="#e2e7ea"/></g>
   <text x="60" y="604" font-size="92" fill="#232527" font-weight="700">Settle</text><text x="63" y="652" font-size="30" fill="#52565a" font-weight="400">Damped rest</text>
   <circle cx="920" cy="622" r="11" fill="#b84924"/>

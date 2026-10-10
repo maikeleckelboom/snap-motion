@@ -17,6 +17,7 @@ import { playgroundScreens } from "./demoScreens";
 import { playgroundMedia } from "./gallery-media";
 import { presetLabel } from "./preset-facts";
 import { playgroundSections, type PlaygroundSectionId } from "./sections";
+import MotionStudio from "./studio/MotionStudio.vue";
 import { playgroundTuningKey } from "./tuning-context";
 import { useActiveSection } from "./use-active-section";
 
@@ -154,6 +155,15 @@ const repositoryHref = "https://github.com/maikeleckelboom/snap-motion";
         :reduced-motion-override="reducedMotionOverride"
         :settings="physics.settings.value"
         :stage-width="STAGE_WIDTH"
+      />
+    </PlaygroundSection>
+
+    <PlaygroundSection :section="sectionById.studio!">
+      <MotionStudio
+        :exchange="exchange"
+        :reduced-motion-override="reducedMotionOverride"
+        :settings="physics.settings.value"
+        @exchange-change="exchange = $event"
       />
     </PlaygroundSection>
   </main>

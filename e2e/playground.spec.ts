@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { playgroundSections } from "../apps/lab/src/playground/sections";
+import { playgroundSections, sectionNavTitle } from "../apps/lab/src/playground/sections";
 import { MOTION_PRESETS } from "../packages/core/src/index";
 import {
   dragMouseBy,
@@ -135,7 +135,7 @@ test.describe("public Playground page", () => {
     expect(titles).toEqual([...playgroundSections.map(({ title }) => title), "Under the hood"]);
 
     const nav = page.getByRole("navigation", { name: "Playground sections" });
-    await expect(nav.getByRole("link")).toHaveCount(5);
+    await expect(nav.getByRole("link")).toHaveCount(playgroundSections.length);
     for (const [index, { id }] of playgroundSections.entries()) {
       await expect(nav.getByRole("link").nth(index)).toHaveAttribute("href", `#${id}`);
       await expect(section(page, id)).toHaveCount(1);
@@ -167,7 +167,7 @@ test.describe("public Playground page", () => {
         await section(page, id).evaluate((element) => element.getBoundingClientRect().top),
       ).toBeGreaterThanOrEqual(-2);
       await expect(page.getByTestId("section-menu-toggle")).toContainText(
-        playgroundSections.find((entry) => entry.id === id)!.title,
+        sectionNavTitle(playgroundSections.find((entry) => entry.id === id)!),
       );
     });
   }
@@ -936,7 +936,7 @@ test.describe("document structure", () => {
     await expect(nav.getByRole("link")).toHaveCount(0);
     const toggle = page.getByTestId("section-menu-toggle");
     await toggle.press("Enter");
-    await expect(nav.getByRole("link")).toHaveCount(5);
+    await expect(nav.getByRole("link")).toHaveCount(playgroundSections.length);
     await page.keyboard.press("Escape");
     await expect(toggle).toBeFocused();
     await expect(nav.getByRole("link")).toHaveCount(0);
@@ -949,10 +949,12 @@ test.describe("document structure", () => {
       const toggle = page.getByTestId("section-menu-toggle");
       const nav = page.getByRole("navigation", { name: "Playground sections" });
       await expect(toggle).toHaveAccessibleName(/Jump to a component, current: Coverflow/);
-      for (const { id, title } of playgroundSections) {
+      for (const entry of playgroundSections) {
+        const { id } = entry;
+        const title = sectionNavTitle(entry);
         await toggle.focus();
         await toggle.press("Enter");
-        await expect(nav.getByRole("link")).toHaveCount(5);
+        await expect(nav.getByRole("link")).toHaveCount(playgroundSections.length);
         const link = nav.getByRole("link", { name: new RegExp(title) });
         await link.focus();
         await link.press("Enter");
@@ -963,7 +965,7 @@ test.describe("document structure", () => {
       }
       await toggle.focus();
       await toggle.press("Space");
-      await expect(nav.getByRole("link")).toHaveCount(5);
+      await expect(nav.getByRole("link")).toHaveCount(playgroundSections.length);
       await nav.getByRole("link").first().focus();
       await page.keyboard.press("Escape");
       await expect(toggle).toBeFocused();

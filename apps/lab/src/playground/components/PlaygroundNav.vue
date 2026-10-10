@@ -2,7 +2,7 @@
 import { useMediaQuery } from "@vueuse/core";
 import { computed, ref } from "vue";
 
-import { playgroundSections } from "../sections";
+import { playgroundSections, sectionNavTitle } from "../sections";
 
 const props = defineProps<{ activeId: string | undefined }>();
 const compact = useMediaQuery("(max-width: 52rem)");
@@ -47,11 +47,11 @@ function closeMenu() {
         >
           <summary
             ref="menuToggle"
-            :aria-label="`Jump to a component, current: ${activeSection.title}`"
+            :aria-label="`Jump to a component, current: ${sectionNavTitle(activeSection)}`"
             data-testid="section-menu-toggle"
           >
             <span class="nav-number tabular">{{ activeSection.number }}</span>
-            <span>{{ activeSection.title }}</span>
+            <span>{{ sectionNavTitle(activeSection) }}</span>
             <span aria-hidden="true" class="menu-chevron">⌄</span>
           </summary>
           <ol>
@@ -63,7 +63,7 @@ function closeMenu() {
                 @click="selectSection"
               >
                 <span class="nav-number tabular">{{ section.number }}</span>
-                <span class="nav-label">{{ section.title }}</span>
+                <span class="nav-label">{{ sectionNavTitle(section) }}</span>
               </a>
             </li>
           </ol>
