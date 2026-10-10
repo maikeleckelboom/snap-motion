@@ -1,7 +1,4 @@
-/**
- * The five public sections, in page order. `workbench` is the Lab demo id the section links to for
- * deeper inspection; it is a secondary path, never required to experience or tune the motion.
- */
+/** The five public sections, in page order. */
 export const playgroundSections = [
   {
     id: "coverflow",
@@ -11,7 +8,6 @@ export const playgroundSections = [
     summary:
       "Move through a rail of screens. Bring one forward, then reverse direction before it settles.",
     hints: ["Drag or flick", "← → keys", "Tap the front screen to inspect"],
-    workbench: "coverflow",
   },
   {
     id: "stacked-deck",
@@ -21,7 +17,6 @@ export const playgroundSections = [
     summary:
       "Reveal the next card, one exchange at a time. Keep going in either direction, or catch a card mid-move.",
     hints: ["Drag the top card", "← → keys", "Shuffle or Direct"],
-    workbench: "stacked-deck",
   },
   {
     id: "paged-grid",
@@ -31,7 +26,6 @@ export const playgroundSections = [
     summary:
       "Browse a collection of motion studies. Change its shape and size while keeping your place.",
     hints: ["Drag or flick", "← → keys", "Add and remove items"],
-    workbench: "grid",
   },
   {
     id: "gallery",
@@ -41,7 +35,6 @@ export const playgroundSections = [
     summary:
       "Open a landscape, move between images, then zoom in. Close the viewer and continue exploring the gallery.",
     hints: ["Click a thumbnail", "← → keys", "Zoom with + and −"],
-    workbench: "media",
   },
   {
     id: "sheet",
@@ -51,7 +44,6 @@ export const playgroundSections = [
     summary:
       "Bring content in from any edge. Drag between snap points while the body scrolls independently.",
     hints: ["Drag the handle", "Esc closes", "Pick a snap point"],
-    workbench: "sheet",
   },
 ] as const;
 

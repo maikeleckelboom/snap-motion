@@ -30,6 +30,22 @@ export function field(page: Page, name: string): Locator {
   return editor(page).getByRole("spinbutton", { name, exact: true });
 }
 
+/** Include hidden anchors, so compact layouts cannot merely conceal Lab navigation. */
+export async function expectPublicNavigation(page: Page) {
+  await expect(
+    page.getByRole("link", { name: /Engineering Lab|Workbench/, includeHidden: true }),
+  ).toHaveCount(0);
+  const internalDestinations = await page.locator("a[href]").evaluateAll((anchors) =>
+    anchors
+      .filter((anchor) => {
+        const href = anchor.getAttribute("href")!;
+        return !href.startsWith("#") && new URL(href, location.href).origin === location.origin;
+      })
+      .map((anchor) => anchor.getAttribute("href")),
+  );
+  expect(internalDestinations).toEqual([]);
+}
+
 /** Base-relative, so it also resolves under the preview build's non-root base. */
 export async function openPlayground(
   page: Page,

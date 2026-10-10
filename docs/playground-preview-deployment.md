@@ -1,9 +1,10 @@
 # Playground preview deployment
 
-The first Cloudflare Pages preview should serve the existing two-entry Vite build: the Playground
-at `/playground/` and the engineering Lab at `/`. Keep the public entry, shared assets and Lab links
-together by uploading the complete Lab output directory. The reusable packages stay private and
-unpublished; hosting this static application does not require npm publication.
+The first Cloudflare Pages preview should serve the two-entry Vite build: the Playground
+at `/` and `/playground/`, and the engineering Lab at `/lab/`. Upload the complete Lab output
+directory to keep both applications and their shared assets operational. The Playground has no
+navigation to the Lab; direct Lab access and query deep links remain supported. The reusable packages
+stay private and unpublished; hosting this static application does not require npm publication.
 
 ## Build configuration
 
@@ -29,8 +30,10 @@ and repository-access decision.
 
 Use the root-base `build` command above for Pages. `pnpm build:preview` deliberately emits a
 `/snap-motion/` base for the existing portability test and is not this host's deployment artifact.
-The Playground remains at `/playground/`; serving only `dist/playground` would break its shared asset
-and Lab paths. Pages handles directory index routes; verify its real redirect for `/playground`
+The build emits the Playground at `index.html` and `playground/index.html`, and the Lab at
+`lab/index.html`. Local `pnpm dev` keeps the Lab at `/` and the Playground at `/playground/`.
+Serving only `dist/playground` would break shared asset and Lab paths. Pages handles directory
+index routes; verify its real redirects for `/playground` and `/lab`
 after deployment rather than adding a blanket SPA rewrite.
 
 ## Local preparation
@@ -43,8 +46,9 @@ pnpm --filter @snap-motion/lab build
 pnpm --filter @snap-motion/lab exec vite preview --host 127.0.0.1 --port 4176 --strictPort
 ```
 
-Open `http://127.0.0.1:4176/playground/` for the built public application. The repository's final
-`pnpm verify` also checks the separate non-root-base build and packed package consumers.
+Open `http://127.0.0.1:4176/` or `/playground/` for the built public application, and access `/lab/`
+directly for the engineering Lab. The repository's final `pnpm verify` also checks the separate
+non-root-base build and packed package consumers.
 
 ## Interaction acceptance
 
@@ -66,9 +70,18 @@ acceptance evidence.
 ## Hosted preview evidence
 
 After the owner's interaction review, create the preview and record its exact Git source, build
-log, deployment URL and review results. Check `/playground`, `/playground/`, section deep links,
-the Engineering Lab link and a Sheet Workbench link. Decode all screens and Gallery plates, open
-and close both modals, change a shared preset, and inspect runtime errors and failed asset requests.
+log, deployment URL and review results. Check `/`, `/playground`, `/playground/` and section deep
+links. Verify that the header, footer and all five demonstrations offer no Lab or Workbench
+navigation at desktop and narrow widths. This is unconditional in development, production and
+Cloudflare previews; do not add environment-dependent link visibility.
+
+Access `/lab/` directly and verify `/lab` redirects while preserving query parameters. Check
+`/lab/?demo=<id>&view=workbench` for `coverflow`, `stacked-deck`, `grid`, `media` and `sheet`, and
+`/lab/?view=fixtures`. Playground-to-Lab navigation is not an acceptance requirement. The Lab's
+Vite entry, components, routes and certification coverage must remain operational.
+
+Decode all screens and Gallery plates, open and close both modals, change a shared preset, and
+inspect runtime errors and failed asset requests.
 Repeat the interaction acceptance on the hosted build and test touch, scrolling and modal focus on
 a physical mobile browser. Local preview success is not hosted or physical-device proof.
 

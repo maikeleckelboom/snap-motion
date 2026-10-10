@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { playgroundSections } from "../apps/lab/src/playground/sections";
 import { expectCarouselAt } from "./helpers";
-import { openPlayground, section, tuningState } from "./playgroundHelpers";
+import { expectPublicNavigation, openPlayground, section, tuningState } from "./playgroundHelpers";
 
 test("the built playground resolves every asset under a non-root base", async ({ page }) => {
   // Listeners attach before the first navigation so no request is missed.
@@ -107,20 +107,34 @@ test("a missing trailing slash reaches the Playground, not the Lab", async ({ pa
   await expect(page).toHaveTitle("Snap Motion Playground");
 });
 
-test("both entries keep the Lab and the Playground reachable from each other", async ({ page }) => {
-  await openPlayground(page);
-  const labLink = page.getByRole("banner").getByRole("link", { name: "Engineering Lab" });
-  await expect(labLink).toHaveAttribute("href", "/snap-motion/");
-  await labLink.click();
+for (const width of [1280, 390]) {
+  test(`built public entries have no Lab navigation at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("./");
+    await expect(page).toHaveTitle("Snap Motion Playground");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expectPublicNavigation(page);
+    await openPlayground(page);
+    await expectPublicNavigation(page);
+  });
+}
+
+test("the built Lab keeps direct Workbench and Fixtures deep links", async ({ page }) => {
+  await page.goto("./lab/");
   await expect(page.locator(".lab-app")).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe("/snap-motion/");
-
-  await page.goto("./?demo=coverflow&view=workbench");
   await expect(page.locator("#panel-coverflow")).toBeVisible();
+  for (const demo of ["coverflow", "stacked-deck", "grid", "media", "sheet"]) {
+    await page.goto(`./lab/?demo=${demo}&view=workbench`);
+    await expect(page.locator(`#panel-${demo}`)).toBeVisible();
+    await expect(page.getByText("Advanced physics", { exact: true })).toBeVisible();
+  }
+  await page.goto("./lab/?view=fixtures");
+  await expect(page.locator("#panel-defaults")).toBeVisible();
+});
 
-  await openPlayground(page);
-  const workbench = section(page, "sheet").getByRole("link", { name: /Workbench/ });
-  await expect(workbench).toHaveAttribute("href", "/snap-motion/?demo=sheet&view=workbench");
-  await workbench.click();
+test("the built Lab directory redirect preserves deep-link queries", async ({ page }) => {
+  await page.goto("./lab?demo=sheet&view=workbench");
+  expect(new URL(page.url()).pathname).toBe("/snap-motion/lab/");
+  expect(new URL(page.url()).search).toBe("?demo=sheet&view=workbench");
   await expect(page.locator("#panel-sheet")).toBeVisible();
 });

@@ -65,8 +65,10 @@ disclosure. All remain lab-only observability and are not part of reusable primi
 
 ## Tuning in the Playground
 
-`pnpm dev` also serves the public page at `/playground/`; `pnpm build` emits it beside the Lab as
-`playground/index.html`, so it works under any base (the preview gate uses `/snap-motion/`).
+`pnpm dev` serves the Lab at `/` and the public page at `/playground/`. `pnpm build` emits the
+Playground at `index.html` and `playground/index.html`, with the Lab at `lab/index.html`.
+Both work under any base (the preview gate uses `/snap-motion/`). The Playground has no Lab
+navigation; access the Lab and its query deep links directly.
 
 Every section has a **Motion tuning** bar under its stage: the Tight, Balanced, Heavy and Loose
 presets with the selected base pressed, and **Customize**. **Modified (n)** and **Reset** appear when

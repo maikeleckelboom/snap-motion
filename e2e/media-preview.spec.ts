@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-import { openLabDemo } from "./helpers";
 import {
   expectLoadedMediaFixture,
   mediaFixtureIds,
@@ -10,9 +9,10 @@ import {
 test("built lab resolves and decodes every fixture under a non-root base", async ({ page }) => {
   // Listeners attach before the first navigation so no fixture request is missed.
   const probe = observeMediaAssets(page);
-  // The lightbox opener only exists once its own demo panel is selected; the lab opens on a
-  // different demo, so navigating without selecting the tab leaves nothing to click.
-  await openLabDemo(page, "media");
+  // Direct Lab access keeps the existing query resolver responsible for selecting the demo.
+  await page.goto("./lab/?demo=media&view=workbench");
+  await page.getByTestId("reduced-motion-mode").selectOption("reduce");
+  await expect(page.locator("#panel-media")).toBeVisible();
   await page.getByTestId("open-lightbox").click();
 
   const carousel = page.getByTestId("media-carousel");

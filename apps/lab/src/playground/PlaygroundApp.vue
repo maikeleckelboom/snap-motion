@@ -84,7 +84,6 @@ provide(playgroundTuningKey, {
   updateSettings,
 });
 
-const labHref = import.meta.env.BASE_URL;
 const repositoryHref = "https://github.com/maikeleckelboom/snap-motion";
 </script>
 
@@ -175,7 +174,6 @@ const repositoryHref = "https://github.com/maikeleckelboom/snap-motion";
       </div>
       <ul class="closing-links">
         <li><a :href="repositoryHref">Source on GitHub</a></li>
-        <li><a :href="labHref">Engineering Lab</a></li>
         <li class="closing-pending">Documentation <span>in preparation</span></li>
       </ul>
     </div>

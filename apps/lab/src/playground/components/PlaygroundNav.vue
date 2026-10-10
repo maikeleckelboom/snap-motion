@@ -27,8 +27,6 @@ function closeMenu() {
   selectSection();
   menuToggle.value?.focus();
 }
-
-const labHref = import.meta.env.BASE_URL;
 </script>
 
 <template>
@@ -71,8 +69,6 @@ const labHref = import.meta.env.BASE_URL;
           </ol>
         </details>
       </nav>
-
-      <a class="bar-lab" :href="labHref">Engineering Lab</a>
     </div>
   </header>
 </template>
@@ -193,19 +189,6 @@ const labHref = import.meta.env.BASE_URL;
   }
 }
 
-.bar-lab {
-  display: flex;
-  flex: none;
-  align-items: center;
-  color: var(--pg-muted);
-  font-size: 0.82rem;
-  text-underline-offset: 0.2em;
-}
-
-.bar-lab:hover {
-  color: var(--pg-ink);
-}
-
 /* A native disclosure keeps names and real anchors, without a second navigation tree. */
 @media (max-width: 52rem) {
   .bar-nav {
@@ -269,10 +252,6 @@ const labHref = import.meta.env.BASE_URL;
   .bar-mark {
     inline-size: 1.65rem;
     block-size: 1.65rem;
-  }
-
-  .bar-lab {
-    display: none;
   }
 
   .bar-inner {

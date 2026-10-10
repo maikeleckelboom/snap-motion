@@ -7,10 +7,6 @@ import MotionTuning from "./MotionTuning.vue";
 const props = defineProps<{ section: PlaygroundSection }>();
 
 const titleId = computed(() => `${props.section.id}-title`);
-// A secondary path to the engineering Lab's Workbench for this surface; never needed to tune.
-const workbenchHref = computed(
-  () => `${import.meta.env.BASE_URL}?demo=${props.section.workbench}&view=workbench`,
-);
 </script>
 
 <template>
@@ -33,11 +29,6 @@ const workbenchHref = computed(
     </div>
 
     <MotionTuning :section-id="section.id" />
-
-    <p class="section-foot">
-      <a :href="workbenchHref">Inspect {{ section.title }} in the Workbench</a>
-      <span aria-hidden="true">↗</span>
-    </p>
   </section>
 </template>
 
@@ -124,21 +115,6 @@ const workbenchHref = computed(
 
 .section-stage {
   min-inline-size: 0;
-}
-
-.section-foot {
-  display: flex;
-  gap: 0.4rem;
-  color: var(--pg-muted);
-  font-size: 0.82rem;
-}
-
-.section-foot a {
-  text-underline-offset: 0.2em;
-}
-
-.section-foot a:hover {
-  color: var(--pg-ink);
 }
 
 @media (max-width: 62rem) {

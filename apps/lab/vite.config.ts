@@ -78,31 +78,50 @@ function certificationMediaPlugin(): Plugin {
 }
 
 /**
- * The Playground is a directory entry (`playground/index.html`). A static host such as Cloudflare
- * Pages redirects `/playground` to `/playground/` itself; the dev and preview servers would
- * otherwise fall through to the Lab's single-page fallback, so they redirect the same way.
+ * Match static directory-index redirects without losing deep-link queries. Development keeps
+ * the Lab at `/`; built output serves it at `/lab/` and the Playground at both `/` and `/playground/`.
  */
-function playgroundTrailingSlashMiddleware(base: string) {
+function directoryTrailingSlashMiddleware(base: string, entries: readonly string[]) {
   return (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     const url = new URL(request.url ?? "/", "http://snap-motion.local");
-    if (url.pathname !== `${base}playground`) {
+    if (!entries.some((entry) => url.pathname === `${base}${entry}`)) {
       next();
       return;
     }
     response.statusCode = 308;
-    response.setHeader("Location", `${base}playground/${url.search}`);
+    response.setHeader("Location", `${url.pathname}/${url.search}`);
     response.end();
   };
 }
 
-function playgroundTrailingSlashPlugin(): Plugin {
+function directoryTrailingSlashPlugin(): Plugin {
   return {
-    name: "snap-motion-playground-trailing-slash",
+    name: "snap-motion-directory-trailing-slash",
     configurePreviewServer(server) {
-      server.middlewares.use(playgroundTrailingSlashMiddleware(server.config.base));
+      server.middlewares.use(
+        directoryTrailingSlashMiddleware(server.config.base, ["playground", "lab"]),
+      );
     },
     configureServer(server) {
-      server.middlewares.use(playgroundTrailingSlashMiddleware(server.config.base));
+      server.middlewares.use(directoryTrailingSlashMiddleware(server.config.base, ["playground"]));
+    },
+  };
+}
+
+/** Preserve the source Lab entry while publishing the Playground as the site's default page. */
+function publicEntriesPlugin(): Plugin {
+  return {
+    name: "snap-motion-public-entries",
+    apply: "build",
+    enforce: "post",
+    generateBundle(_options, bundle) {
+      const lab = bundle["index.html"];
+      const playground = bundle["playground/index.html"];
+      if (lab?.type !== "asset" || playground?.type !== "asset") {
+        throw new Error("The Lab and Playground HTML entries are required for the public build.");
+      }
+      this.emitFile({ type: "asset", fileName: "lab/index.html", source: lab.source });
+      lab.source = playground.source;
     },
   };
 }
@@ -118,7 +137,12 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
-  plugins: [certificationMediaPlugin(), playgroundTrailingSlashPlugin(), vue()],
+  plugins: [
+    certificationMediaPlugin(),
+    directoryTrailingSlashPlugin(),
+    vue(),
+    publicEntriesPlugin(),
+  ],
   resolve: {
     alias: [
       { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },

@@ -12,6 +12,7 @@ import {
   duplicateIds,
   editor,
   expectEveryBarShows,
+  expectPublicNavigation,
   expectedFieldValues,
   field,
   openEditor,
@@ -206,25 +207,15 @@ test.describe("public Playground page", () => {
     await expect(page.getByTestId("stacked-deck-two-items")).toHaveCount(0);
   });
 
-  test("gives every section a secondary Workbench path that is not required to tune", async ({
-    page,
-  }) => {
-    await openPlayground(page);
-    for (const { id, workbench, title } of playgroundSections) {
-      const link = section(page, id).getByRole("link", {
-        name: `Inspect ${title} in the Workbench`,
-      });
-      await expect(link).toHaveAttribute(
-        "href",
-        new RegExp(`\\?demo=${workbench}&view=workbench$`),
-      );
-    }
-    await section(page, "paged-grid")
-      .getByRole("link", { name: /Workbench/ })
-      .click();
-    await expect(page.locator("#panel-grid")).toBeVisible();
-    await expect(page.getByText("Advanced physics", { exact: true })).toBeVisible();
-  });
+  for (const width of [1280, 390]) {
+    test(`public navigation stays within the Playground at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await openPlayground(page);
+      await expectPublicNavigation(page);
+      await openEditor(page, "paged-grid");
+      await expectPublicNavigation(page);
+    });
+  }
 });
 
 test.describe("live surfaces", () => {
