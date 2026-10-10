@@ -152,15 +152,18 @@ test.describe("responsive composition", () => {
   }) => {
     await openStudio(page, { width: 390, height: 844 });
     const measure = () =>
-      page.evaluate(() => {
-        const rect = (selector: string) =>
-          document.querySelector(selector)!.getBoundingClientRect();
-        return {
-          bar: Math.round(rect(".studio-bar").top + scrollY),
-          modes: Math.round(rect(".studio-modes").top + scrollY),
-          height: Math.round(rect('[data-testid="studio-workspace"]').height),
-        };
-      });
+      page.evaluate(() => ({
+        bar: Math.round(
+          document.querySelector(".studio-bar")!.getBoundingClientRect().top + scrollY,
+        ),
+        modes: Math.round(
+          document.querySelector(".studio-modes")!.getBoundingClientRect().top + scrollY,
+        ),
+        height: Math.round(
+          document.querySelector('[data-testid="studio-workspace"]')!.getBoundingClientRect()
+            .height,
+        ),
+      }));
     const heights: number[] = [];
     let anchor: { bar: number; modes: number } | undefined;
     for (const view of ["browse", "explore", "compare", "browse"]) {
