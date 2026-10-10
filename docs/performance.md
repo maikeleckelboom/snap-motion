@@ -8,16 +8,16 @@ Current packed build graph measurements are enforced by `pnpm size:check`:
 
 | Entry             |   Bytes | Gzip bytes | Budget bytes / gzip |
 | ----------------- | ------: | ---------: | ------------------: |
-| Core              |  47,441 |     13,500 |     47,500 / 13,500 |
-| Vue root          | 130,814 |     33,394 |    132,000 / 33,500 |
-| Vue carousel      |  38,418 |     10,877 |     52,000 / 15,000 |
-| Vue Coverflow     |  48,952 |     14,348 |     49,750 / 14,600 |
-| Vue Stacked Deck  |  50,873 |     14,885 |     51,250 / 15,000 |
-| Vue sheet         |  50,216 |     14,186 |     51,000 / 14,500 |
+| Core              |  53,463 |     15,446 |     53,464 / 15,447 |
+| Vue root          | 140,476 |     37,656 |    140,476 / 37,656 |
+| Vue carousel      |  39,132 |     11,172 |     52,000 / 15,000 |
+| Vue Coverflow     |  50,269 |     14,825 |     50,672 / 14,828 |
+| Vue Stacked Deck  |  57,242 |     16,812 |     57,645 / 16,825 |
+| Vue sheet         |  53,147 |     15,141 |     53,147 / 15,141 |
 | Vue dialog        |  11,786 |      3,891 |      12,500 / 4,100 |
-| Vue media gallery |  53,873 |     14,323 |     60,000 / 16,000 |
-| Vue motion        |  10,771 |      3,551 |      16,000 / 5,500 |
-| Base CSS          |  26,802 |      4,624 |      27,000 / 5,000 |
+| Vue media gallery |  58,298 |     15,931 |     60,000 / 16,000 |
+| Vue motion        |  10,797 |      3,687 |      16,000 / 5,500 |
+| Base CSS          |  26,859 |      4,698 |      27,361 / 5,000 |
 
 The performance-budget files run once through `pnpm test:unit`. They cover 60/120-sample drag
 streams, repeated interruption, 1/20/100/1,000 items, bounded render windows, simultaneous
@@ -69,6 +69,69 @@ tools. Record main-thread long tasks, layout reads, Vue updates, retained listen
 playback while dragging, interrupting springs, resizing, opening dialogs repeatedly, and exercising
 an intentionally large Stacked Deck. Update architecture only when traces show unnecessary
 frame-level reactive work.
+
+## Final integration measurements
+
+Measured on 2026-10-10 from equivalent root-base production builds, Chromium 149.0.7827.55 on the
+same Windows host, 390 × 844 emulated touch viewport, five fresh contexts per CPU setting. The
+baseline is the approved integrated polish tree; the final build includes Sheet dismissal, held
+remeasurement, active Gallery return, corrected native root/crop capture, complete five-card
+Coverflow rail visibility and the borderless,
+transparent Gallery viewport. No browser tests ran
+concurrently with the measurements. Historical comparisons below retain their original scope.
+
+| Metric                                     |           Integrated polish |           Final integration |
+| ------------------------------------------ | --------------------------: | --------------------------: |
+| Native FCP / LCP                           |                196 / 268 ms |                192 / 256 ms |
+| Native blocking proxy                      |                       94 ms |                       99 ms |
+| 4× CPU FCP / LCP                           |            1,504 / 1,504 ms |            1,492 / 1,492 ms |
+| 4× CPU blocking proxy                      |                    1,137 ms |                    1,171 ms |
+| Native layout / style / script             |    91.64 / 14.93 / 36.79 ms |    92.37 / 16.95 / 38.00 ms |
+| 4× layout / style / script                 | 633.61 / 101.34 / 250.90 ms | 656.26 / 107.26 / 290.14 ms |
+| CLS                                        |                           0 |                           0 |
+| DOM nodes / image elements                 |                    805 / 16 |                    805 / 16 |
+| Native JS heap                             |                    5.91 MiB |                    5.93 MiB |
+| Initial JS, locally recompressed gzip      |                   135,904 B |                   137,239 B |
+| Initial CSS, locally recompressed gzip     |                    18,041 B |                    18,030 B |
+| Requested media, locally recompressed gzip |                    44,482 B |                    44,501 B |
+| Native drag p95 / worst                    |              16.8 / 16.8 ms |              16.7 / 16.8 ms |
+| 4× drag p95 / worst                        |              33.3 / 83.3 ms |              33.3 / 66.6 ms |
+
+The blocking proxy sums `max(longTask.duration - 50, 0)` from navigation through a fixed 1.5-second
+post-readiness observation window; it is **not Lighthouse TBT**. Transfer estimates recompress
+response bodies locally, not encoded network bytes. Drag samples cover four real desktop mouse-drag
+round trips with springs allowed to settle: 718/761 native frames, 727/745 throttled frames. No
+native interval exceeded 33.4 ms; throttled counts were 25 before and 18 after. Sampling variance is
+material; these counts do not establish an optimization or continuous frame/input-latency guarantee.
+
+Separate 4× traces attribute the dominant first document layout to `measureSurfaceWidth()`'s first
+`clientWidth` read in Coverflow initialization. That read forces layout of the five mounted surfaces.
+Single traced first-layout samples were 605.5 ms and 705.2 ms; profiler overhead and run variation
+prevent treating this pair as a regression measurement. Repeated untraced layout medians above stay
+between 634 and 656 ms. Style work is around 100 ms; script initialization remains another substantial cost.
+The five surfaces remain eager, retain their state and anchors, and keep existing event ownership.
+No production dependency, large asset, deferred mounting or speculative startup optimization was
+introduced. The evidence does not justify risking geometry and scroll stability. Roughly 1.5-second
+throttled first paint and 1.17-second local blocking remain launch-review concerns. Earlier final
+probes returned throttled paint medians from 1.336 to 1.532 seconds; the last stable-tree sample is
+reported above, without treating this variation as proof of an optimization or isolated regression.
+
+Equivalent package graphs use the pinned bundler and the baseline package source with matching
+package working directories. Only affected size ceilings were adjusted; other budgets are unchanged.
+
+| Package graph | Baseline raw / gzip |   Final raw / gzip | Actual increase raw / gzip |
+| ------------- | ------------------: | -----------------: | -------------------------: |
+| Core          |   53,407 / 15,430 B |  53,463 / 15,446 B |                  56 / 16 B |
+| Vue root      |  138,755 / 37,130 B | 140,476 / 37,656 B |              1,721 / 526 B |
+| Vue Sheet     |   51,468 / 14,656 B |  53,147 / 15,141 B |              1,679 / 485 B |
+
+The Vue root and Sheet ceilings already contained headroom; their ceiling increases are smaller
+than these actual implementation costs and must not be reported as feature-byte deltas. The package
+behavior changes have patch Changesets and preserve export/API declarations.
+
+Raw measurements, CPU profiles, timeline stacks and equivalent baseline builds remain ignored in
+`.artifacts/final-integration/`. Desktop emulation is the available device evidence. No physical
+Android, iOS Safari or 120 Hz hardware certification is claimed.
 
 ## Product-polish comparison
 

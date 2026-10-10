@@ -5,7 +5,7 @@
   <text x="82" y="49" font-size="20" fill="#f6f3ea" font-weight="700">SNAP MOTION</text><text x="262" y="49" font-size="17" fill="#bdc1c3" font-weight="400">/ STUDIO</text>
   <text x="780" y="49" font-size="18" fill="#f6f3ea" font-weight="400">04 / 05</text><circle cx="935" cy="44" r="5" fill="#e7b48d"/>
   <rect x="28" y="82" width="944" height="1" rx="0" fill="#484b4c"/>
-  <text x="30" y="137" font-size="42" fill="#f6f3ea" font-weight="700">Signal monitor</text><text x="30" y="173" font-size="21" fill="#bdc1c3" font-weight="400">Return / Position over time</text><text x="824" y="138" font-size="18" fill="#e7b48d" font-weight="700">●  SETTLED</text>
+  <text x="30" y="137" font-size="42" fill="#f6f3ea" font-weight="700">Signal monitor</text><text x="30" y="173" font-size="21" fill="#bdc1c3" font-weight="400">Illustrative readings / Static response curve</text><text x="824" y="138" font-size="18" fill="#e7b48d" font-weight="700">●  SETTLED</text>
   <rect x="30" y="209" width="940" height="217" rx="8" fill="#2d3032"/><rect x="55" y="235" width="890" height="1" rx="0" fill="#484b4c"/><rect x="55" y="285" width="890" height="1" rx="0" fill="#484b4c"/><rect x="55" y="335" width="890" height="1" rx="0" fill="#484b4c"/><rect x="55" y="385" width="890" height="1" rx="0" fill="#484b4c"/>
   <path d="M60 385 C85 385 90 233 140 241 S196 383 247 330 S294 249 351 280 S408 334 464 309 S521 288 577 300 S635 314 690 308 S770 307 830 308 H940" fill="none" stroke="#e7b48d" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="57" y="408" font-size="15" fill="#bdc1c3" font-weight="400">0.00 s</text><text x="879" y="408" font-size="15" fill="#bdc1c3" font-weight="400">1.50 s</text>

@@ -39,7 +39,7 @@ export const playgroundSections = [
     title: "Gallery",
     category: "Media exploration",
     summary:
-      "Open a landscape, move between images, then zoom in. Close the viewer to return to where you started.",
+      "Open a landscape, move between images, then zoom in. Close the viewer and continue exploring the gallery.",
     hints: ["Click a thumbnail", "← → keys", "Zoom with + and −"],
     workbench: "media",
   },

@@ -105,7 +105,7 @@ writeFileSync(
   shell(
     "Signal monitor",
     "04",
-    `${text(30, 137, "Signal monitor", 42, paper, 700)}${text(30, 173, "Return / Position over time", 21, "#bdc1c3")}${text(824, 138, "●  SETTLED", 18, highlight, 700)}
+    `${text(30, 137, "Signal monitor", 42, paper, 700)}${text(30, 173, "Illustrative readings / Static response curve", 21, "#bdc1c3")}${text(824, 138, "●  SETTLED", 18, highlight, 700)}
   ${rect(30, 209, 940, 217, "#2d3032", 8)}${[0, 1, 2, 3].map((i) => rule(55, 235 + i * 50, 890, "#484b4c")).join("")}
   ${path("M60 385 C85 385 90 233 140 241 S196 383 247 330 S294 249 351 280 S408 334 464 309 S521 288 577 300 S635 314 690 308 S770 307 830 308 H940", highlight, 5)}
   ${text(57, 408, "0.00 s", 15, "#bdc1c3")}${text(879, 408, "1.50 s", 15, "#bdc1c3")}

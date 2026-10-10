@@ -41,7 +41,7 @@ const screenPlates = [
     tone: "ink",
     accent: "#e7b48d",
     url: signalMonitorUrl,
-    alt: "Snap Motion signal monitor with a response curve and peak, rest and target readings.",
+    alt: "Snap Motion signal monitor illustration with static sample readings and a response curve.",
   },
   {
     id: "settings",
