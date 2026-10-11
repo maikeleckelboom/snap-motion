@@ -223,6 +223,8 @@ const RECONCILIATION_DURATION = 460;
 
 interface StackedDeckReconciliationRecord<Id extends string> {
   readonly startedAt: number;
+  /** Timestamp of the frame that last advanced `progress`. */
+  advancedAt: number;
   progress: number;
   readonly topIndex: number;
   readonly survivors: readonly (StackedDeckPose | null)[];
@@ -923,6 +925,11 @@ export function useStackedDeckComponentMotion<Id extends string>(
         clearReconciliation();
         return;
       }
+      // One advance per frame. A clock paused from inside its own callback still has its next
+      // frame requested, so a later resume can run it twice in one frame; the second run must not
+      // step over the midpoint the first one stopped at.
+      if (timestamp === record.advancedAt) return;
+      record.advancedAt = timestamp;
       const progress = Math.min(
         1,
         Math.max(0, timestamp - record.startedAt) / RECONCILIATION_DURATION,
@@ -1003,6 +1010,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
     departureStorage = createStackedDeckFrame(departureIds.length).poses;
     reconciliation = {
       startedAt: performance.now(),
+      advancedAt: Number.NaN,
       progress: 0,
       topIndex,
       survivors,

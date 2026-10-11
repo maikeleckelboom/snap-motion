@@ -155,6 +155,11 @@ function contains(body: TraceBody, x: number, y: number, width: number, height: 
   );
 }
 
+/** One body, spelled out for a failure message. */
+function describe(body: TraceBody) {
+  return `${body.id}${body.exiting ? "(x)" : ""} L${body.layer} (${body.x.toFixed(1)},${body.y.toFixed(1)}) s${body.scale.toFixed(3)} r${body.rotate.toFixed(2)}`;
+}
+
 function ownerAt(bodies: readonly TraceBody[], x: number, y: number, w: number, h: number) {
   let owner: TraceBody | undefined;
   for (const body of bodies) {
@@ -271,7 +276,9 @@ export function analyseReconciliation(
       const bBefore = before.bodies.find((body) => body.id === b.id);
       if (aAfter === undefined || bBefore === undefined) continue;
       if (contains(aAfter, x, y, width, height) && contains(bBefore, x, y, width, height)) {
-        paintSwaps.push(`${index} (${x.toFixed(0)},${y.toFixed(0)}) ${a.id}->${b.id}`);
+        paintSwaps.push(
+          `${index} ${a.id}->${b.id} at (${x.toFixed(0)},${y.toFixed(0)}) | ${before.label} ${before.phase} rec=${before.reconciling}: ${before.bodies.map(describe).join("; ")} | ${after.label} ${after.phase} rec=${after.reconciling}: ${after.bodies.map(describe).join("; ")}`,
+        );
       }
     }
     for (const body of before.bodies) {
@@ -290,7 +297,10 @@ export function analyseReconciliation(
     largestJump,
     largestJumpId,
     largestShadowJump,
-    paintSwaps: [...new Set(paintSwaps.map((swap) => swap.replace(/ \(.*\)/, "")))],
+    // One entry per frame pair and owner change, with both frames spelled out for diagnosis.
+    paintSwaps: [
+      ...new Map(paintSwaps.map((swap) => [swap.split(" at ")[0], swap] as const)).values(),
+    ],
     visibleAppearances,
     stillHintChanges,
     exposedDepartures,

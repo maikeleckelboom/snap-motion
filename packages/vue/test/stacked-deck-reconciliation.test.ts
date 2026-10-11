@@ -605,6 +605,55 @@ describe("Stacked Deck collection reconciliation", () => {
     });
   }
 
+  it("advances at most once per frame, so a slow frame after a finished change cannot skip the midpoint", async () => {
+    // A finished reconciliation pauses its clock from inside its own frame callback, and the frame
+    // scheduler has already requested the next one; a later change resumes a second loop beside
+    // it. Long frames — a slow engine on a heavy page — then decide whether that second run can
+    // carry a change over the midpoint where depth changes.
+    const found: string[] = [];
+    for (const exchange of ["shuffle", "direct"] as const) {
+      for (const frameMs of [16, 120, 450, 600]) {
+        for (const [settleA, settleB] of [
+          [1, 1],
+          [1, 3],
+          [3, 1],
+          [3, 3],
+          [6, 6],
+        ] as const) {
+          const deck = mountDeck(pick("a"), { activeId: "a", exchange });
+          await settle(deck);
+          const { cardWidth: width, cardHeight: height } = deck.view.tuning;
+          const frames: RenderedFrame[] = [read(deck.root, 0)];
+          const record = () => frames.push(read(deck.root, frames.length));
+          const run = async (count: number) => {
+            for (let index = 0; index < count; index += 1) {
+              await deck.clock.step(frameMs);
+              record();
+            }
+          };
+          await deck.wrapper.setProps({ items: pick("a", "b"), activeId: "b" });
+          await nextTick();
+          record();
+          await run(settleA);
+          await deck.wrapper.setProps({ items: pick("a"), activeId: "a" });
+          await nextTick();
+          record();
+          await run(settleB);
+          await deck.wrapper.setProps({ items: pick("a", "b"), activeId: "b" });
+          await nextTick();
+          record();
+          await run(8);
+          const swaps = paintSwaps(frames, width, height);
+          if (swaps.length > 0)
+            found.push(`${exchange} ${frameMs}ms ${settleA}/${settleB}: ${swaps[0]}`);
+          deck.wrapper.unmount();
+          clocks.pop()!.restore();
+        }
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
   it("re-admits a departing card from wherever its departure has carried it", async () => {
     const deck = mountDeck(pick("a", "b", "c"), { activeId: "b" });
     await settle(deck);
