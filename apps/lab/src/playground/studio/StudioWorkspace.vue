@@ -483,6 +483,21 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-inline-size: 0;
+  isolation: isolate;
+}
+
+/* The inspector is a foreground work surface. Comparison cards may travel behind its existing
+   divider, but never over its actions or media. Keep the Deck's overflow and physical paths intact:
+   the opaque region occludes a moving body progressively, rather than retiring or fading it. This
+   same ownership protects the inspector below Comparison in the narrow composition. */
+.studio-layout > .area-inspector {
+  position: relative;
+  z-index: 1;
+  background: var(--pg-bg);
+}
+
+.studio-layout > .area-compare {
+  isolation: isolate;
 }
 
 .studio-region {
