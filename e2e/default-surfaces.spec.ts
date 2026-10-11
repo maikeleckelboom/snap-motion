@@ -87,7 +87,9 @@ test.describe("zero-configuration surfaces", () => {
     await expect(page.getByTestId("defaults-deck-id")).toHaveText("team");
   });
 
-  test("hints the compositor only while a surface is moving", async ({ page }) => {
+  test("hints the compositor only for cards a transaction moved, and keeps them at rest", async ({
+    page,
+  }) => {
     await openLabDemo(page, "defaults", "no-preference");
     await expect(page.locator(DECK)).toHaveAttribute("data-phase", "idle");
     expect(new Set(await cardHints(page)), "idle deck").toEqual(new Set(["auto"]));
@@ -101,8 +103,18 @@ test.describe("zero-configuration surfaces", () => {
     });
     expect(hintedDuringDrag, "manipulated deck").toContain("transform");
 
+    // Releasing a layer repaints a card through a different raster path, which Chromium shows as
+    // a snap on the one frame where nothing moves. The moved cards keep it; it never grows past
+    // them into one layer per parked card.
     await expect(page.locator(DECK)).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
-    expect(new Set(await cardHints(page)), "settled deck").toEqual(new Set(["auto"]));
+    const settled = await cardHints(page);
+    expect(settled.filter((hint) => hint === "transform").length, "settled deck").toBeGreaterThan(
+      0,
+    );
+    expect(
+      settled.filter((hint) => hint === "transform").length,
+      "settled deck",
+    ).toBeLessThanOrEqual(2);
   });
 
   test("keeps a consumer's own controls inside a card usable", async ({ page }) => {

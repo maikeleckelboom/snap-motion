@@ -50,8 +50,39 @@ per-pointermove constraint path allocates nothing. Stacked Deck intentionally ke
 shell and one `#card` subtree per item. Its DOM, frame projection, and style updates are therefore
 linear in item count. The high-level component does not observe the advanced `pileLayers` projection,
 so it does not also allocate that array each frame; custom composable consumers pay that linear cost
-only when they observe it. Explicit `will-change: transform` promotion is bounded to the exchanging
-pair while moving and returns to zero cards at rest, avoiding one forced GPU layer per parked shell.
+only when they observe it. Explicit `will-change: transform` promotion is bounded to the cards a
+transaction moves: the exchanging pair, and through a collection reconciliation the card in front, the
+one that will be, and any departures. It never grows into one forced GPU layer per parked shell. It is
+deliberately not released at settlement. Chromium paints a promoted card differently from the same
+card painted into its parent: text antialiasing and the cast shadow's raster both change. Headed GPU
+Chromium measured that change on the idle frame at up to 161/255 in a channel across about 1,300
+card pixels, and up to 24 in about 700 shadow pixels. The last moving frames changed by at most 13,
+and no transform or shadow value changed. Firefox and WebKit paint both the same. Releasing the hint
+on the frame the deck came to rest therefore produced a visible snap with no physical change behind
+it. A promotion is now released only when a later transaction moves a different card, on the frame
+that card begins to move. At rest the deck holds the last pair, or the last pair plus the card a
+collection change put in front: at most three layers, never one per item.
+
+There was a second, Shuffle-only cause on that frame. The pile tilts a shell by the square root of
+its slot spread, which is vertical at the top slot. The 0.5–0.6 px a spring has left when it comes
+to rest therefore became a 0.09° tilt that vanished on the idle frame: 0.37 px at the card's corners,
+which Chromium paints as a change from filtered to crisp sampling, up to 74/255. Inside the first
+slot the tilt now follows the quadratic that meets the square root with the same value and slope at
+slot one. Every rest pose is unchanged, and the slope at the top is finite.
+
+Measured on real painted frames in headed GPU Chromium (CDP screencast aligned to the DOM trace),
+as the largest change on the idle frame against the last moving frames:
+
+| Exchange         | Before: card / shadow band | After: card / shadow band | Last moving frames |
+| ---------------- | -------------------------- | ------------------------- | ------------------ |
+| Direct           | 139–151 / 3–4              | none                      | ≤ 2 / ≤ 1          |
+| Shuffle forward  | 134–147 / 12–20            | 15–16 / 4–5               | ≤ 13 / ≤ 3         |
+| Shuffle backward | 147 / 20                   | 124–126 / 17–18           | ≤ 50 / ≤ 8         |
+
+The backward Shuffle step that remains is the controller's own `restDistance`. The arriving card
+follows the scalar one-to-one there, so the spring's final snap of up to half a pixel (tight preset)
+lands on it as a real, if sub-pixel, movement. Removing that is a physics-preset decision, not a
+presentation one, and is out of scope here.
 Direct keeps one shallow presentation object and one authoritative frame. Interruption replaces that
 object after capturing the current resolved poses; there is no presentation queue. Its optional
 two-axis callback returns before presentation mutation for Shuffle, so raw-vector samples do not add

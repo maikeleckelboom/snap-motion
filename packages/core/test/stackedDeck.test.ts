@@ -2655,3 +2655,34 @@ describe("stacked deck physical continuity", () => {
     ).toThrowError("landings");
   });
 });
+
+describe("Shuffle arrival", () => {
+  it("converges on its rest pose in proportion to the travel left, so rest has nothing to snap", () => {
+    const radius = Math.hypot(WIDE_TUNING.cardWidth, WIDE_TUNING.cardHeight) / 2;
+    const rest = createStackedDeckFrame(5);
+    const arrived = createStackedDeckTraversal(2, 5);
+    resolveBounded(arrived, 3, 2, "settling");
+    resolveStackedDeckFrame({ itemCount: 5, traversal: arrived, tuning: WIDE_TUNING }, rest);
+    // A spring comes to rest with a fraction of a pixel left. Whatever pose that fraction maps to is
+    // what the frame at rest removes in one step, so it has to shrink with it rather than with its
+    // square root: a vertical tilt curve at the top turns 0.6px of travel into a tenth of a degree.
+    for (const remaining of [0.01, 0.003, 0.001, 0.0003, 0.0001]) {
+      const settling = createStackedDeckTraversal(2, 5);
+      resolveBounded(settling, 3 - remaining, 2, "settling");
+      const frame = createStackedDeckFrame(5);
+      resolveStackedDeckFrame({ itemCount: 5, traversal: settling, tuning: WIDE_TUNING }, frame);
+      let largest = 0;
+      frame.poses.forEach((pose, index) => {
+        const target = rest.poses[index]!;
+        largest = Math.max(
+          largest,
+          Math.hypot(pose.translateX - target.translateX, pose.translateY - target.translateY),
+          Math.abs(pose.scale - target.scale) * radius,
+          Math.abs(pose.rotate - target.rotate) * (Math.PI / 180) * radius,
+        );
+      });
+      // Every channel converges at a finite rate, so this ratio stays bounded however little is left.
+      expect(largest / (remaining * WIDE_TUNING.motionPitch), `${remaining}`).toBeLessThan(0.5);
+    }
+  });
+});

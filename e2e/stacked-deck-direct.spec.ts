@@ -751,6 +751,9 @@ test("Direct takeover preserves same-hand reversal and the two-item physical dir
   await page.getByTestId("stacked-deck-destination").selectOption("team");
   await expectCarouselAt(stage, "team");
   await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+  // The changed collection is reconciled physically, and a card still arriving is not offered to
+  // a hand until it has arrived.
+  await expect(stage).toHaveAttribute("data-reconciling", "false");
   const pitch = await motionPitch(stage);
   let origin = await beginPointer(
     stage.locator("[data-snap-motion-stacked-deck-card][data-item-id='team']"),
@@ -1044,6 +1047,9 @@ test("Direct two-item machine-gun reuse keeps one record per persistent shell", 
   await page.getByTestId("stacked-deck-destination").selectOption("team");
   await expectCarouselAt(stage, "team");
   await expect(stage).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
+  // The changed collection is reconciled physically, and a card still arriving is not offered to
+  // a hand until it has arrived.
+  await expect(stage).toHaveAttribute("data-reconciling", "false");
   const ids = ["team", "settings"] as const;
   const directions = [1, -1, 1, -1, -1, 1, -1, 1] as const;
   const chain = await runRapidDirectChain(

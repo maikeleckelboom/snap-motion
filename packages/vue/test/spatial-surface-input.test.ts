@@ -182,19 +182,24 @@ function deckHints(wrapper: ReturnType<typeof mountDeck>) {
 }
 
 describe("compositor hinting", () => {
-  it("hints only while the deck is actually moving", async () => {
+  it("hints only cards a transaction moved, and does not release them as the deck comes to rest", async () => {
     const wrapper = mountDeck();
     await nextTick();
+    // Nothing has moved yet, so nothing holds a layer.
     expect(new Set(deckHints(wrapper))).toEqual(new Set(["auto"]));
 
     const root = wrapper.element as HTMLElement;
     pressAndMove(root, -120);
     await nextTick();
-    expect(deckHints(wrapper)).toContain("transform");
+    const moving = deckHints(wrapper);
+    expect(moving).toContain("transform");
+    expect(moving.filter((hint) => hint === "transform").length).toBeLessThanOrEqual(2);
 
+    // Releasing a layer repaints the card through a different path, which would be a visible
+    // change on a frame where nothing moves. The cards keep it; a later transaction takes it over.
     releaseAt(root, -120);
     await nextTick();
-    expect(new Set(deckHints(wrapper))).toEqual(new Set(["auto"]));
+    expect(deckHints(wrapper)).toEqual(moving);
     wrapper.unmount();
   });
 });

@@ -793,7 +793,12 @@ function setPilePose(pose: MutableStackedDeckPose, slot: number, tuning: Stacked
   }
   const side = slot < 0 ? -1 : 1;
   const spread = pileSlotSpread(distance);
-  const rotationSpread = Math.sqrt(spread);
+  // Inside the first slot the square root is replaced by the quadratic that meets it with the same
+  // value and slope there. A square root is vertical at the top, so the last fraction of a pixel a
+  // spring has left when it comes to rest would still be a visible tilt — up to a tenth of a degree
+  // snapping away on the frame the card stops. This curve's slope at the top is finite, and every
+  // rest pose, which sits on a whole slot, is unchanged.
+  const rotationSpread = spread < 1 ? spread * (1.5 - 0.5 * spread) : Math.sqrt(spread);
   pose.translateX = side * tuning.pileOffsetX * spread;
   pose.translateY = tuning.pileOffsetY * spread;
   pose.scale = 1 - tuning.pileScaleStep * spread;
@@ -852,12 +857,16 @@ function movePoseGeometry(
 }
 
 /** A persistent opaque shell fully contained by the physical card above it. */
-function setOccludedPilePose(pose: MutableStackedDeckPose, cover: StackedDeckPose): void {
+function setOccludedPilePose(
+  pose: MutableStackedDeckPose,
+  cover: StackedDeckPose,
+): MutableStackedDeckPose {
   pose.translateX = cover.translateX;
   pose.translateY = cover.translateY;
   pose.scale = cover.scale * PILE_OCCLUDED_SCALE;
   pose.rotate = cover.rotate;
   pose.shadowStrength = 0;
+  return pose;
 }
 
 /**
@@ -1543,4 +1552,283 @@ export function resolveStackedDeckFrame(
   }
   if (direct !== undefined) ensureDirectPaintOrder(output, direct);
   return output;
+}
+
+/**
+ * The physical state a deck was drawn in at the instant its collection changed, and how far it has
+ * come since toward the canonical frame of the collection that replaced it.
+ *
+ * Membership changes at once; the cards do not. Every card the new collection still contains keeps
+ * its identity and continues from exactly the pose it was drawn with, a card the old collection did
+ * not contain begins contained beneath the deck's front card, and a card that left continues as an
+ * inert departure until it is contained there too.
+ */
+export interface StackedDeckReconciliation {
+  /** Elapsed fraction: 0 is the captured frame and 1 is canonical arrival. */
+  readonly progress: number;
+  /**
+   * The captured pose of each card in the new collection, by its new index, or `null` for a card the
+   * previous collection did not contain.
+   *
+   * Captured `layer` values are paint ranks rather than z-indexes: unique among visible captured
+   * bodies, increasing toward the eye, and ordered exactly as the captured frame was painted,
+   * including the document order that broke any z-index tie there.
+   */
+  readonly survivors: readonly (StackedDeckPose | null)[];
+  /** Captured poses of the cards the new collection no longer contains, ranked the same way. */
+  readonly departures: readonly StackedDeckPose[];
+  /**
+   * New-collection index of the card the deck names as its top. It is fixed for the whole
+   * reconciliation, so later navigation changes where each card is going but never the route it
+   * takes to get there.
+   */
+  readonly topIndex: number;
+}
+
+/**
+ * Lateral clearance a yielding cover holds through the middle of its route: full from 0.3 to 0.7,
+ * so a frame that steps over the midpoint, where its depth changes, still finds it clear of the pile
+ * unless it skips that whole stretch.
+ */
+const RECONCILIATION_CLEAR_RAMP = 0.3;
+const reconciliationTopPose = resetPose({} as MutableStackedDeckPose);
+const reconciliationSourcePose = resetPose({} as MutableStackedDeckPose);
+const reconciliationDestinationPose = resetPose({} as MutableStackedDeckPose);
+
+/** Poses are plain records of exactly these channels, so a copy is an assignment of all of them. */
+function copyPose(target: MutableStackedDeckPose, source: StackedDeckPose): MutableStackedDeckPose {
+  return Object.assign(target, source);
+}
+
+function isPainted(pose: StackedDeckPose | null): pose is StackedDeckPose {
+  return pose !== null && pose.visible && pose.opacity > 0;
+}
+
+function samePlacement(left: StackedDeckPose, right: StackedDeckPose): boolean {
+  return (
+    Math.abs(left.translateX - right.translateX) <= TRAVERSAL_EPSILON &&
+    Math.abs(left.translateY - right.translateY) <= TRAVERSAL_EPSILON &&
+    Math.abs(left.scale - right.scale) <= TRAVERSAL_EPSILON &&
+    Math.abs(left.rotate - right.rotate) <= TRAVERSAL_EPSILON &&
+    Math.abs(left.shadowStrength - right.shadowStrength) <= TRAVERSAL_EPSILON
+  );
+}
+
+/**
+ * A shell that keeps its place travels nowhere; one that changes its place or its depth does so
+ * beneath the deck's front card, exactly as every background shell does through an ordinary
+ * exchange. Its depth changes only at the midpoint, where it is contained.
+ */
+function reconcileContainedShell(
+  pose: MutableStackedDeckPose,
+  source: StackedDeckPose,
+  destination: StackedDeckPose,
+  cover: StackedDeckPose,
+  progress: number,
+): void {
+  if (samePlacement(source, destination)) {
+    copyPose(pose, destination);
+  } else {
+    copyPose(pose, source);
+    movePileShell(pose, destination, cover, progress);
+  }
+  pose.layer = progress < AUTHORITY_MIDPOINT ? source.layer : destination.layer;
+  pose.role = destination.role;
+  pose.opacity = destination.opacity;
+  pose.visible = true;
+}
+
+/**
+ * The card the deck no longer has in front. It cannot pass behind the pile through it, so it does
+ * what the outgoing card of every Shuffle does: it travels clear of the whole pile, changes depth
+ * there — touching nothing, with no cast shadow left to move across anything — and continues to
+ * its destination behind the deck.
+ */
+function reconcileYieldingCover(
+  pose: MutableStackedDeckPose,
+  source: StackedDeckPose,
+  destination: StackedDeckPose,
+  destinationLayer: number,
+  coverLayer: number,
+  front: StackedDeckPose,
+  side: -1 | 1,
+  clearSeparation: number,
+  progress: number,
+  tuning: StackedDeckTuning,
+): void {
+  const middle = Math.sin(Math.PI * progress);
+  copyPose(pose, source);
+  movePoseGeometry(pose, destination, smoothstep(progress));
+  const clearance =
+    progress <= RECONCILIATION_CLEAR_RAMP
+      ? smoothstep(progress / RECONCILIATION_CLEAR_RAMP)
+      : progress >= 1 - RECONCILIATION_CLEAR_RAMP
+        ? smoothstep((1 - progress) / RECONCILIATION_CLEAR_RAMP)
+        : 1;
+  // Clear of the pile, which stands around the deck's centre, and of the front card wherever it is
+  // still rising from: a held or parked shell can be most of a stage away from the centre.
+  const clearOffset = clearSeparation + Math.max(0, side * front.translateX);
+  pose.translateX = mix(
+    pose.translateX,
+    side * Math.max(side * pose.translateX, clearOffset),
+    clearance,
+  );
+  pose.translateY += tuning.topDropY * middle;
+  pose.scale -= tuning.topScaleReduction * middle;
+  pose.rotate += side * tuning.topRotate * middle;
+  pose.shadowStrength *= crossoverElevation(progress);
+  pose.layer = progress < AUTHORITY_MIDPOINT ? coverLayer : destinationLayer;
+  pose.opacity = 1;
+  pose.visible = true;
+}
+
+/**
+ * Carries a resolved canonical frame from the poses its cards were drawn with when their collection
+ * changed, by `reconciliation.progress`, and resolves every departing card into `departureOutput`.
+ * Call it after {@link resolveStackedDeckFrame} on the same frame. At progress 1 the frame is left
+ * exactly canonical and every departure is contained beneath the front card.
+ *
+ * Every route is continuous in every channel — translation, rotation, scale, and shadow — and the
+ * discrete ones are confined to where they cannot be seen. Depth changes once, at the midpoint,
+ * where a moving shell is either contained beneath the card that will be in front or clear of the
+ * whole pile, and a card changing depth in the open has no cast shadow there. No card is
+ * interactive until it has arrived.
+ */
+export function applyStackedDeckReconciliation(
+  reconciliation: StackedDeckReconciliation,
+  tuning: StackedDeckTuning,
+  frame: MutableStackedDeckFrame,
+  departureOutput: MutableStackedDeckPose[],
+): void {
+  validateTuning(tuning);
+  assertFiniteNumber(reconciliation.progress, "progress");
+  const { departures, survivors, topIndex } = reconciliation;
+  const itemCount = frame.poses.length;
+  if (survivors.length !== itemCount) throw new RangeError("survivors");
+  if (departureOutput.length !== departures.length) throw new RangeError("departureOutput");
+  const progress = clamp(reconciliation.progress, 0, 1);
+
+  // The captured front-most body: whatever the eye saw on top when the collection changed.
+  let coverLayer = Number.NEGATIVE_INFINITY;
+  let coverSurvivor = -1;
+  let coverDeparture = -1;
+  survivors.forEach((pose, index) => {
+    if (isPainted(pose) && pose.layer > coverLayer) {
+      coverLayer = pose.layer;
+      coverSurvivor = index;
+    }
+  });
+  departures.forEach((pose, index) => {
+    if (isPainted(pose) && pose.layer > coverLayer) {
+      coverLayer = pose.layer;
+      coverSurvivor = -1;
+      coverDeparture = index;
+    }
+  });
+  if (itemCount === 0 || (coverSurvivor < 0 && coverDeparture < 0)) {
+    // No front card to be contained beneath, or nothing drawn to continue from.
+    departureOutput.forEach(resetPose);
+    return;
+  }
+  assertIndex(topIndex, itemCount, "topIndex");
+  const cover = coverSurvivor >= 0 ? survivors[coverSurvivor]! : departures[coverDeparture]!;
+  const switched = progress >= AUTHORITY_MIDPOINT;
+  const arrived = progress >= 1;
+
+  // The card that will be in front never changes depth in the open. It is the cover itself, or it
+  // rises while the cover yields over it, and takes the front only once the cover is clear.
+  const top = frame.poses[topIndex]!;
+  const topDestination = copyPose(reconciliationDestinationPose, top);
+  copyPose(top, survivors[topIndex] ?? setOccludedPilePose(reconciliationSourcePose, cover));
+  movePoseGeometry(top, topDestination, smoothstep(progress));
+  if (coverSurvivor !== topIndex) top.shadowStrength *= crossoverElevation(progress);
+  top.layer = switched ? topDestination.layer : coverLayer + (coverSurvivor === topIndex ? 2 : 1);
+  top.opacity = topDestination.opacity;
+  top.role = topDestination.role;
+  top.visible = true;
+  top.interactive = arrived && topDestination.interactive;
+  copyPose(reconciliationTopPose, top);
+
+  const clearSeparation = wholePileClearSeparation(itemCount + departures.length, tuning);
+  // A yielding cover clears to the side away from wherever the front card is rising from, so the
+  // two never pass through each other; with nothing to tell them apart it leaves as Shuffle does.
+  const topSourceX = (survivors[topIndex] ?? cover).translateX;
+  const yieldSide: -1 | 1 =
+    topSourceX > cover.translateX + TRAVERSAL_EPSILON
+      ? -1
+      : topSourceX < cover.translateX - TRAVERSAL_EPSILON || cover.translateX > TRAVERSAL_EPSILON
+        ? 1
+        : -1;
+  for (let index = 0; index < itemCount; index += 1) {
+    if (index === topIndex) continue;
+    const pose = frame.poses[index]!;
+    const destination = copyPose(reconciliationDestinationPose, pose);
+    const source = survivors[index];
+    if (index === coverSurvivor) {
+      reconcileYieldingCover(
+        pose,
+        cover,
+        destination,
+        destination.layer,
+        coverLayer + 2,
+        reconciliationTopPose,
+        yieldSide,
+        clearSeparation,
+        progress,
+        tuning,
+      );
+      pose.role = destination.role;
+    } else if (source === null || source === undefined) {
+      // An arriving card begins contained beneath the front card and is drawn beneath everything
+      // until it re-emerges there, so nothing of it is seen before it has somewhere to come from.
+      setOccludedPilePose(reconciliationSourcePose, reconciliationTopPose);
+      reconciliationSourcePose.layer = 0;
+      reconcileContainedShell(
+        pose,
+        reconciliationSourcePose,
+        destination,
+        reconciliationTopPose,
+        progress,
+      );
+    } else {
+      reconcileContainedShell(pose, source, destination, reconciliationTopPose, progress);
+    }
+    pose.interactive = arrived && destination.interactive;
+  }
+
+  // A departure ends exactly where nothing of it can be seen: contained beneath the front card.
+  const contained = setOccludedPilePose(
+    resetPose(reconciliationDestinationPose),
+    reconciliationTopPose,
+  );
+  contained.visible = true;
+  contained.opacity = 1;
+  for (let index = 0; index < departures.length; index += 1) {
+    const pose = departureOutput[index]!;
+    const source = departures[index]!;
+    if (!isPainted(source)) {
+      resetPose(pose);
+      continue;
+    }
+    if (index === coverDeparture) {
+      reconcileYieldingCover(
+        pose,
+        source,
+        contained,
+        0,
+        coverLayer + 2,
+        reconciliationTopPose,
+        yieldSide,
+        clearSeparation,
+        progress,
+        tuning,
+      );
+    } else {
+      copyPose(pose, source);
+      movePoseGeometry(pose, contained, smoothstep(Math.min(1, progress / PILE_OCCLUSION_ENTER)));
+      pose.layer = switched ? 0 : source.layer;
+    }
+    pose.role = "hidden";
+    pose.interactive = false;
+  }
 }

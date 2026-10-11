@@ -999,7 +999,8 @@
   transform-style: flat;
 }
 
-.snap-motion-stacked-deck-card {
+.snap-motion-stacked-deck-card,
+.snap-motion-stacked-deck-exit {
   position: absolute;
   inset: 0;
   margin: 0;

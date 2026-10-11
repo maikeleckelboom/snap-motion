@@ -1,4 +1,5 @@
 import {
+  applyStackedDeckReconciliation,
   createCoverflowGeometry,
   createStackedDeckFrame,
   isStackedDeckInspectEligible,
@@ -15,6 +16,7 @@ import {
   type ControllerConfiguration,
   type ControllerSnapshot,
   type ElasticityOptions,
+  type MutableStackedDeckPose,
   type SnapAnchor,
   type SpringConfiguration,
   type StackedDeckDirectLanding,
@@ -22,6 +24,7 @@ import {
   type StackedDeckExchange,
   type StackedDeckFrame,
   type StackedDeckModelState,
+  type StackedDeckPose,
   type StackedDeckProfile,
   type StackedDeckReleasePolicy,
   type StackedDeckTuning,
@@ -143,6 +146,13 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
   readonly compositing: ComputedRef<boolean>;
   /** The card the deck names, which leads the visual top through a handoff. */
   readonly visualId: ComputedRef<Id | undefined>;
+  /**
+   * Cards the collection no longer contains that are still drawn while they depart. They are
+   * presentation only: no index, no input, no focus, and no accessible item. Each pose is updated in
+   * place with the frame, and the list empties once every departure is contained beneath the front
+   * card.
+   */
+  readonly departures: ShallowRef<readonly StackedDeckDeparture<Id>[]>;
   /** Read-only motion telemetry. Observation only: nothing here can move the deck. */
   readonly diagnostics: ComputedRef<SurfaceMotionDiagnostics<Id>>;
   readonly frame: ShallowRef<StackedDeckFrame>;
@@ -157,6 +167,12 @@ export interface UseStackedDeckMotionReturn<Id extends string> {
   /** Advanced read-only projection of the non-dominant persistent card shells. */
   readonly pileLayers: ComputedRef<readonly StackedDeckPileLayer<Id>[]>;
   readonly pitch: ComputedRef<number>;
+  /**
+   * True while cards are still travelling from where they were drawn when the collection changed
+   * to where the new collection puts them. Membership, selection and settlement have already
+   * changed; this is presentation, and no card is interactive until it has arrived.
+   */
+  readonly reconciling: ComputedRef<boolean>;
   /** Durable selection. It changes only at mechanical rest. */
   readonly settledId: ComputedRef<Id | undefined>;
   readonly speedInCards: ComputedRef<number>;
@@ -190,6 +206,29 @@ type StackedDeckComponentMotionReturn<Id extends string> = Omit<
   UseStackedDeckMotionReturn<Id>,
   "anchorsById" | "pileLayers" | "statusIndex"
 >;
+
+/** One card the collection no longer contains, drawn until its departure completes. */
+export interface StackedDeckDeparture<Id extends string = string> {
+  readonly id: Id;
+  readonly pose: StackedDeckPose;
+}
+
+/**
+ * How long a collection change takes to reconcile: two natural periods of the deck's own spring,
+ * 2π√(mass / stiffness), one to carry a yielding cover clear of the pile and one to bring every card
+ * to rest. A presentation constant like the release tuck, for the same reason: a consumer retunes
+ * how the deck travels between screens, not how long its cards take to close up.
+ */
+const RECONCILIATION_DURATION = 460;
+
+interface StackedDeckReconciliationRecord<Id extends string> {
+  readonly startedAt: number;
+  progress: number;
+  readonly topIndex: number;
+  readonly survivors: readonly (StackedDeckPose | null)[];
+  readonly departures: readonly StackedDeckPose[];
+  readonly departureIds: readonly Id[];
+}
 
 /** Internal per-release telemetry used by the rendered lab/browser proof. */
 export interface StackedDeckDirectLandingTelemetry extends StackedDeckDirectLanding {
@@ -542,7 +581,16 @@ export function useStackedDeckComponentMotion<Id extends string>(
   const visualId = computed(() => model.idAt(state.value.currentIndex));
   const settledId = computed(() => model.idAt(state.value.settledIndex));
 
-  const compositing = computed(() => motion.isAnimating.value || owned.value);
+  /** The collection change still being drawn, if any. Replaced whole by the next one. */
+  let reconciliation: StackedDeckReconciliationRecord<Id> | undefined;
+  let departureStorage: MutableStackedDeckPose[] = [];
+  const departures = shallowRef<readonly StackedDeckDeparture<Id>[]>([]);
+  const reconcilingFlag = ref(false);
+  const reconciling = computed(() => reconcilingFlag.value);
+
+  const compositing = computed(
+    () => motion.isAnimating.value || owned.value || reconcilingFlag.value,
+  );
 
   /**
    * The shell the presentation owns, which outlives the model's interaction.
@@ -850,11 +898,122 @@ export function useStackedDeckComponentMotion<Id extends string>(
       },
       frameStorage,
     );
+    // Last, over whatever the deck is doing now: the cards of a changed collection are still on
+    // their way from where they were drawn, and the canonical frame is only where they are going.
+    const record = reconciliation;
+    if (record !== undefined && record.survivors.length === itemCount) {
+      applyStackedDeckReconciliation(record, activeTuning.value, frameStorage, departureStorage);
+      triggerRef(departures);
+    }
     frame.value = frameStorage;
     // Resolution writes through one reused frame, so the identity in the ref is unchanged and only
     // an explicit trigger can report it. This is the case manual triggering exists for.
     triggerRef(frame);
   });
+
+  /**
+   * One clock for the collection change being drawn. Its progress is time since the change itself,
+   * read off each frame's own timestamp, so a change made between two frames is never charged for
+   * time it did not exist in. The exact-arrival frame is drawn before the record is retired.
+   */
+  const reconciliationClock = useRafFn(
+    ({ timestamp }) => {
+      const record = reconciliation;
+      if (record === undefined || record.progress >= 1) {
+        clearReconciliation();
+        return;
+      }
+      const progress = Math.min(
+        1,
+        Math.max(0, timestamp - record.startedAt) / RECONCILIATION_DURATION,
+      );
+      // Depth changes at the midpoint, where every route is clear of the pile or contained beneath
+      // the front card. A long frame that would step over it is drawn there instead, so the change
+      // is always rendered where it cannot be seen, however slowly the browser is painting.
+      record.progress = record.progress < 0.5 && progress > 0.5 ? 0.5 : progress;
+      triggerRef(state);
+    },
+    { immediate: false },
+  );
+
+  function clearReconciliation(): void {
+    reconciliationClock.pause();
+    if (reconciliation === undefined) return;
+    reconciliation = undefined;
+    departureStorage = [];
+    departures.value = [];
+    reconcilingFlag.value = false;
+    triggerRef(state);
+  }
+
+  /**
+   * Every card as the eye last saw it, keyed by identity: the collection's own shells, then any
+   * departures still being drawn after them in document order. Layers become paint ranks, because a
+   * z-index tie was resolved by a document order the new collection may not keep.
+   */
+  function captureRenderedPoses(): Map<Id, StackedDeckPose> {
+    const bodies: { id: Id; pose: StackedDeckPose }[] = [];
+    model.ids.forEach((id, index) => {
+      const pose = frameStorage.poses[index];
+      if (pose !== undefined) bodies.push({ id, pose });
+    });
+    for (const departure of departures.value) bodies.push(departure);
+    const painted = bodies.filter(({ pose }) => pose.visible && pose.opacity > 0);
+    const captured = new Map<Id, StackedDeckPose>();
+    painted.forEach(({ id, pose }, order) => {
+      // Its rank is how many painted bodies the browser drew beneath it.
+      let rank = 1;
+      painted.forEach((other, otherOrder) => {
+        const layer = other.pose.layer;
+        if (layer < pose.layer || (layer === pose.layer && otherOrder < order)) rank += 1;
+      });
+      captured.set(id, { ...pose, layer: rank });
+    });
+    return captured;
+  }
+
+  /**
+   * A departing card becomes inert at once, and a browser drops focus held inside an inert subtree
+   * to the document body. Focus that was there moves to the deck instead, which is the nearest
+   * thing that still means what it did.
+   */
+  function releaseFocusFromDepartures(nextIds: readonly Id[]): void {
+    const viewport = options.viewport.value;
+    const focused = viewport?.ownerDocument.activeElement;
+    if (viewport === undefined || !isHTMLElement(focused) || !viewport.contains(focused)) return;
+    const card = focused.closest<HTMLElement>("[data-snap-motion-stacked-deck-card]");
+    if (card !== null && !nextIds.includes(card.dataset.itemId as Id)) {
+      viewport.focus({ preventScroll: true });
+    }
+  }
+
+  /** Opens the presentation that carries the captured cards to the collection now published. */
+  function beginReconciliation(captured: ReadonlyMap<Id, StackedDeckPose>): void {
+    const survivors = model.ids.map((id) => captured.get(id) ?? null);
+    const departureIds = [...captured.keys()].filter((id) => model.indexOf(id) < 0);
+    const topIndex = state.value.visualTopIndex;
+    if (
+      motion.reducedMotion.value ||
+      topIndex < 0 ||
+      (survivors.every((pose) => pose === null) && departureIds.length === 0)
+    ) {
+      clearReconciliation();
+      return;
+    }
+    departureStorage = createStackedDeckFrame(departureIds.length).poses;
+    reconciliation = {
+      startedAt: performance.now(),
+      progress: 0,
+      topIndex,
+      survivors,
+      departures: departureIds.map((id) => captured.get(id)!),
+      departureIds,
+    };
+    departures.value = departureIds.map((id, index) => ({ id, pose: departureStorage[index]! }));
+    reconcilingFlag.value = true;
+    reconciliationClock.resume();
+    triggerRef(state);
+  }
 
   if (import.meta.env.DEV && directDebug !== undefined) {
     let revision = 0;
@@ -887,7 +1046,13 @@ export function useStackedDeckComponentMotion<Id extends string>(
   );
 
   function isInspectEligible(index: number): boolean {
-    if (disabled() || index < 0 || index >= ids.value.length || isReleaseInFlight(index))
+    if (
+      disabled() ||
+      reconcilingFlag.value ||
+      index < 0 ||
+      index >= ids.value.length ||
+      isReleaseInFlight(index)
+    )
       return false;
     return isStackedDeckInspectEligible(state.value, {
       index,
@@ -1225,11 +1390,15 @@ export function useStackedDeckComponentMotion<Id extends string>(
         return;
       }
 
+      // What the eye saw is read before anything is cancelled, because cancelling is a state change
+      // and the cards must continue from where they were drawn, not from where a reset puts them.
+      const captured = itemsChanged ? captureRenderedPoses() : undefined;
       if (itemsChanged || (controlledChanged && controlledDestinationAvailable)) {
         cancelInteractionRecords();
       }
 
       if (itemsChanged) {
+        releaseFocusFromDepartures(nextIds);
         const previousSettledId = model.idAt(model.state.settledIndex);
         const preservedIndex = model.reconfigure(nextIds);
         const controlledIndex = controlledId === undefined ? -1 : model.indexOf(controlledId);
@@ -1242,6 +1411,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
           ...measure(),
           ...(finalId === undefined ? {} : { activeId: finalId }),
         });
+        beginReconciliation(captured!);
         if (finalId !== undefined && finalId !== previousSettledId) {
           options.onSettled?.(finalId, finalIndex, controlledIndex >= 0 ? "external" : "reconcile");
         }
@@ -1259,7 +1429,10 @@ export function useStackedDeckComponentMotion<Id extends string>(
 
   // Teardown is the same thing as a cancelled interaction: nothing pending may still speak for a
   // surface that no longer exists.
-  onBeforeUnmount(cancelInteractionRecords);
+  onBeforeUnmount(() => {
+    cancelInteractionRecords();
+    clearReconciliation();
+  });
 
   return {
     atRest,
@@ -1267,6 +1440,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
     canPrevious: computed(() => !disabled() && state.value.canPrevious),
     compositing,
     visualId,
+    departures,
     diagnostics,
     frame,
     isInspectEligible,
@@ -1284,6 +1458,7 @@ export function useStackedDeckComponentMotion<Id extends string>(
     physicalIndex,
     pitch,
     previous,
+    reconciling,
     remeasure: motion.remeasure,
     navigateTo,
     settledId,
@@ -1320,6 +1495,8 @@ export interface StackedDeckHandle<Id extends string> {
   readonly owned: boolean;
   readonly physicalIndex: number;
   readonly pitch: number;
+  /** True while cards are still travelling to where a changed collection puts them. */
+  readonly reconciling: boolean;
   readonly root: HTMLElement | undefined;
   /** Durable selection. It changes only at mechanical rest. */
   readonly settledId: Id | undefined;

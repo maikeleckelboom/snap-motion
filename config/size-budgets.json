@@ -1,13 +1,13 @@
 {
   "core": {
     "entry": "packages/core/dist/index.js",
-    "maxBytes": 53464,
-    "maxGzipBytes": 15447
+    "maxBytes": 56245,
+    "maxGzipBytes": 16289
   },
   "vueRoot": {
     "entry": "packages/vue/dist/index.js",
-    "maxBytes": 140476,
-    "maxGzipBytes": 37656
+    "maxBytes": 144503,
+    "maxGzipBytes": 38808
   },
   "vueCarousel": {
     "entry": "packages/vue/dist/carousel.js",
@@ -21,8 +21,8 @@
   },
   "vueStackedDeck": {
     "entry": "packages/vue/dist/stacked-deck.js",
-    "maxBytes": 57645,
-    "maxGzipBytes": 16825
+    "maxBytes": 61269,
+    "maxGzipBytes": 17935
   },
   "vueSheet": {
     "entry": "packages/vue/dist/sheet.js",

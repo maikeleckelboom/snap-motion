@@ -685,6 +685,7 @@ export const StackedDeck: <TItem extends {
     physicalIndex: ComputedRef<number>;
     pitch: ComputedRef<number>;
     previous: () => boolean;
+    reconciling: ComputedRef<boolean>;
     navigateTo: (id: TItem["id"]) => boolean;
     root: Ref<HTMLElement | undefined, HTMLElement | undefined>;
     settledId: ComputedRef<TItem["id"] | undefined>;
@@ -702,6 +703,7 @@ export const StackedDeck: <TItem extends {
             item: TItem;
             id: TItem["id"];
             index: number;
+            exiting: boolean;
             active: boolean;
             visual: boolean;
             settled: boolean;
@@ -723,9 +725,9 @@ export const StackedDeck: <TItem extends {
 // @public
 export interface StackedDeckCardState<TItem, TId extends string> {
     readonly active: boolean;
+    readonly exiting: boolean;
     // (undocumented)
     readonly id: TId;
-    // (undocumented)
     readonly index: number;
     readonly inspectable: boolean;
     // (undocumented)
@@ -762,6 +764,7 @@ export interface StackedDeckHandle<Id extends string> {
     // (undocumented)
     readonly pitch: number;
     previous(): boolean;
+    readonly reconciling: boolean;
     // (undocumented)
     readonly root: HTMLElement | undefined;
     readonly settledId: Id | undefined;

@@ -39,6 +39,46 @@ pile that no longer reads as one object.
 At rest the physical pile is the canonical ring rotated to the current item. Reconfiguration
 preserves the current semantic ID where possible, then rebuilds this order from the new collection.
 
+## Collection reconciliation
+
+Membership changes at once; the cards do not. When the `items` collection changes, the adapter
+first captures every card exactly as it was last drawn — whatever was happening: rest, a Shuffle
+exchange, a held or parking Direct shell, unfinished landings, an earlier reconciliation, or a
+departure still leaving — keyed by semantic ID. Only then does it cancel interaction records and
+rebuild the semantic model, physical coordinate and controller for the new collection, so
+selection, `activeId` reconciliation and settlement are exactly what they were before. The captured
+poses then reconcile to the new collection's canonical frame over two natural periods of the deck's
+spring (460 ms) with `applyStackedDeckReconciliation`, applied after `resolveStackedDeckFrame` on
+every frame. There is no second controller and no queue: a later change captures the drawn state
+again and replaces the reconciliation whole, and later navigation only changes where each card is
+going.
+
+Identity owns every route; indices never do.
+
+- **The new top** (the card the deck names after the change) continues from where it was drawn to
+  the top slot. If it was already the front-most body it keeps the front throughout. Otherwise it
+  rises beneath the card that was in front.
+- **The card that was in front**, when it no longer is, yields the way every Shuffle's outgoing card
+  does. It travels clear of the whole pile and of the rising top, on the side away from it. It
+  changes depth there, where it touches nothing and has no cast shadow left to move across
+  anything, then continues behind the deck to its slot.
+- **Every other shell** that changes place or depth recedes beneath the new top, changes depth only
+  at the midpoint while it is contained there, and re-emerges in its new slot. This is what
+  background shells already do through every exchange. A shell that keeps its place does not move.
+- **A card the collection gained** begins contained beneath the card in front, so nothing of it is
+  drawn before it has somewhere to come from.
+- **A card the collection lost** is a departure. It keeps its element, so its content is never
+  rebuilt mid-motion, but nothing that makes it an item: no role, label, `aria-current`, hit target
+  or focus. It is `inert`, `aria-hidden`, and exposed only as `departures` on the composable and an
+  `exiting` slot flag. It ends contained beneath the front card, and is removed on the frame after
+  it arrives there. Focus inside it moves to the deck when the collection lets it go.
+
+Captured layers become paint ranks, including the document order that broke any z-index tie, so a
+reorder never changes paint by moving DOM. Translation, rotation, scale and shadow are continuous on
+every route. No card is interactive until it has arrived. Reduced motion, an empty new collection
+and a deck that drew nothing adopt the canonical frame at once. A deck that had no cards has nothing
+to continue from.
+
 ## Concurrent interrupted releases
 
 Presentation settlement is its own channel. A hand pressing the deck opens a new interaction; it
@@ -67,7 +107,8 @@ interaction stays available. The collection therefore contains at most one landi
 no duplicate card, restart from nominal rest, or teleport. Item reconfiguration, mode changes,
 controlled synchronization, and teardown clear the complete presentation collection atomically
 under the component's existing cancellation policy; normal completion removes only the body that
-arrived. Disabling the deck rejects new input but does not erase physical presentation already in
+arrived. Item reconfiguration captures every drawn pose before it clears anything, so the shells a
+release was still carrying continue through the collection reconciliation rather than snapping. Disabling the deck rejects new input but does not erase physical presentation already in
 flight.
 
 ## Traversal and navigation

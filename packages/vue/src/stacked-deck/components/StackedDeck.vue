@@ -9,7 +9,7 @@ import type {
 } from "@snap-motion/core";
 import type { SnapMotionMessages } from "@snap-motion/vue/localization";
 import type { NavigationReason } from "@snap-motion/vue/motion";
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 
 import { preserveFocusBeforeSemanticChange } from "../../internal/accessibility/focus";
 import { useSurfaceFocus } from "../../internal/accessibility/surfaceFocus";
@@ -288,15 +288,42 @@ if (import.meta.env.DEV) {
   );
 }
 
+/**
+ * Items the collection has let go of, kept only for as long as their cards are still drawn leaving.
+ * A departing card is the same element it always was, so its content is never rebuilt mid-motion.
+ */
+const departedItems = new Map<TId, TItem>();
+watch(
+  () => props.items,
+  (_next, previous) => {
+    for (const item of previous ?? []) departedItems.set(item.id, item);
+  },
+  { flush: "sync" },
+);
+// After each render, so whatever the deck decided to draw has already found its item.
+watch(
+  [ids, deck.departures],
+  () => {
+    for (const id of departedItems.keys()) {
+      if (!deck.departures.value.some((departure) => departure.id === id)) {
+        departedItems.delete(id);
+      }
+    }
+  },
+  { flush: "post" },
+);
+
 const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {
   const frame = deck.frame.value;
   const state = deck.state.value;
-  return props.items.map((item, index) => {
+  const departures = deck.departures.value;
+  const present = props.items.map((item, index) => {
     const pose = frame.poses[index]!;
     return {
       item,
       id: item.id,
       index,
+      exiting: false,
       active: item.id === semanticActiveId.value,
       visual: index === state.currentIndex,
       settled: index === state.settledIndex,
@@ -305,7 +332,68 @@ const cards = computed<StackedDeckCardState<TItem, TId>[]>(() => {
       pose,
     };
   });
+  for (const departure of departures) {
+    const item = departedItems.get(departure.id);
+    if (item === undefined || ids.value.includes(departure.id)) continue;
+    present.push({
+      item,
+      id: departure.id,
+      index: -1,
+      exiting: true,
+      active: false,
+      visual: false,
+      settled: false,
+      inspectable: false,
+      role: departure.pose.role,
+      pose: departure.pose,
+    });
+  }
+  return present;
 });
+
+/**
+ * Cards holding an explicit compositor layer.
+ *
+ * A browser may paint a promoted card differently from the same card painted into its parent, so
+ * releasing a layer is a visible change of its own. Releasing it at settlement would put that
+ * change on the one frame where nothing else moves. Promotion therefore follows the transaction
+ * that moved the cards and is released only when a later transaction moves different ones — at
+ * most the last exchanging pair and the card a changed collection put in front, never one layer per
+ * parked shell, and never on the frame a card comes to rest.
+ */
+const promotedIds = shallowRef<ReadonlySet<TId>>(new Set());
+watch(
+  [deck.frame, deck.departures],
+  () => {
+    const current = promotedIds.value;
+    const live = (id: TId) =>
+      ids.value.includes(id) || deck.departures.value.some((departure) => departure.id === id);
+    let owners: TId[] = [];
+    if (deck.compositing.value) {
+      const frame = deck.frame.value;
+      owners = props.items
+        .filter((_item, index) => {
+          const role = frame.poses[index]?.role;
+          return role === "top" || role === "target";
+        })
+        .map((item) => item.id);
+      if (deck.reconciling.value) {
+        // A changed collection moves the card that was in front as well as the one that will be,
+        // and that card already holds its layer from the transaction that put it there. Every
+        // other shell, departures included, only moves beneath the front card.
+        owners.push(...current);
+      }
+    }
+    // A transaction that only moves cards already holding layers changes nothing; one that moves a
+    // card without a layer takes the promotion over, on the frame that card begins to move.
+    const next = owners.every((id) => current.has(id)) ? [...current] : owners;
+    const kept = [...new Set(next)].filter(live);
+    if (kept.length !== current.size || kept.some((id) => !current.has(id))) {
+      promotedIds.value = new Set(kept);
+    }
+  },
+  { flush: "sync" },
+);
 
 watch(
   [() => deck.diagnostics.value.phase, () => deck.state.value.currentIndex] as const,
@@ -341,12 +429,7 @@ function cardMotionStyle(card: StackedDeckCardState<TItem, TId>) {
     pointerEvents: pose.interactive ? ("auto" as const) : ("none" as const),
     transform: stackedDeckTransform(pose),
     transformOrigin: "center center",
-    // Bound explicit GPU promotion to the exchanging pair. Every persistent shell still follows its
-    // physical pose, but a larger deck must not allocate one promoted layer per item.
-    willChange:
-      deck.compositing.value && (pose.role === "top" || pose.role === "target")
-        ? ("transform" as const)
-        : ("auto" as const),
+    willChange: promotedIds.value.has(card.id) ? ("transform" as const) : ("auto" as const),
     "--snap-motion-deck-shadow-strength": pose.shadowStrength.toFixed(4),
   };
 }
@@ -366,6 +449,7 @@ defineExpose({
   physicalIndex: deck.physicalIndex,
   pitch: deck.pitch,
   previous: deck.previous,
+  reconciling: deck.reconciling,
   navigateTo: deck.navigateTo,
   root,
   settledId: deck.settledId,
@@ -390,6 +474,7 @@ defineExpose({
     :data-owned="deck.owned.value ? 'true' : 'false'"
     :data-phase="deck.diagnostics.value.phase"
     :data-profile="deck.tuningProfile.value"
+    :data-reconciling="deck.reconciling.value ? 'true' : 'false'"
     :data-reduced-motion="deck.diagnostics.value.reducedMotion ? 'true' : 'false'"
     :data-settled-id="deck.settledId.value"
     :data-visual-id="deck.visualId.value"
@@ -404,16 +489,20 @@ defineExpose({
   >
     <slot name="backdrop" />
     <div ref="track" class="snap-motion-stacked-deck-stage">
+      <!-- A departing card keeps its element, and with it its content, but nothing that would make
+      it an item: no label, no role, no hit target, and it is inert and hidden from assistive
+      technology from the frame the collection let it go. -->
       <div
         v-for="card in cards"
         :key="card.id"
         :aria-current="card.visual ? 'true' : undefined"
         :aria-hidden="card.pose.interactive ? undefined : 'true'"
-        :aria-label="positionLabel(card.index)"
-        aria-roledescription="slide"
-        class="snap-motion-stacked-deck-card"
-        data-snap-motion-item
-        data-snap-motion-stacked-deck-card
+        :aria-label="card.exiting ? undefined : positionLabel(card.index)"
+        :aria-roledescription="card.exiting ? undefined : 'slide'"
+        :class="card.exiting ? 'snap-motion-stacked-deck-exit' : 'snap-motion-stacked-deck-card'"
+        :data-snap-motion-item="card.exiting ? undefined : ''"
+        :data-snap-motion-stacked-deck-card="card.exiting ? undefined : ''"
+        :data-deck-exiting="card.exiting ? 'true' : undefined"
         :data-deck-interactive="card.pose.interactive ? 'true' : 'false'"
         :data-deck-layer="card.pose.layer"
         :data-deck-role="card.role"
@@ -423,7 +512,7 @@ defineExpose({
         :data-visual="card.visual ? 'true' : 'false'"
         :data-settled="card.settled ? 'true' : 'false'"
         :inert="!card.pose.interactive"
-        role="group"
+        :role="card.exiting ? undefined : 'group'"
         :style="cardStyle(card)"
       >
         <div class="snap-motion-stacked-deck-card-motion" :style="cardMotionStyle(card)">

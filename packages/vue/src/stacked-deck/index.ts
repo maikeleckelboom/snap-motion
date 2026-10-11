@@ -8,6 +8,7 @@ export type {
 } from "./stacked-deck-contracts";
 export { useStackedDeckMotion } from "./use-stacked-deck-motion-public";
 export type {
+  StackedDeckDeparture,
   StackedDeckHandle,
   UseStackedDeckMotionOptions,
   UseStackedDeckMotionReturn,

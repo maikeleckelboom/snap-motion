@@ -96,6 +96,7 @@ export {
 } from "./selection";
 export type { SettledSelectionAdoption, SettledSelectionUpdate } from "./selection";
 export {
+  applyStackedDeckReconciliation,
   createStackedDeckFrame,
   createStackedDeckTraversal,
   isStackedDeckAuthorityStable,
@@ -122,6 +123,7 @@ export type {
   StackedDeckPilePose,
   StackedDeckPose,
   StackedDeckProfile,
+  StackedDeckReconciliation,
   StackedDeckRole,
   StackedDeckTraversal,
   StackedDeckTraversalPhase,

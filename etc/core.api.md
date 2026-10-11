@@ -28,6 +28,9 @@ export interface AnimationPlaybackControls {
 // @public (undocumented)
 export function applyElasticity(position: number, bounds: ScalarBounds, elasticity?: ElasticityOptions): number;
 
+// @public
+export function applyStackedDeckReconciliation(reconciliation: StackedDeckReconciliation, tuning: StackedDeckTuning, frame: MutableStackedDeckFrame, departureOutput: MutableStackedDeckPose[]): void;
+
 // @public (undocumented)
 export const balancedPreset: {
     readonly name: "balanced";
@@ -1354,6 +1357,14 @@ export interface StackedDeckPose {
 
 // @public (undocumented)
 export type StackedDeckProfile = "compact" | "medium" | "wide";
+
+// @public
+export interface StackedDeckReconciliation {
+    readonly departures: readonly StackedDeckPose[];
+    readonly progress: number;
+    readonly survivors: readonly (StackedDeckPose | null)[];
+    readonly topIndex: number;
+}
 
 // @public
 export type StackedDeckReleasePolicy = Partial<Omit<ReleaseTargetPolicy, "maxAnchorSkip">>;

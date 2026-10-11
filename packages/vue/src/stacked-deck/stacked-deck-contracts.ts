@@ -10,7 +10,13 @@ export function stackedDeckTransform(
 export interface StackedDeckCardState<TItem, TId extends string> {
   readonly item: TItem;
   readonly id: TId;
+  /** Ordinal in the collection, or `-1` for a departing card. */
   readonly index: number;
+  /**
+   * True for a card the collection no longer contains, drawn only until its departure completes.
+   * It is inert and hidden from assistive technology, and every other flag on it is false.
+   */
+  readonly exiting: boolean;
   /** True for the application-authoritative semantic selection, independent of visual authority. */
   readonly active: boolean;
   /** True for the card currently dominant in the physical projection. */
