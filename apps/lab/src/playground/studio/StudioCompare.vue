@@ -50,7 +50,7 @@ const deckStudy = computed(() =>
 );
 const activeInComparison = computed(() => model.isCompared(model.activeId.value));
 const deckIsActive = computed(() => model.deckId.value === model.activeId.value);
-// The Deck is only mounted with at least two members, so the cursor always names one of them.
+// The Deck is only mounted with at least one member, so the cursor always names one of them.
 const deckCursor = computed(() => model.deckId.value ?? compared.value[0]!.id);
 const countText = computed(() => `${compared.value.length} of ${MAX_COMPARISON}`);
 const overlayOwned = computed(() => model.overlay.value !== "none");
@@ -105,13 +105,19 @@ defineExpose({
       <p class="region-count tabular" data-testid="studio-comparison-count">{{ countText }}</p>
     </header>
 
-    <template v-if="model.deckState.value === 'deck'">
+    <!-- One Deck for one card and for many. Its cards are the same physical objects either side of
+    the two-card boundary, so the package reconciles that boundary like any other change of
+    membership. Holding a single card it has nothing to exchange, so it refuses every input and
+    leaves the accessibility tree; the copy and the tray beneath it say what it holds. -->
+    <template v-if="model.deckState.value !== 'empty'">
       <StackedDeck
         ref="deck"
         class="studio-deck"
         data-testid="studio-deck"
         :active-id="deckCursor"
-        :disabled="overlayOwned"
+        :data-deck-state="model.deckState.value"
+        :disabled="overlayOwned || model.deckState.value === 'single'"
+        :inert="model.deckState.value === 'single' ? true : undefined"
         :elasticity="physics.elasticity.value"
         :exchange="exchange"
         :fallback-stage-width="1280"
@@ -145,7 +151,7 @@ defineExpose({
         </template>
       </StackedDeck>
 
-      <div class="deck-controls">
+      <div v-if="model.deckState.value === 'deck'" class="deck-controls">
         <div class="step-controls">
           <button
             aria-label="Previous card"
@@ -182,7 +188,11 @@ defineExpose({
           @update:model-value="emit('exchangeChange', $event)"
         />
       </div>
-      <p v-if="!deckIsActive && deckStudy" class="deck-note" data-testid="studio-deck-note">
+      <p
+        v-if="model.deckState.value === 'deck' && !deckIsActive && deckStudy"
+        class="deck-note"
+        data-testid="studio-deck-note"
+      >
         {{ deckStudy.name }} is on top. {{ activeStudy.name }} is the active study{{
           activeInComparison ? "" : ", and is not in the comparison"
         }}.
@@ -190,25 +200,17 @@ defineExpose({
           Make {{ deckStudy.name }} active
         </button>
       </p>
-    </template>
 
-    <div
-      v-else-if="model.deckState.value === 'single'"
-      class="compare-state"
-      data-testid="studio-compare-single"
-    >
-      <figure v-if="deckStudy" class="single-card" :style="{ '--tone': deckStudy.tone }">
-        <img
-          :alt="`${deckStudy.name} study plate`"
-          class="single-image"
-          :height="deckStudy.cover.preview.height"
-          :src="deckStudy.cover.preview.src"
-          :width="deckStudy.cover.preview.width"
-        />
-      </figure>
-      <div class="state-copy">
+      <div
+        v-if="model.deckState.value === 'single'"
+        class="state-copy single-copy"
+        data-testid="studio-compare-single"
+      >
         <p class="state-title">One study so far</p>
-        <p>The Deck exchanges cards, so it needs two. Add another study to compare.</p>
+        <p>
+          {{ deckStudy?.name }} is the only card. The Deck exchanges cards, so it needs two. Add
+          another study to compare.
+        </p>
         <div class="state-actions">
           <button
             v-if="!activeInComparison"
@@ -224,7 +226,7 @@ defineExpose({
           </button>
         </div>
       </div>
-    </div>
+    </template>
 
     <div v-else class="compare-state" data-testid="studio-compare-empty">
       <div aria-hidden="true" class="empty-pile">
@@ -417,28 +419,14 @@ defineExpose({
   background: var(--stage);
 }
 
-.single-card,
 .empty-pile {
+  position: relative;
   margin: 0;
   aspect-ratio: 10 / 7;
 }
 
-.single-card {
-  border-radius: 0.75rem;
-  background: var(--tone);
-  overflow: hidden;
-  box-shadow: 0 14px 26px -16px rgb(21 20 15 / 0.4);
-}
-
-.single-image {
-  display: block;
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
-}
-
-.empty-pile {
-  position: relative;
+.single-copy {
+  padding-inline: 0.25rem;
 }
 
 .empty-pile span {
@@ -570,7 +558,6 @@ defineExpose({
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .single-card,
   .empty-pile {
     inline-size: min(100%, 14rem);
     justify-self: center;

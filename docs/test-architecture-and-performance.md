@@ -169,10 +169,11 @@ Chromium, 48 Firefox and 48 WebKit tests: Chromium general reached 338 tests and
 6-minute limit at test 243 (367 s), WebKit general by its 8-minute limit (493 s against a 426 s
 baseline), and Firefox general finished in 357 s of 360 s (278 s before). Nothing had failed; the
 cancellations made the aggregate Browser certification fail closed, as designed. The limits are
-unchanged: `chromiumStudioSpecs` (group `studio`, 72 tests) and `interoperabilityStudioSpecs`
-(`firefox-studio` and `webkit-studio`, 48 tests each, 47 run and 1 skipped) are separate jobs, the general projects ignore
-them, and `browserOwnership.test.ts` asserts the partition on both sides. `pnpm test:browser:studio`
-runs the three owners locally.
+unchanged: `chromiumStudioSpecs` (group `studio`, 79 tests) and `interoperabilityStudioSpecs`
+(`firefox-studio` and `webkit-studio`, 55 tests each, 53 run and 2 skipped) are separate jobs, the
+general projects ignore them, and `browserOwnership.test.ts` asserts the partition on both sides.
+`pnpm test:browser:studio` runs the three owners locally. `studio-deck-reconciliation.spec.ts`
+joined both lists with Phase 06C; it adds about 25 s of test time per engine.
 
 Product-polish coverage adds public screen identities/assets and separate Lab Yoot fixtures, named
 mobile jump navigation at 320/375/390/430/768px, public Grid item continuity and Sheet content/edges,

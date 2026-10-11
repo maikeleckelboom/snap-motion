@@ -311,14 +311,23 @@ test.describe("comparison", () => {
     await expect(studio.tray(page, "relay").locator(".tray-name")).toBeFocused();
   });
 
-  test("one and zero studies are plain states, and the Deck returns with two", async ({ page }) => {
+  test("one study keeps its card but not the Deck's controls, zero is a plain state, and the Deck returns with two", async ({
+    page,
+  }) => {
     await openStudio(page);
     await page.getByTestId("studio-remove-arc").click();
     await page.getByTestId("studio-remove-relay").click();
-    await expect(studio.deck(page)).toHaveCount(0);
+    // The one remaining card is the same physical card, held by a Deck with nothing to exchange:
+    // it refuses input and leaves the accessibility tree, and the controls go with it.
+    const deck = studio.deck(page);
+    await expect(deck).toHaveAttribute("data-deck-state", "single");
+    await expect(deck).toHaveAttribute("inert", "");
+    await expect(deck.locator("[data-snap-motion-stacked-deck-card]")).toHaveCount(1);
+    await expect(page.getByTestId("studio-deck-next")).toHaveCount(0);
     const single = page.getByTestId("studio-compare-single");
     await expect(single).toBeVisible();
     await expect(single).toContainText("The Deck exchanges cards, so it needs two.");
+    await expect(single).toContainText("Fold is the only card.");
     await expect(studio.status(page)).toContainText("Relay removed");
 
     await page.getByTestId("studio-remove-fold").click();
@@ -335,7 +344,10 @@ test.describe("comparison", () => {
     await studio.tile(page, "orbit").click();
     await page.getByTestId("studio-toggle-compare").click();
     await expect(studio.deck(page)).toBeVisible();
+    await expect(studio.deck(page)).toHaveAttribute("data-deck-state", "deck");
+    await expect(studio.deck(page)).not.toHaveAttribute("inert");
     await expect(studio.deck(page)).toHaveAttribute("data-active-id", "orbit");
+    await expect(page.getByTestId("studio-deck-next")).toBeEnabled();
     expect(await trayNames(page)).toEqual(["Fold", "Orbit"]);
   });
 

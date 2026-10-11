@@ -16,10 +16,15 @@ export const previewSpecs = ["media-preview.spec.ts", "playground-preview.spec.t
 /**
  * The Motion Studio's browser specs. They compose five surfaces and three overlays, so they own
  * their own parallel job on each engine instead of lengthening the general ones past their limits.
- * `studio-layout.spec.ts` is Chromium-only; `studio.spec.ts` is the one cross-engine spec.
+ * `studio-layout.spec.ts` is Chromium-only; `studio.spec.ts` and the Comparison Deck's
+ * reconciliation spec run on every engine.
  */
-export const chromiumStudioSpecs = ["studio.spec.ts", "studio-layout.spec.ts"];
-export const interoperabilityStudioSpecs = ["studio.spec.ts"];
+export const chromiumStudioSpecs = [
+  "studio.spec.ts",
+  "studio-layout.spec.ts",
+  "studio-deck-reconciliation.spec.ts",
+];
+export const interoperabilityStudioSpecs = ["studio.spec.ts", "studio-deck-reconciliation.spec.ts"];
 export const interoperabilitySpecs = [
   "lab-physics-settings.spec.ts",
   "playground.spec.ts",
