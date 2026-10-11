@@ -555,12 +555,16 @@ test("native modal contains focus, guards the background, and restores scroll st
   await page.keyboard.press("Escape");
   await expect(gallery(page)).not.toBeVisible();
   await expect(page.getByTestId("coverflow-inspect")).toBeFocused();
-  expect(
-    await page.locator("html").evaluate((element) => ({
-      overflow: element.style.overflow,
-      paddingInlineEnd: element.style.paddingInlineEnd,
-    })),
-  ).toEqual(rootStyles);
+  // Native close hides the dialog and can restore focus before its queued `close` event. The
+  // component releases the scroll lock in that event's completion, so observe the actual contract.
+  await expect
+    .poll(() =>
+      page.locator("html").evaluate((element) => ({
+        overflow: element.style.overflow,
+        paddingInlineEnd: element.style.paddingInlineEnd,
+      })),
+    )
+    .toEqual(rootStyles);
 });
 
 test("scrim closes only a true scrim sequence and not an image gesture", async ({ page }) => {

@@ -182,7 +182,24 @@ shell or listener inventory was observed. This is bounded retention evidence, no
 The focused three-engine suite completed with 55 passes and its two existing Chromium-only skips.
 The additional combined interruption case passed in all three engines; the two affected narrow
 paint cases passed three focused repetitions each after the hover correction. No assertion or
-timeout was weakened. Static, unit, API and packed-consumer checks are part of `pnpm verify`.
+individual test timeout was weakened. Static, unit, API and packed-consumer checks are part of `pnpm verify`.
+
+The first remote run failed its Chromium general owner because the existing Lab Gallery scroll
+restoration test read `overflow: hidden` after native close but before the queued `close` handler
+completed; its automatic retry passed and the no-flakes policy correctly rejected the job. The
+Studio is not mounted in that test. The readiness correction in `coverflow-gallery.spec.ts` waits
+for the same exact original scroll styles with `expect.poll`, because native focus return and
+invisibility do not prove that the component's close handler has completed. No Gallery, View
+Transition or Coverflow implementation changed. The original failure remains in
+`ci-general-evidence/` and `ci-chromium-general.log`; a retry is not presented as a clean first run.
+The corrected assertion passed five repetitions in each engine (15 total); Firefox and WebKit
+used a local focused configuration because this Lab spec's regular owner is Chromium.
+
+The same run exhausted the WebKit Studio job's six-minute budget at test 66 of 68, with no
+assertion failure. Its eight new paired-raster tests took about 90 seconds on two workers. Only
+that owner's job budget increases to eight minutes; general owners, worker counts, individual
+test deadlines and all visual assertions remain unchanged. The cancellation and progress are
+retained in `ci-webkit-studio.log`.
 
 The local delivery record `.artifacts/deck-review/gates.md` identifies aggregate command outcomes
 and the CI run for the delivered branch head. These bounded visual and performance measurements

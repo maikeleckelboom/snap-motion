@@ -197,8 +197,9 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.61.1-noble
       options: --user 1001
     # General WebKit includes the expanded Gallery and Sheet lifecycle witnesses. The Motion Studio's
-    # cross-engine spec has its own firefox-studio and webkit-studio owners.
-    timeout-minutes: ${{ matrix.project == 'webkit' && 8 || 6 }}
+    # cross-engine spec has its own firefox-studio and webkit-studio owners. The expanded
+    # WebKit Studio raster oracle reached test 66/68 at the former six-minute job limit.
+    timeout-minutes: ${{ (matrix.project == 'webkit' || matrix.project == 'webkit-studio') && 8 || 6 }}
     strategy:
       fail-fast: false
       matrix:
