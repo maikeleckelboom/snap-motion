@@ -250,17 +250,19 @@ on physical NVDA, VoiceOver or TalkBack setups.
   layout, interruption, and document-level listener balance.
 - `e2e/studio-layout.spec.ts` (Chromium): the seven widths, stability, scroll lock with real
   scrollbars, natural scrolling and touch, touch targets, and axe.
-- `e2e/studio-deck-reconciliation.spec.ts` (every engine, desktop and 390px, Shuffle and Direct):
+- `e2e/studio-deck-reconciliation.spec.ts` (every engine, 1280/1440/390/320px, Shuffle and Direct):
   tray removals and additions read back frame by frame. Each change must start exactly from the
   drawn frame, never swap depth where two bodies still overlap, never show a card appearing or
   vanishing, keep departures inert, and change no compositor hint at rest. In Chromium, no card may
-  move or change shadow faster than the Deck's own exchange.
+  move or change shadow faster than the Deck's own exchange. Frozen raster comparisons also prove
+  that cards cannot paint over Active Study, including ordinary traversal; see the
+  [composition and settlement review](studio-deck-composition-review.md).
 - `e2e/playground-preview.spec.ts`: the built page under a non-root base, including the Studio's
   chunk and plates.
 
 In CI the Studio specs are not part of the general owners. Chromium runs all three as the `studio`
-group (79 tests); Firefox and WebKit each run `studio.spec.ts` and
-`studio-deck-reconciliation.spec.ts` (55 tests: 53 run, and 2 Chromium-only tests skipped) as
+group; Firefox and WebKit each run `studio.spec.ts` and
+`studio-deck-reconciliation.spec.ts` (with the Chromium-only tests skipped) as
 `firefox-studio` and `webkit-studio`. They are separate parallel jobs because the first push put every Studio test
 into the general jobs, and Chromium general and WebKit general were cancelled at their time limits
 (see [test architecture](test-architecture-and-performance.md#playground-certification)).

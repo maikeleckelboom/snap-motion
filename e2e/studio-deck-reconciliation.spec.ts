@@ -46,7 +46,7 @@ async function trayIds(page: Page) {
     .evaluateAll((items) => items.map((item) => item.getAttribute("data-testid")!.slice(12)));
 }
 
-for (const width of [1280, 390]) {
+for (const width of [1280, 1440, 390, 320]) {
   for (const exchange of ["shuffle", "direct"] as const) {
     test(`${exchange} at ${width}px: removing and adding comparison cards reorganizes one coherent stack`, async ({
       page,
@@ -112,6 +112,154 @@ for (const width of [1280, 390]) {
     });
   }
 }
+
+for (const width of [1280, 1440, 390, 320]) {
+  for (const exchange of ["shuffle", "direct"] as const) {
+    test(`${exchange} at ${width}px: the inspector remains painted above comparison travel`, async ({
+      page,
+    }) => {
+      await page.clock.install();
+      await openCompare(page, width, exchange);
+      // Scrolling the inspector beneath a stationary pointer can update thumbnail hover paint
+      // between the two screenshots (especially Firefox). Keep that input outside the crop.
+      await page.mouse.move(0, 0);
+      await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 1000));
+      const inspector = studio.inspector(page);
+      let overlapsInspector = false;
+      // Compare actual paint with and without the Deck in the SAME physical frame. Inert shells
+      // are deliberately absent from hit testing, so elementFromPoint cannot prove this contract.
+      async function expectProtected() {
+        await inspector.scrollIntoViewIfNeeded();
+        await inspector
+          .locator("img")
+          .evaluateAll((images) =>
+            Promise.all(images.map((image) => (image as HTMLImageElement).decode())),
+          );
+        const bounds = (await inspector.boundingBox())!;
+        overlapsInspector ||= await studio
+          .deck(page)
+          .locator(".snap-motion-stacked-deck-card-motion")
+          .evaluateAll(
+            (cards, inspectorBounds) =>
+              cards.some((card) => {
+                const body = card.getBoundingClientRect();
+                return (
+                  body.left < inspectorBounds.x + inspectorBounds.width &&
+                  body.right > inspectorBounds.x &&
+                  body.top < inspectorBounds.y + inspectorBounds.height &&
+                  body.bottom > inspectorBounds.y
+                );
+              }),
+            bounds,
+          );
+        // Exclude fractional edge pixels shared with the divider, not occupied inspector content.
+        const clip = {
+          x: Math.ceil(bounds.x) + 1,
+          y: Math.ceil(bounds.y) + 1,
+          width: Math.floor(bounds.width) - 2,
+          height: Math.floor(bounds.height) - 2,
+        };
+        const painted = await page.screenshot({
+          clip,
+          animations: "allow",
+          path: test.info().outputPath("painted.png"),
+        });
+        const withoutDeck = await page.screenshot({
+          clip,
+          animations: "allow",
+          path: test.info().outputPath("without.png"),
+          // Keep the composited surfaces alive: visibility:hidden changes sibling text antialiasing.
+          style:
+            ".studio-deck .snap-motion-stacked-deck-card-motion { opacity: 0.000001 !important; }",
+        });
+        if (!painted.equals(withoutDeck)) {
+          await test
+            .info()
+            .attach("inspector-with-deck", { body: painted, contentType: "image/png" });
+          await test
+            .info()
+            .attach("inspector-without-deck", { body: withoutDeck, contentType: "image/png" });
+        }
+        expect(painted.equals(withoutDeck), "Deck body or shadow painted over Active Study").toBe(
+          true,
+        );
+        expect(
+          await inspector.locator("button").evaluateAll((buttons) =>
+            buttons.every((button) => {
+              const rect = button.getBoundingClientRect();
+              return button.contains(
+                document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2),
+              );
+            }),
+          ),
+          "Active Study retains pointer ownership",
+        ).toBe(true);
+      }
+      for (const control of [
+        "studio-deck-next",
+        "studio-remove-arc",
+        "studio-toggle-compare",
+        "studio-deck-previous",
+      ]) {
+        await mutateTraced(page, control, control);
+        // Outbound, crossover clearance, and return. The trace suite samples every intervening RAF.
+        for (const delta of [64, 144, 144]) {
+          await page.clock.runFor(delta);
+          await expectProtected();
+        }
+        await page.clock.runFor(1200);
+      }
+      await expect(studio.deck(page)).toHaveAttribute("data-reconciling", "false");
+      if (width >= 992) expect(overlapsInspector, "exercise real cross-divider travel").toBe(true);
+      // The opaque foreground remains an ordinary region, with its own pointer and keyboard owner.
+      const details = page.getByTestId("studio-details");
+      await details.focus();
+      await expect(details).toBeFocused();
+    });
+  }
+}
+
+test("an interrupted Shuffle mutation survives another mutation, a mode change and re-addition", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await openCompare(page, 1280, "shuffle");
+  await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 1000));
+  await mutateTraced(page, "studio-deck-next", "exchange");
+  await page.clock.runFor(96);
+  await mutateTraced(page, "studio-remove-arc", "remove-moving-current");
+  await page.clock.runFor(64);
+  await mutateTraced(page, "studio-remove-fold", "second-mutation");
+  await page.clock.runFor(48);
+  // There is one member, so the mode control is absent; the shared standalone Deck control still
+  // changes the same exchange owner. Use the real shared tuning control, not component internals.
+  await page
+    .locator("#stacked-deck")
+    .getByRole("button", { name: "Direct", exact: true })
+    .evaluate((el) => (el as HTMLElement).click());
+  await mutateTraced(page, "studio-compare-add", "readd-departing-arc");
+  await page.clock.runFor(64);
+  await mutateTraced(page, "studio-remove-relay", "remove-with-departures");
+  await page.clock.runFor(800);
+  await expect(studio.deck(page)).toHaveAttribute("data-deck-state", "single");
+  await page.getByTestId("studio-tile-relay").evaluate((el) => (el as HTMLElement).click());
+  await mutateTraced(page, "studio-toggle-compare", "restore-second");
+  await page.clock.runFor(800);
+  await expect(page.getByTestId("studio-deck-next")).toBeEnabled();
+  await mutateTraced(page, "studio-deck-next", "navigate-when-ready");
+  await page.clock.runFor(1200);
+  const frames = await stopDeckTrace(page);
+  for (const name of [
+    "remove-moving-current",
+    "second-mutation",
+    "readd-departing-arc",
+    "remove-with-departures",
+    "restore-second",
+  ]) {
+    expectContinuous(analyseReconciliation(frames, name), name);
+  }
+  await expect(studio.deck(page).locator(".snap-motion-stacked-deck-exit")).toHaveCount(0);
+});
 
 test("a change while a pointer holds the deck releases the hand and continues from its card", async ({
   page,
