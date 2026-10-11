@@ -129,7 +129,11 @@ for (const width of [1280, 1440, 390, 320]) {
       // Compare actual paint with and without the Deck in the SAME physical frame. Inert shells
       // are deliberately absent from hit testing, so elementFromPoint cannot prove this contract.
       async function expectProtected() {
-        await inspector.scrollIntoViewIfNeeded();
+        // The clock is paused. A locator's RAF-based stability wait can block here in WebKit;
+        // scroll synchronously, then read the actual occupied region without advancing motion.
+        await inspector.evaluate((element) =>
+          element.scrollIntoView({ block: "center", behavior: "instant" }),
+        );
         await inspector
           .locator("img")
           .evaluateAll((images) =>

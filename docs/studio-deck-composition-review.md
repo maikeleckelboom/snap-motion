@@ -79,6 +79,13 @@ images, and parks the pointer outside the crop before scrolling so hover cannot 
 counterfactual captures. Both affected narrow cases passed three focused repetitions. Earlier
 failed experiments are retained in the ignored evidence, not counted as successful certification.
 
+The final local aggregate exposed a separate WebKit harness deadlock: the locator's
+`scrollIntoViewIfNeeded()` waited for RAF-based element stability while the test clock was paused.
+The last captured image pair was identical; the next scroll call exhausted the test deadline.
+The oracle now uses immediate native scrolling, reads the resulting occupied bounds, and preserves
+every physical and raster assertion. No timeout was increased. The original aggregate failure and
+three traced focused passes on the earlier harness remain in the delivery record.
+
 An additional three-engine stress case starts Shuffle, removes the moving current card, removes
 another card, switches the shared mode to Direct, re-adds the departing Arc, removes Relay while
 other departures remain, restores a second member and navigates when available. Its retained frame
