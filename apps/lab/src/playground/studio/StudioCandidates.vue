@@ -69,7 +69,7 @@ defineExpose({
   >
     <header class="region-head">
       <div>
-        <p class="region-kicker"><span class="tabular">1</span> / Candidates</p>
+        <p class="region-kicker">Candidates</p>
         <h4 :id="titleId" class="region-title">Behaviours to consider</h4>
       </div>
       <p class="region-count tabular" data-testid="studio-candidate-count">{{ countText }}</p>

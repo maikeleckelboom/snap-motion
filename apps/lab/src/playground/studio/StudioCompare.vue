@@ -7,6 +7,7 @@ import CandidatePreview from "./CandidatePreview.vue";
 import { differenceRows, responseChart, summarizeDifference } from "./candidates";
 import { useStudio } from "./studio-context";
 import { REASON_LIMIT } from "./studio-model";
+import { whenReady } from "./studio-replay";
 import { carryOverScreen, middleScreenId, stagesLevel } from "./studio-stage";
 
 const props = defineProps<{
@@ -19,6 +20,7 @@ const titleId = `${useId()}-title`;
 const decisionTitleId = `${useId()}-decision`;
 const reasonId = `${useId()}-reason`;
 const chartTitleId = `${useId()}-chart`;
+const statusId = `${useId()}-status`;
 const stageA = ref<InstanceType<typeof CandidatePreview>>();
 const stageB = ref<InstanceType<typeof CandidatePreview>>();
 
@@ -43,15 +45,36 @@ const decided = computed(() =>
   model.decidedId.value === undefined ? undefined : behavior(model.decidedId.value),
 );
 const reasonLength = computed(() => model.reason.value.length);
-const driverNote = computed(() => {
-  if (replayPhase.value === "returning") return `Returning both to ${screenTitle(homeId.value)}…`;
-  if (replayPhase.value === "running")
-    return "Replaying the same run on both. Touch either to take over.";
-  if (!both.value) return "Runs the reference. You can also drag it.";
-  return level.value
-    ? "Both stages get the same input, on the same screen. You can also drag either one."
-    : "Both stages get the same input, but they are on different screens.";
+/**
+ * The one statement of whether the stages are comparable, which sits in a place that never moves.
+ * "Apart" is a state of the stages, not of the last input: it follows where each stage is, so it
+ * clears when the visitor brings them back by hand as surely as when Reset does.
+ */
+const driverState = computed<"alone" | "level" | "apart" | "returning" | "running">(() => {
+  if (replayPhase.value !== "idle") return replayPhase.value;
+  if (!both.value) return "alone";
+  return level.value ? "level" : "apart";
 });
+const driverNote = computed(() => {
+  switch (driverState.value) {
+    case "returning":
+      return `Returning both to ${screenTitle(homeId.value)}…`;
+    case "running":
+      return "Replaying the same run on both. Touch either to take over.";
+    case "alone":
+      return "Runs the reference. You can also drag it.";
+    case "apart":
+      return `A is on ${screenTitle(positions.value.a)}, B is on ${screenTitle(positions.value.b)}. Reset puts both on ${screenTitle(homeId.value)}.`;
+    default:
+      return "The same input on both, on the same screen. Drag either to explore.";
+  }
+});
+const driverLabel = computed(
+  () =>
+    ({ alone: "", level: "Level", apart: "Apart", returning: "Returning", running: "Replay" })[
+      driverState.value
+    ],
+);
 
 // ----------------------------------------------------------------------------- the conditions
 
@@ -68,6 +91,14 @@ const positions = computed(() => ({
 }));
 const level = computed(() => stagesLevel(positions.value));
 
+// A replay answers to the roles the visitor chose, not to the card the Deck has drawn since. B is
+// accepted the instant it is chosen while the Deck is still showing the card that was B, so waiting
+// for the shown card would leave a replay driving a stage the visitor has already replaced. The
+// watcher is synchronous so no step that was scheduled can land between the choice and its effect.
+watch([() => model.referenceId.value, () => model.candidateId.value], () => stopReplay(), {
+  flush: "sync",
+});
+
 // A run is a controlled comparison only while both stages are on the same screen, so a change of
 // role must not leave one of them behind. The stage that stays keeps its screen and its motion;
 // the stage that arrives is mounted level with it. The watcher runs before the stages are replaced,
@@ -75,7 +106,6 @@ const level = computed(() => stagesLevel(positions.value));
 watch(
   () => [a.value?.id, b.value?.id] as const,
   ([nextA, nextB], [prevA, prevB]) => {
-    stopReplay();
     anchorId.value = carryOverScreen(
       { a: prevA, b: prevB },
       { a: nextA, b: nextB },
@@ -152,19 +182,16 @@ function replay() {
   stageB.value?.goTo(homeId.value);
   replayPhase.value = "returning";
   // The condition to wait for is the stages' own report of being at rest on the screen, not a time.
-  stopWaiting = watch(
+  stopWaiting = whenReady(
     () =>
       [stageA.value, stageB.value].every(
         (stage) => stage === undefined || stage.restsOn(homeId.value),
       ),
-    (ready) => {
-      if (!ready || generation !== replayGeneration) return;
-      stopWaiting?.();
-      stopWaiting = undefined;
+    () => {
+      if (generation !== replayGeneration) return;
       replayPhase.value = "running";
       run();
     },
-    { flush: "post", immediate: true },
   );
 }
 
@@ -208,7 +235,7 @@ defineExpose({ stopReplay });
   >
     <header class="region-head">
       <div>
-        <p class="region-kicker"><span class="tabular">3</span> / Compare</p>
+        <p class="region-kicker">Compare</p>
         <h4 :id="titleId" class="region-title">A against B</h4>
       </div>
     </header>
@@ -301,38 +328,25 @@ defineExpose({ stopReplay });
           {{ replaying ? "Stop replay" : "Replay a run" }}
         </button>
         <button
+          :aria-describedby="driverState === 'apart' ? statusId : undefined"
           class="studio-button"
+          :data-attention="driverState === 'apart' ? 'true' : undefined"
           data-testid="studio-driver-reset"
           type="button"
           @click="realign"
         >
           Reset
         </button>
-        <p class="driver-note" data-testid="studio-driver-note">
-          {{ driverNote }}
-        </p>
       </div>
 
-      <div
-        v-if="!level && !replaying"
-        class="stages-apart"
-        data-testid="studio-stages-apart"
-        role="group"
-      >
-        <p class="stages-apart-copy">
-          <strong>The stages are on different screens.</strong>
-          A is on {{ screenTitle(positions.a) }} and B is on {{ screenTitle(positions.b) }}, so what
-          you see is no longer a like-for-like comparison.
-        </p>
-        <button
-          class="studio-button studio-button-primary"
-          data-testid="studio-realign"
-          type="button"
-          @click="realign"
-        >
-          Put both on {{ screenTitle(homeId) }}
-        </button>
-      </div>
+      <!-- One line, in a fixed place, that always has room for two lines of text: the stages
+      coming apart or back together changes what it says and never where anything else sits. -->
+      <p class="driver-status" :data-state="driverState" data-testid="studio-driver-status">
+        <span v-if="driverState !== 'alone'" class="driver-state" aria-hidden="true">{{
+          driverLabel
+        }}</span>
+        <span :id="statusId" data-testid="studio-driver-note">{{ driverNote }}</span>
+      </p>
 
       <slot name="shortlist" />
 
@@ -420,7 +434,7 @@ defineExpose({ stopReplay });
         data-testid="studio-decision"
         role="group"
       >
-        <p class="region-kicker"><span class="tabular">4</span> / Decision</p>
+        <p class="region-kicker">Decision</p>
         <h5 :id="decisionTitleId" class="sub-title">Which one will you use?</h5>
         <template v-if="decided === undefined">
           <div class="decision-actions">
@@ -534,28 +548,47 @@ defineExpose({ stopReplay });
   gap: 0.5rem;
 }
 
-.stages-apart {
+/* The one label that changes between "Replay a run" and "Stop replay" must not move its neighbours. */
+.driver [data-testid="studio-driver-replay"] {
+  min-inline-size: 8.5rem;
+}
+
+/* The stages being apart asks for the realigning control without becoming a second primary action. */
+.driver [data-attention="true"] {
+  border-color: var(--pg-accent);
+  box-shadow: inset 0 0 0 1px var(--pg-accent);
+}
+
+/*
+ * The comparability status. Its height is reserved for two lines so that no state of the stages,
+ * and no width, can change the height of what follows it.
+ */
+.driver-status {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem 0.9rem;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid var(--pg-accent);
-  border-radius: 0.7rem;
-  background: var(--stage);
-}
-
-.stages-apart-copy {
-  flex: 1 1 16rem;
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
-
-.driver-note {
-  flex: 1 1 14rem;
-  color: var(--pg-muted);
+  align-items: baseline;
+  gap: 0.5rem;
+  min-block-size: 2.8em;
+  color: var(--pg-ink-soft);
   font-size: 0.82rem;
   line-height: 1.4;
+}
+
+.driver-state {
+  flex: none;
+  padding: 0 0.45rem;
+  border: 1px solid var(--pg-line);
+  border-radius: 999px;
+  color: var(--pg-muted);
+  font-family: var(--pg-font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.driver-status[data-state="apart"] .driver-state {
+  border-color: var(--pg-accent);
+  background: var(--pg-accent);
+  color: var(--pg-white);
 }
 
 .compare-empty {
@@ -775,6 +808,12 @@ defineExpose({ stopReplay });
 @media (max-width: 40rem) {
   .stages {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Two by two, so the row has the same shape whichever label the replay button carries. */
+  .driver {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

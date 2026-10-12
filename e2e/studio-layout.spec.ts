@@ -142,6 +142,61 @@ test.describe("responsive composition", () => {
   });
 });
 
+test.describe("desktop composition", () => {
+  for (const [width, height] of [
+    [1280, 800],
+    [1440, 900],
+  ]) {
+    test(`at ${width}x${height} choosing B and watching A and B share one viewport, and choosing moves nothing`, async ({
+      page,
+    }) => {
+      await openStudio(page, { width, height });
+      // Where a visitor lands by scrolling: the workspace just under the sticky navigation.
+      await page.evaluate(() => {
+        const top = document.querySelector("[data-testid=studio-workspace]")!;
+        scrollTo(0, top.getBoundingClientRect().top + scrollY - 64);
+      });
+      const boxes = () =>
+        page.evaluate(() => {
+          // oxlint-disable-next-line unicorn/consistent-function-scoping -- runs in the page, so it cannot be hoisted out of this callback
+          const box = (id: string) => {
+            const rect = document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect();
+            return { top: rect.top, bottom: rect.bottom };
+          };
+          return {
+            deck: box("studio-deck"),
+            stageA: box("studio-preview-reference"),
+            stageB: box("studio-preview-candidate"),
+            status: box("studio-driver-status"),
+            viewport: innerHeight,
+          };
+        });
+      const before = await boxes();
+      // The Deck stands level with the stages it drives, not a screen below them...
+      expect(Math.abs(before.deck.top - before.stageA.top)).toBeLessThan(80);
+      // ...and the Deck, both stages and the status that says whether they compare are all in view.
+      for (const part of [before.deck, before.stageA, before.stageB, before.status]) {
+        expect(part.top).toBeGreaterThanOrEqual(0);
+        expect(part.bottom).toBeLessThanOrEqual(before.viewport);
+      }
+
+      const y = await scrollY(page);
+      await shortlistCandidateFromView(page);
+      await page.getByTestId("studio-deck-next").click();
+      await expect(studio.bName(page)).toHaveText("Balanced rail");
+      // Choosing B scrolled nothing: the page is where the visitor left it.
+      expect(await scrollY(page)).toBe(y);
+    });
+  }
+});
+
+/** Shortlists the third candidate without moving the page: the toggle is below the fold here. */
+async function shortlistCandidateFromView(page: Page) {
+  const toggle = page.getByTestId("studio-shortlist-rail-balanced");
+  await toggle.evaluate((element) => (element as HTMLElement).click());
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+}
+
 test.describe("touch and pointer", () => {
   test("every control is at least 44px in each dimension on a phone", async ({ browser }) => {
     const context = await browser.newContext({

@@ -94,8 +94,10 @@ const position = computed(() => surface.value?.activeId);
 /**
  * The screen the surface last announced as settled. A surface publishes its rest in two steps: its
  * state says it has stopped, and a moment later it confirms the host agrees with where it stopped.
- * A host that navigates onward in the first step, before the confirmation, makes the surface
- * mistake its own destination for a disagreement and jump there instead of travelling.
+ * A rail used to mistake a destination the host issued between the two steps for a disagreement and
+ * jump there instead of travelling (fixed in the package, see `settlement-authority.test.ts`). A
+ * replay still starts only on the confirmed rest, because that is the surface's own statement that
+ * it is at rest on the screen, not merely that its state momentarily says so.
  */
 const confirmedId = ref<ShowcaseScreenId>(screenId.value);
 

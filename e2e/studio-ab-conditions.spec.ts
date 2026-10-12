@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { dragMouseBy } from "./helpers";
-import { nameOf, openStudio, shortlistCandidate, studio } from "./studioHelpers";
+import { expectStudioIdle, nameOf, openStudio, shortlistCandidate, studio } from "./studioHelpers";
 
 /**
  * The conditions of an A/B comparison: both stages are on the same screen when a run begins, a
@@ -251,7 +251,7 @@ test.describe("a change of role keeps the stages level", () => {
     await expect(studio.aName(page)).toHaveText(nameOf("rail-loose"));
     await expect(studio.bName(page)).toHaveText(nameOf("rail-tight"));
     expect(await expectLevelAtRest(page)).toBe(stepped);
-    await expect(page.getByTestId("studio-stages-apart")).toHaveCount(0);
+    await expect(status(page)).toHaveAttribute("data-state", "level");
 
     // A run from there moves both by the same step.
     await page.getByTestId("studio-driver-next").click();
@@ -284,7 +284,7 @@ test.describe("a replay always begins from the same place", () => {
       if (disturb === "drag") {
         await dragMouseBy(page, surface(page, "reference"), -260, 0);
         await expectBothAtRest(page);
-        await expect(page.getByTestId("studio-stages-apart")).toBeVisible();
+        await expect(status(page)).toHaveAttribute("data-state", "apart");
       } else if (disturb === "step") {
         await page.getByTestId("studio-driver-next").click();
         await page.getByTestId("studio-driver-next").click();
@@ -446,14 +446,92 @@ test.describe("nothing a replay scheduled outlives what invalidated it", () => {
   }
 });
 
+test.describe("a replay answers to the semantic roles, not to what the Deck has drawn", () => {
+  test("choosing B between two scheduled steps ends the replay while the Deck still shows the previous B", async ({
+    page,
+  }) => {
+    await page.clock.install();
+    await openStudio(page, { reducedMotion: "no-preference" });
+    await withDeck(page);
+    await expectStudioIdle(page);
+    await expectBothAtRest(page);
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 50);
+
+    const replay = page.getByTestId("studio-driver-replay");
+    await replay.click();
+    await expect(replay).toHaveAttribute("aria-pressed", "true");
+    // The first step has been delivered; the second waits at 420 ms. Stop just short of it.
+    await page.clock.runFor(380);
+
+    await page.getByTestId("studio-deck-next").click();
+    // The semantic B is accepted at once, and the Deck, which only advances on the clock, still draws
+    // the card that was B. Nothing has been drawn yet that could have told the replay.
+    await expect(studio.deck(page)).toHaveAttribute("data-active-id", "rail-balanced");
+    await expect(studio.deck(page)).toHaveAttribute("data-visual-id", "rail-loose");
+    await expect(replay).toHaveAttribute("aria-pressed", "false");
+
+    const aimed = await surface(page, "reference").getAttribute("data-active-id");
+    // The step that was waiting would land inside this time.
+    await page.clock.runFor(5_000);
+    await atRest(page);
+    expect(await surface(page, "reference").getAttribute("data-active-id")).toBe(aimed);
+  });
+});
+
+const status = (page: Page) => page.getByTestId("studio-driver-status");
+const reset = (page: Page) => page.getByTestId("studio-driver-reset");
+
+/**
+ * Where everything below the stages sits, read every animation frame until stopped. The comparability
+ * status shares its place with whatever it says, so no state of the stages may move any of these.
+ */
+async function startLayoutFrames(page: Page) {
+  await page.evaluate(() => {
+    const seen = new Set<string>();
+    const state = { running: true, seen };
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- runs in the page, so it cannot be hoisted out of this callback
+    const top = (id: string) => {
+      const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect();
+      return box === undefined ? null : Math.round(box.top + scrollY);
+    };
+    const sample = () => {
+      if (!state.running) return;
+      const box = document
+        .querySelector('[data-testid="studio-driver-status"]')
+        ?.getBoundingClientRect();
+      seen.add(
+        JSON.stringify({
+          status:
+            box === undefined ? null : [Math.round(box.top + scrollY), Math.round(box.height)],
+          differences: top("studio-differences"),
+          decision: top("studio-decision"),
+        }),
+      );
+      requestAnimationFrame(sample);
+    };
+    (window as unknown as { snapMotionLayout: typeof state }).snapMotionLayout = state;
+    sample();
+  });
+}
+
+async function stopLayoutFrames(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const state = (
+      window as unknown as { snapMotionLayout: { running: boolean; seen: Set<string> } }
+    ).snapMotionLayout;
+    state.running = false;
+    return [...state.seen];
+  });
+}
+
 test.describe("independent exploration stays possible and is never silent", () => {
-  test("dragging one stage says the stages are apart, and one control puts them back", async ({
+  test("dragging one stage says the stages are apart, and Reset puts them back", async ({
     page,
   }) => {
     await openStudio(page);
     const home = await expectLevelAtRest(page);
-    const apart = page.getByTestId("studio-stages-apart");
-    await expect(apart).toHaveCount(0);
+    await expect(status(page)).toHaveAttribute("data-state", "level");
+    await expect(reset(page)).not.toHaveAttribute("data-attention");
 
     await dragMouseBy(page, surface(page, "reference"), -260, 0);
     await expectBothAtRest(page);
@@ -461,20 +539,24 @@ test.describe("independent exploration stays possible and is never silent", () =
     expect(a.settled).not.toBe(b.settled);
     expect(b.settled).toBe(home);
 
-    await expect(apart).toBeVisible();
-    await expect(page.getByTestId("studio-driver-note")).toContainText("different screens");
+    // One place says why the stages differ and what to do about it, and the control it names is the
+    // one that realigns them. There is no second copy of either.
+    await expect(status(page)).toHaveAttribute("data-state", "apart");
+    await expect(page.getByTestId("studio-driver-note")).toContainText("A is on");
+    await expect(page.getByTestId("studio-driver-note")).toContainText("Reset puts both on");
     await expect(studio.status(page)).toContainText("A is on");
-    const realign = page.getByTestId("studio-realign");
-    await expect(realign).toBeVisible();
+    await expect(reset(page)).toHaveAttribute("data-attention", "true");
+    await expect(reset(page)).toHaveAccessibleDescription(/Reset puts both on/);
 
     // It is an ordinary button: the keyboard reaches it and activates it.
-    await realign.focus();
+    await reset(page).focus();
     await page.keyboard.press("Enter");
     expect(await expectLevelAtRest(page)).toBe(home);
-    await expect(apart).toHaveCount(0);
+    await expect(status(page)).toHaveAttribute("data-state", "level");
+    await expect(reset(page)).not.toHaveAttribute("data-attention");
   });
 
-  test("the notice follows the stages, not the last input: stepping A back by hand clears it", async ({
+  test("the status follows the stages, not the last input: stepping A back by hand clears it", async ({
     page,
   }) => {
     await openStudio(page);
@@ -482,11 +564,10 @@ test.describe("independent exploration stays possible and is never silent", () =
     await surface(page, "reference").focus();
     await page.keyboard.press("ArrowRight");
     await expectBothAtRest(page);
-    const apart = page.getByTestId("studio-stages-apart");
-    await expect(apart).toBeVisible();
+    await expect(status(page)).toHaveAttribute("data-state", "apart");
     await page.keyboard.press("ArrowLeft");
     await expectBothAtRest(page);
-    await expect(apart).toHaveCount(0);
+    await expect(status(page)).toHaveAttribute("data-state", "level");
   });
 
   test("a deck wraps where a rail ends, and the stages say so instead of pretending", async ({
@@ -504,25 +585,62 @@ test.describe("independent exploration stays possible and is never silent", () =
     // The rail stopped at its last screen; the deck went around to its first.
     const { a, b } = await both(page);
     expect(a.settled).not.toBe(b.settled);
-    await expect(page.getByTestId("studio-stages-apart")).toBeVisible();
-    await page.getByTestId("studio-realign").click();
+    await expect(status(page)).toHaveAttribute("data-state", "apart");
+    await reset(page).click();
     await expectLevelAtRest(page);
   });
 
-  test("the notice fits a phone and is reachable there", async ({ page }) => {
+  for (const [name, size] of [
+    ["a desktop", { width: 1280, height: 800 }],
+    ["a phone", { width: 390, height: 844 }],
+  ] as const) {
+    test(`on ${name}, the stages coming apart, together and into a replay move nothing`, async ({
+      page,
+    }) => {
+      await openStudio(page, { ...size, reducedMotion: "no-preference" });
+      if (size.width < 600) await page.getByTestId("studio-view-compare").click();
+      await expectLevelAtRest(page);
+      await expect(studio.compare(page)).toBeVisible();
+
+      await startLayoutFrames(page);
+      await surface(page, "reference").focus();
+      await page.keyboard.press("ArrowRight");
+      await expectBothAtRest(page);
+      await expect(status(page)).toHaveAttribute("data-state", "apart");
+      // A replay from there returns both stages and runs, passing through every state.
+      const replay = page.getByTestId("studio-driver-replay");
+      await replay.click();
+      await expect(replay).toHaveAttribute("aria-pressed", "true");
+      await expect(replay).toHaveAttribute("aria-pressed", "false");
+      await expectLevelAtRest(page);
+      await reset(page).click();
+      await expectLevelAtRest(page);
+      await expect(status(page)).toHaveAttribute("data-state", "level");
+
+      // One layout in every frame of every state.
+      expect(await stopLayoutFrames(page)).toHaveLength(1);
+    });
+  }
+
+  test("the status fits a phone, wraps inside it, and Reset is reachable there", async ({
+    page,
+  }) => {
     await openStudio(page, { width: 390, height: 844 });
     await page.getByTestId("studio-view-compare").click();
     await expectLevelAtRest(page);
+    const level = (await status(page).boundingBox())!;
     await dragMouseBy(page, surface(page, "reference"), -200, 0);
     await expectBothAtRest(page);
-    const apart = page.getByTestId("studio-stages-apart");
-    await expect(apart).toBeVisible();
-    const box = (await apart.boundingBox())!;
+    await expect(status(page)).toHaveAttribute("data-state", "apart");
+    const box = (await status(page).boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);
-    const button = (await page.getByTestId("studio-realign").boundingBox())!;
+    // It is the same box as when the stages were level, and no taller than two lines of text.
+    expect(box).toEqual(level);
+    expect(box.height).toBeLessThanOrEqual(48);
+    const button = (await reset(page).boundingBox())!;
     expect(button.height).toBeGreaterThanOrEqual(44);
-    await page.getByTestId("studio-realign").click();
+    await reset(page).click();
     await expectLevelAtRest(page);
   });
 });

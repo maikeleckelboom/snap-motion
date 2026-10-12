@@ -317,13 +317,15 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
 
     <div ref="layout" class="studio-layout" data-testid="studio-layout">
       <template v-if="wide">
+        <!-- The shortlist leads the column so the Deck that chooses B sits level with the stages it
+        drives; the candidates to add from follow it. -->
         <div class="area-choose">
+          <StudioShortlist ref="shortlist" :reduced-motion-override="reducedMotionOverride" />
           <StudioCandidates
             ref="candidates"
             :reduced-motion-override="reducedMotionOverride"
             :screens="screens"
           />
-          <StudioShortlist ref="shortlist" :reduced-motion-override="reducedMotionOverride" />
         </div>
         <StudioCompare
           class="area-compare"
@@ -559,7 +561,7 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
     padding-inline-end: clamp(1.25rem, 2.5vw, 2rem);
   }
 
-  .area-choose > .studio-shortlist {
+  .area-choose > .studio-candidates {
     border-block-start: 1px solid var(--pg-line);
   }
 

@@ -144,11 +144,26 @@ Back, Reset, any change of A or B, a pointer, wheel or navigation key on either 
 all invalidate both the wait for rest and the steps still waiting. Taking over by hand announces that
 the replay stopped.
 
+**A replay answers to the roles, not to the card the Deck has drawn.** The change of A or B that
+cancels a replay is the semantic one, observed synchronously. B is accepted the instant it is chosen,
+while the Deck is still drawing the card that was B, so a replay that waited for the drawn card kept
+driving a stage the visitor had already replaced, and delivered a scheduled step to it.
+`studio-ab-conditions.spec.ts` chooses B with the Deck's own Next, on a paused clock, just short of a
+scheduled step, while the Deck still draws the previous B, and requires the replay to be over at once.
+The wait for both stages to rest is `whenReady` (`studio-replay.ts`). It replaced an immediate watcher
+that stopped itself from its own callback: on the path where the stages were already at rest the
+callback ran before `watch` had returned the handle to stop, so the watcher outlived the replay and
+called back again each time both stages next came to rest on the start screen.
+
 **Exploration stays possible and is never silent.** Either surface can still be dragged or driven
 from the keyboard, because how a behaviour feels under a hand is what is being judged. When that
-leaves the stages on different screens (a drag, or a deck wrapping where a rail ends) the driver's
-note says so, and a notice names both screens and offers one button that puts both back on the
-middle screen. It disappears when the stages are level again, however they got there.
+leaves the stages on different screens (a drag, or a deck wrapping where a rail ends) one status line
+under the driver says so (`Apart`, with both screens named) and Reset, which is the control that puts
+both back on the middle screen, takes an accent border and is described by that line. The line is in a
+fixed place with room for two lines, so the stages coming apart, together or into a replay never moves
+anything below it (the previous separate notice moved the content below it by 101 px on a desktop and
+155 px on a phone). It follows where the stages are, so it clears when they are level again, however
+they got there.
 
 Changing B replaces only B's stage. A's element stays the same element.
 
@@ -245,8 +260,10 @@ once, which is where the 4× cost comes from; the narrow layout mounts one view.
 
 ## Layout and accessibility
 
-Wide (62rem and up) puts choosing on the left (Candidates, then the Shortlist and its Deck) and
-comparing on the right (the stages, the differences and the decision). Narrower, one view shows at a
+Wide (62rem and up) puts the Shortlist first on the left, so the Deck that chooses B stands level with
+the two stages it drives (Deck, roster, stages and the status line are in one 800 px viewport), with the
+Candidates to add from below it; comparing is on the right (the stages, the differences and the
+decision). Nothing scrolls the page for the visitor. Narrower, one view shows at a
 time (Candidates, or Compare with the Shortlist inside it) behind a persistent switch. On a phone the
 two stages stack, at the same size.
 

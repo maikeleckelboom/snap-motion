@@ -89,7 +89,7 @@ defineExpose({ focusAfterRemoval, focusTarget: () => deck.value?.root, root: () 
   >
     <header class="region-head">
       <div>
-        <p class="region-kicker"><span class="tabular">2</span> / Shortlist</p>
+        <p class="region-kicker">Shortlist</p>
         <h4 :id="titleId" class="region-title">Compare against A</h4>
       </div>
       <p class="region-count tabular" data-testid="studio-shortlist-count">{{ countText }}</p>
@@ -127,8 +127,16 @@ defineExpose({ focusAfterRemoval, focusTarget: () => deck.value?.root, root: () 
         </template>
       </StackedDeck>
 
-      <div v-if="model.deckState.value === 'deck'" class="deck-controls">
-        <div class="step-controls">
+      <!-- What is in front and the way to change it share a row, so the choice and its control are read together. -->
+      <div class="deck-bar">
+        <p class="deck-caption" data-testid="studio-deck-caption-line">
+          <span class="deck-caption-label">In front</span>
+          <strong data-testid="studio-deck-caption">{{ shownName }}</strong>
+          <span v-if="model.deckState.value === 'single'" class="deck-note">
+            One candidate beside A. Shortlist another to flip between them.
+          </span>
+        </p>
+        <div v-if="model.deckState.value === 'deck'" class="step-controls">
           <button
             aria-label="Previous candidate"
             data-testid="studio-deck-previous"
@@ -153,13 +161,6 @@ defineExpose({ focusAfterRemoval, focusTarget: () => deck.value?.root, root: () 
           </button>
         </div>
       </div>
-      <p class="deck-caption" data-testid="studio-deck-caption-line">
-        <span class="deck-caption-label">In front</span>
-        <strong data-testid="studio-deck-caption">{{ shownName }}</strong>
-        <span v-if="model.deckState.value === 'single'" class="deck-note">
-          One candidate beside A. Shortlist another to flip between them.
-        </span>
-      </p>
     </template>
 
     <div v-else class="shortlist-empty" data-testid="studio-shortlist-empty">
@@ -310,10 +311,12 @@ defineExpose({ focusAfterRemoval, focusTarget: () => deck.value?.root, root: () 
   font-weight: 650;
 }
 
-.deck-controls {
+.deck-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
 }
 
 .step-controls {
@@ -332,8 +335,10 @@ defineExpose({ focusAfterRemoval, focusTarget: () => deck.value?.root, root: () 
 
 .deck-caption {
   display: flex;
+  flex: 1 1 10rem;
   flex-wrap: wrap;
   align-items: baseline;
+  min-inline-size: 0;
   gap: 0.25rem 0.6rem;
 }
 
