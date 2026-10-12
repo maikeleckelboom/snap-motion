@@ -1,306 +1,278 @@
 # Motion Studio
 
-Section 06 of the public Playground, "Everything in motion". It is a small product built from the
-five surfaces the page demonstrates one at a time: browse a collection of motion studies, select
-one, explore the collection spatially, compare studies on a deck, inspect their plates, and refine
-a note, all on one selection and one set of motion settings.
+Section 06 of the public Playground, "Choose the motion". It is a small product for one decision:
+which motion should switch between an interface's screens? You shortlist candidate behaviours, run
+two of them side by side on the same screens, read what differs, and record a choice and the code
+that gives it.
 
 It is application code in `apps/lab/src/playground/studio/`. It adds no package API, no dependency
-and no motion logic: it composes the public components and composables and owns only content,
-layout, application state and orchestration.
+and no motion logic: it composes the public `Coverflow`, `StackedDeck` and `Sheet` components and
+owns only content, layout, application state and orchestration. Why it replaced the first Studio,
+and what was wrong with that one, is in the [UX diagnosis](studio-ux-audit.md).
 
-## The workflow and the surface behind each step
+## The workflow
 
-| Step    | Surface                                                                                      |
-| ------- | -------------------------------------------------------------------------------------------- |
-| Browse  | The Paged Grid: `useCarouselMotion` with `createPagedGridGeometry`, as `PagedGridDemo` does. |
-| Explore | `Coverflow`, with the whole collection and the active study at its centre.                   |
-| Compare | `StackedDeck` over an ordered comparison of up to five studies, Shuffle or Direct.           |
-| Inspect | `MediaGalleryDialog` over every plate of every study.                                        |
-| Refine  | `Sheet`: details, comparison membership, a short note, and the study's plates.               |
+| Step        | What the visitor does                                                            |
+| ----------- | -------------------------------------------------------------------------------- |
+| Candidates  | Browse seven live behaviours. Open one to run it alone; shortlist some.          |
+| Shortlist   | The first is the reference **A**. The rest ride a Deck; the front card is **B**. |
+| Compare     | A and B run side by side on the same screens with the same input.                |
+| Differences | A table of what differs, and the two step responses on one axis.                 |
+| Decision    | Choose A or B, say why, and open the implementation.                             |
 
-The workspace is not the five demonstrations mounted side by side. Those wrappers carry their own
-example state and controls; the Studio mounts the underlying components around one model.
+## Candidates
 
-## The collection
+A candidate is a behaviour a product could ship:
 
-Twelve studies in four motion types (Path, Surface, Sequence, Response), named for the geometry
-the Playground already uses (Orbit, Traverse, Fold, Relay, Drift, Return, Arc, Spiral, Step) plus
-Pivot, Cascade and Settle. Each study has a stable ID, a name, a motion type, a summary, four
-authored attributes and three plates:
+| Candidate          | Surface | Exchange | Feel                           |
+| ------------------ | ------- | -------- | ------------------------------ |
+| Tight rail         | Rail    | none     | Tight                          |
+| Balanced rail      | Rail    | none     | Balanced                       |
+| Loose rail         | Rail    | none     | Loose                          |
+| Your tuning        | Rail    | none     | the Playground's Motion Tuning |
+| Shuffle deck       | Deck    | Shuffle  | Balanced                       |
+| Direct deck        | Deck    | Direct   | Balanced                       |
+| Heavy shuffle deck | Deck    | Shuffle  | Heavy                          |
 
-- **Study plate**: the cover, 10:7, shown in the Grid, the Coverflow, the Deck and the Gallery.
-- **Route**: the study's path on a grid, with labelled anchors and its attributes.
-- **Timing**: an illustrative response curve.
+A rail is `Coverflow`; a deck is `StackedDeck`. The sample content is the same five product screens
+the Playground's own Coverflow and Deck sections use, so the Studio fetches no media of its own.
 
-`node scripts/generateStudioPlates.ts` writes the 36 SVGs into `apps/lab/src/assets/studio/`
-(about 170 KiB together, largest 13 KiB). The plates, like the Playground's earlier ones, are
-illustrations. The Route and Timing plates say so on their face, and the attributes are authored
-descriptions of a study. Nothing in the Studio reports a measurement.
+`candidate-definitions.ts` holds the catalogue as plain data (no framework, no engine import), so the
+model, the unit tests and the browser specs read one source. `candidates.ts` resolves a definition
+into numbers for the page's current tuning. "Your tuning" is the only candidate that follows it; every
+other candidate's numbers come from its own preset and never move. That is what keeps the Motion
+Tuning bar under section 06 meaningful: tune it, then compare the result with the presets.
 
-`studies.ts` is plain data with no asset URLs or framework imports, so the model, the tests and the
-plate generator all read one source. `catalog.ts` attaches the generated plates and builds the
-Gallery's item list from them: a plate is a Gallery item, so the Gallery has no second catalog.
+### Declared, computed and authored
+
+Three kinds of statement appear, and the interface keeps them apart:
+
+- **Declared**: the settings a candidate is given. Stiffness, damping, mass, fling threshold,
+  release projection, elastic edge, control impulse, largest step. They are read from the same
+  mapping functions (`springFromSettings`, `carouselReleaseFromSettings`, `deckReleaseFromSettings`,
+  `symmetricElasticityFromSettings`) the live surfaces use.
+- **Computed**: settle time and overshoot, from stepping the preset's spring once on a one-screen
+  move with the engine's own `advanceBoundedSpring`, stopped by the surfaces' rest rule. They
+  describe the spring alone. They are not release velocity, not a frame rate, and not a measurement
+  of this page. The table marks each such row "computed" and a legend says so.
+- **Authored**: the one-line pitch and "suggested use" of each candidate. They are opinions, and the
+  detail says "Authored guidance, not a measurement".
+
+Nothing in the Studio reports a measurement, and no figure is invented. Two presets can settle
+alike; the table then names the release settings that differ instead of pretending the springs do.
 
 ## State ownership
 
-`studio-model.ts` is the one owner of the Studio's application state. Surfaces read it and ask it
-to change; none keeps a copy. Identity is always a stable ID, never an index.
+`studio-model.ts` is the one owner of the Studio's application state. Regions read it and ask the
+workspace's commands to change it; none keeps a copy. Identity is a stable candidate ID, never an
+index.
 
-| State               | Meaning                                                                                     |
-| ------------------- | ------------------------------------------------------------------------------------------- |
-| `activeId`          | The study being worked on, everywhere. Always in the collection; need not be compared.      |
-| `comparisonIds`     | The ordered comparison: unique, at most five.                                               |
-| `deckId`            | The comparison cursor: the card the Deck names. A member of the comparison, or `undefined`. |
-| `notes`             | Local edits, by study ID. Kept while the page is open; nothing is persisted.                |
-| `view`              | Browse, Explore or Compare. Only the narrow layout shows one at a time.                     |
-| `filter`, `density` | How the collection is presented. The filter never changes `activeId` or the comparison.     |
-| `overlay`           | Which of `none`, `gallery`, `sheet` owns modality, and whether it is open.                  |
-| `inspectionMediaId` | The plate the Gallery is showing: the Gallery's controlled item, not a study.               |
+| State                  | Meaning                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| `shortlist`            | The ordered candidates being considered, at most four.                             |
+| `referenceId` (A)      | The pinned reference. A member of the shortlist whenever it is not empty.          |
+| `candidateId` (B)      | The shortlisted candidate compared with A. Never A. The Deck's front card.         |
+| `deckIds`              | The shortlist without A: what the Deck holds.                                      |
+| `decidedId`, `reason`  | The choice and the why. Independent of the shortlist.                              |
+| `inspectedId`          | Which candidate's detail is open in the list, or none.                             |
+| `view`                 | Candidates or Compare. Only the narrow layout shows one at a time.                 |
+| `overlay`, `sheetId`   | The one native modal, and which candidate it describes.                            |
+| `presentedCandidateId` | **Presentation, not selection.** The card the Deck reports in front.               |
+| `shownCandidateId`     | B as the visitor can see it: the presented card while the Deck is mounted, else B. |
 
-`activeId` and `deckId` are deliberately two facts. The Deck's card must belong to the comparison;
-the active study need not. So:
+The roles are explicit rather than overloaded:
 
-- selecting a study outside the comparison never adds it and never points the Deck at an ID it does
-  not hold; the Deck keeps its card and says so ("Fold is on top. Orbit is the active study"), with
-  a control to make its card active;
-- selecting a study that is in the comparison moves the Deck to it;
-- a card chosen on the Deck sets both;
-- adding the active study puts it on top of the Deck, since it is the study in hand; adding a first
-  member always names a cursor;
-- removing the Deck's current card moves the cursor to the card that took its place (else the new
-  last card), and never changes the active study.
+- The first shortlisted candidate is A. Later ones become B only when B is vacant, so adding never
+  changes a comparison under way.
+- Removing A promotes B, so the comparison stays meaningful. Removing B moves B to the card that took
+  its place, else the new last. Pinning B swaps the pair. Choosing B for a candidate outside the
+  shortlist shortlists it when there is room.
+- A is never compared with itself, whatever order the controls are used in. `studio-model.test.ts`
+  holds a seeded random walk of 40 sequences of 150 operations and checks every invariant after each.
 
-The comparison has three states. With two or more studies the Deck is interactive. With one, the
-same Deck keeps holding that one card, but it is `disabled` and `inert`: it refuses all input and
-leaves the accessibility tree. Its step controls are replaced by a statement that exchanging needs
-two, and the tray names the card. With none, the Deck unmounts and an empty state offers a way
-forward.
+### Semantic authority and what is seen
 
-The one-card state keeps the Deck so that its card stays the same physical object on both sides of
-the two-card boundary. Removing to one and adding back to two are then ordinary collection changes,
-and Stacked Deck reconciles them physically like any other: the departing card yields and tucks
-beneath the survivor, and an added card emerges from beneath it. Swapping to a separate figure would
-replace the card's element, size and material at the very moment it should be continuous.
+The Stacked Deck separates four facts: the accepted selection, the destination, the card drawn in
+front (`visualId`) and the card at rest (`settledId`). The Studio never collapses them:
 
-Layer ownership:
+- B, the selection, changes the instant a card is chosen. Nothing delays it, and no timer or snap is
+  used to make the text keep up.
+- Every name beside the Deck (B in the summary, the caption, the stage and the table) reads
+  `shownCandidateId`, which follows the card the Deck is drawing in front. A name therefore changes on
+  the frame the visitor can see the card change, never before.
+- The presentation is a mirror: reported by the Deck, kept apart, and never read as intent.
+  A report for a card that has since left the Deck is ignored.
 
-- **Stacked Deck** (package) owns every card's continuity through a membership change: capture,
-  routes, paint order, shadow, departures, the compositor-hint policy, and inertness while cards
-  are still arriving. This is described in
-  [Collection reconciliation](./stacked-deck-cyclic-topology.md#collection-reconciliation).
-- **The Studio** owns which presentation a comparison size gets, keeps the one Deck instance
-  mounted from one card upward, and handles the empty boundary (mount and unmount around the empty
-  state). It also owns focus after a tray removal: the next tray control, else the empty state's
-  action.
+`studio.spec.ts` samples every animation frame through forward, backward, rapid and interrupted
+exchanges, and requires every piece of text to name the card in front on every frame. The first
+Studio failed that: its names changed about 95 ms early.
 
-Membership, the cursor fallback, the active study and focus all change at once; only the cards
-move.
+## The Deck and the shortlist
 
-`studio-model.test.ts` pins these rules without a browser.
+The Deck holds every shortlisted candidate except A. With none it is absent; with one it stays
+mounted but `disabled` and `inert`, so that card is the same physical object either side of the
+two-candidate boundary and the package reconciles the change like any other; with two or more it is
+interactive. Its keyboard scope is its own root: an arrow on a button beside it stays that button's.
 
-## Cross-surface synchronization
+The shortlist's members are also a list with the actions that cannot be dragged: Compare as B, Pin as
+A and Remove, plus Swap A and B. Everything a drag can do, a button can.
 
-The Snap Motion surfaces separate four facts: the accepted semantic selection (`activeId`), the
-intended destination, the item dominant in the projection, and the item at mechanical rest. The
-Studio never collapses them, and never turns a frame into a selection.
+A tap on the Deck's front card opens that candidate; a drag turns the Deck and opens nothing.
 
-1. **One owner, controlled surfaces.** Coverflow, the Deck and the Gallery are bound one way
-   (`:active-id`) and report through `activeIdRequest`. The model accepts a request as it arrives:
-   nothing in this composition refuses one, so there is no guard to race. No surface is left
-   uncontrolled.
-2. **A gesture is not echoed.** A request from a surface updates the model; the surface's own
-   mechanics were already travelling to that target, so the confirming prop changes nothing.
-3. **Followers adopt exactly.** A surface that did not originate a change receives the new
-   `activeId` as an external prop change, which the components define as exact adoption: no travel
-   request, no echo, no announcement. The Deck follows only when the active study is one of its
-   members.
-4. **The rail travels when asked, instead of jumping.** While the Coverflow is mounted it owns the
-   spatial presentation of the selection. A command from another surface (a Grid tile, a Deck card)
-   is routed through `navigateTo`, so the rail glides on its own spring and its request is what
-   updates the model. Without a rail (a narrow layout showing another view) the model adopts the
-   selection directly and the rail mounts on it later, with no entrance spring.
-5. **The Grid navigates, and measures.** The Grid is the low-level carousel, so it has no `activeId`
-   to adopt. A selection from elsewhere moves it to the study's page with `moveTo`, unless the
-   visitor's own pointer currently owns it. A change of filter or density changes the pages
-   themselves, so it is a measurement: `remeasure` with the page that holds the active study, and no
-   travel.
-6. **Overlays synchronize on close, not on every step.** The Gallery's active item is a plate.
-   Browsing plates changes only `inspectionMediaId`. When the visitor leaves the Gallery on another
-   study's plate, that study becomes active once, so every surface behind the modal adopts it
-   exactly while it fades.
-7. **No fake settlement.** The Studio announces committed outcomes (a study added or removed, a note
-   saved, a view or filter changed, a return from the Gallery) on one polite status region. Selection
-   announcements come from the surfaces' own settlement messages while one is mounted, and from the
-   workspace only when none is.
+## Compare
 
-Stale asynchronous work cannot overwrite newer intent. The one asynchronous step the Studio owns,
-the Sheet-to-Gallery handoff, carries a generation that every later overlay open and unmount
-invalidates, and it re-checks that no overlay owns modality before it opens the Gallery.
+A and B are two live previews. They are the same size and show the same five screens, start on the
+same one, and are driven through the same `next` and `previous`. The driver sends one input to both:
+Back, Step, Reset, and a replayed run (forward twice, back once, forward once at a fixed cadence), so
+a slowly settling spring is interrupted by the next step exactly as it would be in use. Each replay
+carries a generation; any manual input, any newer replay and unmounting invalidate the steps still
+waiting. The run stops short of the last screen because a rail ends where a deck wraps.
 
-## Gallery and Sheet: one modal owner
+Either surface can still be dragged or driven from the keyboard, because how a behaviour feels under
+a hand is what is being judged.
 
-Both are native modals with their own lifecycles. The repository does not certify a Gallery opened
-above an open Sheet, so the Studio does not do it.
+Changing B replaces only B's stage. A's element stays the same element.
 
-- `overlay` records the single owner. `openGallery` and `openSheet` refuse while another owns
-  modality, and modality is returned only when the native dialog has actually closed (`closed`), not
-  when a close is requested.
-- A Gallery action inside the Sheet (the plate buttons) closes the Sheet first. When the Sheet's
-  native `closed` has fired, the Studio waits for the observable condition that focus has a stable
-  owner again, bounded at the six frames the library's own focus verification uses, and only then
-  opens the Gallery. It is a wait for a fact, not a timer. A frame-by-frame sample in the specs
-  confirms there is never more than one open dialog through the handoff.
-- Nothing opens the Sheet over a Gallery. The Gallery has no application action that could.
+## Decision and implementation
 
-Focus returns to the control the visitor started from: Inspect, a plate chip, the front Coverflow
-card or the Deck (a card tap), and Details. If that control is unavailable the fallback is the
-active-study panel, which is always present; a spec removes the opener while the Gallery is open and
-checks that. The document's scroll position is unchanged by either overlay, and both are reopenable
-the moment they have closed.
+Choose A or B, say why (240 characters), and open the implementation: a Sheet with the candidate's
+facts and the code that gives the behaviour, built from the same mappings as the preview. Revising
+keeps the reason. A decision survives its candidate leaving the shortlist.
 
-The openers are deliberately not disabled while a modal is open. The page behind a native modal is
-inert, and the model refuses a second overlay anyway. Disabling them made WebKit's native close
-restore focus to the opener's nearest focusable ancestor (the active-study panel) instead, which the
-dialog then treated as the application's own hand-off and left there. That was found by the
-cross-engine run and traced frame by frame before it was changed.
+## Native View Transitions
 
-### Gallery View Transitions: not reproduced
+The Studio uses the browser's own `document.startViewTransition` for two changes of application
+state. It is feature detected, skipped under reduced motion (the page's setting included), and falls
+back to the plain state change.
 
-The Playground's Gallery section returns to the thumbnail of the item it was left on using the
-Lab's `runMediaTransition` helper. That helper needs the host to run `showModal()` and `close()`
-inside the transition's update callback and to name an element inside the dialog as the destination.
-`MediaGalleryDialog` owns its native dialog (it calls `showModal()` after its own open watcher, and
-`close()` after its closing state) and exposes no media element as a public surface. Composing the
-two would mean either wrapping the controlled `open` flip and hoping the component's internal
-timing lands inside the callback, or assigning a `view-transition-name` to the package's private DOM.
-Either violates lifecycle ownership, so the Studio uses the Gallery's native opening and closing.
+| Change                                  | Names for the length of the transition                                            |
+| --------------------------------------- | --------------------------------------------------------------------------------- |
+| Switching views on a narrow layout      | `studio-view` on the layout region                                                |
+| Opening or leaving a candidate's detail | `studio-detail` on the Candidates region; `studio-glyph` on the candidate's glyph |
 
-The visible limitation is that there is no shared-element flight between a Studio surface and the
-Gallery. The return itself is verified: the correct study becomes active, focus lands on the
-opener, scroll is unchanged, and no stale modal state remains.
+Rules the implementation (`studio-transition.ts`) keeps:
 
-## Shared physics
+- A name is set on an element only while one transition runs and removed after, so a snapshot never
+  holds the same name twice and the page's stacking is unchanged at rest. Moving the shared name from
+  the list's glyph to the detail's happens inside the update, so the new snapshot holds it once too.
+- The update closures are absolute (they set a target, never toggle). A newer transition skips an
+  older one's animation but never its state change: every update runs, in order, and the last wins.
+  A stale transition cannot clear a newer one's names.
+- It never runs over a Deck, Rail or Sheet exchange. Those own their physics and their native
+  dialogs, and a snapshot would replace the very motion being evaluated.
+- It is document-level, because every supported engine has that form (Chromium 149, Firefox 151 and
+  WebKit 26.5 were probed; element-scoped transitions exist only in Chromium). A document transition
+  freezes the rest of the page for its few hundred milliseconds, so it is used only for a change the
+  visitor just asked for, and the root's own cross-fade is switched off for it.
+- Focus and scroll are settled after the update: the detail's heading on opening, the row's opener on
+  leaving. Nothing else moves the page.
 
-The Studio reads the Playground's one physics configuration. `PlaygroundApp` owns
-`useSharedPhysics()`; the Studio receives `settings` and the reduced-motion override as props, like
-the five demonstrations, and `use-studio-physics.ts` maps them onto each surface with the existing
-`lab-settings` functions. It creates no second store and holds no settings of its own.
+`studio-transitions.spec.ts` wraps the real API from outside and reads back what the browser did: the
+names the snapshot held, that the transition became ready, and the pseudo-element animations it ran.
+In Chromium it also holds the shared element's group at the start and end of its animation and reads
+its computed width: the start matches the list's glyph, the end the detail's, and they differ.
 
-Section 06 carries the standard Motion Tuning bar (presets, Modified, Reset, Customize) like every
-other section, so the shared editor is reachable from the Studio, and a compact "Motion · Balanced"
-indicator in the workspace bar links to it. A preset or an edit made in any section reaches the
-Studio, and one made beside the Studio reaches every other section. The Studio's Shuffle and Direct
-choice is the page's `exchange`, shared with section 02.
+### The Gallery
 
-`studio.spec.ts` proves the sharing by behaviour, not by reading the store: a held overdrag on the
-Studio's Grid follows an elastic limit set beside the Sheet demonstration, Reset from the Studio's
-bar restores it, and an edit made in the Studio's editor changes the standalone Paged Grid.
+The Studio no longer composes a Gallery: there is nothing to inspect that the live surfaces do not
+show. The earlier finding stands for anyone who wants it: `runMediaTransition` needs the host to run
+`showModal()` and `close()` inside the transition's update and to name an element inside the dialog,
+while `MediaGalleryDialog` owns its native dialog and exposes no media element as a public surface.
+Composing them would mean assigning a name to the package's private DOM or racing its internal timing.
+The smallest contract that would allow it is a documented pair of hooks on the dialog: one that runs
+the host's update around its own `showModal()`/`close()`, and one that returns the media element of the
+active item. That is a package change, recorded here rather than made.
+
+## Shared physics and reduced motion
+
+The Studio reads the Playground's one physics configuration for the "Your tuning" candidate and for the
+Sheet. It creates no second store. Section 06 carries the standard Motion Tuning bar like every other
+section, and a compact "Your tuning" indicator in the workspace bar links to it.
+
+Reduced motion follows the Playground's setting and reaches every surface, the Sheet and the View
+Transitions. Under it the surfaces adopt a change at once and no transition starts.
+
+## One modal owner
+
+The Sheet is a native modal with its own lifecycle. `overlay` records the single owner, `openSheet`
+refuses while another is open, and modality is returned only when the native dialog has actually
+closed (`closed`), not when a close is requested. Focus returns to the control the visitor started
+from; the fallback is the workspace.
+
+No control is disabled while the Sheet is open. The page behind a native modal is inert, and the model
+refuses a second overlay anyway. Disabling an opener makes WebKit's native close restore focus to the
+opener's focusable ancestor instead, which the Sheet treats as the application's own hand-off. This
+was found again by the cross-engine run on this design, and `studio.spec.ts` now asserts focus return.
 
 ## Activation boundary
 
-`MotionStudio.vue` renders a complete, light introduction: the section's pitch, the six verbs of the
-workflow, an inline-SVG miniature of the workspace and an "Open Motion Studio" button. The
-workspace is a dynamic import that loads only on activation (it is warmed on pointer-enter, focus
-or touch of the button), and once opened it stays mounted, so scrolling away or changing view never
-discards the selection, the comparison or a note. A direct `#studio` visit lands on the section with
-the button in view. Activation moves focus to the workspace, since the button leaves the DOM.
+`MotionStudio.vue` renders a complete, light introduction and loads the workspace only when the
+visitor opens it (warmed on pointer-enter, focus or touch of the button). Once opened it stays mounted,
+so scrolling away or changing view never discards the shortlist, the comparison or the decision.
+Activation moves focus to the workspace. The introduction reserves no height for the workspace.
 
-The introduction reserves no height for the workspace. It is the section's complete content, so
-the page is stable as it loads, and opening the workspace grows the section downward in response to
-the visitor's own input without moving anything above it.
+Measured in a production build under `/snap-motion/`, Chromium, median of five cold contexts
+(local, Windows; not a guarantee, no physical phone):
 
-Measurements are in [performance](performance.md#motion-studio-activation).
+| Metric                | 390 px native | 390 px, 4× CPU | 1280 px native | 1280 px, 4× CPU |
+| --------------------- | ------------: | -------------: | -------------: | --------------: |
+| Ready after the click |         63 ms |         445 ms |          98 ms |          913 ms |
+| Extra blocking time   |          0 ms |         153 ms |           0 ms |          544 ms |
+| DOM nodes added       |          +205 |           +205 |           +397 |            +397 |
+
+The chunk is 14.3 KiB of script and 3.5 KiB of style, gzip, in two requests, and no media (the five
+screens are the page's own, already loaded). The wide layout mounts three live surfaces and a Deck at
+once, which is where the 4× cost comes from; the narrow layout mounts one view.
 
 ## Layout and accessibility
 
-Wide (62rem and up) is a two-by-two composition with hairline dividers: the collection beside the
-spatial view, the active study beside the comparison. Narrower, one view shows at a time (Browse,
-Explore, Compare) behind a persistent switch, with the active study and its actions always beneath
-it. Only the shown view's surface is mounted, so switching never keeps duplicate hidden systems
-alive; the model carries the state across. The three views are held within a card of each other in
-height so switching barely moves the page.
+Wide (62rem and up) puts choosing on the left (Candidates, then the Shortlist and its Deck) and
+comparing on the right (the stages, the differences and the decision). Narrower, one view shows at a
+time (Candidates, or Compare with the Shortlist inside it) behind a persistent switch. On a phone the
+two stages stack, at the same size.
 
-- Native semantics first: buttons, a labelled `ul` for the comparison, a `dl` of attributes, real
-  headings (section h2, workspace h3, regions h4), `aria-pressed` on toggles, `aria-current` on the
-  active tile and the Deck's card.
-- Grid tiles are `role="button"` elements rather than `<button>`s because the surface does not start
-  a drag on a native control, and the whole tile is what a visitor grabs. They are named
-  ("Fold, surface study, in comparison, has a note"), focusable, and operable with Enter and Space.
-  A tap is resolved from the press and release on the surface, because the surface captures a mouse
-  pointer and the browser then reports the click on the surface, not the tile.
-- Arrow keys act on the surface that owns focus: each of the Coverflow and the Deck is given its
-  own region as its focus scope, the Grid pages only when the Grid itself is focused, and a key
-  pressed on a tile or button stays that control's. There are never two handlers for one key.
-- Everything has a non-drag path: tiles, step buttons, the tray, the Make-active control, and the
-  Gallery and Sheet controls.
-- Reduced motion follows the Playground's setting and reaches the Gallery and Sheet as well as the
-  surfaces.
-
-Automated checks (axe at rest, on a phone in every view, with each overlay, and in the empty and
-single comparison states) are not a substitute for assistive-technology testing; none has been done
-on physical NVDA, VoiceOver or TalkBack setups.
+- Native semantics first: buttons, a labelled list and ordered list, a real `table` with a caption,
+  `th scope`, headings, `aria-pressed` toggles, `role="img"` with a text alternative for the chart.
+- A differing row is marked with a bar and the word "differs", not by colour alone.
+- Every drag has a button: the Deck's step buttons and member actions, the stages' Back and Step.
+- Touch targets are at least 44 px on a coarse pointer, asserted on a phone.
+- axe passes at rest, with a detail open, decided, with the Sheet open, in the reference-only and
+  empty states, and on a phone in each view. Automated checks are not a substitute for assistive
+  technology testing; none has been done on physical NVDA, VoiceOver or TalkBack setups.
 
 ## Tests
 
-- `apps/lab/test/studio-*.test.ts`: catalog identity, the model's selection, comparison, edit and
-  overlay rules, and the physics mapping.
-- `e2e/studio.spec.ts`: activation, the journey, ownership and sync, the comparison's states, the
-  Gallery and Sheet lifecycles and handoff, shared physics, reduced motion, keyboard, the narrow
-  layout, interruption, and document-level listener balance.
-- `e2e/studio-layout.spec.ts` (Chromium): the seven widths, stability, scroll lock with real
-  scrollbars, natural scrolling and touch, touch targets, and axe.
-- `e2e/studio-deck-reconciliation.spec.ts` (every engine, 1280/1440/390/320px, Shuffle and Direct):
-  tray removals and additions read back frame by frame. Each change must start exactly from the
-  drawn frame, never swap depth where two bodies still overlap, never show a card appearing or
-  vanishing, keep departures inert, and change no compositor hint at rest. In Chromium, no card may
-  move or change shadow faster than the Deck's own exchange. Frozen raster comparisons also prove
-  that cards cannot paint over Active Study, including ordinary traversal; see the
-  [composition and settlement review](studio-deck-composition-review.md).
-- `e2e/playground-preview.spec.ts`: the built page under a non-root base, including the Studio's
-  chunk and plates.
+- `apps/lab/test/studio-model.test.ts`: every rule of the model, and the seeded invariant walk.
+- `apps/lab/test/studio-candidates.test.ts`: the catalogue, that each candidate reads its own preset,
+  the rows and the summary, and that every implementation snippet's numbers are the candidate's.
+- `apps/lab/test/studio-transition.test.ts`: ownership, names, rapid and stale transitions, refusal
+  and fallback, against a controllable stand-in for the browser API.
+- `e2e/studio.spec.ts` (every engine): activation, the journey, every size of shortlist, equal
+  conditions, text that follows the card, keyboard and focus, the detail, the Sheet, a phone, and
+  click versus drag.
+- `e2e/studio-transitions.spec.ts` (every engine): the real transitions, the fallback and reduced
+  motion.
+- `e2e/studio-deck-reconciliation.spec.ts` (every engine): shortlist changes frame by frame.
+- `e2e/studio-layout.spec.ts` (Chromium): seven widths, stability, touch targets, scroll lock with real
+  scrollbars, axe.
+- `e2e/playground-preview.spec.ts`: the built page under a non-root base, including the Studio's chunk.
 
-In CI the Studio specs are not part of the general owners. Chromium runs all three as the `studio`
-group; Firefox and WebKit each run `studio.spec.ts` and
-`studio-deck-reconciliation.spec.ts` (with the Chromium-only tests skipped) as
-`firefox-studio` and `webkit-studio`. They are separate parallel jobs because the first push put every Studio test
-into the general jobs, and Chromium general and WebKit general were cancelled at their time limits
-(see [test architecture](test-architecture-and-performance.md#playground-certification)).
+The Studio's Deck is always a Shuffle deck. Direct is a candidate's behaviour, previewed on a stage
+whose membership never changes; the package suites certify Direct reconciliation.
 
-## Changes outside the Studio
-
-Three things beyond `apps/lab/src/playground/studio/` changed. The first two were found by this
-work's tests:
-
-- **`MediaGalleryDialog` and `scrollbar-gutter: stable`** (a package fix, patch changeset,
-  [media gallery](media-gallery.md#scroll-lock)). The dialog padded the document root by the
-  scrollbar width it removed, but a page that reserves its gutter keeps that space while locked, so
-  every surface behind the modal narrowed by one scrollbar width (985 to 970 px on the Playground's
-  existing Coverflow Gallery). The compensation now applies only to documents that do not reserve a
-  gutter; the existing scroll-lock layout test gained the package Gallery, failed before, and passes.
-- **`sheetDismissal.spec.ts`**, "public slow exit preserves sticky header, gutter and scroll
-  position at 390px". It scrolled the Sheet's opener into view and relied on the page ending soon
-  after, which kept the button clear of the sticky header. With a section below the Sheet the opener
-  sat at the top edge, beneath the header, and the harness scrolled to uncover it before clicking.
-  The test now centres the opener first. Every assertion is unchanged, and the Sheet's behaviour was
-  not involved.
-
-- **Browser CI ownership.** `config/browserOwnership.ts`, `playwright.config.ts`,
-  `.github/workflows/verify.yml` and `scripts/sourceVerification.ts` gained the three Studio owners
-  above, with their unit tests. `sourceVerification.ts` lists the owners a candidate source must have
-  passed, so a source SHA from before this branch no longer qualifies for candidate preparation.
-
-Section 06 also adds an id and `tabindex="-1"` to each section's Motion Tuning group so the Studio's
-indicator can link to it, and a short navigation name (`navTitle`) for sections whose heading is too
-long for the bar.
+In CI the Studio specs are not part of the general owners. Chromium runs them as the `studio` group;
+Firefox and WebKit run the cross-engine three as `firefox-studio` and `webkit-studio`. See
+[test architecture](test-architecture-and-performance.md#motion-studio) and
+[development verification](development-verification.md).
 
 ## Known limitations
 
-- No shared-element transition between a surface and the Gallery (see above).
-- Notes live in memory for the page's lifetime; there is no persistence.
-- The Studio's Gallery spans every study's plates, so swiping past a study's last plate enters the
-  next study's. That is intentional, and closing synchronizes the active study, but a very long
-  collection would want a narrower scope.
-- The collection filter and density apply to the Grid. The Coverflow and the Gallery always show the
-  whole collection in its canonical order.
+- Computed values describe the spring alone. Release velocity, rendered frame rate and the behaviour
+  of a real interface are not measured here.
+- The Studio's shortlist, decision and reason live in memory for the page's lifetime; nothing is
+  persisted or shared.
+- A rail ends where a deck wraps, so the replayed run stops short of the last screen.
+- A document View Transition freezes the rest of the page briefly; it is used only for changes the
+  visitor just asked for.
+- No shared-element transition into a Gallery (see above).
 - Assistive-technology behaviour is unverified on physical devices.

@@ -1,3 +1,8 @@
+> **Superseded.** This review concerns the first Motion Studio, whose inspector overlapped the
+> comparison Deck's travel. That composition was replaced by the decision workflow in
+> [Motion Studio](motion-studio.md); there is no inspector for a card to travel over. The settlement
+> findings below concern the Stacked Deck package and still describe it.
+
 # Studio Deck composition and settlement review
 
 ## Decision
