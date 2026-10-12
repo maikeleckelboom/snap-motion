@@ -1,19 +1,20 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId } from "vue";
+import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 
-import type { ShowcaseScreen } from "@/demos/showcaseScreens";
+import type { ShowcaseScreen, ShowcaseScreenId } from "@/demos/showcaseScreens";
 
 import CandidatePreview from "./CandidatePreview.vue";
 import { differenceRows, responseChart, summarizeDifference } from "./candidates";
 import { useStudio } from "./studio-context";
 import { REASON_LIMIT } from "./studio-model";
+import { carryOverScreen, middleScreenId, stagesLevel } from "./studio-stage";
 
 const props = defineProps<{
   reducedMotionOverride: boolean | undefined;
   screens: readonly ShowcaseScreen[];
 }>();
 
-const { behavior, commands, model } = useStudio();
+const { announce, behavior, commands, model } = useStudio();
 const titleId = `${useId()}-title`;
 const decisionTitleId = `${useId()}-decision`;
 const reasonId = `${useId()}-reason`;
@@ -42,26 +43,76 @@ const decided = computed(() =>
   model.decidedId.value === undefined ? undefined : behavior(model.decidedId.value),
 );
 const reasonLength = computed(() => model.reason.value.length);
+const driverNote = computed(() => {
+  if (replayPhase.value === "returning") return `Returning both to ${screenTitle(homeId.value)}…`;
+  if (replayPhase.value === "running")
+    return "Replaying the same run on both. Touch either to take over.";
+  if (!both.value) return "Runs the reference. You can also drag it.";
+  return level.value
+    ? "Both stages get the same input, on the same screen. You can also drag either one."
+    : "Both stages get the same input, but they are on different screens.";
+});
+
+// ----------------------------------------------------------------------------- the conditions
+
+/** The screen a run begins on and a reset returns to. */
+const homeId = computed(() => middleScreenId(props.screens));
+/** Where a stage mounted by a role change begins: level with the stage that stayed. */
+const anchorId = ref<ShowcaseScreenId>(homeId.value);
+const screenTitle = (id: ShowcaseScreenId | undefined) =>
+  props.screens.find((screen) => screen.id === id)?.title ?? "another screen";
+
+const positions = computed(() => ({
+  a: stageA.value?.position,
+  b: stageB.value?.position,
+}));
+const level = computed(() => stagesLevel(positions.value));
+
+// A run is a controlled comparison only while both stages are on the same screen, so a change of
+// role must not leave one of them behind. The stage that stays keeps its screen and its motion;
+// the stage that arrives is mounted level with it. The watcher runs before the stages are replaced,
+// while the one that stays can still be asked where it is.
+watch(
+  () => [a.value?.id, b.value?.id] as const,
+  ([nextA, nextB], [prevA, prevB]) => {
+    stopReplay();
+    anchorId.value = carryOverScreen(
+      { a: prevA, b: prevB },
+      { a: nextA, b: nextB },
+      positions.value,
+      homeId.value,
+    );
+  },
+  { flush: "pre" },
+);
 
 // ---------------------------------------------------------------------------------- the driver
 
 /**
  * One input, delivered to both stages. A replay is a fixed run of steps at a fixed cadence, so a
- * spring that settles slowly is interrupted by the next step exactly as it would be in use. The run
- * reverses once and stops short of the last screen, because a rail ends where a deck wraps. Each
- * replay carries a generation: any newer replay, any manual input and the end of this component
- * invalidate the steps still waiting.
+ * spring that settles slowly is interrupted by the next step exactly as it would be in use. It first
+ * brings both stages to the same defined screen and waits until both are at rest there, so every
+ * replay begins from the same condition whatever came before. The run reverses once and stops short
+ * of the last screen, because a rail ends where a deck wraps.
+ *
+ * Each replay carries a generation. Any newer replay, any manual input on a stage, any change of
+ * role and the end of this component invalidate whatever is still waiting: the wait for rest, and
+ * the steps still to come.
  */
 const REPLAY_STEPS = ["next", "next", "previous", "next"] as const;
 const REPLAY_INTERVAL_MS = 420;
 let replayGeneration = 0;
-const replaying = ref(false);
+const replayPhase = ref<"idle" | "returning" | "running">("idle");
+const replaying = computed(() => replayPhase.value !== "idle");
 let replayTimer: ReturnType<typeof setTimeout> | undefined;
+let stopWaiting: (() => void) | undefined;
 
 function stopReplay() {
   replayGeneration += 1;
   clearTimeout(replayTimer);
-  replaying.value = false;
+  stopWaiting?.();
+  stopWaiting = undefined;
+  replayPhase.value = "idle";
 }
 
 function drive(command: "next" | "previous") {
@@ -74,30 +125,67 @@ function step(command: "next" | "previous") {
   drive(command);
 }
 
-function reset() {
+/** Both stages go to the defined screen, each by its own spring. */
+function realign() {
   stopReplay();
-  stageA.value?.reset();
-  stageB.value?.reset();
+  stageA.value?.goTo(homeId.value);
+  stageB.value?.goTo(homeId.value);
 }
 
 function replay() {
   stopReplay();
   const generation = replayGeneration;
-  replaying.value = true;
   let index = 0;
   const run = () => {
     if (generation !== replayGeneration) return;
     const command = REPLAY_STEPS[index];
     if (command === undefined) {
-      replaying.value = false;
+      replayPhase.value = "idle";
       return;
     }
     index += 1;
     drive(command);
     replayTimer = setTimeout(run, REPLAY_INTERVAL_MS);
   };
-  run();
+
+  stageA.value?.goTo(homeId.value);
+  stageB.value?.goTo(homeId.value);
+  replayPhase.value = "returning";
+  // The condition to wait for is the stages' own report of being at rest on the screen, not a time.
+  stopWaiting = watch(
+    () =>
+      [stageA.value, stageB.value].every(
+        (stage) => stage === undefined || stage.restsOn(homeId.value),
+      ),
+    (ready) => {
+      if (!ready || generation !== replayGeneration) return;
+      stopWaiting?.();
+      stopWaiting = undefined;
+      replayPhase.value = "running";
+      run();
+    },
+    { flush: "post", immediate: true },
+  );
 }
+
+/** A hand on either stage ends a replay: from here the visitor is driving. */
+function onManual() {
+  if (replaying.value) {
+    stopReplay();
+    announce("Replay stopped. You are driving.");
+  }
+}
+
+watch(
+  () => level.value || replaying.value,
+  (together) => {
+    if (!together) {
+      announce(
+        `A is on ${screenTitle(positions.value.a)} and B is on ${screenTitle(positions.value.b)}.`,
+      );
+    }
+  },
+);
 
 onBeforeUnmount(stopReplay);
 
@@ -156,6 +244,8 @@ defineExpose({ stopReplay });
             :reduced-motion-override="props.reducedMotionOverride"
             role="reference"
             :screens="screens"
+            :start-id="anchorId"
+            @manual="onManual"
           />
         </figure>
 
@@ -172,6 +262,8 @@ defineExpose({ stopReplay });
             :reduced-motion-override="props.reducedMotionOverride"
             role="candidate"
             :screens="screens"
+            :start-id="anchorId"
+            @manual="onManual"
           />
         </figure>
         <div v-else class="stage stage-vacant" data-testid="studio-stage-b-vacant">
@@ -212,16 +304,34 @@ defineExpose({ stopReplay });
           class="studio-button"
           data-testid="studio-driver-reset"
           type="button"
-          @click="reset"
+          @click="realign"
         >
           Reset
         </button>
-        <p class="driver-note">
-          {{
-            both ? "Both stages get the same input, on the same screens." : "Runs the reference."
-          }}
-          You can also drag either one.
+        <p class="driver-note" data-testid="studio-driver-note">
+          {{ driverNote }}
         </p>
+      </div>
+
+      <div
+        v-if="!level && !replaying"
+        class="stages-apart"
+        data-testid="studio-stages-apart"
+        role="group"
+      >
+        <p class="stages-apart-copy">
+          <strong>The stages are on different screens.</strong>
+          A is on {{ screenTitle(positions.a) }} and B is on {{ screenTitle(positions.b) }}, so what
+          you see is no longer a like-for-like comparison.
+        </p>
+        <button
+          class="studio-button studio-button-primary"
+          data-testid="studio-realign"
+          type="button"
+          @click="realign"
+        >
+          Put both on {{ screenTitle(homeId) }}
+        </button>
       </div>
 
       <slot name="shortlist" />
@@ -422,6 +532,23 @@ defineExpose({ stopReplay });
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+}
+
+.stages-apart {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--pg-accent);
+  border-radius: 0.7rem;
+  background: var(--stage);
+}
+
+.stages-apart-copy {
+  flex: 1 1 16rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .driver-note {

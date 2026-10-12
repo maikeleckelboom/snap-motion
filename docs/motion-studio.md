@@ -121,15 +121,34 @@ A tap on the Deck's front card opens that candidate; a drag turns the Deck and o
 
 ## Compare
 
-A and B are two live previews. They are the same size and show the same five screens, start on the
-same one, and are driven through the same `next` and `previous`. The driver sends one input to both:
-Back, Step, Reset, and a replayed run (forward twice, back once, forward once at a fixed cadence), so
-a slowly settling spring is interrupted by the next step exactly as it would be in use. Each replay
-carries a generation; any manual input, any newer replay and unmounting invalidate the steps still
-waiting. The run stops short of the last screen because a rail ends where a deck wraps.
+A and B are two live previews. They are the same size and show the same five screens, and are driven
+through the same `next` and `previous`. Each surface still owns its own selection; Compare adds only
+the rule for where a stage begins, so the stages are on the same screen whenever the visitor has not
+moved one of them.
 
-Either surface can still be dragged or driven from the keyboard, because how a behaviour feels under
-a hand is what is being judged.
+**Level stages.** A stage mounted by a change of role begins on the screen of the stage that stayed:
+A's screen when B changed, B's when A changed, the reference's when both did (a swap). It is the
+surface's own semantic selection that carries over, so a stage that is still travelling hands over
+where it is going, and the new stage starts at rest there instead of on the middle screen. Nothing
+the stage that stayed is doing is interrupted.
+
+**A replay starts from one defined place.** Replay first sends both stages to the middle screen, each
+by its own spring, and starts the run only when both have reported being at rest there: the card in
+front, the selection, the phase and the surface's own settled announcement all agree. The condition
+is the surfaces' state, not a time. The run is then forward twice, back once, forward once at a fixed
+cadence, so a slowly settling spring is interrupted by the next step exactly as it would be in use.
+The run stops short of the last screen because a rail ends where a deck wraps.
+
+**Nothing outlives what invalidated it.** Each replay carries a generation. A newer replay, Step,
+Back, Reset, any change of A or B, a pointer, wheel or navigation key on either stage, and unmounting
+all invalidate both the wait for rest and the steps still waiting. Taking over by hand announces that
+the replay stopped.
+
+**Exploration stays possible and is never silent.** Either surface can still be dragged or driven
+from the keyboard, because how a behaviour feels under a hand is what is being judged. When that
+leaves the stages on different screens (a drag, or a deck wrapping where a rail ends) the driver's
+note says so, and a notice names both screens and offers one button that puts both back on the
+middle screen. It disappears when the stages are level again, however they got there.
 
 Changing B replaces only B's stage. A's element stays the same element.
 
@@ -271,7 +290,14 @@ Firefox and WebKit run the cross-engine three as `firefox-studio` and `webkit-st
   of a real interface are not measured here.
 - The Studio's shortlist, decision and reason live in memory for the page's lifetime; nothing is
   persisted or shared.
-- A rail ends where a deck wraps, so the replayed run stops short of the last screen.
+- A rail ends where a deck wraps, so the replayed run stops short of the last screen, and stepping a
+  rail and a deck past the end legitimately leaves them apart; the notice says so.
+- Starting the run in the same task as a surface's rest, from a host that reacts to that rest, made a
+  controlled Coverflow jump to its next destination instead of travelling (observed in the Studio; the
+  suspected cause is the package's settlement rollback check, not isolated in a package test). The
+  Studio waits for the surface's `settled` announcement, which is delivered after that check.
+- On a wide screen the Deck is in the list column and the stages are in the compare column, so
+  changing B from the Deck can scroll the stages out of view on a short window.
 - A document View Transition freezes the rest of the page briefly; it is used only for changes the
   visitor just asked for.
 - No shared-element transition into a Gallery (see above).

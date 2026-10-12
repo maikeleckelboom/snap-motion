@@ -14,6 +14,7 @@ import { computed, ref } from "vue";
 import type { ShowcaseScreen, ShowcaseScreenId } from "@/demos/showcaseScreens";
 
 import { implementationProps, type CandidateBehavior } from "./candidates";
+import { middleScreenId } from "./studio-stage";
 
 /**
  * One candidate, running on the real surface it describes, over the Studio's sample screens.
@@ -30,6 +31,16 @@ const props = defineProps<{
   label: string;
   /** Names the preview for tests and for the readout's relationship to its stage. */
   role: "reference" | "candidate" | "detail";
+  /**
+   * The screen this preview mounts on. A comparison passes the screen the other stage is on, so a
+   * stage mounted by a role change begins level with the one that stayed; alone, it is the middle.
+   */
+  startId?: ShowcaseScreenId;
+}>();
+
+const emit = defineEmits<{
+  /** The visitor took hold of the surface with a pointer, a wheel or a navigation key. */
+  manual: [];
 }>();
 
 type Handle = CoverflowHandle<ShowcaseScreenId> | StackedDeckHandle<ShowcaseScreenId>;
@@ -38,9 +49,9 @@ const rail = ref<CoverflowHandle<ShowcaseScreenId>>();
 const deck = ref<StackedDeckHandle<ShowcaseScreenId>>();
 const surface = computed<Handle | undefined>(() => rail.value ?? deck.value);
 
-/** The screen both previews begin on, and return to on reset: the middle of the sample. */
-const startId = props.screens[Math.floor(props.screens.length / 2)]!.id;
-const screenId = ref<ShowcaseScreenId>(startId);
+/** The screen a reset returns to: the middle of the sample, which has a neighbour each way. */
+const homeId = middleScreenId(props.screens);
+const screenId = ref<ShowcaseScreenId>(props.startId ?? homeId);
 
 const settings = computed(() => implementationProps(props.behavior));
 const visualScreen = computed(
@@ -62,12 +73,66 @@ function cardImage(card: CoverflowCardState<ShowcaseScreen, ShowcaseScreenId>) {
   return card.item.preview;
 }
 
+const NAVIGATION_KEYS = new Set([
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "End",
+  "Home",
+  "PageDown",
+  "PageUp",
+]);
+
+function onKeyDown(event: KeyboardEvent) {
+  if (NAVIGATION_KEYS.has(event.key)) emit("manual");
+}
+
+/** The surface's own semantic selection: where this stage is going, or is. */
+const position = computed(() => surface.value?.activeId);
+
+/**
+ * The screen the surface last announced as settled. A surface publishes its rest in two steps: its
+ * state says it has stopped, and a moment later it confirms the host agrees with where it stopped.
+ * A host that navigates onward in the first step, before the confirmation, makes the surface
+ * mistake its own destination for a disagreement and jump there instead of travelling.
+ */
+const confirmedId = ref<ShowcaseScreenId>(screenId.value);
+
+function onSettled(id: ShowcaseScreenId) {
+  confirmedId.value = id;
+}
+
+/**
+ * Whether the surface is at rest on `id` and has said so. Being on the card is not enough: a spring
+ * that has only just been sent elsewhere still shows the old card, and one that is returning shows
+ * the right card while it is still travelling, so the surface's own phase and its settled
+ * announcement have to agree as well.
+ */
+function restsOn(id: ShowcaseScreenId): boolean {
+  const handle = surface.value;
+  return (
+    handle !== undefined &&
+    handle.activeId === id &&
+    handle.visualId === id &&
+    handle.settledId === id &&
+    handle.diagnostics.phase === "idle" &&
+    confirmedId.value === id
+  );
+}
+
 defineExpose({
   next: () => surface.value?.next(),
   previous: () => surface.value?.previous(),
-  reset: () => {
-    screenId.value = startId;
+  /** Moves to a screen the way any request does: with the surface's own spring. */
+  goTo: (id: ShowcaseScreenId) => {
+    screenId.value = id;
   },
+  reset: () => {
+    screenId.value = homeId;
+  },
+  restsOn,
+  position,
   root: computed(() => surface.value?.root),
   moving,
 });
@@ -79,6 +144,9 @@ defineExpose({
     :data-candidate="behavior.id"
     :data-surface="behavior.surface"
     :data-testid="`studio-preview-${role}`"
+    @keydown.capture="onKeyDown"
+    @pointerdown.capture="emit('manual')"
+    @wheel.capture.passive="emit('manual')"
   >
     <Coverflow
       v-if="behavior.surface === 'rail'"
@@ -97,6 +165,7 @@ defineExpose({
       :spring="settings.spring"
       :data-testid="`studio-${role}-surface`"
       @active-id-request="onRequest"
+      @settled="onSettled"
     >
       <template #card="card">
         <div class="screen">
@@ -130,6 +199,7 @@ defineExpose({
       :spring="settings.spring"
       :data-testid="`studio-${role}-surface`"
       @active-id-request="onRequest"
+      @settled="onSettled"
     >
       <template #backdrop>
         <div aria-hidden="true" class="preview-backdrop" />

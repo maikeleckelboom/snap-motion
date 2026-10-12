@@ -22,12 +22,14 @@ export const previewSpecs = ["media-preview.spec.ts", "playground-preview.spec.t
 export const chromiumStudioSpecs = [
   "studio.spec.ts",
   "studio-transitions.spec.ts",
+  "studio-ab-conditions.spec.ts",
   "studio-layout.spec.ts",
   "studio-deck-reconciliation.spec.ts",
 ];
 export const interoperabilityStudioSpecs = [
   "studio.spec.ts",
   "studio-transitions.spec.ts",
+  "studio-ab-conditions.spec.ts",
   "studio-deck-reconciliation.spec.ts",
 ];
 export const interoperabilitySpecs = [
