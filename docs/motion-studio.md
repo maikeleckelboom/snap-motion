@@ -150,6 +150,19 @@ while the Deck is still drawing the card that was B, so a replay that waited for
 driving a stage the visitor had already replaced, and delivered a scheduled step to it.
 `studio-ab-conditions.spec.ts` chooses B with the Deck's own Next, on a paused clock, just short of a
 scheduled step, while the Deck still draws the previous B, and requires the replay to be over at once.
+Settlement is owned by the surface, not the Studio. A controlled Coverflow checks each settlement
+against the host's authority one microtask after reporting it. Before `df26701` a host that reacted
+to the rail's rest, or to the request behind it, by asking for another destination changed that
+authority first; the stale settlement was then rolled back to the new authority, so the rail jumped
+there instead of travelling and the `settled` event for the real destination was swallowed. That
+race, first seen in the Studio and then isolated in the package, is confirmed and fixed in
+`Coverflow`: it discards a queued settlement when the host redirects its authority elsewhere and
+reports only its latest settlement, as `StackedDeck` already did. The package tests are
+`settlement-authority.test.ts` (real springs, a host moving on in the settlement stack or the moment
+rest is reported) and `controlled-settlement-chaining.test.ts` (a deterministic manual animation
+driver and a host whose post-flush watcher calls `next()` on `phase === "idle"`, on both
+surfaces). The Studio's wait for the stages to be at rest no longer works around a defect; it is the
+condition a replay needs.
 The wait for both stages to rest is `whenReady` (`studio-replay.ts`). It replaced an immediate watcher
 that stopped itself from its own callback: on the path where the stages were already at rest the
 callback ran before `watch` had returned the handle to stop, so the watcher outlived the replay and
@@ -288,16 +301,24 @@ two stages stack, at the same size.
   click versus drag.
 - `e2e/studio-transitions.spec.ts` (every engine): the real transitions, the fallback and reduced
   motion.
+- `e2e/studio-ab-conditions.spec.ts` (every engine): level stages after a change of role, a replay
+  that always begins from the same screen, nothing a replay scheduled outliving what invalidated it
+  (on a paused clock), a replay that answers to the roles rather than to the card the Deck has drawn,
+  and the fixed-height status row moving nothing below it.
 - `e2e/studio-deck-reconciliation.spec.ts` (every engine): shortlist changes frame by frame.
 - `e2e/studio-layout.spec.ts` (Chromium): seven widths, stability, touch targets, scroll lock with real
   scrollbars, axe.
 - `e2e/playground-preview.spec.ts`: the built page under a non-root base, including the Studio's chunk.
+- `apps/lab/test/studio-replay.test.ts` and `studio-stage.test.ts`: the replay's wait and the stage
+  rules.
+- `packages/vue/test/settlement-authority.test.ts` and `controlled-settlement-chaining.test.ts`: the
+  package's settlement authority, which the Studio's replay relies on (see above).
 
 The Studio's Deck is always a Shuffle deck. Direct is a candidate's behaviour, previewed on a stage
 whose membership never changes; the package suites certify Direct reconciliation.
 
 In CI the Studio specs are not part of the general owners. Chromium runs them as the `studio` group;
-Firefox and WebKit run the cross-engine three as `firefox-studio` and `webkit-studio`. See
+Firefox and WebKit run the cross-engine four as `firefox-studio` and `webkit-studio`. See
 [test architecture](test-architecture-and-performance.md#motion-studio) and
 [development verification](development-verification.md).
 
@@ -309,12 +330,9 @@ Firefox and WebKit run the cross-engine three as `firefox-studio` and `webkit-st
   persisted or shared.
 - A rail ends where a deck wraps, so the replayed run stops short of the last screen, and stepping a
   rail and a deck past the end legitimately leaves them apart; the notice says so.
-- Starting the run in the same task as a surface's rest, from a host that reacts to that rest, made a
-  controlled Coverflow jump to its next destination instead of travelling (observed in the Studio; the
-  suspected cause is the package's settlement rollback check, not isolated in a package test). The
-  Studio waits for the surface's `settled` announcement, which is delivered after that check.
-- On a wide screen the Deck is in the list column and the stages are in the compare column, so
-  changing B from the Deck can scroll the stages out of view on a short window.
+- The wide composition keeps the Deck, both stages and the status line in one viewport at 1280×800 and
+  1440×900 (`studio-layout.spec.ts`). Nothing is asserted for a shorter window, where the page may
+  have to scroll between them.
 - A document View Transition freezes the rest of the page briefly; it is used only for changes the
   visitor just asked for.
 - No shared-element transition into a Gallery (see above).
