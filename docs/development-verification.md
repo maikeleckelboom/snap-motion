@@ -11,23 +11,23 @@ gates are expensive and why that cost is mostly intentional.
 
 ## Five levels
 
-Move outward only when the level inside is green. Times are local, on the Windows development host,
-measured on the Motion Studio's tests (see [Studio test cost](#studio-test-cost)).
+Move outward only when the level inside is green. Times are local, on the Windows development host (level 5 is one complete `pnpm verify` there: 30 min,
+run while CI ran; the historical isolated Linux figure is 13 min), measured on the Motion Studio's tests (see [Studio test cost](#studio-test-cost)).
 
-| Level | Question                                    | Command                                                                        | Cost             |
-| ----- | ------------------------------------------- | ------------------------------------------------------------------------------ | ---------------- |
-| 1     | Does the logic hold? Does it type and lint? | `pnpm check:lab` (lint, architecture, lab typecheck, lab unit tests)           | 7 s              |
-|       | One unit file                               | `pnpm exec vitest run apps/lab/test/studio-model.test.ts`                      | 2 s              |
-| 2     | Does this behaviour work in a real browser? | `pnpm exec playwright test e2e/studio.spec.ts --project=chromium -g "<title>"` | 3 s per test     |
-| 3     | Do the affected specs pass together?        | `pnpm test:studio` (Chromium, every Studio spec)                               | 55 s             |
-| 4     | Do the other engines agree?                 | `pnpm test:studio:witness` (Firefox and WebKit owners)                         | 2.4 min          |
-| 5     | Is it ready to ship?                        | `pnpm verify`, then the full Verify run in CI                                  | 13 min, 5 min CI |
+| Level | Question                                    | Command                                                                        | Cost                  |
+| ----- | ------------------------------------------- | ------------------------------------------------------------------------------ | --------------------- |
+| 1     | Does the logic hold? Does it type and lint? | `pnpm check:lab` (lint, architecture, lab typecheck, lab unit tests)           | 7 s                   |
+|       | One unit file                               | `pnpm exec vitest run apps/lab/test/studio-model.test.ts`                      | 2 s                   |
+| 2     | Does this behaviour work in a real browser? | `pnpm exec playwright test e2e/studio.spec.ts --project=chromium -g "<title>"` | 3 s per test          |
+| 3     | Do the affected specs pass together?        | `pnpm test:studio` (Chromium, every Studio spec)                               | 60 s                  |
+| 4     | Do the other engines agree?                 | `pnpm test:studio:witness` (Firefox and WebKit owners)                         | 2.4 min               |
+| 5     | Is it ready to ship?                        | `pnpm verify`, then the full Verify run in CI                                  | 30 min here, 8 min CI |
 
 Level 2 and 3 need a dev server. Playwright reuses one that is already running, so start it once and
 leave it:
 
 ```bash
-pnpm dev --port 4173
+pnpm dev --host 127.0.0.1 --port 4173
 ```
 
 (Playwright's own default is port 4173; set `SNAP_MOTION_TEST_PORT` to use another.) Without one it
@@ -102,15 +102,14 @@ widths in the one exchange mode the Studio's Deck has, and every per-frame invar
 
 | Chromium, 2 workers, local | Before (first Studio) | After (this design) |
 | -------------------------- | --------------------: | ------------------: |
-| Tests                      |                    92 |                  64 |
-| Wall time                  |               105.9 s |              54.6 s |
-| Aggregate test time        |                 205 s |             104.8 s |
-| Reconciliation spec        |     20 tests, 104.8 s |     6 tests, 18.4 s |
-| Single slowest test        |                 9.6 s |  13.6 s (see below) |
+| Tests                      |                    92 |                  70 |
+| Wall time                  |               105.9 s |              61.8 s |
+| Aggregate test time        |                 205 s |             119.7 s |
+| Reconciliation spec        |       20 tests, 105 s |       6 tests, 19 s |
+| Single slowest test        |                 9.6 s |               6.5 s |
 
-The slowest test was then one test running nine axe scans in a row. It is now seven tests, one scan
-each, so they run on separate workers and name the state that failed: the layout spec went from 15
-tests (31 s aggregate) to 20 (32 s aggregate, 17 s wall).
+The layout spec's nine sequential axe scans (one 13.6 s test) are now seven tests, one scan each, so
+they run on separate workers and name the state that failed.
 
 Firefox and WebKit run the journey, the transitions and the reconciliation specs: 98 tests, 94 pass and
 4 are the Chromium-only checks skipped by design, in 2.4 minutes for both engines in one command.

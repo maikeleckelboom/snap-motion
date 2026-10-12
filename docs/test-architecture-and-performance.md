@@ -153,27 +153,65 @@ scroll lock against real scrollbars. `playground-preview.spec.ts` runs the built
 `/snap-motion/` in the preview gate with `media-preview.spec.ts`; `previewSpecs` in
 `config/browserOwnership.ts` is the single list that keeps both out of the source browser groups.
 
-The Motion Studio (section 06) adds two Chromium specs, one of which also runs on Firefox and WebKit.
-`studio.spec.ts` covers the activation boundary, one selection across the surfaces, the comparison's
-states, the Gallery and Sheet lifecycles with the Sheet-to-Gallery handoff, shared physics by held
-elastic overdrag, reduced motion, keyboard use, the narrow layout and interruption (the
-listener-balance test is Chromium-only). `studio-layout.spec.ts` is Chromium-only: the seven widths
-with every overlay, stability while views change, real-scrollbar scroll lock, wheel and touch, touch
-targets, and axe. The activation test asserts the workspace's code and plates are not requested until
-the visitor opens it. Unit tests (`studio-catalog`, `studio-model`, `studio-physics`) pin the
-catalog's identity, the selection, comparison, edit and overlay rules, and the physics mapping with
-no browser.
+## Motion Studio
 
-These specs own their own jobs. The first push left them in the general owners, which added 72
-Chromium, 48 Firefox and 48 WebKit tests: Chromium general reached 338 tests and was cancelled by its
-6-minute limit at test 243 (367 s), WebKit general by its 8-minute limit (493 s against a 426 s
-baseline), and Firefox general finished in 357 s of 360 s (278 s before). Nothing had failed; the
-cancellations made the aggregate Browser certification fail closed, as designed. The limits are
-unchanged: `chromiumStudioSpecs` (group `studio`, 79 tests) and `interoperabilityStudioSpecs`
-(`firefox-studio` and `webkit-studio`, 55 tests each, 53 run and 2 skipped) are separate jobs, the
-general projects ignore them, and `browserOwnership.test.ts` asserts the partition on both sides.
-`pnpm test:browser:studio` runs the three owners locally. `studio-deck-reconciliation.spec.ts`
-joined both lists with Phase 06C; it adds about 25 s of test time per engine.
+The Motion Studio (section 06) is a decision workflow built on live surfaces, and its specs follow
+[Motion Studio](motion-studio.md). Three unit files pin the model, the candidates and the View
+Transition helper with no browser (`studio-model` includes a seeded walk of 40 sequences of 150
+operations; the file runs in under half a second). Four browser specs own the rest:
+
+- `studio.spec.ts` (every engine): activation, the journey, every size of shortlist, equal conditions,
+  text that follows the card in front frame by frame, keyboard and focus, the detail, the Sheet, a
+  phone, and click versus drag.
+- `studio-transitions.spec.ts` (every engine): wraps the real `document.startViewTransition` and reads
+  back the names a snapshot held, that it became ready and which pseudo-element animations ran;
+  rapid, fallback, reduced-motion and never-over-a-physical-exchange cases.
+- `studio-deck-reconciliation.spec.ts` (every engine): shortlist changes frame by frame.
+- `studio-layout.spec.ts` (Chromium): seven widths, stability, touch targets, scroll lock against real
+  scrollbars, the document-level listener balance and axe (one scan per test).
+
+These specs own their own jobs. The first Studio's push left its specs in the general owners and
+Chromium and WebKit general were cancelled at their time limits; that is why
+`chromiumStudioSpecs` (group `studio`) and `interoperabilityStudioSpecs` (`firefox-studio` and
+`webkit-studio`) exist, the general projects ignore them, and `browserOwnership.test.ts` asserts the
+partition on both sides. `pnpm test:browser:studio` runs the three owners locally.
+
+### What the redesign changed in test cost
+
+The first Studio's three specs ran 92 Chromium tests. One matrix dominated: the comparison Deck's
+reconciliation spec repeated its assertions at four widths in two exchange modes (16 tests, 98 s of 205 s
+aggregate), because its layout let a card travel over the inspector. The redesign removed that overlap,
+so the matrix is two widths in the single exchange the Studio's Deck has; every per-frame invariant
+(first-frame continuity, paint order, appearance, compositor hints at rest, inert departures) is kept,
+and the interrupted-exchange, held-pointer, speed and reduced-motion cases are ported.
+
+| Local Chromium, 2 workers |    First Studio |   This design |
+| ------------------------- | --------------: | ------------: |
+| Tests                     |              92 |            70 |
+| Wall time                 |         105.9 s |        61.8 s |
+| Aggregate test time       |           205 s |       119.7 s |
+| Reconciliation spec       | 20 tests, 105 s | 6 tests, 18 s |
+
+CI, test step of each Studio owner, run 38179173105 (first Studio, 4877b93) against run 38274117398
+(this design, 30c1640), both first attempt with no retries:
+
+| Owner           | First Studio | This design |
+| --------------- | -----------: | ----------: |
+| Chromium studio |        124 s |        82 s |
+| firefox-studio  |        117 s |        51 s |
+| webkit-studio   |        246 s |       170 s |
+
+No Studio owner is on the critical path of either run: the run's wall time is set by WebKit general
+(434 s before, 434 s after) and the whole Verify run took 466 s. The Studio owners no longer approach
+their job time limits, so the eight-minute allowance the first design needed for `webkit-studio` is
+now far from binding (it is left as the first design set it; lowering it is a separate decision).
+
+These are not claims about full-suite speed. They show a feature's own specs getting cheaper without
+removing a class of evidence: real-browser per-frame traces, cross-engine focus and native-dialog
+witnesses and real View Transition execution remain.
+
+The development loop that keeps most iterations out of these jobs is in
+[development verification](development-verification.md).
 
 Product-polish coverage adds public screen identities/assets and separate Lab Yoot fixtures, named
 mobile jump navigation at 320/375/390/430/768px, public Grid item continuity and Sheet content/edges,
