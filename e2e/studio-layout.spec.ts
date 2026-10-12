@@ -222,35 +222,115 @@ test.describe("scroll lock", () => {
 });
 
 test.describe("accessibility", () => {
-  test("passes axe at rest, with a detail, with the sheet open and in the empty states", async ({
-    page,
-  }) => {
+  // One scan per test: axe on the whole page is the most expensive thing here, and separate tests run
+  // on separate workers and name the state that failed.
+  test("passes axe at rest on a wide layout", async ({ page }) => {
     await openStudio(page);
     await expectNoAxeViolations(page, "wide at rest");
+  });
+
+  test("passes axe with a detail open and with a decision made", async ({ page }) => {
+    await openStudio(page);
     await page.getByTestId("studio-open-deck-shuffle").click();
     await expect(studio.detail(page)).toBeVisible();
     await expectNoAxeViolations(page, "detail");
     await page.getByTestId("studio-detail-back").click();
     await page.getByTestId("studio-choose-b").click();
     await expectNoAxeViolations(page, "decided");
+  });
+
+  test("passes axe with the implementation sheet open", async ({ page }) => {
+    await openStudio(page);
+    await page.getByTestId("studio-choose-a").click();
     await page.getByTestId("studio-open-implementation").click();
     await expect(studio.sheet(page)).toBeVisible();
     await expectNoAxeViolations(page, "sheet");
-    await page.keyboard.press("Escape");
-    await expectSheetClosed(page);
+  });
+
+  test("passes axe with only a reference, and with nothing shortlisted", async ({ page }) => {
+    await openStudio(page);
     await page.getByTestId("studio-remove-rail-loose").click();
     await expectNoAxeViolations(page, "reference only");
     await page.getByTestId("studio-remove-rail-tight").click();
     await expectNoAxeViolations(page, "empty");
   });
 
-  test("passes axe on a phone in each view", async ({ page }) => {
-    await openStudio(page, { width: 390, height: 844 });
-    await expectNoAxeViolations(page, "candidates");
-    await page.getByTestId("studio-view-compare").click();
-    await expectNoAxeViolations(page, "compare");
-    await page.getByTestId("studio-add-more").click();
-    await page.getByTestId("studio-open-deck-shuffle").click();
-    await expectNoAxeViolations(page, "detail");
+  for (const view of ["candidates", "compare", "detail"] as const) {
+    test(`passes axe on a phone in the ${view} view`, async ({ page }) => {
+      await openStudio(page, { width: 390, height: 844 });
+      if (view === "compare") await page.getByTestId("studio-view-compare").click();
+      if (view === "detail") {
+        await page.getByTestId("studio-open-deck-shuffle").click();
+        await expect(studio.detail(page)).toBeVisible();
+      }
+      await expectNoAxeViolations(page, view);
+    });
+  }
+});
+
+test.describe("document-level listeners", () => {
+  test("cycling the Studio's views, details, shortlist and sheet leaves no listener behind", async ({
+    page,
+  }) => {
+    await openStudio(page);
+    const client = await page.context().newCDPSession(page);
+
+    async function inventory() {
+      const result: Record<string, Record<string, number>> = {};
+      for (const target of ["window", "document", "document.documentElement", "document.body"]) {
+        const { result: handle } = await client.send("Runtime.evaluate", { expression: target });
+        const { listeners } = await client.send("DOMDebugger.getEventListeners", {
+          objectId: handle.objectId!,
+        });
+        const byType: Record<string, number> = {};
+        for (const { type } of listeners) byType[type] = (byType[type] ?? 0) + 1;
+        result[target] = byType;
+      }
+      return result;
+    }
+
+    async function cycle() {
+      await page.getByTestId("studio-open-deck-direct").click();
+      await expect(studio.detail(page)).toBeVisible();
+      await page.getByTestId("studio-detail-shortlist").click();
+      await page.getByTestId("studio-detail-back").click();
+      await page.getByTestId("studio-shortlist-rail-balanced").click();
+      await page.getByTestId("studio-swap").click();
+      await page.getByTestId("studio-driver-replay").click();
+      await page.getByTestId("studio-driver-replay").click();
+      await page.getByTestId("studio-remove-deck-direct").click();
+      await page.getByTestId("studio-remove-rail-balanced").click();
+      await page.getByTestId("studio-swap").click();
+      await page.getByTestId("studio-choose-a").click();
+      await page.getByTestId("studio-open-implementation").click();
+      await expect(studio.sheet(page)).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expectSheetClosed(page);
+      await page.getByTestId("studio-revise").click();
+      await page.locator("#studio [data-testid='preset-heavy']").click();
+      await page.locator("#studio [data-testid='preset-balanced']").click();
+    }
+
+    async function settledInventory() {
+      let previous = JSON.stringify(await inventory());
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+            ),
+        );
+        const next = JSON.stringify(await inventory());
+        if (next === previous) return JSON.parse(next) as Awaited<ReturnType<typeof inventory>>;
+        previous = next;
+      }
+      throw new Error("The page's document-level listeners never settled.");
+    }
+
+    await cycle();
+    const before = await settledInventory();
+    expect(before.document?.focus ?? 0).toBe(0);
+    for (let run = 0; run < 3; run += 1) await cycle();
+    expect(await settledInventory()).toEqual(before);
   });
 });
