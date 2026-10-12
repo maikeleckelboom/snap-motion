@@ -160,10 +160,8 @@ const repositoryHref = "https://github.com/maikeleckelboom/snap-motion";
 
     <PlaygroundSection :section="sectionById.studio!">
       <MotionStudio
-        :exchange="exchange"
         :reduced-motion-override="reducedMotionOverride"
         :settings="physics.settings.value"
-        @exchange-change="exchange = $event"
       />
     </PlaygroundSection>
   </main>

@@ -1,288 +1,334 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  MAX_COMPARISON,
-  NOTE_LIMIT,
+  MAX_SHORTLIST,
+  REASON_LIMIT,
   createStudioModel,
-  type StudioModelOptions,
+  type StudioModel,
 } from "../src/playground/studio/studio-model";
 
-const ids = ["a", "b", "c", "d", "e", "f", "g"] as const;
+const ids = ["a", "b", "c", "d", "e", "f"] as const;
 type Id = (typeof ids)[number];
-const category = (id: Id) => (id <= "c" ? "one" : "two");
-const mediaOwner = (mediaId: string): Id | undefined => {
-  const owner = mediaId.split("/")[0] as Id;
-  return ids.includes(owner) ? owner : undefined;
-};
 
-function model(overrides: Partial<StudioModelOptions<Id, string>> = {}) {
-  return createStudioModel<Id, string>({
-    ids,
-    initialActiveId: "c",
-    initialComparisonIds: ["c", "e"],
-    categoryOf: category,
-    ownerOfMedia: mediaOwner,
-    mediaIdOf: (id) => `${id}/cover`,
-    ...overrides,
-  });
+function model(initialShortlist: readonly Id[] = []) {
+  return createStudioModel<Id>({ ids, initialShortlist });
 }
 
-describe("selection ownership", () => {
-  it("starts on the requested study and refuses an empty or duplicated collection", () => {
-    expect(model().activeId.value).toBe("c");
-    expect(() => createStudioModel({ ids: [] })).toThrow(RangeError);
-    expect(() => createStudioModel({ ids: ["a", "a"] })).toThrow(RangeError);
-  });
+function state(studio: StudioModel<Id>) {
+  return {
+    shortlist: [...studio.shortlist.value],
+    a: studio.referenceId.value,
+    b: studio.candidateId.value,
+    deck: [...studio.deckIds.value],
+  };
+}
 
-  it("falls back to the middle study when the initial one is unknown", () => {
-    expect(model({ initialActiveId: "zzz" as Id }).activeId.value).toBe("d");
-  });
+/** Every way the state breaks a rule that must hold whatever sequence led to it. */
+function violations(studio: StudioModel<Id>): string[] {
+  const { shortlist, a, b, deck } = state(studio);
+  const broken: string[] = [];
+  if (new Set(shortlist).size !== shortlist.length) broken.push("the shortlist has a duplicate");
+  if (shortlist.length > MAX_SHORTLIST) broken.push("the shortlist is over its bound");
+  // A is the pinned reference: a member whenever the shortlist is not empty, undefined only then.
+  if (shortlist.length === 0 ? a !== undefined : !shortlist.includes(a as Id)) {
+    broken.push(`A is ${String(a)} for a shortlist of ${shortlist.length}`);
+  }
+  if (JSON.stringify(deck) !== JSON.stringify(shortlist.filter((id) => id !== a))) {
+    broken.push("the deck is not the shortlist without A");
+  }
+  // B is a member other than A, or there is no such member.
+  if (deck.length === 0 ? b !== undefined : !deck.includes(b as Id)) {
+    broken.push(`B is ${String(b)} for a deck of ${deck.length}`);
+  }
+  if (a !== undefined && a === b) broken.push("A is compared against itself");
+  return broken;
+}
 
-  it("reports whether a selection changed anything and refuses unknown IDs", () => {
+function expectInvariants(studio: StudioModel<Id>, context: string) {
+  expect(violations(studio).map((message) => `${context}: ${message}`)).toEqual([]);
+}
+
+/** A small seeded generator, so a failure names the seed that reproduces it. */
+function random(seed: number) {
+  let value = seed >>> 0;
+  return () => {
+    value = (Math.imul(value, 1664525) + 1013904223) >>> 0;
+    return value / 2 ** 32;
+  };
+}
+
+describe("the shortlist", () => {
+  it("starts empty by default and names no roles", () => {
     const studio = model();
-    expect(studio.select("d")).toBe("changed");
-    expect(studio.select("d")).toBe("unchanged");
-    expect(studio.select("nope" as Id)).toBe("unknown");
-    expect(studio.activeId.value).toBe("d");
+    expect(studio.compareState.value).toBe("empty");
+    expect(studio.referenceId.value).toBeUndefined();
+    expect(studio.candidateId.value).toBeUndefined();
+    expect(studio.deckState.value).toBe("empty");
   });
 
-  it("moves the deck cursor only when the selected study already belongs to the comparison", () => {
+  it("makes the first member the reference, the second B, and leaves B alone after that", () => {
     const studio = model();
-    expect(studio.deckId.value).toBe("c");
-    studio.select("e");
-    expect(studio.deckId.value).toBe("e");
-    studio.select("a");
-    // Outside the comparison: the cursor keeps its own card and nothing is added.
-    expect(studio.activeId.value).toBe("a");
-    expect(studio.deckId.value).toBe("e");
-    expect(studio.comparisonIds.value).toEqual(["c", "e"]);
+    expect(studio.addToShortlist("c")).toBe("added");
+    expect(studio.compareState.value).toBe("reference-only");
+    expect(state(studio)).toMatchObject({ a: "c", b: undefined });
+    studio.addToShortlist("e");
+    expect(state(studio)).toMatchObject({ a: "c", b: "e" });
+    expect(studio.compareState.value).toBe("ready");
+    expect(studio.deckState.value).toBe("single");
+    studio.addToShortlist("a");
+    // Adding never changes a comparison already under way.
+    expect(state(studio)).toMatchObject({ a: "c", b: "e", deck: ["e", "a"] });
+    expect(studio.deckState.value).toBe("deck");
   });
 
-  it("makes a deck gesture update both the cursor and the active study, but only for members", () => {
-    const studio = model();
-    expect(studio.selectFromDeck("e")).toBe(true);
-    expect(studio.activeId.value).toBe("e");
-    expect(studio.deckId.value).toBe("e");
-    expect(studio.selectFromDeck("a")).toBe(false);
-    expect(studio.activeId.value).toBe("e");
+  it("refuses duplicates, unknown ids and a fifth member without changing anything", () => {
+    const studio = model(["a", "b", "c", "d"]);
+    const before = state(studio);
+    expect(studio.addToShortlist("a")).toBe("duplicate");
+    expect(studio.addToShortlist("e")).toBe("full");
+    expect(studio.addToShortlist("nope" as Id)).toBe("unknown");
+    expect(state(studio)).toEqual(before);
+    expect(studio.shortlistFull.value).toBe(true);
+    studio.removeFromShortlist("d");
+    expect(studio.shortlistFull.value).toBe(false);
+    expect(studio.addToShortlist("e")).toBe("added");
+  });
+
+  it("deduplicates and bounds an initial shortlist", () => {
+    const studio = model(["a", "a", "b", "c", "d", "e", "f"]);
+    expect(studio.shortlist.value).toEqual(["a", "b", "c", "d"]);
+    expectInvariants(studio, "initial");
+  });
+
+  it("toggles membership", () => {
+    const studio = model(["a"]);
+    expect(studio.toggleShortlist("b")).toBe("added");
+    expect(studio.toggleShortlist("b")).toBe("removed");
+    expect(studio.toggleShortlist("b")).toBe("added");
   });
 });
 
-describe("comparison membership", () => {
-  it("adds in order, keeps the cursor on the study just added when it is active", () => {
-    const studio = model({ initialComparisonIds: [] });
-    expect(studio.deckState.value).toBe("empty");
-    expect(studio.deckId.value).toBeUndefined();
-    expect(studio.addToComparison("c")).toBe("added");
-    expect(studio.deckState.value).toBe("single");
-    expect(studio.deckId.value).toBe("c");
-    studio.select("f");
-    expect(studio.addToComparison()).toBe("added");
-    expect(studio.comparisonIds.value).toEqual(["c", "f"]);
-    expect(studio.deckState.value).toBe("deck");
-    expect(studio.deckId.value).toBe("f");
+describe("removing candidates", () => {
+  it("removing B moves B to the card that took its place, else the new last", () => {
+    const studio = model(["a", "b", "c", "d"]);
+    studio.setCandidate("c");
+    studio.removeFromShortlist("c");
+    expect(state(studio)).toMatchObject({ a: "a", b: "d", deck: ["b", "d"] });
+    studio.removeFromShortlist("d");
+    expect(state(studio)).toMatchObject({ a: "a", b: "b", deck: ["b"] });
   });
 
-  it("does not move the cursor when a study that is not active is added", () => {
-    const studio = model();
-    expect(studio.addToComparison("a")).toBe("added");
-    expect(studio.deckId.value).toBe("c");
+  it("removing the pinned reference promotes B, so the comparison stays meaningful", () => {
+    const studio = model(["a", "b", "c"]);
+    expect(state(studio)).toMatchObject({ a: "a", b: "b" });
+    expect(studio.removeFromShortlist("a")).toBe("removed");
+    expect(state(studio)).toMatchObject({ a: "b", b: "c", deck: ["c"] });
+    studio.removeFromShortlist("b");
+    expect(state(studio)).toMatchObject({ a: "c", b: undefined, deck: [] });
+    expect(studio.compareState.value).toBe("reference-only");
+    studio.removeFromShortlist("c");
+    expect(studio.compareState.value).toBe("empty");
+    expect(studio.referenceId.value).toBeUndefined();
   });
 
-  it("prevents duplicates and refuses unknown IDs", () => {
-    const studio = model();
-    expect(studio.addToComparison("c")).toBe("duplicate");
-    expect(studio.addToComparison("zzz" as Id)).toBe("unknown");
-    expect(studio.comparisonIds.value).toEqual(["c", "e"]);
+  it("removing a member behind B changes neither role", () => {
+    const studio = model(["a", "b", "c", "d"]);
+    studio.removeFromShortlist("d");
+    expect(state(studio)).toMatchObject({ a: "a", b: "b" });
   });
 
-  it("stops at the deck's capacity and says so", () => {
-    const studio = model({ initialComparisonIds: [] });
-    for (const id of ids.slice(0, MAX_COMPARISON)) expect(studio.addToComparison(id)).toBe("added");
-    expect(studio.comparisonFull.value).toBe(true);
-    expect(studio.addToComparison("g")).toBe("full");
-    expect(studio.comparisonIds.value).toHaveLength(MAX_COMPARISON);
-    studio.removeFromComparison("a");
-    expect(studio.comparisonFull.value).toBe(false);
-    expect(studio.addToComparison("g")).toBe("added");
+  it("closes the detail of a candidate that is no longer on the shortlist", () => {
+    const studio = model(["a", "b"]);
+    studio.inspect("b");
+    studio.removeFromShortlist("b");
+    expect(studio.inspectedId.value).toBeUndefined();
+    studio.inspect("a");
+    studio.removeFromShortlist("c");
+    expect(studio.inspectedId.value).toBe("a");
   });
 
-  it("caps and de-duplicates the initial comparison", () => {
-    const studio = model({ initialComparisonIds: ["a", "a", "b", "c", "d", "e", "f", "g"] });
-    expect(studio.comparisonIds.value).toEqual(["a", "b", "c", "d", "e"]);
-  });
-
-  it("falls back to the card that slid into the removed slot, else the new last card", () => {
-    const studio = model({ initialComparisonIds: ["a", "b", "c", "d"], initialActiveId: "b" });
-    expect(studio.deckId.value).toBe("b");
-    expect(studio.removeFromComparison("b")).toBe("removed");
-    expect(studio.deckId.value).toBe("c");
-    studio.selectFromDeck("d");
-    expect(studio.removeFromComparison("d")).toBe("removed");
-    expect(studio.deckId.value).toBe("c");
-    // Removing the active study from the comparison never changes what is active.
-    expect(studio.activeId.value).toBe("d");
-  });
-
-  it("keeps the cursor when another member is removed and reports a missing member", () => {
-    const studio = model({ initialComparisonIds: ["a", "b", "c"], initialActiveId: "a" });
-    expect(studio.removeFromComparison("c")).toBe("removed");
-    expect(studio.deckId.value).toBe("a");
-    expect(studio.removeFromComparison("g")).toBe("missing");
-  });
-
-  it("walks through the one-item and empty states without leaving the cursor dangling", () => {
-    const studio = model({ initialComparisonIds: ["a", "b"], initialActiveId: "a" });
-    expect(studio.deckState.value).toBe("deck");
-    studio.removeFromComparison("a");
-    expect(studio.deckState.value).toBe("single");
-    expect(studio.deckId.value).toBe("b");
-    studio.removeFromComparison("b");
-    expect(studio.deckState.value).toBe("empty");
-    expect(studio.deckId.value).toBeUndefined();
-  });
-
-  it("toggles membership for the active study by default", () => {
-    const studio = model();
-    expect(studio.toggleComparison()).toBe("removed");
-    expect(studio.toggleComparison()).toBe("added");
-    expect(studio.comparisonIds.value).toEqual(["e", "c"]);
-  });
-
-  it("survives a rapid sequence of selections and edits with a consistent final state", () => {
-    const studio = model();
-    for (const id of ["a", "d", "e", "b", "c", "e", "g", "c"] as const) studio.select(id);
-    expect(studio.activeId.value).toBe("c");
-    expect(studio.deckId.value).toBe("c");
-    studio.toggleComparison("e");
-    studio.toggleComparison("e");
-    studio.removeFromComparison("c");
-    expect(studio.comparisonIds.value.every((id) => ids.includes(id))).toBe(true);
-    expect(studio.deckId.value === undefined || studio.isCompared(studio.deckId.value)).toBe(true);
+  it("reports a missing member and changes nothing", () => {
+    const studio = model(["a", "b"]);
+    const before = state(studio);
+    expect(studio.removeFromShortlist("f")).toBe("missing");
+    expect(state(studio)).toEqual(before);
   });
 });
 
-describe("local edits", () => {
-  it("stores, trims and clears a note by study without touching other studies", () => {
-    const studio = model();
-    expect(studio.setNote("c", "Keep the crease.")).toBe("Keep the crease.");
-    expect(studio.noteFor("c")).toBe("Keep the crease.");
-    expect(studio.hasNote("c")).toBe(true);
-    expect(studio.hasNote("d")).toBe(false);
-    studio.setNote("c", "   ");
-    expect(studio.hasNote("c")).toBe(false);
-    expect(studio.noteFor("c")).toBe("");
+describe("roles", () => {
+  it("pins a member as A; the old A joins the deck and B is kept", () => {
+    const studio = model(["a", "b", "c"]);
+    expect(studio.pinReference("c")).toBe("pinned");
+    expect(state(studio)).toMatchObject({ a: "c", b: "b", deck: ["a", "b"] });
   });
 
-  it("bounds a note and keeps it across view, filter, density, selection and overlay changes", () => {
-    const studio = model();
-    expect(studio.setNote("c", "x".repeat(NOTE_LIMIT + 50))).toHaveLength(NOTE_LIMIT);
-    studio.setView("compare");
-    studio.setFilter("two");
-    studio.setDensity("compact");
-    studio.select("g");
-    studio.openSheet();
+  it("pinning B swaps the pair rather than comparing a card with itself", () => {
+    const studio = model(["a", "b", "c"]);
+    studio.pinReference("b");
+    expect(state(studio)).toMatchObject({ a: "b", b: "a" });
+  });
+
+  it("pins a candidate that is not yet on the shortlist, adding it when there is room", () => {
+    const studio = model(["a", "b"]);
+    expect(studio.pinReference("e")).toBe("pinned");
+    expect(studio.shortlist.value).toEqual(["a", "b", "e"]);
+    expect(studio.referenceId.value).toBe("e");
+    const full = model(["a", "b", "c", "d"]);
+    expect(full.pinReference("e")).toBe("full");
+    expect(full.referenceId.value).toBe("a");
+  });
+
+  it("pinning the reference again is a no-op", () => {
+    const studio = model(["a", "b"]);
+    expect(studio.pinReference("a")).toBe("unchanged");
+  });
+
+  it("changing B never changes A, and refuses A itself", () => {
+    const studio = model(["a", "b", "c"]);
+    expect(studio.setCandidate("c")).toBe("changed");
+    expect(state(studio)).toMatchObject({ a: "a", b: "c" });
+    expect(studio.setCandidate("c")).toBe("unchanged");
+    expect(studio.setCandidate("a")).toBe("is-reference");
+    expect(state(studio)).toMatchObject({ a: "a", b: "c" });
+  });
+
+  it("shortlists a candidate chosen as B when there is room, and refuses when full", () => {
+    const studio = model(["a", "b"]);
+    expect(studio.setCandidate("e")).toBe("changed");
+    expect(state(studio)).toMatchObject({ a: "a", b: "e", deck: ["b", "e"] });
+    const full = model(["a", "b", "c", "d"]);
+    expect(full.setCandidate("e")).toBe("full");
+    expect(full.candidateId.value).toBe("b");
+  });
+
+  it("swaps roles only when there is a B", () => {
+    const studio = model(["a"]);
+    expect(studio.swapRoles()).toBe(false);
+    studio.addToShortlist("b");
+    expect(studio.swapRoles()).toBe(true);
+    expect(state(studio)).toMatchObject({ a: "b", b: "a" });
+  });
+
+  it("never lets the same sequence leave A and B equal", () => {
+    const studio = model(["a", "b"]);
+    studio.swapRoles();
+    studio.pinReference("a");
+    studio.swapRoles();
+    expect(studio.referenceId.value).not.toBe(studio.candidateId.value);
+  });
+});
+
+describe("the Deck's states", () => {
+  it("counts the Deck's own cards, not the shortlist", () => {
+    const studio = model(["a"]);
+    expect(studio.deckState.value).toBe("empty");
+    studio.addToShortlist("b");
+    expect(studio.deckState.value).toBe("single");
+    studio.addToShortlist("c");
+    expect(studio.deckState.value).toBe("deck");
+    studio.pinReference("c");
+    expect(studio.deckIds.value).toEqual(["a", "b"]);
+    expect(studio.deckState.value).toBe("deck");
+  });
+});
+
+describe("what is shown is not what is chosen", () => {
+  it("shows B until the Deck reports the card in front, then that card", () => {
+    const studio = model(["a", "b", "c"]);
+    expect(studio.shownCandidateId.value).toBe("b");
+    studio.setCandidate("c");
+    // The semantic B has changed at once; the Deck is still showing b.
+    studio.reportPresented("b");
+    expect(studio.candidateId.value).toBe("c");
+    expect(studio.shownCandidateId.value).toBe("b");
+    studio.reportPresented("c");
+    expect(studio.shownCandidateId.value).toBe("c");
+  });
+
+  it("ignores a report for a card that has left the Deck", () => {
+    const studio = model(["a", "b", "c"]);
+    studio.reportPresented("c");
+    studio.removeFromShortlist("c");
+    expect(studio.shownCandidateId.value).toBe("b");
+    studio.reportPresented(undefined);
+    expect(studio.shownCandidateId.value).toBe("b");
+  });
+
+  it("never lets the presentation become a selection", () => {
+    const studio = model(["a", "b", "c"]);
+    studio.reportPresented("c");
+    expect(studio.candidateId.value).toBe("b");
+  });
+});
+
+describe("the decision", () => {
+  it("is independent of the shortlist and survives the candidate leaving it", () => {
+    const studio = model(["a", "b"]);
+    expect(studio.decide("b")).toBe(true);
+    studio.removeFromShortlist("b");
+    expect(studio.decidedId.value).toBe("b");
+    expect(studio.decide("nope" as Id)).toBe(false);
+    studio.clearDecision();
+    expect(studio.decidedId.value).toBeUndefined();
+  });
+
+  it("keeps the reason while the choice changes, and bounds it", () => {
+    const studio = model(["a", "b"]);
+    studio.decide("a");
+    expect(studio.setReason("x".repeat(REASON_LIMIT + 50))).toHaveLength(REASON_LIMIT);
+    studio.decide("b");
+    expect(studio.reason.value).toHaveLength(REASON_LIMIT);
+  });
+});
+
+describe("the one native modal", () => {
+  it("refuses a second overlay and hands modality back only on completion", () => {
+    const studio = model(["a", "b"]);
+    expect(studio.openSheet("a")).toBe(true);
+    expect(studio.openSheet("b")).toBe(false);
+    expect(studio.sheetId.value).toBe("a");
     studio.requestClose();
-    studio.completeClose();
-    expect(studio.noteFor("c")).toHaveLength(NOTE_LIMIT);
-  });
-});
-
-describe("view and filter state", () => {
-  it("filters the visible collection without changing the active study or the comparison", () => {
-    const studio = model();
-    expect(studio.visibleIds.value).toEqual(ids);
-    studio.setFilter("two");
-    expect(studio.visibleIds.value).toEqual(["d", "e", "f", "g"]);
-    expect(studio.activeId.value).toBe("c");
-    expect(studio.comparisonIds.value).toEqual(["c", "e"]);
-    studio.setFilter("all");
-    expect(studio.visibleIds.value).toEqual(ids);
-  });
-
-  it("keeps one workspace view across selection changes", () => {
-    const studio = model();
-    studio.setView("compare");
-    studio.select("a");
-    expect(studio.view.value).toBe("compare");
-  });
-});
-
-describe("overlay ownership", () => {
-  it("lets exactly one overlay own modality", () => {
-    const studio = model();
-    expect(studio.openSheet()).toBe(true);
-    expect(studio.openGallery("c/route")).toBe(false);
-    expect(studio.openSheet()).toBe(false);
-    expect(studio.overlay.value).toBe("sheet");
-  });
-
-  it("opens the Gallery on a plate and keeps modality until the dialog has closed", () => {
-    const studio = model();
-    expect(studio.openGallery()).toBe(true);
-    expect(studio.inspectionMediaId.value).toBe("c/cover");
-    expect(studio.setInspectionMedia("f/timing")).toBe(true);
-    expect(studio.setInspectionMedia("nope/none")).toBe(false);
-    expect(studio.requestClose()).toBe("f");
-    // The visitor asked to close, but the native dialog still owns the page.
     expect(studio.overlayOpen.value).toBe(false);
-    expect(studio.overlay.value).toBe("gallery");
-    expect(studio.openSheet()).toBe(false);
-    expect(studio.completeClose()).toBeUndefined();
-    expect(studio.overlay.value).toBe("none");
-    expect(studio.openSheet()).toBe(true);
-  });
-
-  it("returns to the study whose plate was showing and keeps the deck consistent", () => {
-    const studio = model();
-    studio.openGallery("c/cover");
-    studio.setInspectionMedia("e/route");
-    studio.requestClose("e/route");
-    expect(studio.activeId.value).toBe("e");
-    expect(studio.deckId.value).toBe("e");
-    studio.completeClose();
-    studio.openGallery("a/cover");
-    studio.requestClose("a/cover");
-    expect(studio.activeId.value).toBe("a");
-    expect(studio.deckId.value).toBe("e");
-  });
-
-  it("ignores a close request when nothing is open", () => {
-    const studio = model();
-    expect(studio.requestClose()).toBeUndefined();
-    expect(studio.overlay.value).toBe("none");
-  });
-
-  it("hands a Sheet action off to the Gallery only after the Sheet has closed", () => {
-    const studio = model();
-    studio.openSheet();
-    expect(studio.handOffToGallery("c/route")).toBe(true);
-    // Still the Sheet's modal: the Gallery cannot be opened over it.
+    // Closing is a request: modality stays with the dialog until it has really closed.
     expect(studio.overlay.value).toBe("sheet");
-    expect(studio.openGallery("c/route")).toBe(false);
-    expect(studio.completeClose()).toBe("c/route");
-    expect(studio.openGallery("c/route")).toBe(true);
-    expect(studio.overlay.value).toBe("gallery");
-  });
-
-  it("refuses a handoff without an open Sheet or for an unknown plate", () => {
-    const studio = model();
-    expect(studio.handOffToGallery("c/route")).toBe(false);
-    studio.openSheet();
-    expect(studio.handOffToGallery("nope/none")).toBe(false);
-    expect(studio.overlayOpen.value).toBe(true);
-  });
-
-  it("can be reopened immediately after it finished closing", () => {
-    const studio = model();
-    for (let cycle = 0; cycle < 5; cycle += 1) {
-      expect(studio.openGallery("c/cover")).toBe(true);
-      studio.requestClose();
-      studio.completeClose();
-      expect(studio.openSheet()).toBe(true);
-      studio.requestClose();
-      studio.completeClose();
-    }
+    expect(studio.openSheet("b")).toBe(false);
+    studio.completeClose();
     expect(studio.overlay.value).toBe("none");
+    expect(studio.openSheet("b")).toBe(true);
   });
+
+  it("refuses an unknown candidate", () => {
+    expect(model().openSheet("nope" as Id)).toBe(false);
+  });
+});
+
+describe("invariants over arbitrary sequences", () => {
+  for (let seed = 1; seed <= 40; seed += 1) {
+    it(`holds after every operation (seed ${seed})`, () => {
+      const next = random(seed);
+      const pick = () => ids[Math.floor(next() * ids.length)]!;
+      const studio = model(next() < 0.5 ? ["a", "b"] : []);
+      expectInvariants(studio, "start");
+      for (let step = 0; step < 150; step += 1) {
+        const id = pick();
+        const operation = Math.floor(next() * 7);
+        const label = `seed ${seed} step ${step} op ${operation} ${id}`;
+        if (operation === 0) studio.addToShortlist(id);
+        else if (operation === 1) studio.removeFromShortlist(id);
+        else if (operation === 2) studio.toggleShortlist(id);
+        else if (operation === 3) studio.pinReference(id);
+        else if (operation === 4) studio.setCandidate(id);
+        else if (operation === 5) studio.swapRoles();
+        else studio.reportPresented(next() < 0.5 ? id : undefined);
+        expectInvariants(studio, label);
+        // The shown candidate is always something the visitor could actually see in the Deck.
+        const shown = studio.shownCandidateId.value;
+        const deck = studio.deckIds.value;
+        expect([label, shown === undefined ? deck.length === 0 : deck.includes(shown)]).toEqual([
+          label,
+          true,
+        ]);
+      }
+    });
+  }
 });

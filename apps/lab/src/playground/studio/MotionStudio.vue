@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { StackedDeckExchange } from "@snap-motion/core";
 import { defineAsyncComponent, nextTick, provide, ref, watch } from "vue";
 
 import type { LabPhysicsSettings } from "@/fixtures/lab-types";
@@ -11,17 +10,15 @@ import StudioLoading from "./StudioLoading.vue";
 /**
  * The activation boundary of section 06.
  *
- * The workspace mounts a Paged Grid, a Coverflow, a Stacked Deck, a Gallery and a Sheet. The page
- * above already mounts five surfaces, so this section renders a light introduction and loads the
- * workspace only when the visitor opens it. Once opened it stays mounted: scrolling away or
- * changing view never discards the selection, the comparison or the notes.
+ * The workspace runs live surfaces side by side. The page above already mounts five, so this section
+ * renders a light introduction and loads the workspace only when the visitor opens it. Once opened
+ * it stays mounted: scrolling away or changing view never discards the shortlist, the comparison or
+ * the decision.
  */
 defineProps<{
-  exchange: StackedDeckExchange;
   reducedMotionOverride: boolean | undefined;
   settings: LabPhysicsSettings;
 }>();
-const emit = defineEmits<{ exchangeChange: [exchange: StackedDeckExchange] }>();
 
 const loadWorkspace = () => import("./StudioWorkspace.vue");
 const StudioWorkspace = defineAsyncComponent({
@@ -81,27 +78,24 @@ defineExpose({ activate });
     <StudioWorkspace
       v-if="activated"
       ref="workspace"
-      :exchange="exchange"
       :reduced-motion-override="reducedMotionOverride"
       :settings="settings"
-      @exchange-change="emit('exchangeChange', $event)"
     />
 
     <div v-else class="intro" data-testid="studio-intro">
       <div class="intro-copy">
         <h3 class="intro-title">Motion Studio</h3>
         <p class="intro-lede">
-          A small product built from the surfaces above. Browse a collection, compare studies on a
-          deck, inspect their plates and keep a note, all on one selection and one set of motion
-          settings.
+          Your product has a set of screens people move between. Which motion should do the moving?
+          Shortlist candidates, run two of them side by side on the same screens, read what differs
+          and record your choice.
         </p>
         <ol class="intro-journey" aria-label="What you can do">
-          <li>Browse</li>
-          <li>Select</li>
-          <li>Explore</li>
-          <li>Compare</li>
-          <li>Inspect</li>
-          <li>Refine</li>
+          <li>Shortlist</li>
+          <li>Pin A</li>
+          <li>Compare B</li>
+          <li>Read the differences</li>
+          <li>Decide</li>
         </ol>
         <div class="intro-actions">
           <button
@@ -127,134 +121,69 @@ defineExpose({ activate });
         viewBox="0 0 640 420"
       >
         <rect width="640" height="420" fill="#e9e5d9" rx="14" />
-        <path d="M262 14v392M262 214h364" stroke="#cfcabb" stroke-width="1.5" />
         <g
           font-family="ui-monospace, Consolas, monospace"
           font-size="10"
           letter-spacing="1.4"
           fill="#5f5c52"
         >
-          <text x="24" y="38">01 / BROWSE</text>
-          <text x="286" y="38">02 / EXPLORE</text>
-          <text x="286" y="238">03 / COMPARE</text>
-          <text x="24" y="238">ACTIVE STUDY</text>
+          <text x="28" y="40">A · REFERENCE</text>
+          <text x="340" y="40">B · CANDIDATE</text>
+          <text x="28" y="300">WHAT DIFFERS</text>
         </g>
 
-        <!-- Browse: a two-by-two page of tiles, one selected. -->
+        <!-- Two stages running the same screens: a rail on the left, a deck on the right. -->
         <g>
-          <rect x="24" y="56" width="104" height="73" rx="8" fill="#e6b091" />
-          <circle cx="68" cy="94" r="22" fill="#232527" />
-          <circle cx="86" cy="84" r="16" fill="#f4ddd0" />
-          <rect x="140" y="56" width="104" height="73" rx="8" fill="#e4ded1" />
+          <rect x="28" y="54" width="272" height="190" rx="10" fill="#f4f2ec" />
+          <path d="M58 118l50-14v70l-50-14z" fill="#15140f" opacity="0.28" />
+          <path d="M270 118l-50-14v70l50-14z" fill="#15140f" opacity="0.28" />
+          <rect x="112" y="92" width="104" height="98" rx="7" fill="#15140f" />
+          <rect x="124" y="104" width="80" height="10" rx="3" fill="#f4f2ec" />
+          <rect x="124" y="124" width="56" height="6" rx="3" fill="#bdb8a8" />
+          <rect x="124" y="138" width="68" height="6" rx="3" fill="#bdb8a8" />
+
+          <rect x="340" y="54" width="272" height="190" rx="10" fill="#f4f2ec" />
+          <rect
+            x="384"
+            y="96"
+            width="150"
+            height="100"
+            rx="7"
+            fill="#ead2bf"
+            transform="rotate(-6 459 146)"
+          />
+          <rect
+            x="394"
+            y="92"
+            width="150"
+            height="100"
+            rx="7"
+            fill="#cfd6dc"
+            transform="rotate(4 469 142)"
+          />
+          <rect x="402" y="86" width="150" height="100" rx="7" fill="#15140f" />
+          <rect x="418" y="102" width="100" height="10" rx="3" fill="#f4f2ec" />
+          <rect x="418" y="124" width="70" height="6" rx="3" fill="#bdb8a8" />
+        </g>
+
+        <!-- The two step responses on one axis, and a row of differences. -->
+        <g fill="none" stroke-linecap="round" stroke-width="3">
           <path
-            d="M156 112l22-34 22 34 22-34"
-            fill="none"
-            stroke="#232527"
-            stroke-width="7"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-          <rect x="24" y="141" width="104" height="73" rx="8" fill="#cbd3d9" />
-          <rect x="52" y="157" width="36" height="36" rx="3" fill="#232527" />
-          <rect x="70" y="171" width="36" height="30" rx="3" fill="#eef1f3" />
-          <rect x="140" y="141" width="104" height="73" rx="8" fill="#ded4bb" />
-          <circle cx="166" cy="180" r="14" fill="#232527" />
-          <circle cx="196" cy="180" r="10" fill="#232527" />
-          <circle cx="220" cy="180" r="6" fill="#b84924" />
-          <rect
-            x="21"
-            y="53"
-            width="110"
-            height="79"
-            rx="10"
-            fill="none"
+            d="M28 380 C60 380 70 310 110 312 S160 338 200 336 S240 328 290 328"
             stroke="#15140f"
-            stroke-width="2.5"
+          />
+          <path
+            d="M28 380 C60 380 80 296 120 300 S170 346 210 340 S250 326 290 328"
+            stroke="#b84924"
+            stroke-dasharray="8 5"
           />
         </g>
-
-        <!-- Active study. -->
-        <g>
-          <rect x="24" y="250" width="86" height="60" rx="6" fill="#cbd3d9" />
-          <rect x="52" y="262" width="26" height="26" rx="3" fill="#232527" />
-          <rect x="66" y="274" width="26" height="22" rx="3" fill="#eef1f3" />
-          <rect x="124" y="252" width="94" height="10" rx="3" fill="#232527" />
-          <rect x="124" y="272" width="118" height="6" rx="3" fill="#bdb8a8" />
-          <rect x="124" y="286" width="96" height="6" rx="3" fill="#bdb8a8" />
-          <rect x="24" y="330" width="122" height="30" rx="7" fill="#15140f" />
-          <rect
-            x="156"
-            y="330"
-            width="40"
-            height="30"
-            rx="7"
-            fill="none"
-            stroke="#15140f"
-            stroke-width="1.5"
-          />
-          <rect
-            x="204"
-            y="330"
-            width="40"
-            height="30"
-            rx="7"
-            fill="none"
-            stroke="#15140f"
-            stroke-width="1.5"
-          />
+        <g fill="#bdb8a8">
+          <rect x="340" y="316" width="272" height="8" rx="4" />
+          <rect x="340" y="340" width="272" height="8" rx="4" />
+          <rect x="340" y="364" width="272" height="8" rx="4" />
         </g>
-
-        <!-- Explore: a rail of cards in perspective around the front card. -->
-        <g>
-          <path d="M296 92l56-14v108l-56-14z" fill="#d9ccc8" />
-          <path d="M608 92l-56-14v108l56-14z" fill="#bec9d0" />
-          <path d="M342 84l36-8v96l-36-8z" fill="#e4ded1" />
-          <path d="M562 84l-36-8v96l36-8z" fill="#ded4bb" />
-          <rect x="396" y="64" width="132" height="92" rx="7" fill="#cbd3d9" />
-          <rect x="426" y="80" width="46" height="46" rx="4" fill="#232527" />
-          <rect x="452" y="100" width="46" height="38" rx="4" fill="#eef1f3" />
-          <path d="M456 102l42 34" stroke="#b84924" stroke-width="3" />
-          <circle cx="462" cy="188" r="3" fill="#232527" />
-          <circle cx="446" cy="188" r="2.5" fill="#bdb8a8" />
-          <circle cx="478" cy="188" r="2.5" fill="#bdb8a8" />
-        </g>
-
-        <!-- Compare: a pile, the top card slightly turned. -->
-        <g>
-          <rect
-            x="360"
-            y="276"
-            width="140"
-            height="96"
-            rx="7"
-            fill="#ded4bb"
-            transform="rotate(-5 430 324)"
-          />
-          <rect
-            x="372"
-            y="268"
-            width="140"
-            height="96"
-            rx="7"
-            fill="#d9ccc8"
-            transform="rotate(4 442 316)"
-          />
-          <rect x="384" y="262" width="140" height="96" rx="7" fill="#e6b091" />
-          <circle cx="428" cy="310" r="26" fill="#232527" />
-          <circle cx="448" cy="298" r="18" fill="#f4ddd0" />
-          <circle cx="408" cy="338" r="5" fill="#b84924" />
-          <rect
-            x="560"
-            y="276"
-            width="44"
-            height="22"
-            rx="11"
-            fill="none"
-            stroke="#15140f"
-            stroke-width="1.5"
-          />
-          <rect x="560" y="306" width="44" height="22" rx="11" fill="#15140f" />
-        </g>
+        <rect x="340" y="338" width="6" height="12" fill="#b84924" />
       </svg>
     </div>
   </div>

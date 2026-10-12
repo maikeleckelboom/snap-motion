@@ -75,7 +75,7 @@ test("the built playground resolves every asset under a non-root base", async ({
   expect(errors).toEqual([]);
 });
 
-test("the built Studio loads on demand from the base and decodes every plate it shows", async ({
+test("the built Studio loads on demand from the base and runs its candidates on the page's screens", async ({
   page,
 }) => {
   const requested: string[] = [];
@@ -93,44 +93,33 @@ test("the built Studio loads on demand from the base and decodes every plate it 
 
   await openPlayground(page);
   // Nothing of the workspace is fetched until the visitor opens it.
-  const studioAssets = () =>
-    requested.filter((url) => /StudioWorkspace|-(cover|route|timing)-[\w-]+\.svg/.test(url));
-  expect(studioAssets()).toEqual([]);
+  const studioCode = () => requested.filter((url) => /StudioWorkspace/.test(url));
+  expect(studioCode()).toEqual([]);
 
   await page.getByTestId("studio-activate").click();
   await expect(page.getByTestId("studio-workspace")).toBeVisible();
-  await expect(page.getByTestId("studio-coverflow")).toHaveAttribute("data-phase", "idle");
-  const loaded = studioAssets();
-  expect(loaded.some((url) => /StudioWorkspace-[\w-]+\.js/.test(url))).toBe(true);
-  expect(loaded.every((url) => new URL(url).pathname.startsWith("/snap-motion/assets/"))).toBe(
-    true,
-  );
+  await expect(page.getByTestId("studio-reference-surface")).toHaveAttribute("data-phase", "idle");
+  expect(studioCode().some((url) => /StudioWorkspace-[\w-]+\.js/.test(url))).toBe(true);
+  expect(
+    studioCode().every((url) => new URL(url).pathname.startsWith("/snap-motion/assets/")),
+  ).toBe(true);
 
-  // Every cover the Coverflow, the Grid and the Deck show decodes from its built URL.
-  const covers = page.locator("#studio img[src*='-cover-']");
-  await expect.poll(() => covers.count()).toBeGreaterThan(24);
+  // Both stages show the page's own screens, decoded from their built URLs under the base.
+  const screens = page.locator("#studio .screen-image");
+  await expect.poll(() => screens.count()).toBeGreaterThan(4);
   await expect
     .poll(() =>
-      covers.evaluateAll((images) =>
+      screens.evaluateAll((images) =>
         images.every((image) => (image as HTMLImageElement).naturalWidth === 1_600),
       ),
     )
     .toBe(true);
 
-  // The Gallery's plates come from the same base, and only the plates it is showing are fetched.
-  const beforeGallery = loaded.length;
-  await page.getByTestId("studio-plate-timing").click();
-  const gallery = page.getByTestId("studio-gallery");
-  await expect(gallery).toBeVisible();
-  await expect(gallery.getByTestId("snap-motion-media-gallery-title")).toHaveText("Fold — Timing");
-  const plate = gallery.locator("img[src*='fold-timing']").first();
-  await expect(plate).toBeVisible();
-  await expect
-    .poll(() => plate.evaluate((image) => (image as HTMLImageElement).naturalWidth))
-    .toBe(1_600);
-  const source = await plate.evaluate((image) => (image as HTMLImageElement).currentSrc);
-  expect(new URL(source).pathname.startsWith("/snap-motion/assets/")).toBe(true);
-  expect(studioAssets().length).toBeGreaterThanOrEqual(beforeGallery);
+  // A decision opens the implementation sheet with the real values.
+  await page.getByTestId("studio-choose-a").click();
+  await page.getByTestId("studio-open-implementation").click();
+  await expect(page.getByTestId("studio-sheet")).toBeVisible();
+  await expect(page.getByTestId("studio-snippet")).toContainText("@snap-motion/vue/coverflow");
 
   expect(failed).toEqual([]);
   expect(errors).toEqual([]);

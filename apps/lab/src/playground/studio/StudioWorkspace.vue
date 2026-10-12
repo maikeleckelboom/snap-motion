@@ -1,276 +1,279 @@
 <script setup lang="ts">
-import type { StackedDeckExchange } from "@snap-motion/core";
 import type { FocusReturnOptions } from "@snap-motion/vue/dialog";
-import {
-  MediaGalleryDialog,
-  type MediaGalleryOpenRequestDetails,
-} from "@snap-motion/vue/media-gallery";
 import { useMediaQuery } from "@vueuse/core";
 import { computed, nextTick, onBeforeUnmount, provide, ref, shallowRef, useId } from "vue";
 
 import SegmentedControl from "@/components/SegmentedControl.vue";
 import type { LabPhysicsSettings } from "@/fixtures/lab-types";
 
+import { playgroundScreens } from "../demoScreens";
 import { presetLabel } from "../preset-facts";
 import { usePlaygroundTuning } from "../tuning-context";
-import { coverMediaId, galleryMedia, studies, studyById, studyIdOfMedia } from "./catalog";
 import {
-  initialActiveStudyId,
-  initialComparisonIds,
-  type StudyCategoryId,
-  type StudyId,
-} from "./studies";
-import { studioKey } from "./studio-context";
-import {
-  MAX_COMPARISON,
-  createStudioModel,
-  type ComparisonOutcome,
-  type StudioView,
-} from "./studio-model";
-import StudioCollection from "./StudioCollection.vue";
+  candidateDefinitions,
+  candidateIds,
+  resolveCandidate,
+  type CandidateBehavior,
+  type CandidateId,
+} from "./candidates";
+import { studioKey, type StudioCommands } from "./studio-context";
+import { MAX_SHORTLIST, createStudioModel, type StudioView } from "./studio-model";
+import { cancelStudioTransition, runStudioTransition } from "./studio-transition";
+import StudioCandidates from "./StudioCandidates.vue";
 import StudioCompare from "./StudioCompare.vue";
-import StudioExplore from "./StudioExplore.vue";
-import StudioInspector from "./StudioInspector.vue";
 import StudioSheet from "./StudioSheet.vue";
+import StudioShortlist from "./StudioShortlist.vue";
 
 const props = defineProps<{
-  exchange: StackedDeckExchange;
   reducedMotionOverride: boolean | undefined;
   settings: LabPhysicsSettings;
 }>();
-const emit = defineEmits<{ exchangeChange: [exchange: StackedDeckExchange] }>();
 
-const model = createStudioModel<StudyId, StudyCategoryId>({
-  ids: studies.map(({ id }) => id),
-  initialActiveId: initialActiveStudyId,
-  initialComparisonIds,
-  categoryOf: (id) => studyById.get(id)!.category,
-  mediaIdOf: coverMediaId,
-  ownerOfMedia: studyIdOfMedia,
+/** Where a first visit starts: two candidates already shortlisted, so Compare has something to show. */
+const model = createStudioModel<CandidateId>({
+  ids: candidateIds,
+  initialShortlist: ["rail-tight", "rail-loose"],
 });
 
 const tuning = usePlaygroundTuning();
 const titleId = `${useId()}-title`;
 const root = ref<HTMLElement>();
-const collection = ref<InstanceType<typeof StudioCollection>>();
-const explore = ref<InstanceType<typeof StudioExplore>>();
-const compare = ref<InstanceType<typeof StudioCompare>>();
-const inspector = ref<InstanceType<typeof StudioInspector>>();
+const layout = ref<HTMLElement>();
+const candidates = ref<InstanceType<typeof StudioCandidates>>();
+const shortlist = ref<InstanceType<typeof StudioShortlist>>();
 const statusText = ref("");
-const galleryOpener = shallowRef<HTMLElement>();
+const sheetOpener = shallowRef<HTMLElement>();
 const wide = useMediaQuery("(min-width: 62rem)");
+const systemReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+const reducedMotion = computed(() => props.reducedMotionOverride ?? systemReducedMotion.value);
+
+const screens = playgroundScreens;
+
+// ---------------------------------------------------------------------------------- behaviours
+
+// Presets never change, so each is resolved once. Only "Your tuning" follows the page's settings.
+const fixed = new Map<CandidateId, CandidateBehavior>(
+  candidateDefinitions
+    .filter(({ feel }) => feel !== "tuning")
+    .map((definition) => [definition.id, resolveCandidate(definition, props.settings)]),
+);
+const yours = computed(() =>
+  resolveCandidate(
+    candidateDefinitions.find(({ feel }) => feel === "tuning")!,
+    props.settings,
+  ),
+);
+function behavior(id: CandidateId): CandidateBehavior {
+  return fixed.get(id) ?? yours.value;
+}
+const nameOf = (id: CandidateId | undefined) => (id === undefined ? "none" : behavior(id).name);
 
 // A change of the one status string is the only thing a screen reader hears from the workspace, so
 // repeating a message must still change it.
 function announce(message: string) {
-  statusText.value = statusText.value === message ? `${message} ` : message;
+  statusText.value = statusText.value === message ? `${message} ` : message;
 }
 
-provide(studioKey, { announce, model });
+// ---------------------------------------------------------------------------------- summary
 
 const summaryText = computed(() => {
-  const count = model.comparisonIds.value.length;
-  return `${studies.length} studies · ${count} in comparison`;
+  const count = model.shortlist.value.length;
+  return `${count} shortlisted · A ${nameOf(model.referenceId.value)} · B ${nameOf(model.shownCandidateId.value)}`;
 });
+const decisionText = computed(() =>
+  model.decidedId.value === undefined
+    ? "No decision yet"
+    : `Chosen: ${nameOf(model.decidedId.value)}`,
+);
 const motionLabel = computed(() => {
   const modified = tuning.modifiedKeys.value.length > 0;
   return `${presetLabel(tuning.preset.value)}${modified ? " · modified" : ""}`;
 });
 
 const viewOptions: { label: string; value: StudioView; testid: string }[] = [
-  { label: "Browse", value: "browse", testid: "studio-view-browse" },
-  { label: "Explore", value: "explore", testid: "studio-view-explore" },
+  { label: "Candidates", value: "candidates", testid: "studio-view-candidates" },
   { label: "Compare", value: "compare", testid: "studio-view-compare" },
 ];
 
-const sheetOpen = computed(() => model.overlay.value === "sheet" && model.overlayOpen.value);
-const galleryOpen = computed(() => model.overlay.value === "gallery" && model.overlayOpen.value);
-const galleryActiveId = computed(
-  () => model.inspectionMediaId.value ?? coverMediaId(model.activeId.value),
-);
-// Read through a function: after an `await`, TypeScript must not assume an earlier narrowing holds.
-const overlayIsFree = () => model.overlay.value === "none";
-const sheetSide = computed(() => (wide.value ? "right" : "bottom"));
-const sheetFocusReturn = computed<FocusReturnOptions>(() => ({
-  ...(inspector.value?.detailsButton ? { opener: inspector.value.detailsButton } : {}),
-  fallback: () => inspector.value?.root,
-}));
-const galleryFocusReturn = computed<FocusReturnOptions>(() => ({
-  ...(galleryOpener.value ? { opener: galleryOpener.value } : {}),
-  fallback: () => inspector.value?.root,
-}));
+// ---------------------------------------------------------------------------------- transitions
 
-// ---------------------------------------------------------------------------------- selection
-
-/**
- * A visitor's command to work on a study, from a surface that is not the Coverflow's own gesture.
- *
- * While the Coverflow is mounted it owns the spatial presentation of the selection, so the command
- * is routed through it: the rail travels on its own spring, and its request (not this function) is
- * what updates the model. That keeps its physical continuity, and a request that races a gesture
- * cannot tear the rail. Without a rail (a narrow layout showing another view) the model adopts the
- * selection directly, and the rail simply mounts on it later.
- */
-function chooseStudy(id: StudyId) {
-  if (model.overlay.value !== "none" || model.activeId.value === id) return;
-  if (explore.value?.travelTo(id)) return;
-  model.select(id);
-  announce(`${studyById.get(id)!.name} selected`);
-}
-
-/** The rail's own request. It is accepted as it arrives: there is no guard to refuse it. */
-function onCoverflowRequest(id: StudyId) {
-  model.select(id);
+interface PresentOptions {
+  region?: HTMLElement | undefined;
+  shared?: { source: HTMLElement | undefined; destination: () => HTMLElement | undefined };
+  afterUpdate?: () => void;
 }
 
 /**
- * A card chosen on the Deck. The comparison cursor and the active study both take it, and the rail
- * is asked to travel to it so the other surface follows by motion rather than by jumping.
+ * Presents a change of application state with the browser's own View Transition, when it can. The
+ * regions it names are chosen here, by the Studio, from its own DOM: nothing reaches into a package
+ * surface, and no transition runs over a Deck, Rail or Sheet exchange.
  */
-function onDeckRequest(id: StudyId) {
-  explore.value?.travelTo(id);
-  model.selectFromDeck(id);
-}
-
-function makeActive(id: StudyId) {
-  if (model.overlay.value !== "none") return;
-  if (model.isCompared(id)) {
-    model.selectFromDeck(id);
-    explore.value?.travelTo(id);
-  } else chooseStudy(id);
-}
-
-// ---------------------------------------------------------------------------------- comparison
-
-function comparisonMessage(outcome: ComparisonOutcome, id: StudyId) {
-  const name = studyById.get(id)!.name;
-  const count = model.comparisonIds.value.length;
-  switch (outcome) {
-    case "added":
-      return `${name} added to comparison, ${count} of ${MAX_COMPARISON}`;
-    case "removed":
-      return count === 0
-        ? `${name} removed. The comparison is empty`
-        : `${name} removed from comparison, ${count} of ${MAX_COMPARISON} left`;
-    case "full":
-      return `The comparison is full. Remove a study to add ${name}`;
-    case "duplicate":
-      return `${name} is already in the comparison`;
-    default:
-      return "";
-  }
-}
-
-function toggleCompare(id: StudyId = model.activeId.value) {
-  const outcome = model.toggleComparison(id);
-  announce(comparisonMessage(outcome, id));
-}
-
-function addActive() {
-  const id = model.activeId.value;
-  announce(comparisonMessage(model.addToComparison(id), id));
-}
-
-/** Removing from the tray removes the control that had focus, so focus moves to a surviving one. */
-async function removeFromTray(id: StudyId) {
-  const index = model.comparisonIds.value.indexOf(id);
-  const outcome = model.removeFromComparison(id);
-  announce(comparisonMessage(outcome, id));
-  if (outcome !== "removed") return;
-  await nextTick();
-  compare.value?.focusAfterRemoval(index);
-}
-
-async function browse() {
-  if (!wide.value) {
-    setView("browse");
-    await nextTick();
-  }
-  collection.value?.focusGrid();
-}
-
-function setView(view: StudioView) {
-  if (model.view.value === view) return;
-  model.setView(view);
-  announce(`${view[0]!.toUpperCase()}${view.slice(1)} view`);
-}
-
-// ---------------------------------------------------------------------------------- overlays
-
-// Every open, and every unmount, invalidates a handoff still waiting for focus to settle.
-let handoffGeneration = 0;
-
-function openGallery(opener: HTMLElement | undefined, mediaId?: string) {
-  handoffGeneration += 1;
-  galleryOpener.value = opener;
-  return model.openGallery(mediaId);
-}
-
-function onInspect(mediaId: string | undefined, opener: HTMLElement | undefined) {
-  openGallery(opener ?? inspector.value?.inspectButton, mediaId);
-}
-
-function onExploreActivate(id: StudyId) {
-  openGallery(explore.value?.focusTarget(), coverMediaId(id));
-}
-
-function onCompareActivate(id: StudyId) {
-  openGallery(compare.value?.focusTarget(), coverMediaId(id));
-}
-
-function onGalleryActiveRequest(mediaId: string | undefined) {
-  if (mediaId !== undefined) model.setInspectionMedia(mediaId);
-}
-
-function onGalleryOpenRequest(_open: false, details: MediaGalleryOpenRequestDetails) {
-  const id = model.requestClose(details.activeId);
-  if (id !== undefined) announce(`Back to ${studyById.get(id)!.name}`);
-}
-
-function onDetails() {
-  handoffGeneration += 1;
-  model.openSheet();
-}
-
-function onSheetRequestClose() {
-  model.requestClose();
-}
-
-function onSheetInspect(mediaId: string) {
-  model.handOffToGallery(mediaId);
-}
-
-/** Resolves once focus has a stable owner after a native close, within the library's own window. */
-function focusSettled(target: HTMLElement | undefined): Promise<void> {
-  return new Promise((resolve) => {
-    let frames = 0;
-    const tick = () => {
-      if (!target?.isConnected || target.ownerDocument.activeElement === target || ++frames >= 6) {
-        resolve();
-        return;
-      }
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
+function present(
+  kind: "view" | "detail",
+  direction: 1 | -1,
+  update: () => void,
+  options: PresentOptions = {},
+) {
+  void runStudioTransition({
+    kind,
+    direction,
+    reducedMotion: reducedMotion.value,
+    update,
+    ...(options.afterUpdate ? { afterUpdate: options.afterUpdate } : {}),
+    region: { name: kind === "view" ? "studio-view" : "studio-detail", element: options.region },
+    ...(options.shared ? { shared: { name: "studio-glyph", ...options.shared } } : {}),
   });
 }
 
-async function onOverlayClosed(kind: "gallery" | "sheet") {
-  if (model.overlay.value !== kind) return;
-  const handoff = model.completeClose();
-  if (handoff === undefined) return;
-  // The Sheet is a native modal: the Gallery may not open over it. It opens only after the Sheet has
-  // closed and handed focus back, so there is never more than one modal owner.
-  const generation = ++handoffGeneration;
-  const opener = inspector.value?.detailsButton;
-  await focusSettled(opener);
-  if (generation !== handoffGeneration || !overlayIsFree()) return;
-  openGallery(opener, handoff);
+onBeforeUnmount(() => cancelStudioTransition(document));
+
+const detailGlyph = () =>
+  root.value?.querySelector<HTMLElement>("[data-testid='studio-detail'] [data-shared-glyph]") ??
+  undefined;
+
+// ---------------------------------------------------------------------------------- commands
+
+function snapshot() {
+  return { a: model.referenceId.value, b: model.candidateId.value };
 }
 
-onBeforeUnmount(() => {
-  handoffGeneration += 1;
-});
+/** What a change did to the two roles, in words. */
+function describeRoles(before: { a: CandidateId | undefined; b: CandidateId | undefined }) {
+  const a = model.referenceId.value;
+  const b = model.candidateId.value;
+  const notes: string[] = [];
+  if (a !== before.a && a !== undefined) notes.push(`${nameOf(a)} is the reference A`);
+  if (b !== before.b && b !== undefined && b !== a) notes.push(`${nameOf(b)} is compared as B`);
+  return notes.length > 0 ? `. ${notes.join(". ")}` : "";
+}
+
+const commands: StudioCommands = {
+  toggleShortlist(id) {
+    const before = snapshot();
+    const name = nameOf(id);
+    const outcome = model.toggleShortlist(id);
+    const count = model.shortlist.value.length;
+    if (outcome === "added") {
+      announce(
+        `${name} added to the shortlist, ${count} of ${MAX_SHORTLIST}${describeRoles(before)}`,
+      );
+    } else if (outcome === "removed") {
+      announce(
+        `${name} removed from the shortlist, ${count} of ${MAX_SHORTLIST}${describeRoles(before)}`,
+      );
+    } else if (outcome === "full") {
+      announce(`The shortlist holds ${MAX_SHORTLIST}. Remove one to add ${name}`);
+    }
+  },
+  async removeFromShortlist(id) {
+    const index = model.shortlist.value.indexOf(id);
+    commands.toggleShortlist(id);
+    await nextTick();
+    shortlist.value?.focusAfterRemoval(index);
+  },
+  pinReference(id) {
+    const before = snapshot();
+    const outcome = model.pinReference(id);
+    if (outcome === "pinned") {
+      announce(`${nameOf(id)} pinned as the reference A${describeRoles({ ...before, a: id })}`);
+    } else if (outcome === "full") {
+      announce(`The shortlist holds ${MAX_SHORTLIST}. Remove one to pin ${nameOf(id)}`);
+    }
+  },
+  setCandidate(id) {
+    const outcome = model.setCandidate(id);
+    if (outcome === "changed") announce(`${nameOf(id)} is now compared as B`);
+    else if (outcome === "is-reference") announce(`${nameOf(id)} is the reference A`);
+    else if (outcome === "full") {
+      announce(`The shortlist holds ${MAX_SHORTLIST}. Remove one to compare ${nameOf(id)}`);
+    }
+  },
+  swapRoles() {
+    if (!model.swapRoles()) return;
+    announce(
+      `${nameOf(model.referenceId.value)} is now the reference A, ${nameOf(model.candidateId.value)} is B`,
+    );
+  },
+  async decide(id) {
+    if (!model.decide(id)) return;
+    announce(`${nameOf(id)} chosen`);
+    await nextTick();
+    root.value?.querySelector<HTMLElement>("[data-testid='studio-reason']")?.focus();
+  },
+  async clearDecision() {
+    model.clearDecision();
+    announce("Decision cleared");
+    await nextTick();
+    root.value?.querySelector<HTMLElement>("[data-testid='studio-choose-a']")?.focus();
+  },
+  openDetail(id, source) {
+    present(
+      "detail",
+      1,
+      () => {
+        model.inspect(id);
+        if (!wide.value) model.setView("candidates");
+      },
+      {
+        region: candidates.value?.root(),
+        shared: { source, destination: detailGlyph },
+        afterUpdate: () => candidates.value?.heading()?.focus({ preventScroll: true }),
+      },
+    );
+  },
+  closeDetail() {
+    const id = model.inspectedId.value;
+    if (id === undefined) return;
+    present("detail", -1, () => model.inspect(undefined), {
+      region: candidates.value?.root(),
+      shared: {
+        source: detailGlyph(),
+        destination: () =>
+          root.value?.querySelector<HTMLElement>(
+            `[data-candidate-row="${id}"] [data-shared-glyph]`,
+          ) ?? undefined,
+      },
+      afterUpdate: () => candidates.value?.focusRowOpener(id),
+    });
+  },
+  setView(view) {
+    if (model.view.value === view) return;
+    announce(`${view === "compare" ? "Compare" : "Candidates"} view`);
+    present("view", view === "compare" ? 1 : -1, () => model.setView(view), {
+      region: layout.value,
+    });
+  },
+  openImplementation(id, opener) {
+    sheetOpener.value = opener;
+    model.openSheet(id);
+  },
+  goToCandidates() {
+    const focusFirst = () =>
+      root.value
+        ?.querySelector<HTMLElement>("[data-testid='studio-candidate-list'] [data-open-detail]")
+        ?.focus();
+    if (wide.value || model.view.value === "candidates") {
+      focusFirst();
+      return;
+    }
+    announce("Candidates view");
+    present("view", -1, () => model.setView("candidates"), {
+      region: layout.value,
+      afterUpdate: focusFirst,
+    });
+  },
+};
+
+provide(studioKey, { announce, behavior, commands, model });
+
+// ---------------------------------------------------------------------------------- sheet
+
+const sheetOpen = computed(() => model.overlay.value === "sheet" && model.overlayOpen.value);
+const sheetSide = computed(() => (wide.value ? "right" : "bottom"));
+const sheetFocusReturn = computed<FocusReturnOptions>(() => ({
+  ...(sheetOpener.value ? { opener: sheetOpener.value } : {}),
+  fallback: () => root.value,
+}));
 
 defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
 </script>
@@ -287,10 +290,16 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
     <header class="studio-bar">
       <div class="studio-identity">
         <h3 :id="titleId" class="studio-name">Motion Studio</h3>
+        <p class="studio-question">
+          Which motion should switch between your product's screens? Shortlist, compare, decide.
+        </p>
+      </div>
+      <div class="studio-state">
         <p class="studio-summary tabular" data-testid="studio-summary">{{ summaryText }}</p>
+        <p class="studio-decision" data-testid="studio-decision-line">{{ decisionText }}</p>
       </div>
       <a class="studio-motion" data-testid="studio-motion" href="#studio-tuning">
-        <span class="studio-motion-label">Motion</span>
+        <span class="studio-motion-label">Your tuning</span>
         <strong>{{ motionLabel }}</strong>
         <span class="sr-only">. Go to motion tuning</span>
       </a>
@@ -302,50 +311,39 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
         label-hidden
         :model-value="model.view.value"
         :options="viewOptions"
-        @update:model-value="setView"
+        @update:model-value="commands.setView"
       />
     </div>
 
-    <div class="studio-layout">
-      <StudioCollection
-        v-if="wide || model.view.value === 'browse'"
-        ref="collection"
-        class="area-browse"
-        :reduced-motion-override="reducedMotionOverride"
-        :settings="settings"
-        @choose="chooseStudy"
-      />
-      <StudioExplore
-        v-if="wide || model.view.value === 'explore'"
-        ref="explore"
-        class="area-explore"
-        :reduced-motion-override="reducedMotionOverride"
-        :settings="settings"
-        @activate="onExploreActivate"
-        @request="onCoverflowRequest"
-      />
-      <StudioInspector
-        ref="inspector"
-        class="area-inspector"
-        @details="onDetails"
-        @inspect="onInspect"
-        @toggle-compare="toggleCompare()"
-      />
-      <StudioCompare
-        v-if="wide || model.view.value === 'compare'"
-        ref="compare"
-        class="area-compare"
-        :exchange="exchange"
-        :reduced-motion-override="reducedMotionOverride"
-        :settings="settings"
-        @activate="onCompareActivate"
-        @add="addActive"
-        @browse="browse"
-        @exchange-change="emit('exchangeChange', $event)"
-        @make-active="makeActive"
-        @remove="removeFromTray"
-        @request="onDeckRequest"
-      />
+    <div ref="layout" class="studio-layout" data-testid="studio-layout">
+      <template v-if="wide">
+        <div class="area-choose">
+          <StudioCandidates
+            ref="candidates"
+            :reduced-motion-override="reducedMotionOverride"
+            :screens="screens"
+          />
+          <StudioShortlist ref="shortlist" :reduced-motion-override="reducedMotionOverride" />
+        </div>
+        <StudioCompare
+          class="area-compare"
+          :reduced-motion-override="reducedMotionOverride"
+          :screens="screens"
+        />
+      </template>
+      <template v-else>
+        <StudioCandidates
+          v-if="model.view.value === 'candidates'"
+          ref="candidates"
+          :reduced-motion-override="reducedMotionOverride"
+          :screens="screens"
+        />
+        <StudioCompare v-else :reduced-motion-override="reducedMotionOverride" :screens="screens">
+          <template #shortlist>
+            <StudioShortlist ref="shortlist" :reduced-motion-override="reducedMotionOverride" />
+          </template>
+        </StudioCompare>
+      </template>
     </div>
 
     <StudioSheet
@@ -354,26 +352,8 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
       :reduced-motion-override="reducedMotionOverride"
       :settings="settings"
       :side="sheetSide"
-      @closed="onOverlayClosed('sheet')"
-      @inspect="onSheetInspect"
-      @note="announce"
-      @request-close="onSheetRequestClose"
-      @toggle-compare="toggleCompare()"
-    />
-
-    <MediaGalleryDialog
-      class="studio-gallery"
-      data-testid="studio-gallery"
-      eyebrow="Motion Studio"
-      :active-id="galleryActiveId"
-      :focus-return="galleryFocusReturn"
-      :items="galleryMedia"
-      :open="galleryOpen"
-      :reduced-motion-override="reducedMotionOverride"
-      title="Study plates"
-      @active-id-request="onGalleryActiveRequest"
-      @closed="onOverlayClosed('gallery')"
-      @open-request="onGalleryOpenRequest"
+      @closed="model.completeClose()"
+      @request-close="model.requestClose()"
     />
 
     <p class="sr-only" role="status" aria-atomic="true" data-testid="studio-status">
@@ -411,16 +391,15 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem 1rem;
+  gap: 0.5rem 1.5rem;
   padding-block: 0.9rem;
   border-block-end: 1px solid var(--pg-line);
 }
 
 .studio-identity {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.25rem 1rem;
+  display: grid;
+  gap: 0.2rem;
+  max-inline-size: 34rem;
 }
 
 .studio-name {
@@ -429,16 +408,33 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
   letter-spacing: -0.01em;
 }
 
+.studio-question {
+  color: var(--pg-ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.studio-state {
+  display: grid;
+  flex: 1 1 14rem;
+  gap: 0.15rem;
+}
+
 .studio-summary {
-  color: var(--pg-muted);
+  color: var(--pg-ink);
   font-family: var(--pg-font-mono);
   font-size: 0.75rem;
   letter-spacing: 0.03em;
 }
 
+.studio-decision {
+  color: var(--pg-muted);
+  font-size: 0.82rem;
+}
+
 .studio-motion {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem;
   min-block-size: 2.25rem;
   padding: 0.3rem 0.75rem;
@@ -447,11 +443,17 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
   color: var(--pg-ink);
   font-size: 0.85rem;
   text-decoration: none;
-  align-items: center;
 }
 
 .studio-motion:hover {
   border-color: var(--pg-ink);
+}
+
+/* A finger needs 44px. */
+@media (pointer: coarse) {
+  .studio-motion {
+    min-block-size: 2.75rem;
+  }
 }
 
 .studio-motion-label {
@@ -483,21 +485,6 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-inline-size: 0;
-  isolation: isolate;
-}
-
-/* The inspector is a foreground work surface. Comparison cards may travel behind its existing
-   divider, but never over its actions or media. Keep the Deck's overflow and physical paths intact:
-   the opaque region occludes a moving body progressively, rather than retiring or fading it. This
-   same ownership protects the inspector below Comparison in the narrow composition. */
-.studio-layout > .area-inspector {
-  position: relative;
-  z-index: 1;
-  background: var(--pg-bg);
-}
-
-.studio-layout > .area-compare {
-  isolation: isolate;
 }
 
 .studio-region {
@@ -559,71 +546,88 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
   background: transparent;
 }
 
-/* Wide: the collection and its active study on one side, the two spatial surfaces on the other. */
+/* Wide: choosing on one side, comparing on the other, so what is picked and what runs share a view. */
 @media (min-width: 62rem) {
   .studio-layout {
     grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-    grid-template-areas:
-      "browse explore"
-      "inspector compare";
+    align-items: start;
   }
 
-  .area-browse {
-    grid-area: browse;
+  .area-choose {
+    display: grid;
+    min-inline-size: 0;
     padding-inline-end: clamp(1.25rem, 2.5vw, 2rem);
   }
 
-  .area-explore {
-    grid-area: explore;
-    padding-inline-start: clamp(1.25rem, 2.5vw, 2rem);
-    border-inline-start: 1px solid var(--pg-line);
-  }
-
-  .area-inspector {
-    grid-area: inspector;
-    padding-inline-end: clamp(1.25rem, 2.5vw, 2rem);
+  .area-choose > .studio-shortlist {
     border-block-start: 1px solid var(--pg-line);
   }
 
   .area-compare {
-    grid-area: compare;
     padding-inline-start: clamp(1.25rem, 2.5vw, 2rem);
-    border-block-start: 1px solid var(--pg-line);
     border-inline-start: 1px solid var(--pg-line);
   }
 }
 
-/* Narrow: one view at a time, with the active study always beneath it, whichever view is showing. */
-@media (max-width: 61.99rem) {
-  .area-browse,
-  .area-explore,
-  .area-compare {
-    order: 1;
-    /* The three views are close in height, so switching between them barely moves the page. */
-    min-block-size: 35rem;
+/*
+ * Native View Transitions. The Studio names a region only for the length of one transition (see
+ * studio-transition.ts); these rules style the pseudo-elements that exist only while one runs. The
+ * root's own cross-fade is switched off so the frozen page around the Studio cannot flicker.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-studio-transition]::view-transition-group(root) {
+    animation: none;
   }
 
-  .area-inspector {
-    order: 2;
-    border-block-start: 1px solid var(--pg-line);
+  :root[data-studio-transition]::view-transition-old(root) {
+    display: none;
   }
-}
 
-/* The Gallery is a dark viewer on this page, as in the other demonstrations. */
-.studio-gallery {
-  --snap-motion-gallery-surface: #11161f;
-  --snap-motion-gallery-canvas: #090d13;
-  --snap-motion-gallery-text: #eef2f7;
-  --snap-motion-gallery-muted: #aab4c2;
-  --snap-motion-gallery-line: rgb(255 255 255 / 0.14);
-  --snap-motion-gallery-control-surface: #202936;
-  --snap-motion-gallery-control-border: rgb(255 255 255 / 0.24);
-  --snap-motion-gallery-control-hover-surface: #2a3545;
-  --snap-motion-gallery-disabled-surface: #171e29;
-  --snap-motion-gallery-disabled-text: #667286;
-  --snap-motion-gallery-focus: #73b3ff;
-  --snap-motion-gallery-scrim: rgb(3 7 18 / 0.92);
-  --snap-motion-gallery-chrome-surface: #151b25;
-  --snap-motion-gallery-radius: 1rem;
+  :root[data-studio-transition]::view-transition-new(root) {
+    animation: none;
+  }
+
+  :root {
+    --studio-vt-shift: 1;
+  }
+
+  :root[data-studio-direction="back"] {
+    --studio-vt-shift: -1;
+  }
+
+  ::view-transition-group(studio-view),
+  ::view-transition-group(studio-detail) {
+    animation-duration: 260ms;
+    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  ::view-transition-old(studio-view),
+  ::view-transition-old(studio-detail) {
+    animation: studio-vt-out 160ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  ::view-transition-new(studio-view),
+  ::view-transition-new(studio-detail) {
+    animation: studio-vt-in 260ms cubic-bezier(0, 0, 0.2, 1) both;
+  }
+
+  ::view-transition-group(studio-glyph) {
+    animation-duration: 340ms;
+    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  @keyframes studio-vt-out {
+    to {
+      opacity: 0;
+      transform: translateX(calc(var(--studio-vt-shift) * -18px));
+    }
+  }
+
+  @keyframes studio-vt-in {
+    from {
+      opacity: 0;
+      transform: translateX(calc(var(--studio-vt-shift) * 18px));
+    }
+  }
 }
 </style>

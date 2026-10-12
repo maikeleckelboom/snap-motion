@@ -51,12 +51,12 @@ export const playgroundSections = [
   {
     id: "studio",
     number: "06",
-    title: "Everything in motion",
+    title: "Choose the motion",
     navTitle: "Studio",
-    category: "Composition",
+    category: "Decision",
     summary:
-      "One collection. Five connected interactions. Explore, compare, inspect and refine without losing your place.",
-    hints: ["Select anywhere", "Compare on the deck", "Details open in a sheet"],
+      "Shortlist candidates, run two side by side on the same screens, read what differs and record your choice.",
+    hints: ["Shortlist two or more", "Pin A, compare B", "Same input to both"],
   },
 ] as const;
 

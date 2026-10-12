@@ -1,9 +1,17 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { studyDefinitions } from "../apps/lab/src/playground/studio/studies";
+import {
+  candidateById,
+  type CandidateId,
+} from "../apps/lab/src/playground/studio/candidate-definitions";
 import { openPlayground } from "./playgroundHelpers";
 
 export type StudioWidth = "wide" | "narrow";
+
+/** The name a candidate is shown under, from the one catalogue the Studio itself reads. */
+export function nameOf(id: CandidateId): string {
+  return candidateById.get(id)!.name;
+}
 
 /** The Studio is behind an activation boundary, so nothing about it exists until this runs. */
 export async function openStudio(
@@ -20,64 +28,67 @@ export async function openStudio(
   const workspace = page.getByTestId("studio-workspace");
   await expect(workspace).toBeVisible();
   await expect(workspace).toBeFocused();
-  if ((await workspace.getAttribute("data-layout")) === "wide") await expectStudioIdle(page);
+  await expectStudioIdle(page);
   return workspace;
 }
 
-/** Every mounted Studio surface has measured itself and published a settled state. */
+/** Every mounted live surface has measured itself and published a settled state. */
 export async function expectStudioIdle(page: Page) {
-  for (const testid of ["studio-coverflow", "studio-grid"]) {
+  for (const testid of [
+    "studio-reference-surface",
+    "studio-candidate-surface",
+    "studio-detail-surface",
+    "studio-deck",
+  ]) {
     const surface = page.getByTestId(testid);
     if ((await surface.count()) > 0) await expect(surface).toHaveAttribute("data-phase", "idle");
   }
-  const deck = page.getByTestId("studio-deck");
-  if ((await deck.count()) > 0) await expect(deck).toHaveAttribute("data-phase", "idle");
 }
 
 export const studio = {
-  activeName: (page: Page) => page.getByTestId("studio-active-name"),
-  coverflow: (page: Page) => page.getByTestId("studio-coverflow"),
+  aName: (page: Page) => page.getByTestId("studio-a-name"),
+  bName: (page: Page) => page.getByTestId("studio-b-name"),
+  compare: (page: Page) => page.getByTestId("studio-compare"),
   deck: (page: Page) => page.getByTestId("studio-deck"),
-  grid: (page: Page) => page.getByTestId("studio-grid"),
-  inspector: (page: Page) => page.getByTestId("studio-inspector"),
-  // The page's other galleries live in their own sections; this is the Studio's.
-  gallery: (page: Page) => page.getByTestId("studio-gallery"),
+  detail: (page: Page) => page.getByTestId("studio-detail"),
+  member: (page: Page, id: CandidateId) => page.getByTestId(`studio-member-${id}`),
+  row: (page: Page, id: CandidateId) => page.getByTestId(`studio-row-${id}`),
   sheet: (page: Page) => page.getByTestId("studio-sheet"),
   status: (page: Page) => page.getByTestId("studio-status"),
   summary: (page: Page) => page.getByTestId("studio-summary"),
-  tile: (page: Page, id: string) => page.getByTestId(`studio-tile-${id}`),
-  tray: (page: Page, id: string) => page.getByTestId(`studio-tray-${id}`),
 };
 
-const studiesPerPage = 4;
+export type Role = "a" | "b" | "other";
 
-/**
- * Chooses a study from the Grid the way a visitor does: page to it, then tap it. The roomy layout
- * holds four per page at every width the specs use (the tablet layout is not exercised here).
- */
-export async function selectStudy(page: Page, id: string) {
-  const grid = studio.grid(page);
-  const target = `page-${Math.floor(studyDefinitions.findIndex((study) => study.id === id) / studiesPerPage) + 1}`;
-  for (let guard = 0; guard < 6; guard += 1) {
-    const current = await grid.getAttribute("data-active-page");
-    if (current === target) break;
-    const forward = Number(current!.slice(5)) < Number(target.slice(5));
-    await page.getByTestId(forward ? "studio-grid-next" : "studio-grid-previous").click();
-    await expect(grid).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
-  }
-  await expect(grid).toHaveAttribute("data-active-page", target);
-  await studio.tile(page, id).click();
+/** The shortlist as the Studio shows it: each member's id and role, in order. */
+export async function shortlist(page: Page): Promise<{ id: string; role: Role }[]> {
+  return page.locator("[data-testid^='studio-member-']").evaluateAll((members) =>
+    members.map((member) => ({
+      id: member.getAttribute("data-testid")!.slice("studio-member-".length),
+      role: member.getAttribute("data-role") as "a" | "b" | "other",
+    })),
+  );
 }
 
-export async function expectActiveStudy(page: Page, id: string, name: string) {
-  await expect(studio.activeName(page)).toHaveText(name);
-  const coverflow = studio.coverflow(page);
-  if ((await coverflow.count()) > 0) {
-    await expect(coverflow).toHaveAttribute("data-active-id", id);
-    await expect(coverflow).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
-  }
-  const tile = studio.tile(page, id);
-  if ((await tile.count()) > 0) await expect(tile).toHaveAttribute("aria-current", "true");
+/** The roles in words, which is what the visitor reads: the reference first, then B. */
+export async function roles(page: Page): Promise<{ a?: string; b?: string }> {
+  const members = await shortlist(page);
+  const a = members.find(({ role }) => role === "a")?.id;
+  const b = members.find(({ role }) => role === "b")?.id;
+  return { ...(a ? { a } : {}), ...(b ? { b } : {}) };
+}
+
+/** Shortlists a candidate from the list, as a visitor does, and waits for the row to say so. */
+export async function shortlistCandidate(page: Page, id: CandidateId) {
+  const toggle = page.getByTestId(`studio-shortlist-${id}`);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+}
+
+export async function unshortlistCandidate(page: Page, id: CandidateId) {
+  const toggle = page.getByTestId(`studio-shortlist-${id}`);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
 }
 
 /** Which dialogs are open right now: at most one may ever own modality. */
@@ -94,18 +105,72 @@ export async function focusedTestId(page: Page): Promise<string | null> {
   );
 }
 
-export async function expectGalleryOpen(page: Page, title: string) {
-  const gallery = studio.gallery(page);
-  await expect(gallery).toBeVisible();
-  await expect(gallery.getByTestId("snap-motion-media-gallery-title")).toHaveText(title);
-}
-
-export async function expectGalleryClosed(page: Page) {
-  await expect(studio.gallery(page)).toHaveCount(1);
-  await expect(studio.gallery(page)).not.toBeVisible();
-  await expect(studio.gallery(page)).toHaveAttribute("data-dialog-state", "closed");
-}
-
 export async function expectSheetClosed(page: Page) {
   await expect(studio.sheet(page)).not.toBeVisible();
+}
+
+/**
+ * Samples, every animation frame, which name each part of the Studio is showing next to the card
+ * the Deck is really drawing in front. The invariant it exists for: no text ever names a card
+ * before that card is the one in front. It is frame-rate independent, so it holds on every engine.
+ */
+export async function startNameTrace(page: Page) {
+  await page.evaluate(() => {
+    const frames: {
+      b: string | null;
+      caption: string | null;
+      summary: string | null;
+      stage: string | null;
+      visual: string | null;
+      settled: string | null;
+    }[] = [];
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- This helper must execute in the browser evaluation scope.
+    const read = (id: string) =>
+      document.querySelector(`[data-testid="${id}"]`)?.textContent?.trim() ?? null;
+    let running = true;
+    const tick = () => {
+      if (!running) return;
+      const deck = document.querySelector('[data-testid="studio-deck"]');
+      frames.push({
+        b: read("studio-b-name"),
+        caption: read("studio-deck-caption"),
+        summary:
+          read("studio-summary")
+            ?.split("·")
+            .pop()
+            ?.replace(/^\s*B\s+/, "") ?? null,
+        stage:
+          document
+            .querySelector('[data-testid="studio-preview-candidate"]')
+            ?.getAttribute("data-candidate") ?? null,
+        visual: deck?.getAttribute("data-visual-id") ?? null,
+        settled: deck?.getAttribute("data-settled-id") ?? null,
+      });
+      requestAnimationFrame(tick);
+    };
+    (window as unknown as { snapMotionNames: unknown }).snapMotionNames = {
+      frames,
+      stop: () => {
+        running = false;
+      },
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+export async function stopNameTrace(page: Page) {
+  return page.evaluate(() => {
+    const trace = (
+      window as unknown as { snapMotionNames: { frames: unknown[]; stop: () => void } }
+    ).snapMotionNames;
+    trace.stop();
+    return trace.frames as {
+      b: string | null;
+      caption: string | null;
+      summary: string | null;
+      stage: string | null;
+      visual: string | null;
+      settled: string | null;
+    }[];
+  });
 }

@@ -1,566 +1,653 @@
 <script setup lang="ts">
-import type { StackedDeckExchange } from "@snap-motion/core";
-import {
-  StackedDeck,
-  type StackedDeckCardState,
-  type StackedDeckHandle,
-} from "@snap-motion/vue/stacked-deck";
-import { computed, ref, useId } from "vue";
+import { computed, onBeforeUnmount, ref, useId } from "vue";
 
-import SegmentedControl from "@/components/SegmentedControl.vue";
-import type { LabPhysicsSettings } from "@/fixtures/lab-types";
+import type { ShowcaseScreen } from "@/demos/showcaseScreens";
 
-import { studyById, type Study } from "./catalog";
-import type { StudyId } from "./studies";
+import CandidatePreview from "./CandidatePreview.vue";
+import { differenceRows, responseChart, summarizeDifference } from "./candidates";
 import { useStudio } from "./studio-context";
-import { MAX_COMPARISON } from "./studio-model";
-import { useStudioPhysics } from "./use-studio-physics";
+import { REASON_LIMIT } from "./studio-model";
 
 const props = defineProps<{
-  exchange: StackedDeckExchange;
   reducedMotionOverride: boolean | undefined;
-  settings: LabPhysicsSettings;
-}>();
-const emit = defineEmits<{
-  /** The Deck asked to change its card: a drag, a key, a step, or a tray jump. */
-  request: [id: StudyId];
-  /** The settled top card was tapped: the visitor asked to inspect it. */
-  activate: [id: StudyId];
-  /** A study was removed from the comparison. */
-  remove: [id: StudyId];
-  /** Add the active study to the comparison. */
-  add: [];
-  /** Make the Deck's current card the active study everywhere. */
-  makeActive: [id: StudyId];
-  browse: [];
-  exchangeChange: [exchange: StackedDeckExchange];
+  screens: readonly ShowcaseScreen[];
 }>();
 
-const { model } = useStudio();
-const physics = useStudioPhysics(() => props.settings);
+const { behavior, commands, model } = useStudio();
 const titleId = `${useId()}-title`;
-const trayId = `${useId()}-tray`;
-const region = ref<HTMLElement>();
-const deck = ref<StackedDeckHandle<StudyId>>();
+const decisionTitleId = `${useId()}-decision`;
+const reasonId = `${useId()}-reason`;
+const chartTitleId = `${useId()}-chart`;
+const stageA = ref<InstanceType<typeof CandidatePreview>>();
+const stageB = ref<InstanceType<typeof CandidatePreview>>();
 
-const compared = computed(() => model.comparisonIds.value.map((id) => studyById.get(id)!));
-const activeStudy = computed(() => studyById.get(model.activeId.value)!);
-const deckStudy = computed(() =>
-  model.deckId.value === undefined ? undefined : studyById.get(model.deckId.value),
+const a = computed(() =>
+  model.referenceId.value === undefined ? undefined : behavior(model.referenceId.value),
 );
-const activeInComparison = computed(() => model.isCompared(model.activeId.value));
-const deckIsActive = computed(() => model.deckId.value === model.activeId.value);
-// The Deck is only mounted with at least one member, so the cursor always names one of them.
-const deckCursor = computed(() => model.deckId.value ?? compared.value[0]!.id);
-const countText = computed(() => `${compared.value.length} of ${MAX_COMPARISON}`);
-const overlayOwned = computed(() => model.overlay.value !== "none");
+/**
+ * B as presented. The Deck reports the card in front, which trails the semantic B while it
+ * exchanges, so the stage, the table and every name beside them change at the moment the visitor
+ * can see the card change. The semantic B has already been accepted; nothing here delays it.
+ */
+const b = computed(() =>
+  model.shownCandidateId.value === undefined ? undefined : behavior(model.shownCandidateId.value),
+);
+const both = computed(() => (a.value && b.value ? { a: a.value, b: b.value } : undefined));
+const rows = computed(() => (both.value ? differenceRows(both.value.a, both.value.b) : []));
+const summary = computed(() => (both.value ? summarizeDifference(both.value.a, both.value.b) : ""));
+const chart = computed(() =>
+  both.value ? responseChart([both.value.a, both.value.b]) : undefined,
+);
+const decided = computed(() =>
+  model.decidedId.value === undefined ? undefined : behavior(model.decidedId.value),
+);
+const reasonLength = computed(() => model.reason.value.length);
 
-const exchangeOptions = [
-  { label: "Shuffle", value: "shuffle", testid: "studio-exchange-shuffle" },
-  { label: "Direct", value: "direct", testid: "studio-exchange-direct" },
-] as const;
-
-function cardStyle(card: StackedDeckCardState<Study, StudyId>) {
-  return { "--tone": card.item.tone };
-}
-
-function jumpTo(id: StudyId) {
-  if (deck.value?.navigateTo(id)) return;
-  // Already the current card, or the Deck is not mounted: nothing to travel.
-  if (model.deckId.value !== id) emit("makeActive", id);
-}
+// ---------------------------------------------------------------------------------- the driver
 
 /**
- * After a removal the control that had focus is gone. Focus moves to the card that took its place in
- * the tray (the next one, else the new last), or to the empty state's own action.
+ * One input, delivered to both stages. A replay is a fixed run of steps at a fixed cadence, so a
+ * spring that settles slowly is interrupted by the next step exactly as it would be in use. The run
+ * reverses once and stops short of the last screen, because a rail ends where a deck wraps. Each
+ * replay carries a generation: any newer replay, any manual input and the end of this component
+ * invalidate the steps still waiting.
  */
-function focusAfterRemoval(index: number) {
-  const names = region.value?.querySelectorAll<HTMLElement>(".tray-name:not(:disabled)");
-  const survivor = names?.[Math.min(index, (names?.length ?? 0) - 1)];
-  if (survivor) survivor.focus();
-  else region.value?.querySelector<HTMLElement>("[data-testid='studio-compare-add']")?.focus();
+const REPLAY_STEPS = ["next", "next", "previous", "next"] as const;
+const REPLAY_INTERVAL_MS = 420;
+let replayGeneration = 0;
+const replaying = ref(false);
+let replayTimer: ReturnType<typeof setTimeout> | undefined;
+
+function stopReplay() {
+  replayGeneration += 1;
+  clearTimeout(replayTimer);
+  replaying.value = false;
 }
 
-defineExpose({
-  focusAfterRemoval,
-  focusTarget: () => deck.value?.root,
-  jumpTo,
-});
+function drive(command: "next" | "previous") {
+  stageA.value?.[command]();
+  stageB.value?.[command]();
+}
+
+function step(command: "next" | "previous") {
+  stopReplay();
+  drive(command);
+}
+
+function reset() {
+  stopReplay();
+  stageA.value?.reset();
+  stageB.value?.reset();
+}
+
+function replay() {
+  stopReplay();
+  const generation = replayGeneration;
+  replaying.value = true;
+  let index = 0;
+  const run = () => {
+    if (generation !== replayGeneration) return;
+    const command = REPLAY_STEPS[index];
+    if (command === undefined) {
+      replaying.value = false;
+      return;
+    }
+    index += 1;
+    drive(command);
+    replayTimer = setTimeout(run, REPLAY_INTERVAL_MS);
+  };
+  run();
+}
+
+onBeforeUnmount(stopReplay);
+
+function onReasonInput(event: Event) {
+  const field = event.currentTarget as HTMLTextAreaElement;
+  const stored = model.setReason(field.value);
+  if (stored !== field.value) field.value = stored;
+}
+
+defineExpose({ stopReplay });
 </script>
 
 <template>
   <section
-    ref="region"
     class="studio-region studio-compare"
     :aria-labelledby="titleId"
     data-testid="studio-compare"
+    :data-compare-state="model.compareState.value"
     role="group"
-    @keydown="deck?.onKeyDown($event)"
   >
     <header class="region-head">
       <div>
-        <p class="region-kicker"><span class="tabular">03</span> / Compare</p>
-        <h4 :id="titleId" class="region-title">Comparison</h4>
+        <p class="region-kicker"><span class="tabular">3</span> / Compare</p>
+        <h4 :id="titleId" class="region-title">A against B</h4>
       </div>
-      <p class="region-count tabular" data-testid="studio-comparison-count">{{ countText }}</p>
     </header>
 
-    <!-- One Deck for one card and for many. Its cards are the same physical objects either side of
-    the two-card boundary, so the package reconciles that boundary like any other change of
-    membership. Holding a single card it has nothing to exchange, so it refuses every input and
-    leaves the accessibility tree; the copy and the tray beneath it say what it holds. -->
-    <template v-if="model.deckState.value !== 'empty'">
-      <StackedDeck
-        ref="deck"
-        class="studio-deck"
-        data-testid="studio-deck"
-        :active-id="deckCursor"
-        :data-deck-state="model.deckState.value"
-        :disabled="overlayOwned || model.deckState.value === 'single'"
-        :inert="model.deckState.value === 'single' ? true : undefined"
-        :elasticity="physics.elasticity.value"
-        :exchange="exchange"
-        :fallback-stage-width="1280"
-        :focus-scope="region"
-        :item-label="(study) => study.name"
-        :items="compared"
-        label="Compared studies, stacked deck"
-        :programmatic-impulse="physics.programmaticImpulse.value"
-        :reduced-motion-override="reducedMotionOverride"
-        :release-policy="physics.deckRelease.value"
-        :spring="physics.spring.value"
-        @activate="(study) => emit('activate', study.id)"
-        @active-id-request="(id) => id !== undefined && emit('request', id)"
-      >
-        <template #backdrop>
-          <div aria-hidden="true" class="deck-backdrop" />
-        </template>
-        <template #card="card">
-          <div class="deck-plate" :style="cardStyle(card)">
-            <img
-              alt=""
-              aria-hidden="true"
-              class="deck-image"
-              decoding="async"
-              draggable="false"
-              :height="card.item.cover.preview.height"
-              :src="card.item.cover.preview.src"
-              :width="card.item.cover.preview.width"
-            />
-          </div>
-        </template>
-      </StackedDeck>
-
-      <div v-if="model.deckState.value === 'deck'" class="deck-controls">
-        <div class="step-controls">
-          <button
-            aria-label="Previous card"
-            data-testid="studio-deck-previous"
-            :disabled="overlayOwned || !deck?.canPrevious"
-            type="button"
-            @click="deck?.previous()"
-          >
-            <svg aria-hidden="true" height="18" viewBox="0 0 24 24" width="18">
-              <path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" />
-            </svg>
-          </button>
-          <button
-            aria-label="Next card"
-            data-testid="studio-deck-next"
-            :disabled="overlayOwned || !deck?.canNext"
-            type="button"
-            @click="deck?.next()"
-          >
-            <svg aria-hidden="true" height="18" viewBox="0 0 24 24" width="18">
-              <path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" />
-            </svg>
-          </button>
-        </div>
-        <p class="deck-caption">
-          <strong data-testid="studio-deck-caption">{{ deckStudy?.name }}</strong>
-          <span v-if="deckIsActive" class="deck-state">Active study</span>
-        </p>
-        <SegmentedControl
-          class="exchange"
-          label="Exchange"
-          :model-value="exchange"
-          :options="exchangeOptions"
-          @update:model-value="emit('exchangeChange', $event)"
-        />
-      </div>
-      <p
-        v-if="model.deckState.value === 'deck' && !deckIsActive && deckStudy"
-        class="deck-note"
-        data-testid="studio-deck-note"
-      >
-        {{ deckStudy.name }} is on top. {{ activeStudy.name }} is the active study{{
-          activeInComparison ? "" : ", and is not in the comparison"
-        }}.
-        <button class="text-button" type="button" @click="emit('makeActive', deckStudy.id)">
-          Make {{ deckStudy.name }} active
-        </button>
+    <div v-if="a === undefined" class="compare-empty" data-testid="studio-compare-empty">
+      <p class="empty-title">Nothing to compare yet</p>
+      <p class="empty-copy">
+        Shortlist two candidates. The first you shortlist becomes the reference A, and each other
+        one can be set against it as B.
       </p>
-
-      <div
-        v-if="model.deckState.value === 'single'"
-        class="state-copy single-copy"
-        data-testid="studio-compare-single"
+      <button
+        class="studio-button studio-button-primary"
+        data-testid="studio-compare-choose"
+        type="button"
+        @click="commands.goToCandidates()"
       >
-        <p class="state-title">One study so far</p>
-        <p>
-          {{ deckStudy?.name }} is the only card. The Deck exchanges cards, so it needs two. Add
-          another study to compare.
-        </p>
-        <div class="state-actions">
-          <button
-            v-if="!activeInComparison"
-            class="studio-button studio-button-primary"
-            data-testid="studio-compare-add"
-            type="button"
-            @click="emit('add')"
-          >
-            Add {{ activeStudy.name }}
-          </button>
-          <button class="studio-button" type="button" @click="emit('browse')">
-            Choose another study
-          </button>
-        </div>
-      </div>
-    </template>
-
-    <div v-else class="compare-state" data-testid="studio-compare-empty">
-      <div aria-hidden="true" class="empty-pile">
-        <span />
-        <span />
-        <span />
-      </div>
-      <div class="state-copy">
-        <p class="state-title">Nothing to compare yet</p>
-        <p>Add studies from the collection or the spatial view, then exchange them here.</p>
-        <div class="state-actions">
-          <button
-            class="studio-button studio-button-primary"
-            data-testid="studio-compare-add"
-            type="button"
-            @click="emit('add')"
-          >
-            Add {{ activeStudy.name }}
-          </button>
-          <button class="studio-button" type="button" @click="emit('browse')">
-            Browse the collection
-          </button>
-        </div>
-      </div>
+        Choose candidates
+      </button>
     </div>
 
-    <ul v-if="compared.length > 0" :id="trayId" class="tray" aria-label="Studies in comparison">
-      <li
-        v-for="study in compared"
-        :key="study.id"
-        class="tray-item"
-        :data-current="model.deckId.value === study.id ? 'true' : 'false'"
-        :data-testid="`studio-tray-${study.id}`"
-      >
-        <button
-          :aria-current="model.deckId.value === study.id ? 'true' : undefined"
-          class="tray-name"
-          :disabled="overlayOwned"
-          type="button"
-          @click="jumpTo(study.id)"
-        >
-          <img
-            alt=""
-            aria-hidden="true"
-            class="tray-thumb"
-            height="44"
-            :src="study.cover.preview.src"
-            width="63"
+    <template v-else>
+      <div class="stages">
+        <figure class="stage" data-testid="studio-stage-a">
+          <figcaption class="stage-head">
+            <span class="stage-role">A · Reference</span>
+            <strong class="stage-name" data-testid="studio-a-name">{{ a.name }}</strong>
+          </figcaption>
+          <CandidatePreview
+            :key="a.id"
+            ref="stageA"
+            :behavior="a"
+            :label="`A, ${a.name}, live preview`"
+            :reduced-motion-override="props.reducedMotionOverride"
+            role="reference"
+            :screens="screens"
           />
-          <span>{{ study.name }}</span>
+        </figure>
+
+        <figure v-if="b !== undefined" class="stage" data-testid="studio-stage-b">
+          <figcaption class="stage-head">
+            <span class="stage-role">B · Candidate</span>
+            <strong class="stage-name" data-testid="studio-b-name">{{ b.name }}</strong>
+          </figcaption>
+          <CandidatePreview
+            :key="b.id"
+            ref="stageB"
+            :behavior="b"
+            :label="`B, ${b.name}, live preview`"
+            :reduced-motion-override="props.reducedMotionOverride"
+            role="candidate"
+            :screens="screens"
+          />
+        </figure>
+        <div v-else class="stage stage-vacant" data-testid="studio-stage-b-vacant">
+          <p class="stage-head">
+            <span class="stage-role">B · Candidate</span>
+          </p>
+          <p class="empty-copy">Shortlist another candidate to run it beside {{ a.name }}.</p>
+        </div>
+      </div>
+
+      <div class="driver" role="group" aria-label="Run the same input on both">
+        <button
+          class="studio-button"
+          data-testid="studio-driver-previous"
+          type="button"
+          @click="step('previous')"
+        >
+          Back
         </button>
         <button
-          class="tray-remove"
-          :data-testid="`studio-remove-${study.id}`"
-          :disabled="overlayOwned"
+          class="studio-button studio-button-primary"
+          data-testid="studio-driver-next"
           type="button"
-          @click="emit('remove', study.id)"
+          @click="step('next')"
         >
-          <span class="sr-only">Remove {{ study.name }} from comparison</span>
-          <svg aria-hidden="true" height="14" viewBox="0 0 24 24" width="14">
-            <path
-              d="M5 5l14 14M19 5 5 19"
-              fill="none"
-              stroke="currentColor"
-              stroke-linecap="square"
-              stroke-width="2.5"
-            />
-          </svg>
+          Step
         </button>
-      </li>
-    </ul>
+        <button
+          class="studio-button"
+          :aria-pressed="replaying"
+          data-testid="studio-driver-replay"
+          type="button"
+          @click="replaying ? stopReplay() : replay()"
+        >
+          {{ replaying ? "Stop replay" : "Replay a run" }}
+        </button>
+        <button
+          class="studio-button"
+          data-testid="studio-driver-reset"
+          type="button"
+          @click="reset"
+        >
+          Reset
+        </button>
+        <p class="driver-note">
+          {{
+            both ? "Both stages get the same input, on the same screens." : "Runs the reference."
+          }}
+          You can also drag either one.
+        </p>
+      </div>
+
+      <slot name="shortlist" />
+
+      <section
+        v-if="both && chart"
+        class="differences"
+        aria-labelledby="studio-differences-title"
+        data-testid="studio-differences"
+        role="group"
+      >
+        <h5 id="studio-differences-title" class="sub-title">What differs</h5>
+        <p class="summary" data-testid="studio-summary-text">{{ summary }}</p>
+
+        <table class="diff-table" data-testid="studio-diff-table">
+          <caption class="sr-only">
+            Settings of the reference A and the candidate B. Rows that differ are marked.
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Setting</th>
+              <th scope="col">A · {{ both.a.name }}</th>
+              <th scope="col">B · {{ both.b.name }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in rows"
+              :key="row.key"
+              :data-differs="row.differs ? 'true' : 'false'"
+              :data-row="row.key"
+              :data-source="row.source"
+            >
+              <th scope="row">
+                {{ row.label }}
+                <span v-if="row.source === 'computed'" class="source">computed</span>
+              </th>
+              <td>{{ row.a }}</td>
+              <td>
+                {{ row.b }}
+                <span v-if="row.differs" class="differs">differs</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="legend">
+          Declared values are the settings each candidate is given. Computed values come from
+          stepping each spring once on a one-screen move: the spring alone, not a measurement of
+          this page.
+        </p>
+
+        <figure class="chart">
+          <svg
+            :aria-labelledby="chartTitleId"
+            class="chart-svg"
+            data-testid="studio-chart"
+            role="img"
+            :viewBox="`0 0 ${chart.width} ${chart.height}`"
+          >
+            <title :id="chartTitleId">
+              Step response of one screen move. A settles in
+              {{ both.a.settleMs === undefined ? "over 4 s" : `${both.a.settleMs} ms` }}; B settles
+              in {{ both.b.settleMs === undefined ? "over 4 s" : `${both.b.settleMs} ms` }}.
+            </title>
+            <line
+              class="chart-target"
+              :x1="8"
+              :x2="chart.width - 8"
+              :y1="chart.targetY"
+              :y2="chart.targetY"
+            />
+            <path class="chart-a" :d="chart.curves[0]!.path" />
+            <path class="chart-b" :d="chart.curves[1]!.path" />
+          </svg>
+          <figcaption class="chart-legend">
+            <span class="key key-a">A · {{ both.a.name }}</span>
+            <span class="key key-b">B · {{ both.b.name }}</span>
+            <span class="chart-axis">0 to {{ Math.round(chart.seconds * 1000) }} ms</span>
+          </figcaption>
+        </figure>
+      </section>
+
+      <section
+        class="decision"
+        :aria-labelledby="decisionTitleId"
+        data-testid="studio-decision"
+        role="group"
+      >
+        <p class="region-kicker"><span class="tabular">4</span> / Decision</p>
+        <h5 :id="decisionTitleId" class="sub-title">Which one will you use?</h5>
+        <template v-if="decided === undefined">
+          <div class="decision-actions">
+            <button
+              class="studio-button studio-button-primary"
+              data-testid="studio-choose-a"
+              type="button"
+              @click="commands.decide(a.id)"
+            >
+              Choose A: {{ a.name }}
+            </button>
+            <button
+              v-if="b"
+              class="studio-button studio-button-primary"
+              data-testid="studio-choose-b"
+              type="button"
+              @click="commands.decide(b.id)"
+            >
+              Choose B: {{ b.name }}
+            </button>
+          </div>
+          <p class="empty-copy">
+            You can change it at any time. Nothing is saved beyond this page.
+          </p>
+        </template>
+        <template v-else>
+          <p class="decided" data-testid="studio-decided">
+            <span class="decided-label">Chosen</span>
+            <strong>{{ decided.name }}</strong>
+          </p>
+          <label class="reason-label" :for="reasonId">Why this one?</label>
+          <textarea
+            :id="reasonId"
+            class="reason-field"
+            data-testid="studio-reason"
+            :maxlength="REASON_LIMIT"
+            placeholder="A short note for the next person who asks."
+            rows="3"
+            :value="model.reason.value"
+            @input="onReasonInput"
+          />
+          <p class="reason-count tabular">{{ reasonLength }} / {{ REASON_LIMIT }}</p>
+          <div class="decision-actions">
+            <button
+              class="studio-button studio-button-primary"
+              data-testid="studio-open-implementation"
+              type="button"
+              @click="commands.openImplementation(decided.id, $event.currentTarget as HTMLElement)"
+            >
+              View implementation
+            </button>
+            <button
+              class="studio-button"
+              data-testid="studio-revise"
+              type="button"
+              @click="commands.clearDecision()"
+            >
+              Change decision
+            </button>
+          </div>
+        </template>
+      </section>
+    </template>
   </section>
 </template>
 
 <style scoped>
-.studio-deck {
-  margin-block-start: 0.25rem;
-}
-
-.deck-backdrop {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  border-radius: 0.9rem;
-  background: var(--stage);
-  pointer-events: none;
-}
-
-.studio-compare :deep(.snap-motion-stacked-deck-card-motion) {
-  border-radius: 0.75rem;
-  box-shadow:
-    0 18px 34px -18px rgb(21 20 15 / calc(0.38 * var(--snap-motion-deck-shadow-strength))),
-    0 4px 10px -6px rgb(21 20 15 / calc(0.32 * var(--snap-motion-deck-shadow-strength)));
-  cursor: pointer;
-}
-
-.studio-deck {
-  cursor: grab;
-}
-
-.studio-deck:active {
-  cursor: grabbing;
-}
-
-.deck-plate {
-  position: relative;
-  inline-size: 100%;
-  block-size: 100%;
-  border-radius: 0.75rem;
-  background: var(--tone);
-  overflow: hidden;
-}
-
-.deck-image {
-  display: block;
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
-  pointer-events: none;
-}
-
-.deck-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem 1rem;
-}
-
-.step-controls {
-  display: inline-flex;
-  gap: 0.5rem;
-}
-
-.step-controls button {
+.stages {
   display: grid;
-  place-items: center;
-  inline-size: 2.75rem;
-  block-size: 2.75rem;
-  padding: 0;
-  border-radius: 999px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
 }
 
-.deck-caption {
-  display: flex;
-  flex: 1 1 8rem;
-  align-items: baseline;
-  gap: 0.6rem;
+.stage {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
   min-inline-size: 0;
+  margin: 0;
 }
 
-.deck-caption strong {
-  font-size: 1.05rem;
+.stage-head {
+  display: grid;
+  gap: 0.1rem;
 }
 
-.deck-state {
-  color: var(--pg-accent);
+.stage-role {
+  color: var(--pg-muted);
   font-family: var(--pg-font-mono);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
-.deck-note {
-  color: var(--pg-muted);
-  font-size: 0.85rem;
-  line-height: 1.45;
+.stage-name {
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
 }
 
-.text-button {
-  display: inline;
-  min-block-size: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  color: var(--pg-ink);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
+.stage-vacant {
+  padding: 0.9rem;
+  border: 1px dashed var(--pg-line);
+  border-radius: 0.9rem;
 }
 
-.compare-state {
-  display: grid;
-  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr);
+.driver {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1.25rem 1.75rem;
+  gap: 0.5rem;
+}
+
+.driver-note {
+  flex: 1 1 14rem;
+  color: var(--pg-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.compare-empty {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
   padding: 1.25rem;
   border-radius: 0.9rem;
   background: var(--stage);
 }
 
-.empty-pile {
-  position: relative;
+.empty-title {
+  font-size: 1.1rem;
+  font-weight: 650;
+}
+
+.empty-copy {
+  color: var(--pg-ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.sub-title {
   margin: 0;
-  aspect-ratio: 10 / 7;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
-.single-copy {
-  padding-inline: 0.25rem;
-}
-
-.empty-pile span {
-  position: absolute;
-  inset: 0;
-  border: 2px dashed var(--pg-line);
-  border-radius: 0.75rem;
-  background: var(--pg-panel);
-}
-
-.empty-pile span:nth-child(1) {
-  transform: translate(-0.5rem, 0.5rem) rotate(-4deg);
-}
-
-.empty-pile span:nth-child(2) {
-  transform: translate(0.5rem, 0.25rem) rotate(3deg);
-}
-
-.empty-pile span:nth-child(3) {
-  border-style: solid;
-  border-color: var(--pg-ink);
-}
-
-/* A plus on the front card: the invitation, drawn with the page's own ink. */
-.empty-pile span:nth-child(3)::before,
-.empty-pile span:nth-child(3)::after {
-  content: "";
-  position: absolute;
-  inset-block-start: 50%;
-  inset-inline-start: 50%;
-  background: var(--pg-ink);
-  transform: translate(-50%, -50%);
-}
-
-.empty-pile span:nth-child(3)::before {
-  inline-size: 2rem;
-  block-size: 2px;
-}
-
-.empty-pile span:nth-child(3)::after {
-  inline-size: 2px;
-  block-size: 2rem;
-}
-
-.state-copy {
+.differences,
+.decision {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.6rem;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--pg-line);
+}
+
+.summary {
   color: var(--pg-ink-soft);
   font-size: 0.95rem;
   line-height: 1.5;
 }
 
-.state-title {
-  color: var(--pg-ink);
-  font-size: 1.15rem;
+.diff-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.diff-table th,
+.diff-table td {
+  padding: 0.4rem 0.5rem;
+  border-block-end: 1px solid var(--pg-line);
+  text-align: start;
+  vertical-align: baseline;
+}
+
+.diff-table thead th {
+  color: var(--pg-muted);
+  font-family: var(--pg-font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.diff-table tbody th {
+  font-weight: 500;
+}
+
+.diff-table tr[data-differs="true"] td {
   font-weight: 650;
-  letter-spacing: -0.01em;
 }
 
-.state-actions {
+.diff-table tr[data-differs="true"] th {
+  box-shadow: inset 3px 0 0 var(--pg-accent);
+}
+
+.source {
+  margin-inline-start: 0.35rem;
+  color: var(--pg-muted);
+  font-family: var(--pg-font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.differs {
+  margin-inline-start: 0.35rem;
+  color: var(--pg-accent);
+  font-family: var(--pg-font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.legend {
+  color: var(--pg-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.chart {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.chart-svg {
+  inline-size: 100%;
+  max-inline-size: 28rem;
+  block-size: auto;
+  border-radius: 0.5rem;
+  background: var(--stage);
+}
+
+.chart-target {
+  stroke: var(--pg-ink);
+  stroke-dasharray: 3 5;
+  stroke-opacity: 0.4;
+}
+
+.chart-a,
+.chart-b {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+.chart-a {
+  stroke: var(--pg-ink);
+}
+
+.chart-b {
+  stroke: var(--pg-accent);
+  stroke-dasharray: 7 4;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  font-size: 0.82rem;
+}
+
+.key::before {
+  content: "";
+  display: inline-block;
+  inline-size: 1.4rem;
+  margin-inline-end: 0.4rem;
+  vertical-align: middle;
+  border-block-start: 3px solid var(--pg-ink);
+}
+
+.key-b::before {
+  border-block-start: 3px dashed var(--pg-accent);
+}
+
+.chart-axis {
+  margin-inline-start: auto;
+  color: var(--pg-muted);
+  font-family: var(--pg-font-mono);
+  font-size: 0.7rem;
+}
+
+.decision-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  padding-block-start: 0.35rem;
 }
 
-.tray {
+.decided {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: baseline;
+  gap: 0.6rem;
 }
 
-.tray-item {
-  display: inline-flex;
-  align-items: stretch;
-  border: 1px solid var(--pg-line);
-  border-radius: 0.6rem;
-  background: var(--pg-panel);
-  overflow: hidden;
+.decided strong {
+  font-size: 1.2rem;
 }
 
-.tray-item[data-current="true"] {
-  border-color: var(--pg-ink);
+.decided-label {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--pg-accent);
+  color: var(--pg-white);
+  font-family: var(--pg-font-mono);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
-.tray-name,
-.tray-remove {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.tray-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-block-size: 2.75rem;
-  padding: 0.25rem 0.6rem 0.25rem 0.3rem;
+.reason-label {
   font-size: 0.88rem;
   font-weight: 600;
 }
 
-.tray-thumb {
-  inline-size: 2.2rem;
-  block-size: auto;
-  border-radius: 0.25rem;
+.reason-field {
+  inline-size: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--pg-line);
+  border-radius: 0.5rem;
+  background: var(--pg-white);
+  font: inherit;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  resize: vertical;
 }
 
-.tray-remove {
-  display: grid;
-  place-items: center;
-  inline-size: 2.75rem;
-  border-inline-start: 1px solid var(--pg-line);
+.reason-count {
   color: var(--pg-muted);
-}
-
-.tray-remove:hover:not(:disabled) {
-  background: var(--pg-accent-soft);
-  color: var(--pg-accent);
-}
-
-.tray-name:focus-visible,
-.tray-remove:focus-visible {
-  outline-offset: -3px;
+  font-family: var(--pg-font-mono);
+  font-size: 0.72rem;
 }
 
 @media (max-width: 40rem) {
-  .compare-state {
+  .stages {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .empty-pile {
-    inline-size: min(100%, 14rem);
-    justify-self: center;
   }
 }
 </style>
