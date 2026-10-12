@@ -78,6 +78,15 @@ const ids = computed<TId[]>(() => props.items.map((item) => item.id));
 const reducedMotionOverride = computed(() => props.reducedMotionOverride);
 const statusText = ref("");
 let rollbackSettlementId: TId | undefined;
+// A settlement is checked against the host's authority one microtask after it is reported. Only the
+// latest settlement is owed that check, and only while the host has not moved its authority
+// somewhere the settlement did not reach: otherwise it describes a place nobody wants any more.
+let pendingSettlement: { readonly id: TId } | undefined;
+
+function invalidateSettlement() {
+  pendingSettlement = undefined;
+  rollbackSettlementId = undefined;
+}
 const initialMechanicalId =
   props.activeId !== undefined && ids.value.includes(props.activeId)
     ? props.activeId
@@ -104,6 +113,16 @@ function resolveRollbackId(): TId | undefined {
 watch(
   [ids, () => props.activeId] as const,
   ([nextIds, controlledId], previousState) => {
+    // Confirming where the pending settlement went is not a change of mind, and an unavailable
+    // authority still owes the refusal that returns the rail to its last valid anchor.
+    const unavailable = controlledId !== undefined && !nextIds.includes(controlledId);
+    if (
+      !unavailable &&
+      controlledId !== previousState?.[1] &&
+      controlledId !== pendingSettlement?.id
+    ) {
+      invalidateSettlement();
+    }
     if (controlledId !== undefined && nextIds.includes(controlledId)) {
       latestValidAuthorityId.value = controlledId;
       mechanicalAnchorId.value = controlledId;
@@ -154,7 +173,11 @@ function positionLabel(index: number): string {
 function publishSettlement(id: TId, index: number, reason: NavigationReason) {
   // Reduced motion and direct synchronization can settle in the same stack as the request. Vue
   // still needs its already-scheduled prop flush before strict authority can be evaluated.
+  const settlement = { id };
+  pendingSettlement = settlement;
   queueMicrotask(() => {
+    if (pendingSettlement !== settlement) return;
+    pendingSettlement = undefined;
     if (reason === "external" && rollbackSettlementId === id) {
       rollbackSettlementId = undefined;
       return;
