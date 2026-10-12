@@ -6,8 +6,8 @@
   },
   "vueRoot": {
     "entry": "packages/vue/dist/index.js",
-    "maxBytes": 144584,
-    "maxGzipBytes": 38865
+    "maxBytes": 144829,
+    "maxGzipBytes": 38935
   },
   "vueCarousel": {
     "entry": "packages/vue/dist/carousel.js",
@@ -17,7 +17,7 @@
   "vueCoverflow": {
     "entry": "packages/vue/dist/coverflow.js",
     "maxBytes": 50672,
-    "maxGzipBytes": 14828
+    "maxGzipBytes": 14906
   },
   "vueStackedDeck": {
     "entry": "packages/vue/dist/stacked-deck.js",
