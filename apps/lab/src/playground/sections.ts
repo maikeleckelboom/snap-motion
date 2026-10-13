@@ -55,8 +55,8 @@ export const playgroundSections = [
     navTitle: "Studio",
     category: "Decision",
     summary:
-      "Shortlist candidates, run two side by side on the same screens, read what differs and record your choice.",
-    hints: ["Shortlist two or more", "Pin A, compare B", "Same input to both"],
+      "Browse a conversation's shared photos two ways at once, tune the second, read what differs and record your choice.",
+    hints: ["Tap or swipe the photos", "Tune B beside A", "Same input to both"],
   },
 ] as const;
 

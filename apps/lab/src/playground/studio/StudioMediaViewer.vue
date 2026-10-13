@@ -91,7 +91,7 @@ function onBackdropClick(event: MouseEvent) {
 /* The page behind a modal does not scroll. The gutter is already reserved, so nothing shifts. */
 html:has(.studio-viewer[open]),
 html:has(.studio-viewer[open]) body {
-  overflow: clip;
+  overflow: hidden;
 }
 
 .studio-viewer::backdrop {
@@ -145,6 +145,7 @@ html:has(.studio-viewer[open]) body {
 .viewer-photo {
   display: block;
   inline-size: 100%;
+  block-size: auto;
   max-block-size: min(70vh, 40rem);
   object-fit: contain;
   background: #0b0a07;

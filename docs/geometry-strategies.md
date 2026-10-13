@@ -25,5 +25,10 @@ Use `startInset` and `endInset`, not item margins, because logical track padding
 `scrollWidth` and therefore to legal bounds. The lab computes half-viewport minus half-item-width
 for each edge and verifies every item center after navigation.
 
+A strip whose neighbours must stay interactive cannot use `CarouselSlide`, which makes every slide but the
+active one `inert`. It also needs physics, which `CarouselRoot` does not take. The Motion Studio's item
+carousel therefore uses `useCarouselMotion` with `createVariableWidthGeometry` over its own items
+(see [Motion Studio](motion-studio.md#the-item-carousel)).
+
 Custom strategies must measure slide layout boxes only, remain SSR-safe by waiting for mount, and
 never let transformed media descendants alter geometry. Remeasurement preserves the semantic target.

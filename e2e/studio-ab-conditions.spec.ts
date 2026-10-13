@@ -629,11 +629,17 @@ test.describe("independent exploration stays possible and is never silent", () =
     await openStudio(page, { width: 390, height: 844 });
     await page.getByTestId("studio-view-compare").click();
     await expectLevelAtRest(page);
-    const level = (await status(page).boundingBox())!;
+    // In the document, not the viewport: dragging a stage scrolls the page to reach it.
+    const inDocument = () =>
+      status(page).evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return { x: rect.x, y: rect.y + scrollY, width: rect.width, height: rect.height };
+      });
+    const level = await inDocument();
     await dragMouseBy(page, surface(page, "reference"), -200, 0);
     await expectBothAtRest(page);
     await expect(status(page)).toHaveAttribute("data-state", "apart");
-    const box = (await status(page).boundingBox())!;
+    const box = await inDocument();
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);
     // It is the same box as when the stages were level, and no taller than two lines of text.

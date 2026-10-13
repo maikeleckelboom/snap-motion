@@ -86,14 +86,15 @@ defineExpose({ activate });
       <div class="intro-copy">
         <h3 class="intro-title">Motion Studio</h3>
         <p class="intro-lede">
-          Your product has a set of screens people move between. Which motion should do the moving?
-          Shortlist candidates, run two of them side by side on the same screens, read what differs
-          and record your choice.
+          People browse the photos shared in a conversation. How should that feel? Shortlist
+          candidates, run two of them side by side on the same photos, tune the one you are testing,
+          read what differs and record your choice.
         </p>
         <ol class="intro-journey" aria-label="What you can do">
           <li>Shortlist</li>
           <li>Pin A</li>
-          <li>Compare B</li>
+          <li>Tune B</li>
+          <li>Try both</li>
           <li>Read the differences</li>
           <li>Decide</li>
         </ol>
@@ -132,15 +133,14 @@ defineExpose({ activate });
           <text x="28" y="300">WHAT DIFFERS</text>
         </g>
 
-        <!-- Two stages running the same screens: a rail on the left, a deck on the right. -->
+        <!-- Two stages browsing the same photos: an item carousel on the left, a deck on the right. -->
         <g>
           <rect x="28" y="54" width="272" height="190" rx="10" fill="#f4f2ec" />
-          <path d="M58 118l50-14v70l-50-14z" fill="#15140f" opacity="0.28" />
-          <path d="M270 118l-50-14v70l50-14z" fill="#15140f" opacity="0.28" />
-          <rect x="112" y="92" width="104" height="98" rx="7" fill="#15140f" />
-          <rect x="124" y="104" width="80" height="10" rx="3" fill="#f4f2ec" />
-          <rect x="124" y="124" width="56" height="6" rx="3" fill="#bdb8a8" />
-          <rect x="124" y="138" width="68" height="6" rx="3" fill="#bdb8a8" />
+          <rect x="40" y="94" width="38" height="110" rx="6" fill="#cfd6dc" />
+          <rect x="86" y="86" width="64" height="126" rx="7" fill="#15140f" />
+          <rect x="158" y="94" width="82" height="110" rx="6" fill="#cfd6dc" />
+          <rect x="248" y="94" width="40" height="110" rx="6" fill="#cfd6dc" />
+          <rect x="40" y="222" width="92" height="6" rx="3" fill="#bdb8a8" />
 
           <rect x="340" y="54" width="272" height="190" rx="10" fill="#f4f2ec" />
           <rect
@@ -162,8 +162,7 @@ defineExpose({ activate });
             transform="rotate(4 469 142)"
           />
           <rect x="402" y="86" width="150" height="100" rx="7" fill="#15140f" />
-          <rect x="418" y="102" width="100" height="10" rx="3" fill="#f4f2ec" />
-          <rect x="418" y="124" width="70" height="6" rx="3" fill="#bdb8a8" />
+          <rect x="352" y="222" width="92" height="6" rx="3" fill="#bdb8a8" />
         </g>
 
         <!-- The two step responses on one axis, and a row of differences. -->

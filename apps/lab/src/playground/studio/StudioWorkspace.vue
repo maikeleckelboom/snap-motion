@@ -416,7 +416,7 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
         <p class="studio-decision" data-testid="studio-decision-line">{{ decisionText }}</p>
       </div>
       <a class="studio-motion" data-testid="studio-motion" href="#studio-tuning">
-        <span class="studio-motion-label">Your tuning</span>
+        <span class="studio-motion-label">Playground tuning</span>
         <strong>{{ motionLabel }}</strong>
         <span class="sr-only">. Go to motion tuning</span>
       </a>

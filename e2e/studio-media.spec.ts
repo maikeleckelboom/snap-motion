@@ -217,6 +217,24 @@ test.describe("tapping a photo", () => {
     }
   });
 
+  test("a candidate's own detail stage opens photos too, for either layout", async ({ page }) => {
+    await openStudio(page);
+    for (const candidate of ["carousel-balanced", "deck-direct"] as const) {
+      await page.getByTestId(`studio-open-${candidate}`).click();
+      await expect(page.getByTestId("studio-detail")).toBeVisible();
+      const stage = page.getByTestId("studio-detail-surface");
+      await expect(stage).toHaveAttribute("data-phase", "idle");
+      const id = (await stage.getAttribute("data-active-id"))!;
+      await page.getByTestId("studio-detail-open").click();
+      await expect(viewer(page)).toBeVisible();
+      await expect(page.getByTestId("studio-media-title")).toHaveText(titleOf(id));
+      await page.keyboard.press("Escape");
+      await expect(viewer(page)).not.toBeVisible();
+      await expect(page.getByTestId("studio-detail-open")).toBeFocused();
+      await page.getByTestId("studio-detail-back").click();
+    }
+  });
+
   test("the Open photo button opens the selected photo, for those who do not point", async ({
     page,
   }) => {

@@ -42,9 +42,10 @@ a spring-response preview helps connect a value to its effect.
 The Playground combines reusable package surfaces with application compositions. The
 [component guide](docs/components.md) documents the public exports behind the demonstrations.
 
-A sixth section, **Motion Studio**, puts them to work on one decision: shortlist candidate motion
-behaviours, run two side by side on the same screens, read what differs and record a choice and the
-code that gives it. It loads when you open it. See [Motion Studio](docs/motion-studio.md).
+A sixth section, **Motion Studio**, puts them to work on one decision: how should browsing the photos
+shared in a conversation feel? Shortlist candidate behaviours, run two side by side on the same photos
+(an item carousel or a stacked deck), tune the one you are testing, read what differs and record a
+choice and the code that gives it. It loads when you open it. See [Motion Studio](docs/motion-studio.md).
 
 ## Between input and rest
 

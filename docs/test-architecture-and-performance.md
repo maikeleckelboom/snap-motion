@@ -156,9 +156,10 @@ scroll lock against real scrollbars. `playground-preview.spec.ts` runs the built
 ## Motion Studio
 
 The Motion Studio (section 06) is a decision workflow built on live surfaces, and its specs follow
-[Motion Studio](motion-studio.md). Six unit files pin the model, the candidates, the physics, the replay's
-wait, the stage rules and the View Transition helper with no browser (`studio-model` includes a seeded walk of 40 sequences of 150
-operations; the file runs in under half a second). Five browser specs own the rest:
+[Motion Studio](motion-studio.md). Ten unit files pin the model, the candidates, the Custom candidate and editing B, the
+shared media and the strip's geometry, the tap decision, the physics, the replay's wait, the stage rules
+and the View Transition helper with no browser (`studio-model` includes a seeded walk of 40 sequences of 150
+operations; the file runs in under half a second). Eight browser specs own the rest:
 
 - `studio.spec.ts` (every engine): activation, the journey, every size of shortlist, equal conditions,
   text that follows the card in front frame by frame, keyboard and focus, the detail, the Sheet, a
@@ -170,6 +171,14 @@ operations; the file runs in under half a second). Five browser specs own the re
   place and is cancelled by whatever invalidates it (on a paused clock), and a status row that moves
   nothing below it.
 - `studio-deck-reconciliation.spec.ts` (every engine): shortlist changes frame by frame.
+- `studio-media.spec.ts` (every engine): the item carousel as a visitor meets it: several photos in view,
+  taps (selected, neighbour, either side), drag against tap, a catch, the keyboard, and the viewer as a
+  correct modal.
+- `studio-tune.spec.ts` (every engine): the editor for B, the copy a reference becomes, switching layout,
+  Shuffle against Direct, physics editing, the Playground tuning never written, the Shortlist's own
+  Deck, reading the difference, and interrupted and reduced motion.
+- `studio-media-touch.spec.ts` (Chromium): real touch swipes and taps, a resized stage, and the photo
+  View Transition.
 - `studio-layout.spec.ts` (Chromium): seven widths, stability, touch targets, scroll lock against real
   scrollbars, the document-level listener balance and axe (one scan per test).
 

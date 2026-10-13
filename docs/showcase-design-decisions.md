@@ -35,20 +35,25 @@ the experience linked from `maikel.site`:
 
 ## Composition: the Motion Studio
 
-Section 06 puts the surfaces to work on one decision (which motion should switch between an
-interface's screens) instead of adding a sixth demonstration. It is described in
+Section 06 puts the surfaces to work on one decision (how should browsing the photos in a
+conversation feel?) instead of adding a sixth demonstration. It is described in
 [Motion Studio](motion-studio.md); the decisions that matter here:
 
-- It composes the public components (`Coverflow`, `StackedDeck`, `Sheet`). It mounts none of the five
-  demonstration wrappers, owns no motion logic, and adds no package API.
-- Candidates are behaviours that run: a surface, an exchange and a feel, read from the same presets and
-  mappings the live surfaces use. Declared settings, values computed from the spring, and authored
+- It composes the public `useCarouselMotion`, `StackedDeck`, `ModalDialog` and `Sheet`. It mounts none of
+  the five demonstration wrappers, owns no motion logic, and adds no package API. The item carousel is
+  built on the composable because `CarouselRoot` takes no physics and `CarouselSlide` makes neighbours
+  inert.
+- Candidates are behaviours that run: a layout, an exchange and a feel, read from the same presets and
+  mappings the live surfaces use. Declared settings, values calculated from the spring, and authored
   guidance are labelled apart, and nothing is presented as measured.
+- Candidate B is editable. References are immutable; the first edit copies B into Custom, which has one
+  owner and never writes the shared tuning.
 - One application model has explicit roles (a shortlist, a reference A, a compared candidate B and a
   decision). What a Deck is drawing in front is mirrored apart from them and never becomes a selection,
   so names follow the card the visitor can see while the selection stays immediate.
-- It reads the page's one shared physics configuration only for "Your tuning". Section 06 carries the
-  standard Motion Tuning bar like every other section.
+- It reads the page's one shared physics configuration only for the implementation sheet and for one
+  explicit, one-way copy into B. Section 06 carries the standard Motion Tuning bar like every other
+  section.
 - It uses native View Transitions for application state changes only, never over a physical exchange.
 - It loads on demand behind a light introduction, so the page above it costs what it did before.
 

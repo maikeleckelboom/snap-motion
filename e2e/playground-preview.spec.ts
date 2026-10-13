@@ -75,7 +75,7 @@ test("the built playground resolves every asset under a non-root base", async ({
   expect(errors).toEqual([]);
 });
 
-test("the built Studio loads on demand from the base and runs its candidates on the page's screens", async ({
+test("the built Studio loads on demand from the base and runs its candidates on the conversation's photos", async ({
   page,
 }) => {
   const requested: string[] = [];
@@ -104,22 +104,43 @@ test("the built Studio loads on demand from the base and runs its candidates on 
     studioCode().every((url) => new URL(url).pathname.startsWith("/snap-motion/assets/")),
   ).toBe(true);
 
-  // Both stages show the page's own screens, decoded from their built URLs under the base.
-  const screens = page.locator("#studio .screen-image");
-  await expect.poll(() => screens.count()).toBeGreaterThan(4);
+  // Both stages show the conversation's photos, decoded from their built URLs under the base: eleven
+  // in each strip, every one loaded, and none requested from outside the base.
+  const photos = page.locator("#studio .media-carousel .media-image");
+  await expect.poll(() => photos.count()).toBe(22);
   await expect
     .poll(() =>
-      screens.evaluateAll((images) =>
-        images.every((image) => (image as HTMLImageElement).naturalWidth === 1_600),
+      photos.evaluateAll((images) =>
+        images.every((image) => (image as HTMLImageElement).naturalWidth > 0),
       ),
     )
     .toBe(true);
+  expect(
+    requested
+      .filter(
+        (url) => /\/shared-media\/|\/playground-gallery\//.test(url) || /\.svg(\?|$)/.test(url),
+      )
+      .every((url) => new URL(url).pathname.startsWith("/snap-motion/")),
+  ).toBe(true);
+
+  // A tap opens a photo in the viewer, which loads the same built asset and closes again.
+  await page.getByTestId("studio-reference-open").click();
+  await expect(page.getByTestId("studio-media-viewer")).toBeVisible();
+  await expect
+    .poll(() =>
+      page
+        .getByTestId("studio-media-photo")
+        .evaluate((image) => (image as HTMLImageElement).naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("studio-media-viewer")).not.toBeVisible();
 
   // A decision opens the implementation sheet with the real values.
   await page.getByTestId("studio-choose-a").click();
   await page.getByTestId("studio-open-implementation").click();
   await expect(page.getByTestId("studio-sheet")).toBeVisible();
-  await expect(page.getByTestId("studio-snippet")).toContainText("@snap-motion/vue/coverflow");
+  await expect(page.getByTestId("studio-snippet")).toContainText("@snap-motion/vue/carousel");
 
   expect(failed).toEqual([]);
   expect(errors).toEqual([]);

@@ -305,6 +305,25 @@ test.describe("accessibility", () => {
     await expectNoAxeViolations(page, "sheet");
   });
 
+  test("passes axe with the photo viewer open", async ({ page }) => {
+    await openStudio(page);
+    await page.getByTestId("studio-reference-open").click();
+    await expect(page.getByTestId("studio-media-viewer")).toBeVisible();
+    await expectNoAxeViolations(page, "photo viewer");
+  });
+
+  test("passes axe with the editor for B open, as a copy and as a stacked deck", async ({
+    page,
+  }) => {
+    await openStudio(page);
+    await page.getByTestId("studio-tune-fine").locator(":scope > summary").click();
+    await expectNoAxeViolations(page, "editor open, B a reference");
+    await page.getByTestId("tune-surface-deck").click();
+    await page.getByTestId("tune-exchange-direct").click();
+    await page.getByTestId("studio-advanced").locator(":scope > summary").click();
+    await expectNoAxeViolations(page, "editor and advanced details open, B a direct deck");
+  });
+
   test("passes axe with only a reference, and with nothing shortlisted", async ({ page }) => {
     await openStudio(page);
     await page.getByTestId("studio-remove-carousel-loose").click();
@@ -367,6 +386,15 @@ test.describe("document-level listeners", () => {
       await page.getByTestId("studio-revise").click();
       await page.locator("#studio [data-testid='preset-heavy']").click();
       await page.locator("#studio [data-testid='preset-balanced']").click();
+      // A photo opens and closes, and B is copied into Custom, changes layout and is removed again:
+      // stages, viewers and the editor's controls all come and go.
+      await page.getByTestId("studio-reference-open").click();
+      await expect(page.getByTestId("studio-media-viewer")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.getByTestId("studio-media-viewer")).not.toBeVisible();
+      await page.getByTestId("tune-surface-deck").click();
+      await page.getByTestId("tune-surface-carousel").click();
+      await page.getByTestId("studio-remove-custom").click();
     }
 
     async function settledInventory() {

@@ -1,7 +1,9 @@
 # Motion Studio: UX diagnosis and redesign
 
 This records what was wrong with the first Motion Studio, what was measured, and what replaced it.
-The current design is in [Motion Studio](motion-studio.md).
+The current design is in [Motion Studio](motion-studio.md). A later change, recorded in
+[the addendum](#addendum-from-an-abstract-rail-to-a-real-task) at the end, replaced the abstract rail
+with a real task and made candidate B editable.
 
 ## The task the Studio should serve
 
@@ -138,3 +140,44 @@ that took its place. Pinning B swaps the pair. A is never compared with itself.
   this page's performance.
 - The "suggested use" lines are opinions and are labelled authored.
 - No assistive-technology testing on physical devices has been done.
+
+## Addendum: from an abstract rail to a real task
+
+The redesign above fixed the workflow (shortlist, A and B, decide). It left one thing that no visitor
+could recognise: the "rail". Every stage showed five screens of a fictional product on a Coverflow, and
+the question the Studio asked ("which motion should switch between your screens?") was one a person had
+to translate before they could answer it. A rail is a motion primitive, not something anyone browses.
+
+### What was wrong
+
+| Finding                                                                | Consequence                                                                 |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| The task was abstract: five product screens on a rail                  | A visitor had to know what a "rail" is before the comparison meant anything |
+| The surface was a Coverflow: one item in focus, perspective neighbours | Not what a product ships for a strip of media; nothing to tap but the front |
+| Candidates could only be picked, never changed                         | Feedback needed a round trip through another part of the page               |
+| "Your tuning" followed the page's shared tuning                        | Editing it elsewhere silently changed a candidate; the link was implicit    |
+| "What differs" was a static table of parameters                        | The most meaningful difference (the layout) was one row among thirteen      |
+| Computed values sat in the same table as the settings                  | Easy to read a calculated figure as a measurement                           |
+| The Shortlist's Deck was always a Shuffle deck                         | Direct could only be seen on a stage, never on the list a visitor swipes    |
+
+### What replaced it
+
+- **A task a visitor recognises**: browsing the photos shared in a conversation, on a small messaging
+  screen, over eleven photos of different shapes. Both stages do the same task over the same collection.
+- **A real item carousel** (several photos in view, the next one peeking, a tap that opens one, a drag that
+  opens nothing, keyboard and touch), built on the package's `useCarouselMotion`. The reasons
+  `CarouselRoot` and `CarouselSlide` were not used are in
+  [Motion Studio](motion-studio.md#the-item-carousel).
+- **An editor for B beside the previews.** Layout, exchange, preset and every number; references are
+  immutable and the first edit copies B into Custom, which has one owner and never writes the shared
+  tuning.
+- **Differences as a feedback loop**: what you will notice, most meaningful first, a plain call-out when
+  the layouts differ (equal springs would still not feel equal), and the technical record behind Advanced
+  details. Calculated is never "measured".
+- **The Shortlist's own Deck** gets its own Shuffle/Direct control, labelled as the list's.
+
+### Terms added
+
+- **Custom**: the one candidate a visitor can change; B's copy once B has been edited.
+- **Reference candidate**: any of the six fixed presets. Never edited.
+- **Item carousel / Stacked deck**: the two layouts. "Rail" no longer appears in the interface.
