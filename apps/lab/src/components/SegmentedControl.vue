@@ -13,6 +13,8 @@ defineProps<{
   labelHidden?: boolean;
   /** Extra description, for example a note that applies to the whole group. */
   describedBy?: string;
+  /** Every option refuses input, for a choice that does not apply right now. */
+  disabled?: boolean;
   modelValue: T;
   options: readonly SegmentedOption<T>[];
 }>();
@@ -37,6 +39,7 @@ const id = useId();
         :key="option.value"
         :aria-pressed="modelValue === option.value"
         :data-testid="option.testid"
+        :disabled="disabled"
         type="button"
         @click="emit('update:modelValue', option.value)"
       >
@@ -78,6 +81,10 @@ const id = useId();
   background: transparent;
   font-size: 0.9rem;
   font-weight: 600;
+}
+.segmented-options button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .segmented-options button:last-child {
   border-inline-end: 0;

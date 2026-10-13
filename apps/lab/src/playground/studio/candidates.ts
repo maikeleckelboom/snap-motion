@@ -6,17 +6,21 @@ import {
   symmetricElasticityFromSettings,
 } from "../../fixtures/lab-settings";
 import type { LabPhysicsSettings } from "../../fixtures/lab-types";
+import { modifiedPhysicsKeys } from "../../fixtures/physics-parameters";
 import { presetLabel } from "../preset-facts";
-import { sampleSpringResponse, type SpringResponse } from "../spring-response";
-import type {
-  CandidateDefinition,
-  CandidateExchange,
-  CandidateFeel,
-  CandidateId,
-  CandidateSurface,
+import { PREVIEW_TRAVEL_PX, sampleSpringResponse, type SpringResponse } from "../spring-response";
+import {
+  CUSTOM_ID,
+  type CandidateDefinition,
+  type CandidateExchange,
+  type CandidateFeel,
+  type CandidateId,
+  type CandidateSurface,
 } from "./candidate-definitions";
+import type { CustomCandidateState } from "./studio-custom";
 
 export {
+  CUSTOM_ID,
   candidateById,
   candidateDefinitions,
   candidateIds,
@@ -31,24 +35,23 @@ export type {
 } from "./candidate-definitions";
 
 /**
- * The Motion Studio's candidates: motion behaviours a product team could ship for one interaction,
- * switching between the screens of an application.
+ * The Motion Studio's candidates: ways to browse the photos shared in a conversation.
  *
- * A candidate is a surface (a Coverflow rail or a Stacked Deck), an exchange where the surface has
- * one, and a feel (a preset, or the Playground's own Motion Tuning). It is all declared data: the
- * numbers shown for it are read from the same preset and mapping functions the live surfaces use, so
- * a candidate cannot describe a behaviour it does not run.
+ * A candidate is a layout (an item carousel or a stacked deck), an exchange where the layout has one,
+ * and a feel (an engine preset). It is all declared data: the numbers shown for it are read from the
+ * same preset and mapping functions the live surfaces use, so a candidate cannot describe a behaviour
+ * it does not run.
  *
  * Two kinds of fact are kept apart everywhere they appear:
  *
  * - *declared* values are the settings themselves (stiffness, damping, mass, the largest step);
- * - *computed* values (settle time, overshoot) come from stepping the engine's own spring on one
- *   card-width move. They describe the spring alone. Nothing here is measured from a running page.
+ * - *calculated* values (settle time, overshoot) come from stepping the engine's own spring on one
+ *   fixed-distance move. They describe the spring alone. Nothing here is measured from a running page.
  *
  * The `pitch` and `suitedFor` lines are authored guidance, and the interface says so.
  */
 
-/** A candidate with every value the interface reads, resolved for one set of tuning settings. */
+/** A candidate with every value the interface reads, resolved for the Custom candidate's state. */
 export interface CandidateBehavior {
   readonly id: CandidateId;
   readonly name: string;
@@ -56,23 +59,29 @@ export interface CandidateBehavior {
   readonly surfaceLabel: string;
   readonly exchange: CandidateExchange | undefined;
   readonly exchangeLabel: string;
+  /** The preset the numbers are, or began as. */
   readonly feel: CandidateFeel;
+  /** "Balanced", or for an edited Custom, "Balanced, 2 edited". */
   readonly feelLabel: string;
+  /** True for the one candidate a visitor can change. */
+  readonly custom: boolean;
+  /** How many settings differ from the base preset. Always 0 for a reference candidate. */
+  readonly edited: number;
   readonly pitch: string;
   readonly suitedFor: string;
   /** The settings the live surface is given. */
   readonly settings: LabPhysicsSettings;
   readonly response: SpringResponse;
-  /** Computed from the spring: whole milliseconds to rest, or `undefined` if it never rests in 4 s. */
+  /** Calculated from the spring: whole milliseconds to rest, or `undefined` if it never rests in 4 s. */
   readonly settleMs: number | undefined;
-  /** Computed from the spring: the largest excursion past the target, in percent of the move. */
+  /** Calculated from the spring: the largest excursion past the target, in percent of the move. */
   readonly overshootPercent: number;
-  /** Declared: how many cards one release may travel. A deck always takes exactly one. */
+  /** Declared: how many items one release may travel. A deck always takes exactly one. */
   readonly maxStep: number;
 }
 
 export function surfaceLabel(surface: CandidateSurface) {
-  return surface === "rail" ? "Rail" : "Deck";
+  return surface === "carousel" ? "Item carousel" : "Stacked deck";
 }
 
 export function exchangeLabel(exchange: CandidateExchange | undefined) {
@@ -80,25 +89,40 @@ export function exchangeLabel(exchange: CandidateExchange | undefined) {
   return exchange === "shuffle" ? "Shuffle" : "Direct";
 }
 
+/** The one-line shape of a behaviour: what it browses with and how it feels. */
+export function describeShape(behavior: CandidateBehavior): string {
+  const exchange = behavior.exchange === undefined ? "" : `${behavior.exchangeLabel}, `;
+  return `${behavior.surfaceLabel}, ${exchange}${behavior.feelLabel}`;
+}
+
 /**
- * Resolves a candidate against the page's tuning. Only "Your tuning" reads `tuning`; every other
- * candidate's numbers come from its own preset, so they never move.
+ * Resolves a candidate. Only Custom reads `custom`; every other candidate's numbers come from its own
+ * preset, so they never move however Custom is edited.
  */
 export function resolveCandidate(
   definition: CandidateDefinition,
-  tuning: LabPhysicsSettings,
+  custom: CustomCandidateState,
 ): CandidateBehavior {
-  const settings = definition.feel === "tuning" ? tuning : settingsFromPreset(definition.feel);
+  const isCustom = definition.id === CUSTOM_ID;
+  const surface = isCustom ? custom.surface : definition.surface;
+  const exchange =
+    surface === "deck" ? (isCustom ? custom.exchange : definition.exchange) : undefined;
+  const feel = isCustom ? custom.base : definition.feel;
+  const settings = isCustom ? custom.settings : settingsFromPreset(definition.feel);
+  const edited = isCustom ? modifiedPhysicsKeys(settings, settingsFromPreset(feel)).length : 0;
   const response = sampleSpringResponse(settings);
-  return {
+  const feelName = presetLabel(feel);
+  const behavior: CandidateBehavior = {
     id: definition.id,
     name: definition.name,
-    surface: definition.surface,
-    surfaceLabel: surfaceLabel(definition.surface),
-    exchange: definition.exchange,
-    exchangeLabel: exchangeLabel(definition.exchange),
-    feel: definition.feel,
-    feelLabel: definition.feel === "tuning" ? "Your tuning" : presetLabel(definition.feel),
+    surface,
+    surfaceLabel: surfaceLabel(surface),
+    exchange,
+    exchangeLabel: exchangeLabel(exchange),
+    feel,
+    feelLabel: edited > 0 ? `${feelName}, ${edited} edited` : feelName,
+    custom: isCustom,
+    edited,
     pitch: definition.pitch,
     suitedFor: definition.suitedFor,
     settings,
@@ -106,11 +130,19 @@ export function resolveCandidate(
     settleMs:
       response.settleSeconds === undefined ? undefined : Math.round(response.settleSeconds * 1000),
     overshootPercent: Math.round(response.overshoot * 1000) / 10,
-    maxStep: definition.surface === "deck" ? 1 : Math.max(1, Math.round(settings.maxAnchorSkip)),
+    maxStep: surface === "deck" ? 1 : Math.max(1, Math.round(settings.maxAnchorSkip)),
   };
+  // Custom's pitch states what it currently is, so a shortlist card and a row never describe a
+  // candidate that has since been changed.
+  return isCustom
+    ? { ...behavior, pitch: `${describeShape(behavior)}. Your own variant.` }
+    : behavior;
 }
 
-// ---------------------------------------------------------------------------------- differences
+// ------------------------------------------------------------------------------- the comparison
+
+/** Declared settings versus values calculated from them. The interface labels the two apart. */
+export type DifferenceSource = "declared" | "calculated";
 
 export interface DifferenceRow {
   readonly key: string;
@@ -118,31 +150,27 @@ export interface DifferenceRow {
   readonly a: string;
   readonly b: string;
   readonly differs: boolean;
-  /** Declared settings versus values computed from them. The interface labels the two apart. */
-  readonly source: "declared" | "computed";
+  readonly source: DifferenceSource;
 }
 
-function row(
-  key: string,
-  label: string,
-  a: string,
-  b: string,
-  source: DifferenceRow["source"],
-): DifferenceRow {
-  return { key, label, a, b, differs: a !== b, source };
+function row(key: string, label: string, a: string, b: string, source: DifferenceSource) {
+  return { key, label, a, b, differs: a !== b, source } satisfies DifferenceRow;
 }
 
 const elasticEdge = (behavior: CandidateBehavior) =>
-  `${behavior.settings.elasticResistance} resistance, ${behavior.settings.maxElasticDistance} card limit`;
+  `${behavior.settings.elasticResistance} resistance, ${behavior.settings.maxElasticDistance} px limit`;
 
 const ms = (value: number | undefined) => (value === undefined ? "Over 4 s" : `${value} ms`);
 
-/** The rows of the comparison: what each candidate declares, then what its spring computes. */
+/**
+ * Every row of the advanced table: what each candidate declares, then what its spring calculates.
+ * This is the complete record. The comparison a visitor reads first is {@link compareCandidates}.
+ */
 export function differenceRows(a: CandidateBehavior, b: CandidateBehavior): DifferenceRow[] {
   return [
-    row("surface", "Surface", a.surfaceLabel, b.surfaceLabel, "declared"),
+    row("surface", "Layout", a.surfaceLabel, b.surfaceLabel, "declared"),
     row("exchange", "Exchange", a.exchangeLabel, b.exchangeLabel, "declared"),
-    row("feel", "Feel", a.feelLabel, b.feelLabel, "declared"),
+    row("feel", "Base preset", presetLabel(a.feel), presetLabel(b.feel), "declared"),
     row(
       "stiffness",
       "Stiffness",
@@ -175,55 +203,227 @@ export function differenceRows(a: CandidateBehavior, b: CandidateBehavior): Diff
       `${b.settings.programmaticImpulse}`,
       "declared",
     ),
-    row("settle", "Settles in", ms(a.settleMs), ms(b.settleMs), "computed"),
-    row("overshoot", "Overshoot", `${a.overshootPercent}%`, `${b.overshootPercent}%`, "computed"),
+    row("settle", "Settles in", ms(a.settleMs), ms(b.settleMs), "calculated"),
+    row("overshoot", "Overshoot", `${a.overshootPercent}%`, `${b.overshootPercent}%`, "calculated"),
   ];
 }
 
-const RELEASE_KEYS = ["step", "fling", "projection", "edge", "impulse"];
+/** One thing a visitor can see or feel differs. It says what, in the visitor's terms. */
+export interface NotableDifference {
+  readonly key:
+    | "layout"
+    | "exchange"
+    | "settle"
+    | "overshoot"
+    | "flick"
+    | "release"
+    | "edge"
+    | "buttons";
+  readonly title: string;
+  readonly a: string;
+  readonly b: string;
+  /** What it means to the person using it. It never says which is better. */
+  readonly meaning: string;
+  readonly source: DifferenceSource;
+}
+
+export interface Comparison {
+  /** True when A and B are one configuration, so there is nothing to tell apart. */
+  readonly same: boolean;
+  /** The two candidates lay out their items differently: the springs are not the only difference. */
+  readonly layoutDiffers: boolean;
+  /** The springs are identical although the layouts differ: what you feel is then layout alone. */
+  readonly identicalSprings: boolean;
+  /** One or two sentences: the biggest difference first. */
+  readonly headline: string;
+  /** Present when the layouts differ. It says plainly that equal springs would still not feel equal. */
+  readonly caveat: string | undefined;
+  /** The differences that matter, most meaningful first. Empty when nothing differs. */
+  readonly notable: readonly NotableDifference[];
+  /** What does not differ, as short labels. */
+  readonly unchanged: readonly string[];
+}
 
 /** Below this the settle times read as the same, whatever the arithmetic says. */
 const SAME_SETTLE_MS = 20;
 
+const SPRING_KEYS = ["stiffness", "damping", "mass", "restSpeed", "restDistance"] as const;
+
+const sameSpring = (a: CandidateBehavior, b: CandidateBehavior) =>
+  SPRING_KEYS.every((key) => a.settings[key] === b.settings[key]);
+
+const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
+
 /**
- * Two plain sentences on what separates the candidates, built only from the rows above. It never
- * says which is better: that is the decision, and it belongs to the person making it.
+ * What differs between two candidates, in the order a person cares about it.
+ *
+ * The layout comes first because it changes what is being compared at all: an item carousel moves a
+ * strip of unequal-width items over their own distances, a deck exchanges one photo at a time. Two
+ * identical springs on those two layouts still do not feel alike, and the comparison says so. Then
+ * what a deck does with a release, then what the spring does, then the release and edge settings.
+ *
+ * It says nothing about which is better: that is the decision, and it belongs to the person making it.
+ * Calculated figures are labelled as such and never as measurements of this page.
  */
-export function summarizeDifference(a: CandidateBehavior, b: CandidateBehavior): string {
-  if (a.id === b.id) return "These are the same candidate.";
-  const parts: string[] = [];
-  if (a.surface !== b.surface) {
-    parts.push(
-      `${a.name} is a ${a.surfaceLabel.toLowerCase()}; ${b.name} is a ${b.surfaceLabel.toLowerCase()}.`,
-    );
-  } else if (a.exchange !== b.exchange) {
-    parts.push(
-      `Same surface, with a ${exchangeLabel(a.exchange)} exchange against ${exchangeLabel(b.exchange)}.`,
-    );
-  } else {
-    parts.push("Same surface and exchange, so the difference is in the feel.");
+export function compareCandidates(a: CandidateBehavior, b: CandidateBehavior): Comparison {
+  const rows = differenceRows(a, b);
+  const everyRowSame = rows.every(({ differs }) => !differs);
+  const layoutDiffers = a.surface !== b.surface;
+  const identicalSprings = layoutDiffers && sameSpring(a, b);
+  const notable: NotableDifference[] = [];
+  const unchanged: string[] = [];
+  const track = (key: string, label: string, differs: boolean) => {
+    if (!differs) unchanged.push(label);
+    return differs;
+  };
+
+  if (track("layout", "Layout", layoutDiffers)) {
+    notable.push({
+      key: "layout",
+      title: "Layout",
+      a: a.surfaceLabel,
+      b: b.surfaceLabel,
+      meaning:
+        "They move different things over different distances: a carousel slides a strip of items " +
+        "of unequal width, a deck exchanges one photo at a time.",
+      source: "declared",
+    });
   }
-  if (a.settleMs === undefined || b.settleMs === undefined) {
-    parts.push("At least one spring does not come to rest within four seconds.");
-  } else {
+  if (a.surface === "deck" && b.surface === "deck") {
+    if (track("exchange", "Exchange", a.exchange !== b.exchange)) {
+      notable.push({
+        key: "exchange",
+        title: "Exchange",
+        a: a.exchangeLabel,
+        b: b.exchangeLabel,
+        meaning:
+          "Shuffle sends the top photo behind the pile. Direct keeps it attached to the point you grab.",
+        source: "declared",
+      });
+    }
+  }
+
+  if (a.settleMs !== undefined && b.settleMs !== undefined) {
     const delta = b.settleMs - a.settleMs;
-    if (Math.abs(delta) < SAME_SETTLE_MS) {
-      parts.push(`Both settle in about ${a.settleMs} ms.`);
-    } else {
-      parts.push(
-        `${b.name} settles ${Math.abs(delta)} ms ${delta > 0 ? "later" : "sooner"} than ${a.name}.`,
-      );
+    if (track("settle", "Settling time", Math.abs(delta) >= SAME_SETTLE_MS)) {
+      notable.push({
+        key: "settle",
+        title: "Settling",
+        a: ms(a.settleMs),
+        b: ms(b.settleMs),
+        meaning: `B comes to rest ${Math.abs(delta)} ms ${delta > 0 ? "later" : "sooner"} than A, calculated from the springs on one ${PREVIEW_TRAVEL_PX} px move.`,
+        source: "calculated",
+      });
     }
-    if (a.overshootPercent !== b.overshootPercent) {
-      parts.push(`Overshoot is ${a.overshootPercent}% against ${b.overshootPercent}%.`);
-    }
+  } else if (a.settleMs !== b.settleMs) {
+    notable.push({
+      key: "settle",
+      title: "Settling",
+      a: ms(a.settleMs),
+      b: ms(b.settleMs),
+      meaning: "At least one spring does not come to rest within four seconds.",
+      source: "calculated",
+    });
+  } else {
+    unchanged.push("Settling time");
   }
-  // Presets can settle alike and still carry a release differently; say so when they do.
-  const release = differenceRows(a, b)
-    .filter(({ key, differs }) => differs && RELEASE_KEYS.includes(key))
-    .map(({ label }) => label.toLowerCase());
-  if (release.length > 0) parts.push(`A release carries differently: ${release.join(", ")}.`);
-  return parts.join(" ");
+
+  if (track("overshoot", "Overshoot", a.overshootPercent !== b.overshootPercent)) {
+    const larger = b.overshootPercent > a.overshootPercent ? "B" : "A";
+    notable.push({
+      key: "overshoot",
+      title: "Overshoot",
+      a: `${a.overshootPercent}%`,
+      b: `${b.overshootPercent}%`,
+      meaning: `${larger} swings further past its target before it settles, calculated from the spring alone.`,
+      source: "calculated",
+    });
+  }
+
+  if (track("flick", "Flick travel", a.maxStep !== b.maxStep)) {
+    notable.push({
+      key: "flick",
+      title: "Flick travel",
+      a: `${a.maxStep} ${plural(a.maxStep, "photo", "photos")}`,
+      b: `${b.maxStep} ${plural(b.maxStep, "photo", "photos")}`,
+      meaning: "How many photos one release is allowed to carry.",
+      source: "declared",
+    });
+  }
+
+  const releaseDiffers =
+    a.settings.flingVelocity !== b.settings.flingVelocity ||
+    a.settings.projectionSeconds !== b.settings.projectionSeconds;
+  if (track("release", "Release", releaseDiffers)) {
+    notable.push({
+      key: "release",
+      title: "Release",
+      a: `${a.settings.flingVelocity} px/s, ${a.settings.projectionSeconds} s`,
+      b: `${b.settings.flingVelocity} px/s, ${b.settings.projectionSeconds} s`,
+      meaning: "How fast a flick has to be to count, and how far a fast release carries on.",
+      source: "declared",
+    });
+  }
+
+  if (track("edge", "Elastic edge", elasticEdge(a) !== elasticEdge(b))) {
+    notable.push({
+      key: "edge",
+      title: "Edge give",
+      a: elasticEdge(a),
+      b: elasticEdge(b),
+      meaning:
+        "How far the first or last photo can be pulled past the end, and how firmly it resists.",
+      source: "declared",
+    });
+  }
+
+  if (
+    track(
+      "buttons",
+      "Buttons and keys",
+      a.settings.programmaticImpulse !== b.settings.programmaticImpulse,
+    )
+  ) {
+    notable.push({
+      key: "buttons",
+      title: "Buttons and keys",
+      a: `${a.settings.programmaticImpulse} px/s`,
+      b: `${b.settings.programmaticImpulse} px/s`,
+      meaning: "The push a Next or Previous press gives before the spring takes over.",
+      source: "declared",
+    });
+  }
+
+  const same = everyRowSame;
+  const caveat = layoutDiffers
+    ? identicalSprings
+      ? "The springs are identical, but the layouts are not. Whatever feels different here is the layout, not the physics."
+      : "These are different layouts, so the springs are not the only thing that differs. Equal springs would still not feel equal."
+    : undefined;
+
+  let headline: string;
+  if (same) {
+    headline =
+      "A and B are configured the same, so they behave the same. Change B to see what a setting does.";
+  } else if (layoutDiffers) {
+    headline = `A is an ${a.surfaceLabel.toLowerCase()} and B is a ${b.surfaceLabel.toLowerCase()}: you are comparing layouts as much as springs.`;
+  } else {
+    const lead = notable.slice(0, 2).map((item) => item.title.toLowerCase());
+    headline =
+      lead.length === 0
+        ? "The layout and the main settings match; only advanced settings differ."
+        : `Same layout. B differs in ${lead.join(" and ")}.`;
+  }
+
+  return {
+    same,
+    layoutDiffers,
+    identicalSprings,
+    headline,
+    caveat,
+    notable,
+    unchanged,
+  };
 }
 
 // ---------------------------------------------------------------------------------- implementation
@@ -252,20 +452,47 @@ export function implementationProps(behavior: CandidateBehavior) {
   };
 }
 
+/**
+ * What a consumer writes to get this behaviour. A deck is the package's `StackedDeck`. An item
+ * carousel is `useCarouselMotion`: `CarouselRoot` takes no physics, and the item layer is the
+ * application's own, because `CarouselSlide` makes every slide but the current one inert.
+ */
 export function implementationSnippet(behavior: CandidateBehavior): string {
   const props = implementationProps(behavior);
-  const component = behavior.surface === "deck" ? "StackedDeck" : "Coverflow";
-  const entry = behavior.surface === "deck" ? "stacked-deck" : "coverflow";
-  const exchange = behavior.exchange === undefined ? "" : `\n  exchange="${behavior.exchange}"`;
-  return [
-    `import { ${component} } from "@snap-motion/vue/${entry}";`,
-    "",
+  const physics = [
     `const spring = ${formatProps(props.spring)};`,
     `const releasePolicy = ${formatProps(props.releasePolicy)};`,
     `const elasticity = ${formatProps(props.elasticity)};`,
+  ];
+  if (behavior.surface === "carousel") {
+    return [
+      `import { createVariableWidthGeometry } from "@snap-motion/core";`,
+      `import { useCarouselMotion } from "@snap-motion/vue/carousel";`,
+      "",
+      ...physics,
+      "",
+      "const motion = useCarouselMotion({",
+      "  anchors,",
+      "  bounds,",
+      "  // Measure each item's layout box, then centre it with createVariableWidthGeometry.",
+      "  measure,",
+      "  spring,",
+      "  releasePolicy,",
+      "  elasticity,",
+      `  programmaticImpulse: ${props.programmaticImpulse},`,
+      "  track,",
+      "  viewport,",
+      "});",
+    ].join("\n");
+  }
+  return [
+    `import { StackedDeck } from "@snap-motion/vue/stacked-deck";`,
     "",
-    `<${component}${exchange}`,
-    `  :items="screens"`,
+    ...physics,
+    "",
+    `<StackedDeck`,
+    `  exchange="${behavior.exchange ?? "shuffle"}"`,
+    `  :items="photos"`,
     `  :spring="spring"`,
     `  :release-policy="releasePolicy"`,
     `  :elasticity="elasticity"`,

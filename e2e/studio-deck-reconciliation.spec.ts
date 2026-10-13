@@ -28,7 +28,7 @@ import { openStudio, roles, shortlist, shortlistCandidate, studio } from "./stud
 /** A shortlist of four: Tight is A, and Loose, Balanced and Shuffle ride the Deck. */
 async function openShortlistDeck(page: Page, width: number) {
   await openStudio(page, { reducedMotion: "no-preference", width, height: 900 });
-  await shortlistCandidate(page, "rail-balanced");
+  await shortlistCandidate(page, "carousel-balanced");
   await shortlistCandidate(page, "deck-shuffle");
   const narrow =
     (await page.getByTestId("studio-workspace").getAttribute("data-layout")) !== "wide";
@@ -69,18 +69,18 @@ for (const width of [1280, 390]) {
 
     // Balanced on top, then removed with its own control.
     await step("studio-deck-next", "next");
-    expect((await roles(page)).b).toBe("rail-balanced");
-    await mutateTraced(page, "studio-remove-rail-balanced", "remove-current");
+    expect((await roles(page)).b).toBe("carousel-balanced");
+    await mutateTraced(page, "studio-remove-carousel-balanced", "remove-current");
     steps.push("remove-current");
     // Membership, B and focus change at once, while the cards are still moving.
-    expect(await deckMembers(page)).toEqual(["rail-loose", "deck-shuffle"]);
+    expect(await deckMembers(page)).toEqual(["carousel-loose", "deck-shuffle"]);
     await expect(studio.deck(page).locator("[data-snap-motion-stacked-deck-card]")).toHaveCount(2);
     expect((await roles(page)).b).toBe("deck-shuffle");
     await waitForDeckRest(page);
 
     // Swapping the roles changes the Deck's members: B leaves it and the old reference joins.
     await step("studio-swap", "swap-roles");
-    expect(await deckMembers(page)).toEqual(["rail-tight", "rail-loose"]);
+    expect(await deckMembers(page)).toEqual(["carousel-tight", "carousel-loose"]);
     await step("studio-swap", "swap-back");
 
     // Remove the card behind the current one, then down to one card.
@@ -90,16 +90,16 @@ for (const width of [1280, 390]) {
     await expect(studio.deck(page)).toHaveAttribute("data-deck-state", "single");
     if (wide) {
       // Back to two, and then a change while an exchange is settling, and two in quick succession.
-      await step("studio-shortlist-rail-balanced", "add-to-two");
+      await step("studio-shortlist-carousel-balanced", "add-to-two");
       await expect(studio.deck(page)).toHaveAttribute("data-deck-state", "deck");
       await step("studio-deck-next", "exchange-in-flight", false);
       await page.waitForTimeout(90);
       await step(`studio-remove-${(await roles(page)).b}`, "remove-during-exchange");
-      await step("studio-shortlist-rail-balanced", "rapid-add", false);
+      await step("studio-shortlist-carousel-balanced", "rapid-add", false);
       await page.waitForTimeout(60);
-      await step("studio-shortlist-rail-balanced", "rapid-remove", false);
+      await step("studio-shortlist-carousel-balanced", "rapid-remove", false);
       await page.waitForTimeout(60);
-      await step("studio-shortlist-rail-balanced", "rapid-add-again");
+      await step("studio-shortlist-carousel-balanced", "rapid-add-again");
     }
 
     const frames = await stopDeckTrace(page);
@@ -125,11 +125,11 @@ test("an interrupted exchange survives another change and a re-addition", async 
   await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 1000));
   await mutateTraced(page, "studio-deck-next", "exchange");
   await page.clock.runFor(96);
-  await mutateTraced(page, "studio-remove-rail-balanced", "remove-moving-current");
+  await mutateTraced(page, "studio-remove-carousel-balanced", "remove-moving-current");
   await page.clock.runFor(64);
-  await mutateTraced(page, "studio-remove-rail-loose", "second-mutation");
+  await mutateTraced(page, "studio-remove-carousel-loose", "second-mutation");
   await page.clock.runFor(48);
-  await mutateTraced(page, "studio-shortlist-rail-balanced", "readd-departing");
+  await mutateTraced(page, "studio-shortlist-carousel-balanced", "readd-departing");
   await page.clock.runFor(64);
   await mutateTraced(page, "studio-remove-deck-shuffle", "remove-with-departures");
   await page.clock.runFor(800);
@@ -181,9 +181,9 @@ test("in Chromium no card moves faster than the Deck's own exchange moves it", a
   await openShortlistDeck(page, 1280);
   for (const [testId, name] of [
     ["studio-deck-next", "exchange"],
-    ["studio-remove-rail-balanced", "remove-current"],
-    ["studio-shortlist-rail-balanced", "add-again"],
-    ["studio-remove-rail-loose", "remove-behind"],
+    ["studio-remove-carousel-balanced", "remove-current"],
+    ["studio-shortlist-carousel-balanced", "add-again"],
+    ["studio-remove-carousel-loose", "remove-behind"],
   ] as const) {
     await mutateTraced(page, testId, name);
     await waitForDeckRest(page);
@@ -199,11 +199,11 @@ test("in Chromium no card moves faster than the Deck's own exchange moves it", a
 
 test("under reduced motion the new collection is adopted at once", async ({ page }) => {
   await openStudio(page);
-  await shortlistCandidate(page, "rail-balanced");
+  await shortlistCandidate(page, "carousel-balanced");
   await page.getByTestId("studio-deck-next").click();
-  await expect(studio.deck(page)).toHaveAttribute("data-active-id", "rail-balanced");
-  await page.getByTestId("studio-remove-rail-balanced").click();
+  await expect(studio.deck(page)).toHaveAttribute("data-active-id", "carousel-balanced");
+  await page.getByTestId("studio-remove-carousel-balanced").click();
   await expect(studio.deck(page)).toHaveAttribute("data-reconciling", "false");
   await expect(studio.deck(page).locator(".snap-motion-stacked-deck-exit")).toHaveCount(0);
-  await expect(studio.deck(page)).toHaveAttribute("data-active-id", "rail-loose");
+  await expect(studio.deck(page)).toHaveAttribute("data-active-id", "carousel-loose");
 });

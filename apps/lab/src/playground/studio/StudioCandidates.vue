@@ -1,25 +1,22 @@
 <script setup lang="ts">
 import { computed, ref, useId } from "vue";
 
-import type { ShowcaseScreen } from "@/demos/showcaseScreens";
-
 import CandidateGlyph from "./CandidateGlyph.vue";
-import CandidatePreview from "./CandidatePreview.vue";
 import { candidateDefinitions, type CandidateId } from "./candidates";
+import MediaStage from "./media/MediaStage.vue";
 import { useStudio } from "./studio-context";
 import { MAX_SHORTLIST } from "./studio-model";
 
 const props = defineProps<{
   reducedMotionOverride: boolean | undefined;
-  screens: readonly ShowcaseScreen[];
 }>();
 
-const { behavior, commands, model } = useStudio();
+const { behavior, commands, media, model } = useStudio();
 const titleId = `${useId()}-title`;
 const fullId = `${useId()}-full`;
 const root = ref<HTMLElement>();
 const heading = ref<HTMLElement>();
-const preview = ref<InstanceType<typeof CandidatePreview>>();
+const preview = ref<InstanceType<typeof MediaStage>>();
 
 const detailId = computed(() => model.inspectedId.value);
 const detail = computed(() =>
@@ -78,8 +75,8 @@ defineExpose({
     <!-- The collection. -->
     <template v-if="detail === undefined">
       <p class="region-note">
-        Each candidate is a real surface with its own feel. Shortlist the ones worth comparing, or
-        open one to run it.
+        Each candidate is a way to browse the photos shared in a conversation, running on the real
+        surface. Shortlist the ones worth comparing, or open one to try it.
       </p>
       <p v-if="full" :id="fullId" class="region-note" data-testid="studio-shortlist-full">
         The shortlist holds {{ MAX_SHORTLIST }}. Remove one to add another.
@@ -181,38 +178,17 @@ defineExpose({
         </div>
       </div>
 
-      <CandidatePreview
-        :key="detail.id"
+      <MediaStage
+        :key="`${detail.id}-${detail.surface}-${detail.exchange}`"
         ref="preview"
         :behavior="detail"
-        :label="`${detail.name}, live preview`"
+        :items="media"
+        :label="`${detail.name}, shared photos`"
         :reduced-motion-override="props.reducedMotionOverride"
         role="detail"
-        :screens="screens"
+        @open="commands.openMedia"
       />
-      <div class="step-controls">
-        <button
-          aria-label="Previous screen"
-          data-testid="studio-detail-previous"
-          type="button"
-          @click="preview?.previous()"
-        >
-          <svg aria-hidden="true" height="18" viewBox="0 0 24 24" width="18">
-            <path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" />
-          </svg>
-        </button>
-        <button
-          aria-label="Next screen"
-          data-testid="studio-detail-next"
-          type="button"
-          @click="preview?.next()"
-        >
-          <svg aria-hidden="true" height="18" viewBox="0 0 24 24" width="18">
-            <path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" />
-          </svg>
-        </button>
-        <p class="step-hint">Drag it, flick it, or use the arrow keys.</p>
-      </div>
+      <p class="step-hint">Drag it, flick it, or use the arrow keys.</p>
 
       <dl class="facts" data-testid="studio-detail-facts">
         <div>
@@ -226,16 +202,16 @@ defineExpose({
         <div>
           <dt>Settles in</dt>
           <dd>{{ detail.settleMs === undefined ? "Over 4 s" : `${detail.settleMs} ms` }}</dd>
-          <dd class="fact-note">Computed from the spring</dd>
+          <dd class="fact-note">Calculated from the spring</dd>
         </div>
         <div>
           <dt>Overshoot</dt>
           <dd>{{ detail.overshootPercent }}%</dd>
-          <dd class="fact-note">Computed from the spring</dd>
+          <dd class="fact-note">Calculated from the spring</dd>
         </div>
         <div>
           <dt>Largest step</dt>
-          <dd>{{ detail.maxStep }} {{ detail.maxStep === 1 ? "screen" : "screens" }}</dd>
+          <dd>{{ detail.maxStep }} {{ detail.maxStep === 1 ? "photo" : "photos" }}</dd>
           <dd class="fact-note">Per release</dd>
         </div>
       </dl>

@@ -174,3 +174,26 @@ export async function stopNameTrace(page: Page) {
     }[];
   });
 }
+
+/**
+ * Brings a surface to the middle of the viewport and waits until the page has stopped scrolling.
+ * The page scrolls smoothly, and a pointer or touch that arrives mid-scroll is a different gesture
+ * (the browser cancels it), so an input aimed at a surface must wait for the scroll to end.
+ */
+export async function centreOnScreen(page: Page, target: Locator) {
+  await target.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        let last = Number.NaN;
+        let still = 0;
+        const frame = () => {
+          still = window.scrollY === last ? still + 1 : 0;
+          last = window.scrollY;
+          if (still >= 6) resolve();
+          else requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+      }),
+  );
+}

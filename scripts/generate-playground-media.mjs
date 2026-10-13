@@ -1,6 +1,8 @@
-// Generates the public Playground's gallery plates: six seeded, layered-ridgeline illustrations in
-// varied aspect ratios. The output is committed under apps/lab/src/assets/playground-gallery/; run
-// this script only to change the plates, never as part of a build:
+// Generates the public Playground's plates: seeded, layered-ridgeline illustrations in varied aspect
+// ratios. Two sets are written, both committed and never produced by a build: the six Gallery plates
+// under apps/lab/src/assets/playground-gallery/, and the six extra "shared in a conversation" plates
+// the Motion Studio mixes with them, under apps/lab/src/assets/shared-media/. Run this script only to
+// change the plates:
 //
 //   node scripts/generate-playground-media.mjs
 //
@@ -10,8 +12,11 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const outputDirectory = fileURLToPath(
+const galleryDirectory = fileURLToPath(
   new URL("../apps/lab/src/assets/playground-gallery/", import.meta.url),
+);
+const conversationDirectory = fileURLToPath(
+  new URL("../apps/lab/src/assets/shared-media/", import.meta.url),
 );
 
 function createRandom(seed) {
@@ -162,7 +167,7 @@ function plate({
   ].join("\n");
 }
 
-const plates = {
+const galleryPlates = {
   "morning-ridge": plate({
     seed: 11,
     width: 2400,
@@ -358,8 +363,164 @@ const plates = {
   }),
 };
 
-mkdirSync(outputDirectory, { recursive: true });
-for (const [name, svg] of Object.entries(plates)) {
-  writeFileSync(join(outputDirectory, `${name}.svg`), `${svg}\n`);
-  process.stdout.write(`${name}.svg ${(svg.length / 1024).toFixed(1)} KiB\n`);
+const conversationPlates = {
+  "campsite-blue-hour": plate({
+    seed: 211,
+    width: 1600,
+    height: 2000,
+    title: "Campsite at blue hour",
+    description: "A tall dusk scene: deep blue ridges and a warm lantern glow low over camp.",
+    sky: [
+      [0, "#101c3d"],
+      [0.5, "#2f4f86"],
+      [0.85, "#e9a07a"],
+      [1, "#f6c58e"],
+    ],
+    sun: { x: 0.5, y: 0.72, radius: 0.035, color: "#ffd8a0" },
+    horizon: 0.84,
+    starCount: 70,
+    ridges: [
+      { lift: 0.3, height: 0.14, frequency: 2.4, top: "#6a7fb0", bottom: "#a7a3bd" },
+      { lift: 0.2, height: 0.16, frequency: 3, top: "#46598f", bottom: "#6a7fb0" },
+      { lift: 0.1, height: 0.16, frequency: 3.8, top: "#2d3f70", bottom: "#46598f" },
+      { lift: 0.02, height: 0.14, frequency: 4.6, top: "#162244", bottom: "#2d3f70" },
+    ],
+    grain: { dark: "#060b1c", light: "#ffe3c4" },
+  }),
+  "fog-in-the-valley": plate({
+    seed: 233,
+    width: 2400,
+    height: 1350,
+    title: "Fog in the valley",
+    description: "A wide, pale scene: green ridges fading into low morning fog.",
+    sky: [
+      [0, "#cfdad6"],
+      [0.6, "#e6ece6"],
+      [1, "#f4f5ee"],
+    ],
+    sun: { x: 0.82, y: 0.3, radius: 0.03, color: "#fffdf2" },
+    horizon: 0.86,
+    ridges: [
+      { lift: 0.34, height: 0.2, frequency: 2.2, top: "#c4d2cb", bottom: "#dde5df" },
+      { lift: 0.25, height: 0.22, frequency: 2.8, top: "#a5bcb2", bottom: "#c4d2cb" },
+      { lift: 0.16, height: 0.22, frequency: 3.5, top: "#7e9d92", bottom: "#a5bcb2" },
+      { lift: 0.07, height: 0.22, frequency: 4.3, top: "#557a6e", bottom: "#7e9d92" },
+      { lift: 0.0, height: 0.2, frequency: 5.2, top: "#2f5448", bottom: "#557a6e" },
+    ],
+    grain: { dark: "#16241f", light: "#ffffff" },
+  }),
+  "last-light-on-the-lake": plate({
+    seed: 257,
+    width: 2400,
+    height: 1600,
+    title: "Last light on the lake",
+    description: "A still alpine lake holding gold and teal reflections of the evening ridge.",
+    sky: [
+      [0, "#27506a"],
+      [0.5, "#e0a363"],
+      [1, "#f8d9a0"],
+    ],
+    sun: { x: 0.58, y: 0.52, radius: 0.04, color: "#fff2c8" },
+    horizon: 0.6,
+    mirror: { water: "#1f4b5e", opacity: 0.6 },
+    ridges: [
+      { lift: 0.0, height: 0.14, frequency: 2.6, top: "#4a7482", bottom: "#a98f72" },
+      { lift: -0.005, height: 0.1, frequency: 4, top: "#1d4155", bottom: "#376276" },
+    ],
+    grain: { dark: "#08161e", light: "#ffe7b8" },
+  }),
+  "storm-over-the-saddle": plate({
+    seed: 281,
+    width: 2000,
+    height: 1600,
+    title: "Storm over the saddle",
+    description: "A heavy slate sky breaking over dark ridges, one bright seam at the horizon.",
+    sky: [
+      [0, "#2b2f44"],
+      [0.55, "#5d6182"],
+      [0.88, "#b6a3a6"],
+      [1, "#f0cfa6"],
+    ],
+    sun: { x: 0.28, y: 0.7, radius: 0.03, color: "#ffe7bd" },
+    horizon: 0.82,
+    ridges: [
+      { lift: 0.3, height: 0.22, frequency: 2, top: "#7b7893", bottom: "#a29aa6", sharpness: 0.6 },
+      {
+        lift: 0.2,
+        height: 0.24,
+        frequency: 2.6,
+        top: "#575877",
+        bottom: "#7b7893",
+        sharpness: 0.6,
+      },
+      {
+        lift: 0.1,
+        height: 0.24,
+        frequency: 3.2,
+        top: "#383a58",
+        bottom: "#575877",
+        sharpness: 0.58,
+      },
+      { lift: 0.01, height: 0.2, frequency: 4, top: "#1c1e36", bottom: "#383a58", sharpness: 0.55 },
+    ],
+    grain: { dark: "#0a0b18", light: "#e9dccd" },
+  }),
+  "sunrise-from-the-tent": plate({
+    seed: 307,
+    width: 1350,
+    height: 2400,
+    title: "Sunrise from the tent",
+    description: "A very tall frame: a thin band of ridges under a rose and amber sunrise.",
+    sky: [
+      [0, "#3a3466"],
+      [0.4, "#b4577a"],
+      [0.75, "#f2a36b"],
+      [1, "#fbd592"],
+    ],
+    sun: { x: 0.46, y: 0.7, radius: 0.06, color: "#fff0c9" },
+    horizon: 0.88,
+    ridges: [
+      { lift: 0.18, height: 0.1, frequency: 2.4, top: "#a7607c", bottom: "#d3866e" },
+      { lift: 0.1, height: 0.12, frequency: 3, top: "#6c3e6c", bottom: "#a7607c" },
+      { lift: 0.02, height: 0.12, frequency: 3.8, top: "#33264f", bottom: "#6c3e6c" },
+    ],
+    grain: { dark: "#150d22", light: "#ffd9b0" },
+  }),
+  "pine-ridge-at-noon": plate({
+    seed: 331,
+    width: 1800,
+    height: 1800,
+    title: "Pine ridge at noon",
+    description: "A square frame of bright green ridgelines under a clear high-noon sky.",
+    sky: [
+      [0, "#4f93c9"],
+      [0.6, "#a4d0e6"],
+      [1, "#e3f1ee"],
+    ],
+    sun: { x: 0.76, y: 0.16, radius: 0.035, color: "#ffffff" },
+    horizon: 0.84,
+    ridges: [
+      { lift: 0.34, height: 0.2, frequency: 2.2, top: "#90c1a2", bottom: "#bfe0c8" },
+      { lift: 0.24, height: 0.22, frequency: 2.9, top: "#5f9c7c", bottom: "#90c1a2" },
+      { lift: 0.14, height: 0.22, frequency: 3.6, top: "#3b7a5c", bottom: "#5f9c7c" },
+      { lift: 0.04, height: 0.2, frequency: 4.4, top: "#1f5640", bottom: "#3b7a5c" },
+    ],
+    grain: { dark: "#0a1c14", light: "#f5ffee" },
+  }),
+};
+
+for (const [directory, plates] of [
+  [galleryDirectory, galleryPlates],
+  [conversationDirectory, conversationPlates],
+]) {
+  mkdirSync(directory, { recursive: true });
+  for (const [name, svg] of Object.entries(plates)) {
+    writeFileSync(
+      join(directory, `${name}.svg`),
+      `${svg}
+`,
+    );
+    process.stdout.write(`${name}.svg ${(svg.length / 1024).toFixed(1)} KiB
+`);
+  }
 }

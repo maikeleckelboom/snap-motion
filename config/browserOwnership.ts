@@ -16,8 +16,9 @@ export const previewSpecs = ["media-preview.spec.ts", "playground-preview.spec.t
 /**
  * The Motion Studio's browser specs. They run live surfaces side by side, so they own their own
  * parallel job on each engine instead of lengthening the general ones past their limits.
- * `studio-layout.spec.ts` is Chromium-only; the journey, the View Transitions and the Shortlist
- * Deck's reconciliation specs run on every engine.
+ * `studio-layout.spec.ts` and `studio-media-touch.spec.ts` (real touch input, a resized stage, the
+ * photo View Transition) are Chromium-only; the journey, the View Transitions, the Shortlist Deck's
+ * reconciliation, the item carousel and the editor for B run on every engine.
  */
 export const chromiumStudioSpecs = [
   "studio.spec.ts",
@@ -25,12 +26,17 @@ export const chromiumStudioSpecs = [
   "studio-ab-conditions.spec.ts",
   "studio-layout.spec.ts",
   "studio-deck-reconciliation.spec.ts",
+  "studio-media.spec.ts",
+  "studio-tune.spec.ts",
+  "studio-media-touch.spec.ts",
 ];
 export const interoperabilityStudioSpecs = [
   "studio.spec.ts",
   "studio-transitions.spec.ts",
   "studio-ab-conditions.spec.ts",
   "studio-deck-reconciliation.spec.ts",
+  "studio-media.spec.ts",
+  "studio-tune.spec.ts",
 ];
 export const interoperabilitySpecs = [
   "lab-physics-settings.spec.ts",

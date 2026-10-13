@@ -6,10 +6,12 @@ import {
 } from "@snap-motion/vue/stacked-deck";
 import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 
+import SegmentedControl, { type SegmentedOption } from "@/components/SegmentedControl.vue";
+
 import CandidateGlyph from "./CandidateGlyph.vue";
-import type { CandidateBehavior, CandidateId } from "./candidates";
+import { describeShape, type CandidateBehavior, type CandidateId } from "./candidates";
 import { useStudio } from "./studio-context";
-import { MAX_SHORTLIST } from "./studio-model";
+import { MAX_SHORTLIST, type ShortlistExchange } from "./studio-model";
 
 const props = defineProps<{ reducedMotionOverride: boolean | undefined }>();
 
@@ -17,6 +19,12 @@ const { behavior, commands, model } = useStudio();
 const titleId = `${useId()}-title`;
 const region = ref<HTMLElement>();
 const deck = ref<StackedDeckHandle<CandidateId>>();
+
+// How this list's own cards turn. It belongs to the list, and nothing here reads it to configure A or B.
+const turnOptions: SegmentedOption<ShortlistExchange>[] = [
+  { label: "Shuffle", value: "shuffle", testid: "studio-shortlist-turn-shuffle" },
+  { label: "Direct", value: "direct", testid: "studio-shortlist-turn-direct" },
+];
 
 const members = computed(() => model.shortlist.value.map((id) => behavior(id)));
 const deckItems = computed(() => model.deckIds.value.map((id) => behavior(id)));
@@ -107,7 +115,7 @@ defineExpose({ focusAfterRemoval, focusTarget: () => deck.value?.root, root: () 
         :data-deck-state="model.deckState.value"
         :disabled="overlayOwned || deckInert"
         :inert="deckInert ? true : undefined"
-        exchange="shuffle"
+        :exchange="model.shortlistExchange.value"
         :fallback-stage-width="520"
         :item-label="(item: CandidateBehavior) => item.name"
         :items="deckItems"
@@ -122,7 +130,10 @@ defineExpose({ focusAfterRemoval, focusTarget: () => deck.value?.root, root: () 
         <template #card="card: StackedDeckCardState<CandidateBehavior, CandidateId>">
           <div class="deck-card">
             <CandidateGlyph :behavior="card.item" />
-            <p class="deck-card-name">{{ card.item.name }}</p>
+            <p class="deck-card-name">
+              {{ card.item.name }}
+              <span class="deck-card-shape">{{ describeShape(card.item) }}</span>
+            </p>
           </div>
         </template>
       </StackedDeck>
@@ -162,6 +173,22 @@ defineExpose({ focusAfterRemoval, focusTarget: () => deck.value?.root, root: () 
         </div>
       </div>
     </template>
+
+    <div
+      v-if="model.deckState.value !== 'empty'"
+      class="shortlist-turn"
+      data-testid="studio-shortlist-turn"
+    >
+      <SegmentedControl
+        label="How these cards turn"
+        :model-value="model.shortlistExchange.value"
+        :options="turnOptions"
+        @update:model-value="commands.setShortlistExchange"
+      />
+      <p class="turn-hint">
+        This is how the list you are swiping turns. It does not change how A or B behaves.
+      </p>
+    </div>
 
     <div v-else class="shortlist-empty" data-testid="studio-shortlist-empty">
       <p class="empty-title">
@@ -306,9 +333,27 @@ defineExpose({ focusAfterRemoval, focusTarget: () => deck.value?.root, root: () 
 }
 
 .deck-card-name {
+  display: grid;
   padding: 0.35rem 0.75rem 0.5rem;
   font-size: 0.95rem;
   font-weight: 650;
+}
+
+.deck-card-shape {
+  color: var(--pg-muted);
+  font-size: 0.74rem;
+  font-weight: 400;
+}
+
+.shortlist-turn {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.turn-hint {
+  color: var(--pg-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 .deck-bar {

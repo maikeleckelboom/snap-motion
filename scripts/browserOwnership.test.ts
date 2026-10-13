@@ -35,9 +35,10 @@ it("gives the Studio's cross-engine spec exactly one owner per engine, apart fro
   expect(
     interoperabilitySpecs.filter((spec) => interoperabilityStudioSpecs.includes(spec)),
   ).toEqual([]);
-  // Only the Chromium-only layout spec is absent from the cross-engine Studio list.
+  // Only the Chromium-only specs are absent from the cross-engine Studio list: the layout spec, and
+  // the one that drives real touch input, a resized stage and the native View Transition.
   expect(chromiumStudioSpecs.filter((spec) => !interoperabilityStudioSpecs.includes(spec))).toEqual(
-    ["studio-layout.spec.ts"],
+    ["studio-layout.spec.ts", "studio-media-touch.spec.ts"],
   );
   expect(chromiumScope("general").testIgnore).toEqual(expect.arrayContaining(chromiumStudioSpecs));
 });

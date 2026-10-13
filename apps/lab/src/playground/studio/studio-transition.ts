@@ -2,7 +2,8 @@ import { nextTick } from "vue";
 
 /**
  * Native View Transitions for the Studio's application changes: moving between its two views on a
- * narrow layout, and opening or leaving a candidate's detail.
+ * narrow layout, opening or leaving a candidate's detail, and opening a photo from its thumbnail or
+ * returning to it.
  *
  * What this is, and is not:
  *
@@ -33,7 +34,7 @@ interface ViewTransitionDocument {
   startViewTransition?: (update: () => Promise<void> | void) => ViewTransitionLike;
 }
 
-export type StudioTransitionKind = "view" | "detail";
+export type StudioTransitionKind = "view" | "detail" | "media";
 
 export interface SharedElement {
   /** The one name this element pair shares for the length of the transition. */

@@ -172,7 +172,7 @@ function frameSpan(frames: Frame[], element: number) {
 }
 
 async function withDeck(page: Page) {
-  await shortlistCandidate(page, "rail-balanced");
+  await shortlistCandidate(page, "carousel-balanced");
   await expect(studio.deck(page)).toHaveAttribute("data-deck-state", "deck");
 }
 
@@ -191,9 +191,9 @@ test.describe("a change of role keeps the stages level", () => {
     const stepped = await expectLevelAtRest(page);
     expect(stepped).not.toBe(home);
 
-    await setB(page, "rail-balanced");
+    await setB(page, "carousel-balanced");
     expect(await expectLevelAtRest(page)).toBe(stepped);
-    await setB(page, "rail-loose");
+    await setB(page, "carousel-loose");
     expect(await expectLevelAtRest(page)).toBe(stepped);
   });
 
@@ -206,8 +206,8 @@ test.describe("a change of role keeps the stages level", () => {
 
     await startFrames(page);
     await page.getByTestId("studio-driver-next").click();
-    await page.getByTestId("studio-compare-rail-balanced").click();
-    await expect(studio.bName(page)).toHaveText(nameOf("rail-balanced"));
+    await page.getByTestId("studio-compare-carousel-balanced").click();
+    await expect(studio.bName(page)).toHaveText(nameOf("carousel-balanced"));
     const target = await expectLevelAtRest(page);
     const frames = await stopFrames(page);
 
@@ -229,14 +229,14 @@ test.describe("a change of role keeps the stages level", () => {
     const keptB = await surface(page, "candidate").elementHandle();
 
     await page.getByTestId("studio-driver-next").click();
-    await page.getByTestId("studio-pin-rail-balanced").click();
-    await expect(studio.aName(page)).toHaveText(nameOf("rail-balanced"));
+    await page.getByTestId("studio-pin-carousel-balanced").click();
+    await expect(studio.aName(page)).toHaveText(nameOf("carousel-balanced"));
     const target = await expectLevelAtRest(page);
 
     expect(target).not.toBe(before);
     // B was not remounted by the change of A.
     expect(await keptB!.evaluate((node) => node.isConnected)).toBe(true);
-    await expect(studio.bName(page)).toHaveText(nameOf("rail-loose"));
+    await expect(studio.bName(page)).toHaveText(nameOf("carousel-loose"));
   });
 
   test("swapping the roles keeps both stages on one screen, before and after the swap", async ({
@@ -248,8 +248,8 @@ test.describe("a change of role keeps the stages level", () => {
     const stepped = await expectLevelAtRest(page);
 
     await page.getByTestId("studio-swap").click();
-    await expect(studio.aName(page)).toHaveText(nameOf("rail-loose"));
-    await expect(studio.bName(page)).toHaveText(nameOf("rail-tight"));
+    await expect(studio.aName(page)).toHaveText(nameOf("carousel-loose"));
+    await expect(studio.bName(page)).toHaveText(nameOf("carousel-tight"));
     expect(await expectLevelAtRest(page)).toBe(stepped);
     await expect(status(page)).toHaveAttribute("data-state", "level");
 
@@ -261,12 +261,12 @@ test.describe("a change of role keeps the stages level", () => {
 
   test("on a phone, choosing B from the comparison keeps the stages level", async ({ page }) => {
     await openStudio(page, { width: 390, height: 844 });
-    await shortlistCandidate(page, "rail-balanced");
+    await shortlistCandidate(page, "carousel-balanced");
     await page.getByTestId("studio-view-compare").click();
     await expect(studio.deck(page)).toHaveAttribute("data-deck-state", "deck");
     await page.getByTestId("studio-driver-next").click();
     const stepped = await expectLevelAtRest(page);
-    await setB(page, "rail-balanced");
+    await setB(page, "carousel-balanced");
     expect(await expectLevelAtRest(page)).toBe(stepped);
   });
 });
@@ -374,16 +374,16 @@ test.describe("nothing a replay scheduled outlives what invalidated it", () => {
       name: "changing B",
       needsDeck: true,
       act: async (page) => {
-        await page.getByTestId("studio-compare-rail-balanced").click();
-        await bShows(page, "rail-balanced");
+        await page.getByTestId("studio-compare-carousel-balanced").click();
+        await bShows(page, "carousel-balanced");
       },
     },
     {
       name: "pinning a new A",
       needsDeck: true,
       act: async (page) => {
-        await page.getByTestId("studio-pin-rail-balanced").click();
-        await expect(studio.aName(page)).toHaveText(nameOf("rail-balanced"));
+        await page.getByTestId("studio-pin-carousel-balanced").click();
+        await expect(studio.aName(page)).toHaveText(nameOf("carousel-balanced"));
       },
     },
     {
@@ -391,7 +391,7 @@ test.describe("nothing a replay scheduled outlives what invalidated it", () => {
       needsDeck: false,
       act: async (page) => {
         await page.getByTestId("studio-swap").click();
-        await expect(studio.aName(page)).toHaveText(nameOf("rail-loose"));
+        await expect(studio.aName(page)).toHaveText(nameOf("carousel-loose"));
       },
     },
     {
@@ -466,8 +466,8 @@ test.describe("a replay answers to the semantic roles, not to what the Deck has 
     await page.getByTestId("studio-deck-next").click();
     // The semantic B is accepted at once, and the Deck, which only advances on the clock, still draws
     // the card that was B. Nothing has been drawn yet that could have told the replay.
-    await expect(studio.deck(page)).toHaveAttribute("data-active-id", "rail-balanced");
-    await expect(studio.deck(page)).toHaveAttribute("data-visual-id", "rail-loose");
+    await expect(studio.deck(page)).toHaveAttribute("data-active-id", "carousel-balanced");
+    await expect(studio.deck(page)).toHaveAttribute("data-visual-id", "carousel-loose");
     await expect(replay).toHaveAttribute("aria-pressed", "false");
 
     const aimed = await surface(page, "reference").getAttribute("data-active-id");
@@ -570,7 +570,7 @@ test.describe("independent exploration stays possible and is never silent", () =
     await expect(status(page)).toHaveAttribute("data-state", "level");
   });
 
-  test("a deck wraps where a rail ends, and the stages say so instead of pretending", async ({
+  test("a deck wraps where an item carousel ends, and the stages say so instead of pretending", async ({
     page,
   }) => {
     await openStudio(page);
@@ -578,11 +578,12 @@ test.describe("independent exploration stays possible and is never silent", () =
     await page.getByTestId("studio-compare-deck-shuffle").click();
     await expect(studio.bName(page)).toHaveText(nameOf("deck-shuffle"));
     await expectLevelAtRest(page);
-    for (let press = 0; press < 3; press += 1) {
+    // Eleven photos, starting on the sixth: five presses reach the last, the sixth is where they part.
+    for (let press = 0; press < 6; press += 1) {
       await page.getByTestId("studio-driver-next").click();
       await expectBothAtRest(page);
     }
-    // The rail stopped at its last screen; the deck went around to its first.
+    // The carousel stopped at its last photo; the deck went around to its first.
     const { a, b } = await both(page);
     expect(a.settled).not.toBe(b.settled);
     await expect(status(page)).toHaveAttribute("data-state", "apart");

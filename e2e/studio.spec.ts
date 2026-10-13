@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import type { CandidateId } from "../apps/lab/src/playground/studio/candidate-definitions";
 import { MOTION_PRESETS } from "../packages/core/src/index";
 import { dragMouseBy } from "./helpers";
-import { openPlayground, scrollY, section } from "./playgroundHelpers";
+import { openPlayground, scrollY } from "./playgroundHelpers";
 import {
   focusedTestId,
   nameOf,
@@ -42,9 +42,9 @@ test.afterEach(async ({ page }) => {
   expect(collectedErrors.get(page) ?? []).toEqual([]);
 });
 
-/** The first visit's shortlist is Tight rail (A) and Loose rail (B). Adding one makes a real Deck. */
+/** The first visit's shortlist is Tight carousel (A) and Loose carousel (B). Adding one makes a real Deck. */
 async function withDeck(page: Page) {
-  await shortlistCandidate(page, "rail-balanced");
+  await shortlistCandidate(page, "carousel-balanced");
   await expect(studio.deck(page)).toHaveAttribute("data-deck-state", "deck");
 }
 
@@ -60,6 +60,7 @@ test.describe("activation boundary", () => {
     // Nothing of the workspace has been requested.
     expect(requested.filter((url) => /StudioWorkspace/.test(url))).toEqual([]);
     // The page above mounts exactly its own five surfaces, and four dialogs.
+    await expect(page.locator(".media-carousel")).toHaveCount(0);
     await expect(page.locator(".snap-motion-coverflow")).toHaveCount(1);
     await expect(page.locator(".snap-motion-stacked-deck")).toHaveCount(1);
     await expect(page.locator("dialog")).toHaveCount(4);
@@ -68,12 +69,13 @@ test.describe("activation boundary", () => {
     await expect(page.getByTestId("studio-workspace")).toBeFocused();
     await expect(page.getByTestId("studio-intro")).toHaveCount(0);
     expect(requested.some((url) => /StudioWorkspace/.test(url))).toBe(true);
-    // Two live stages and the shortlist's Deck: a rail and a deck were already on the page, so the
-    // Studio adds a rail (A and B are both rails at first) and a deck (the shortlist).
-    await expect(page.locator(".snap-motion-coverflow")).toHaveCount(3);
+    // Two live stages and the shortlist's Deck. A and B are both item carousels at first, which are
+    // the Studio's own (they are not Coverflows), and the shortlist is a Stacked Deck.
+    await expect(page.locator(".media-carousel")).toHaveCount(2);
+    await expect(page.locator(".snap-motion-coverflow")).toHaveCount(1);
     await expect(page.locator(".snap-motion-stacked-deck")).toHaveCount(2);
-    // The Studio adds one dialog: the implementation sheet.
-    await expect(page.locator("dialog")).toHaveCount(5);
+    // The Studio adds two dialogs: the implementation sheet and the photo viewer.
+    await expect(page.locator("dialog")).toHaveCount(6);
   });
 
   for (const [width, height] of [
@@ -101,7 +103,7 @@ test.describe("activation boundary", () => {
     await page.getByTestId("studio-choose-a").click();
     await page.locator("#top").scrollIntoViewIfNeeded();
     await page.locator("#studio").scrollIntoViewIfNeeded();
-    await expect(page.getByTestId("studio-decision-line")).toHaveText("Chosen: Tight rail");
+    await expect(page.getByTestId("studio-decision-line")).toHaveText("Chosen: Tight carousel");
     await expect(studio.row(page, "deck-shuffle")).toHaveAttribute("data-shortlisted", "true");
     await expect(page.getByTestId("studio-workspace")).toHaveCount(1);
   });
@@ -124,43 +126,46 @@ test.describe("the decision journey", () => {
   }) => {
     await openStudio(page);
     // The first visit already holds a comparison, so the stages are never empty.
-    expect(await roles(page)).toEqual({ a: "rail-tight", b: "rail-loose" });
-    await expect(studio.aName(page)).toHaveText("Tight rail");
-    await expect(studio.bName(page)).toHaveText("Loose rail");
+    expect(await roles(page)).toEqual({ a: "carousel-tight", b: "carousel-loose" });
+    await expect(studio.aName(page)).toHaveText("Tight carousel");
+    await expect(studio.bName(page)).toHaveText("Loose carousel");
 
     // Shortlist two more from the candidates.
     await shortlistCandidate(page, "deck-direct");
-    await shortlistCandidate(page, "rail-balanced");
+    await shortlistCandidate(page, "carousel-balanced");
     expect((await shortlist(page)).map(({ id }) => id)).toEqual([
-      "rail-tight",
-      "rail-loose",
+      "carousel-tight",
+      "carousel-loose",
       "deck-direct",
-      "rail-balanced",
+      "carousel-balanced",
     ]);
     // Adding never disturbs a comparison already under way.
-    expect(await roles(page)).toEqual({ a: "rail-tight", b: "rail-loose" });
+    expect(await roles(page)).toEqual({ a: "carousel-tight", b: "carousel-loose" });
 
     // Pin a different reference, then compare against a deck.
-    await page.getByTestId("studio-pin-rail-balanced").click();
-    expect(await roles(page)).toEqual({ a: "rail-balanced", b: "rail-loose" });
-    await expect(studio.aName(page)).toHaveText("Balanced rail");
-    await expect(studio.bName(page)).toHaveText("Loose rail");
+    await page.getByTestId("studio-pin-carousel-balanced").click();
+    expect(await roles(page)).toEqual({ a: "carousel-balanced", b: "carousel-loose" });
+    await expect(studio.aName(page)).toHaveText("Balanced carousel");
+    await expect(studio.bName(page)).toHaveText("Loose carousel");
     await page.getByTestId("studio-compare-deck-direct").click();
-    expect(await roles(page)).toEqual({ a: "rail-balanced", b: "deck-direct" });
+    expect(await roles(page)).toEqual({ a: "carousel-balanced", b: "deck-direct" });
     await expect(studio.bName(page)).toHaveText("Direct deck");
 
     // What differs is read from the two, and says what kind of fact each row is.
+    await page.getByTestId("studio-advanced").locator("summary").click();
     const table = page.getByTestId("studio-diff-table");
     await expect(table.locator("[data-row='surface']")).toHaveAttribute("data-differs", "true");
-    await expect(table.locator("[data-row='surface'] td").first()).toHaveText("Rail");
-    await expect(table.locator("[data-row='surface'] td").nth(1)).toContainText("Deck");
+    await expect(table.locator("[data-row='surface'] td").first()).toHaveText("Item carousel");
+    await expect(table.locator("[data-row='surface'] td").nth(1)).toContainText("Stacked deck");
     await expect(table.locator("[data-row='feel']")).toHaveAttribute("data-differs", "false");
-    await expect(table.locator("[data-row='settle']")).toHaveAttribute("data-source", "computed");
+    await expect(table.locator("[data-row='settle']")).toHaveAttribute("data-source", "calculated");
     await expect(table.locator("[data-row='stiffness']")).toHaveAttribute(
       "data-source",
       "declared",
     );
-    await expect(page.getByTestId("studio-summary-text")).toContainText("a rail");
+    await expect(page.getByTestId("studio-summary-text")).toContainText(
+      "an item carousel and B is a stacked deck",
+    );
 
     // Decide, say why, and read the implementation.
     await page.getByTestId("studio-choose-b").click();
@@ -202,7 +207,7 @@ test.describe("the decision journey", () => {
     await stageA.evaluate((node) => {
       (node as unknown as { kept: boolean }).kept = true;
     });
-    for (const id of ["rail-balanced", "rail-loose", "rail-balanced"] as const) {
+    for (const id of ["carousel-balanced", "carousel-loose", "carousel-balanced"] as const) {
       await page.getByTestId(`studio-compare-${id}`).click();
       await expect(studio.bName(page)).toHaveText(nameOf(id));
     }
@@ -210,7 +215,7 @@ test.describe("the decision journey", () => {
     expect(
       await stageA.evaluate((node) => (node as unknown as { kept?: boolean }).kept === true),
     ).toBe(true);
-    await expect(studio.aName(page)).toHaveText("Tight rail");
+    await expect(studio.aName(page)).toHaveText("Tight carousel");
   });
 
   test("A and B are never the same candidate, whatever order the controls are used in", async ({
@@ -231,14 +236,16 @@ test.describe("the decision journey", () => {
     const { b } = await roles(page);
     await page.getByTestId(`studio-pin-${b!}`).click();
     await assertDistinct();
-    await page.getByTestId("studio-pin-rail-balanced").click();
+    await page.getByTestId("studio-pin-carousel-balanced").click();
     await assertDistinct();
-    expect((await roles(page)).a).toBe("rail-balanced");
+    expect((await roles(page)).a).toBe("carousel-balanced");
   });
 
   test("the summary and the status region say what happened", async ({ page }) => {
     await openStudio(page);
-    await expect(studio.summary(page)).toHaveText("2 shortlisted · A Tight rail · B Loose rail");
+    await expect(studio.summary(page)).toHaveText(
+      "2 shortlisted · A Tight carousel · B Loose carousel",
+    );
     await shortlistCandidate(page, "deck-shuffle");
     await expect(studio.status(page)).toContainText("Shuffle deck added to the shortlist, 3 of 4");
     await page.getByTestId("studio-pin-deck-shuffle").click();
@@ -257,22 +264,22 @@ test.describe("every size of shortlist", () => {
     await expect(page.getByTestId("studio-deck-next")).toHaveCount(0);
 
     // Only a reference.
-    await page.getByTestId("studio-remove-rail-loose").click();
+    await page.getByTestId("studio-remove-carousel-loose").click();
     await expect(page.getByTestId("studio-shortlist-empty")).toContainText(
-      "Tight rail is your reference",
+      "Tight carousel is your reference",
     );
     await expect(page.getByTestId("studio-stage-b-vacant")).toBeVisible();
-    await expect(studio.aName(page)).toHaveText("Tight rail");
+    await expect(studio.aName(page)).toHaveText("Tight carousel");
     await expect(page.getByTestId("studio-differences")).toHaveCount(0);
     await expect(studio.compare(page)).toHaveAttribute("data-compare-state", "reference-only");
     // The one stage still runs, and the decision can still be made.
     await page.getByTestId("studio-driver-next").click();
     await page.getByTestId("studio-choose-a").click();
-    await expect(page.getByTestId("studio-decided")).toContainText("Tight rail");
+    await expect(page.getByTestId("studio-decided")).toContainText("Tight carousel");
     await page.getByTestId("studio-revise").click();
 
     // Nothing.
-    await page.getByTestId("studio-remove-rail-tight").click();
+    await page.getByTestId("studio-remove-carousel-tight").click();
     await expect(page.getByTestId("studio-compare-empty")).toBeVisible();
     await expect(page.getByTestId("studio-shortlist-empty")).toContainText(
       "Nothing shortlisted yet",
@@ -286,10 +293,15 @@ test.describe("every size of shortlist", () => {
     ).toBeFocused();
 
     // Back to the maximum.
-    for (const id of ["rail-tight", "rail-loose", "rail-balanced", "deck-shuffle"] as const) {
+    for (const id of [
+      "carousel-tight",
+      "carousel-loose",
+      "carousel-balanced",
+      "deck-shuffle",
+    ] as const) {
       await shortlistCandidate(page, id);
     }
-    expect(await roles(page)).toEqual({ a: "rail-tight", b: "rail-loose" });
+    expect(await roles(page)).toEqual({ a: "carousel-tight", b: "carousel-loose" });
     await expect(page.getByTestId("studio-shortlist-full")).toBeVisible();
     // Every candidate not on the shortlist is refused, with the reason beside it.
     await expect(page.getByTestId("studio-shortlist-deck-direct")).toBeDisabled();
@@ -302,21 +314,21 @@ test.describe("every size of shortlist", () => {
   test("removing the pinned reference promotes B so the comparison goes on", async ({ page }) => {
     await openStudio(page);
     await withDeck(page);
-    await page.getByTestId("studio-remove-rail-tight").click();
-    expect(await roles(page)).toEqual({ a: "rail-loose", b: "rail-balanced" });
-    await expect(studio.aName(page)).toHaveText("Loose rail");
-    await expect(studio.bName(page)).toHaveText("Balanced rail");
+    await page.getByTestId("studio-remove-carousel-tight").click();
+    expect(await roles(page)).toEqual({ a: "carousel-loose", b: "carousel-balanced" });
+    await expect(studio.aName(page)).toHaveText("Loose carousel");
+    await expect(studio.bName(page)).toHaveText("Balanced carousel");
     await expect(studio.status(page)).toContainText("removed from the shortlist");
-    await expect(studio.status(page)).toContainText("Loose rail is the reference A");
+    await expect(studio.status(page)).toContainText("Loose carousel is the reference A");
   });
 
   test("removing B moves to the card that took its place, and focus survives", async ({ page }) => {
     await openStudio(page);
     await withDeck(page);
     await shortlistCandidate(page, "deck-heavy");
-    await page.getByTestId("studio-compare-rail-balanced").click();
-    await page.getByTestId("studio-remove-rail-balanced").click();
-    expect(await roles(page)).toEqual({ a: "rail-tight", b: "deck-heavy" });
+    await page.getByTestId("studio-compare-carousel-balanced").click();
+    await page.getByTestId("studio-remove-carousel-balanced").click();
+    expect(await roles(page)).toEqual({ a: "carousel-tight", b: "deck-heavy" });
     // The control that had focus is gone; focus moves to a control that survives.
     const focused = await focusedTestId(page);
     expect(focused).not.toBe("BODY");
@@ -326,8 +338,8 @@ test.describe("every size of shortlist", () => {
   test("a decision survives the candidate leaving the shortlist", async ({ page }) => {
     await openStudio(page);
     await page.getByTestId("studio-choose-b").click();
-    await page.getByTestId("studio-remove-rail-loose").click();
-    await expect(page.getByTestId("studio-decision-line")).toHaveText("Chosen: Loose rail");
+    await page.getByTestId("studio-remove-carousel-loose").click();
+    await expect(page.getByTestId("studio-decision-line")).toHaveText("Chosen: Loose carousel");
   });
 });
 
@@ -399,7 +411,7 @@ test.describe("equal conditions", () => {
 
   test("the driver reaches a lone reference too", async ({ page }) => {
     await openStudio(page);
-    await page.getByTestId("studio-remove-rail-loose").click();
+    await page.getByTestId("studio-remove-carousel-loose").click();
     const screenA = page.getByTestId("studio-reference-screen");
     const start = await screenA.innerText();
     await page.getByTestId("studio-driver-next").click();
@@ -467,16 +479,17 @@ test.describe("what the visitor reads follows what the visitor sees", () => {
     await expect(studio.deck(page)).toHaveAttribute("data-phase", "idle");
     await startNameTrace(page);
     await page.getByTestId("studio-deck-next").click();
-    await page.getByTestId("studio-remove-rail-balanced").click();
+    await page.getByTestId("studio-remove-carousel-balanced").click();
     await expect(studio.deck(page)).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
     const frames = await stopNameTrace(page);
     for (const [index, frame] of frames.entries()) {
-      // After the removal the only card B can be is Loose rail; no frame may still name Balanced rail
+      // After the removal the only card B can be is Loose carousel; no frame may still name Balanced carousel
       // once the Deck no longer holds it as a member.
-      if (frame.visual === "rail-loose") expect(frame.b, `frame ${index}`).toBe("Loose rail");
+      if (frame.visual === "carousel-loose")
+        expect(frame.b, `frame ${index}`).toBe("Loose carousel");
       expect(frame.b, `frame ${index}`).toBe(frame.caption);
     }
-    expect(await roles(page)).toEqual({ a: "rail-tight", b: "rail-loose" });
+    expect(await roles(page)).toEqual({ a: "carousel-tight", b: "carousel-loose" });
   });
 });
 
@@ -487,20 +500,20 @@ test.describe("keyboard and focus", () => {
     await openStudio(page);
     await withDeck(page);
     const deck = studio.deck(page);
-    await expect(deck).toHaveAttribute("data-settled-id", "rail-loose");
+    await expect(deck).toHaveAttribute("data-settled-id", "carousel-loose");
     // Focus on a control beside the Deck: its own keys stay its own.
-    await page.getByTestId("studio-compare-rail-balanced").focus();
+    await page.getByTestId("studio-compare-carousel-balanced").focus();
     await page.keyboard.press("ArrowRight");
-    await expect(deck).toHaveAttribute("data-settled-id", "rail-loose");
-    await expect(page.getByTestId("studio-compare-rail-balanced")).toBeFocused();
+    await expect(deck).toHaveAttribute("data-settled-id", "carousel-loose");
+    await expect(page.getByTestId("studio-compare-carousel-balanced")).toBeFocused();
     await page.getByTestId("studio-deck-next").focus();
     await page.keyboard.press("ArrowRight");
-    await expect(deck).toHaveAttribute("data-settled-id", "rail-loose");
+    await expect(deck).toHaveAttribute("data-settled-id", "carousel-loose");
     // The Deck itself takes one step per key.
     await deck.focus();
     await page.keyboard.press("ArrowRight");
-    await expect(deck).toHaveAttribute("data-settled-id", "rail-balanced");
-    expect((await roles(page)).b).toBe("rail-balanced");
+    await expect(deck).toHaveAttribute("data-settled-id", "carousel-balanced");
+    expect((await roles(page)).b).toBe("carousel-balanced");
     await expect(deck).toBeFocused();
   });
 
@@ -551,7 +564,9 @@ test.describe("a candidate's detail", () => {
     await expect(detail).toBeVisible();
     await expect(page.getByTestId("studio-detail-name")).toHaveText("Direct deck");
     await expect(page.getByTestId("studio-detail-surface")).toHaveAttribute("data-phase", "idle");
-    await expect(page.getByTestId("studio-detail-facts")).toContainText("Computed from the spring");
+    await expect(page.getByTestId("studio-detail-facts")).toContainText(
+      "Calculated from the spring",
+    );
     await expect(detail).toContainText("Authored guidance, not a measurement");
     const screen = page.getByTestId("studio-detail-screen");
     const start = await screen.innerText();
@@ -578,31 +593,11 @@ test.describe("a candidate's detail", () => {
     page,
   }) => {
     await openStudio(page);
-    await page.getByTestId("studio-open-rail-loose").click();
+    await page.getByTestId("studio-open-carousel-loose").click();
     await page.getByTestId("studio-detail-implementation").click();
-    await expect(page.getByTestId("studio-sheet-title")).toHaveText("Loose rail");
+    await expect(page.getByTestId("studio-sheet-title")).toHaveText("Loose carousel");
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("studio-detail-implementation")).toBeFocused();
-  });
-
-  test("Your tuning follows the Motion Tuning bar and nothing else does", async ({ page }) => {
-    await openStudio(page);
-    await shortlistCandidate(page, "rail-yours");
-    await page.getByTestId("studio-open-rail-yours").click();
-    const facts = page.getByTestId("studio-detail-facts");
-    const balanced = await facts.innerText();
-    await page.getByTestId("studio-detail-back").click();
-    await page.getByTestId("studio-open-rail-balanced").click();
-    expect(await facts.innerText()).toBe(balanced);
-    await page.getByTestId("studio-detail-back").click();
-
-    await section(page, "studio").getByTestId("preset-heavy").click();
-    await page.getByTestId("studio-open-rail-yours").click();
-    await expect(facts).not.toHaveText(balanced);
-    await page.getByTestId("studio-detail-back").click();
-    await page.getByTestId("studio-open-rail-balanced").click();
-    // A preset's candidate never moves with the bar.
-    expect(await facts.innerText()).toBe(balanced);
   });
 });
 
@@ -674,7 +669,7 @@ test.describe("on a phone", () => {
     await expect(studio.compare(page)).toBeVisible();
     await expect(page.getByTestId("studio-candidate-list")).toHaveCount(0);
     // The shortlist and its controls sit with the comparison on a phone.
-    expect((await roles(page)).b).toBe("rail-loose");
+    expect((await roles(page)).b).toBe("carousel-loose");
     await page.getByTestId("studio-compare-deck-shuffle").click();
     await expect(studio.bName(page)).toHaveText("Shuffle deck");
     await page.getByTestId("studio-choose-b").click();
@@ -722,7 +717,7 @@ test.describe("on a phone", () => {
       "aria-pressed",
       "true",
     );
-    await expect(page.getByTestId("studio-detail-name")).toHaveText("Loose rail");
+    await expect(page.getByTestId("studio-detail-name")).toHaveText("Loose carousel");
   });
 });
 
@@ -738,9 +733,9 @@ test.describe("click and drag on the Deck", () => {
     await dragMouseBy(page, card, -160, 0, { steps: 8 });
     await expect(studio.deck(page)).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
     await expect(studio.detail(page)).toHaveCount(0);
-    expect((await roles(page)).b).toBe("rail-balanced");
+    expect((await roles(page)).b).toBe("carousel-balanced");
 
     await card.click();
-    await expect(page.getByTestId("studio-detail-name")).toHaveText("Balanced rail");
+    await expect(page.getByTestId("studio-detail-name")).toHaveText("Balanced carousel");
   });
 });

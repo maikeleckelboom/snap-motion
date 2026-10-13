@@ -6,21 +6,33 @@ import { computed, nextTick, onBeforeUnmount, provide, ref, shallowRef, useId } 
 import SegmentedControl from "@/components/SegmentedControl.vue";
 import type { LabPhysicsSettings } from "@/fixtures/lab-types";
 
-import { playgroundScreens } from "../demoScreens";
 import { presetLabel } from "../preset-facts";
 import { usePlaygroundTuning } from "../tuning-context";
 import {
+  CUSTOM_ID,
+  candidateById,
   candidateDefinitions,
   candidateIds,
+  describeShape,
   resolveCandidate,
   type CandidateBehavior,
   type CandidateId,
 } from "./candidates";
+import type { MediaOpenRequest } from "./media/media-surface";
+import { sharedMedia } from "./media/shared-media";
 import { studioKey, type StudioCommands } from "./studio-context";
-import { MAX_SHORTLIST, createStudioModel, type StudioView } from "./studio-model";
+import { createCustomCandidate } from "./studio-custom";
+import {
+  MAX_SHORTLIST,
+  createStudioModel,
+  type ShortlistExchange,
+  type StudioView,
+} from "./studio-model";
 import { cancelStudioTransition, runStudioTransition } from "./studio-transition";
+import { tuneCandidateB, type TunePatch } from "./studio-tune";
 import StudioCandidates from "./StudioCandidates.vue";
 import StudioCompare from "./StudioCompare.vue";
+import StudioMediaViewer from "./StudioMediaViewer.vue";
 import StudioSheet from "./StudioSheet.vue";
 import StudioShortlist from "./StudioShortlist.vue";
 
@@ -29,11 +41,18 @@ const props = defineProps<{
   settings: LabPhysicsSettings;
 }>();
 
-/** Where a first visit starts: two candidates already shortlisted, so Compare has something to show. */
+/**
+ * Where a first visit starts: two candidates already shortlisted, so Compare has something to show.
+ * Both are item carousels at opposite ends of the engine's presets (Tight is A, Loose is B), so the
+ * first thing to try is the feel; the Shortlist's Deck holds B alone until another is shortlisted.
+ */
 const model = createStudioModel<CandidateId>({
   ids: candidateIds,
-  initialShortlist: ["rail-tight", "rail-loose"],
+  initialShortlist: ["carousel-tight", "carousel-loose"],
 });
+/** The one owner of the Custom candidate. It never reads or writes the Playground's tuning. */
+const continuity = { forked: false };
+const custom = createCustomCandidate();
 
 const tuning = usePlaygroundTuning();
 const titleId = `${useId()}-title`;
@@ -43,28 +62,29 @@ const candidates = ref<InstanceType<typeof StudioCandidates>>();
 const shortlist = ref<InstanceType<typeof StudioShortlist>>();
 const statusText = ref("");
 const sheetOpener = shallowRef<HTMLElement>();
+const mediaOpener = shallowRef<HTMLElement>();
+/** Which stage and photo the viewer was opened from, so closing can return to that thumbnail. */
+let mediaOrigin: { role: "reference" | "candidate" | "detail"; id: string } | undefined;
 const wide = useMediaQuery("(min-width: 62rem)");
 const systemReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 const reducedMotion = computed(() => props.reducedMotionOverride ?? systemReducedMotion.value);
 
-const screens = playgroundScreens;
+const media = sharedMedia;
 
 // ---------------------------------------------------------------------------------- behaviours
 
-// Presets never change, so each is resolved once. Only "Your tuning" follows the page's settings.
+// A reference candidate never changes, so each is resolved once. Only Custom follows the state that
+// owns it. Neither reads the Playground's tuning.
 const fixed = new Map<CandidateId, CandidateBehavior>(
   candidateDefinitions
-    .filter(({ feel }) => feel !== "tuning")
-    .map((definition) => [definition.id, resolveCandidate(definition, props.settings)]),
+    .filter(({ id }) => id !== CUSTOM_ID)
+    .map((definition) => [definition.id, resolveCandidate(definition, custom.state.value)]),
 );
-const yours = computed(() =>
-  resolveCandidate(
-    candidateDefinitions.find(({ feel }) => feel === "tuning")!,
-    props.settings,
-  ),
+const customBehavior = computed(() =>
+  resolveCandidate(candidateById.get(CUSTOM_ID)!, custom.state.value),
 );
 function behavior(id: CandidateId): CandidateBehavior {
-  return fixed.get(id) ?? yours.value;
+  return fixed.get(id) ?? customBehavior.value;
 }
 const nameOf = (id: CandidateId | undefined) => (id === undefined ? "none" : behavior(id).name);
 
@@ -103,13 +123,15 @@ interface PresentOptions {
   afterUpdate?: () => void;
 }
 
+type PresentKind = "view" | "detail" | "media";
+
 /**
  * Presents a change of application state with the browser's own View Transition, when it can. The
  * regions it names are chosen here, by the Studio, from its own DOM: nothing reaches into a package
  * surface, and no transition runs over a Deck, Rail or Sheet exchange.
  */
 function present(
-  kind: "view" | "detail",
+  kind: PresentKind,
   direction: 1 | -1,
   update: () => void,
   options: PresentOptions = {},
@@ -120,12 +142,47 @@ function present(
     reducedMotion: reducedMotion.value,
     update,
     ...(options.afterUpdate ? { afterUpdate: options.afterUpdate } : {}),
-    region: { name: kind === "view" ? "studio-view" : "studio-detail", element: options.region },
-    ...(options.shared ? { shared: { name: "studio-glyph", ...options.shared } } : {}),
+    ...(kind === "media"
+      ? {}
+      : {
+          region: {
+            name: kind === "view" ? "studio-view" : "studio-detail",
+            element: options.region,
+          },
+        }),
+    ...(options.shared
+      ? { shared: { name: kind === "media" ? "studio-photo" : "studio-glyph", ...options.shared } }
+      : {}),
   });
 }
 
 onBeforeUnmount(() => cancelStudioTransition(document));
+
+const viewerPhoto = () =>
+  root.value?.querySelector<HTMLElement>("[data-testid='studio-media-photo']") ?? undefined;
+
+/**
+ * The thumbnail the viewer was opened from, if it can be returned to: on screen, on a surface at rest,
+ * and still the selected photo. Anything else closes with no transition.
+ */
+function restingThumbnail(role: "reference" | "candidate" | "detail", id: string) {
+  const stage = root.value?.querySelector<HTMLElement>(`[data-testid='studio-preview-${role}']`);
+  const surface = stage?.querySelector<HTMLElement>("[data-phase]");
+  if (!stage || surface?.dataset.phase !== "idle") return undefined;
+  const image = stage.querySelector<HTMLElement>(
+    `[data-media-id="${id}"] img, [data-media-image="${id}"]`,
+  );
+  if (!image) return undefined;
+  const box = image.getBoundingClientRect();
+  const visible =
+    box.width > 0 &&
+    box.height > 0 &&
+    box.bottom > 0 &&
+    box.top < window.innerHeight &&
+    box.right > 0 &&
+    box.left < window.innerWidth;
+  return visible ? image : undefined;
+}
 
 const detailGlyph = () =>
   root.value?.querySelector<HTMLElement>("[data-testid='studio-detail'] [data-shared-glyph]") ??
@@ -247,6 +304,60 @@ const commands: StudioCommands = {
     sheetOpener.value = opener;
     model.openSheet(id);
   },
+  tuneB(patch: TunePatch) {
+    const outcome = tuneCandidateB(model, custom, behavior, patch);
+    const shape = describeShape(customBehavior.value);
+    if (outcome === "forked") {
+      continuity.forked = true;
+      announce(`Copied into Custom. B is now ${shape}`);
+    } else if (outcome === "updated") {
+      // Layout, exchange and preset changes are announced; a slider drag is not, because it would
+      // speak on every step.
+      if (patch.surface || patch.exchange || patch.base) announce(`B is now ${shape}`);
+    } else if (outcome === "reference-is-custom") {
+      announce(
+        "Custom is the reference A, so it cannot also be B's copy. Swap A and B to change it.",
+      );
+    } else if (outcome === "no-b") {
+      announce("Shortlist a candidate to compare as B first");
+    }
+  },
+  copyTuningToB() {
+    commands.tuneB({ base: tuning.preset.value, settings: { ...tuning.settings.value } });
+    announce("Copied the Playground's motion tuning into B");
+  },
+  setShortlistExchange(exchange: ShortlistExchange) {
+    if (model.shortlistExchange.value === exchange) return;
+    model.setShortlistExchange(exchange);
+    announce(`Shortlist cards now turn with ${exchange === "direct" ? "Direct" : "Shuffle"}`);
+  },
+  openMedia(request) {
+    mediaOrigin = { role: request.role, id: request.id };
+    mediaOpener.value = request.opener;
+    const update = () => void model.openMedia(request.id);
+    // A snapshot is only ever taken of a picture that is already still. A photo that had to travel,
+    // or a surface that was still moving, opens with no transition: the motion is what is being
+    // judged and a snapshot would replace it.
+    if (request.atRest && request.source && !model.overlayOpen.value) {
+      present("media", 1, update, {
+        shared: { source: request.source, destination: viewerPhoto },
+      });
+    } else {
+      update();
+    }
+  },
+  closeMedia() {
+    const origin = mediaOrigin;
+    const returnTo = origin ? restingThumbnail(origin.role, origin.id) : undefined;
+    const update = () => model.requestClose();
+    if (returnTo && viewerPhoto()) {
+      present("media", -1, update, {
+        shared: { source: viewerPhoto(), destination: () => returnTo },
+      });
+    } else {
+      update();
+    }
+  },
   goToCandidates() {
     const focusFirst = () =>
       root.value
@@ -264,7 +375,7 @@ const commands: StudioCommands = {
   },
 };
 
-provide(studioKey, { announce, behavior, commands, model });
+provide(studioKey, { announce, behavior, commands, continuity, custom, media, model });
 
 // ---------------------------------------------------------------------------------- sheet
 
@@ -272,6 +383,11 @@ const sheetOpen = computed(() => model.overlay.value === "sheet" && model.overla
 const sheetSide = computed(() => (wide.value ? "right" : "bottom"));
 const sheetFocusReturn = computed<FocusReturnOptions>(() => ({
   ...(sheetOpener.value ? { opener: sheetOpener.value } : {}),
+  fallback: () => root.value,
+}));
+const mediaOpen = computed(() => model.overlay.value === "media" && model.overlayOpen.value);
+const mediaFocusReturn = computed<FocusReturnOptions>(() => ({
+  ...(mediaOpener.value ? { opener: mediaOpener.value } : {}),
   fallback: () => root.value,
 }));
 
@@ -291,7 +407,8 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
       <div class="studio-identity">
         <h3 :id="titleId" class="studio-name">Motion Studio</h3>
         <p class="studio-question">
-          Which motion should switch between your product's screens? Shortlist, compare, decide.
+          How should browsing the photos in a conversation feel? Compare two behaviours on the same
+          photos, tune B, and decide.
         </p>
       </div>
       <div class="studio-state">
@@ -321,32 +438,30 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
         drives; the candidates to add from follow it. -->
         <div class="area-choose">
           <StudioShortlist ref="shortlist" :reduced-motion-override="reducedMotionOverride" />
-          <StudioCandidates
-            ref="candidates"
-            :reduced-motion-override="reducedMotionOverride"
-            :screens="screens"
-          />
+          <StudioCandidates ref="candidates" :reduced-motion-override="reducedMotionOverride" />
         </div>
-        <StudioCompare
-          class="area-compare"
-          :reduced-motion-override="reducedMotionOverride"
-          :screens="screens"
-        />
+        <StudioCompare class="area-compare" :reduced-motion-override="reducedMotionOverride" />
       </template>
       <template v-else>
         <StudioCandidates
           v-if="model.view.value === 'candidates'"
           ref="candidates"
           :reduced-motion-override="reducedMotionOverride"
-          :screens="screens"
         />
-        <StudioCompare v-else :reduced-motion-override="reducedMotionOverride" :screens="screens">
+        <StudioCompare v-else :reduced-motion-override="reducedMotionOverride">
           <template #shortlist>
             <StudioShortlist ref="shortlist" :reduced-motion-override="reducedMotionOverride" />
           </template>
         </StudioCompare>
       </template>
     </div>
+
+    <StudioMediaViewer
+      :focus-return="mediaFocusReturn"
+      :open="mediaOpen"
+      @closed="model.completeClose()"
+      @request-close="commands.closeMedia()"
+    />
 
     <StudioSheet
       :focus-return="sheetFocusReturn"
@@ -616,6 +731,13 @@ defineExpose({ focus: () => root.value?.focus({ preventScroll: true }) });
   ::view-transition-group(studio-glyph) {
     animation-duration: 340ms;
     animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  /* A photo going to or from the viewer travels above the dialog's own top layer. */
+  ::view-transition-group(studio-photo) {
+    z-index: 2147483647;
+    animation-duration: 340ms;
+    animation-timing-function: cubic-bezier(0.22, 0.8, 0.2, 1);
   }
 
   @keyframes studio-vt-out {

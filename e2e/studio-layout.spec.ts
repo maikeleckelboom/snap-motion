@@ -30,8 +30,11 @@ async function horizontalOverflow(page: Page) {
           element.getBoundingClientRect().right > document.documentElement.clientWidth + 1,
       )
       .filter((element) => !element.closest("[inert], dialog"))
-      // The rail and the pile paint beyond their allocation by design; the document must not.
-      .filter((element) => !element.closest(".snap-motion-coverflow, .snap-motion-stacked-deck"))
+      // The strip and the pile paint beyond their allocation by design; the document must not.
+      .filter(
+        (element) =>
+          !element.closest(".media-carousel, .snap-motion-coverflow, .snap-motion-stacked-deck"),
+      )
       .map((element) => `${element.tagName.toLowerCase()}.${element.className}`)
       .slice(0, 6),
     dialogs: [...document.querySelectorAll("dialog[open]")]
@@ -135,7 +138,7 @@ test.describe("responsive composition", () => {
     const before = await top();
     await page.getByTestId("studio-view-compare").click();
     await page.getByTestId("studio-view-candidates").click();
-    await page.getByTestId("studio-open-rail-balanced").click();
+    await page.getByTestId("studio-open-carousel-balanced").click();
     await page.getByTestId("studio-detail-back").click();
     // The Studio's own top edge, in the document, is where it was: nothing above it reflowed.
     expect(await top()).toBe(before);
@@ -183,7 +186,7 @@ test.describe("desktop composition", () => {
       const y = await scrollY(page);
       await shortlistCandidateFromView(page);
       await page.getByTestId("studio-deck-next").click();
-      await expect(studio.bName(page)).toHaveText("Balanced rail");
+      await expect(studio.bName(page)).toHaveText("Balanced carousel");
       // Choosing B scrolled nothing: the page is where the visitor left it.
       expect(await scrollY(page)).toBe(y);
     });
@@ -192,7 +195,7 @@ test.describe("desktop composition", () => {
 
 /** Shortlists the third candidate without moving the page: the toggle is below the fold here. */
 async function shortlistCandidateFromView(page: Page) {
-  const toggle = page.getByTestId("studio-shortlist-rail-balanced");
+  const toggle = page.getByTestId("studio-shortlist-carousel-balanced");
   await toggle.evaluate((element) => (element as HTMLElement).click());
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
 }
@@ -304,9 +307,9 @@ test.describe("accessibility", () => {
 
   test("passes axe with only a reference, and with nothing shortlisted", async ({ page }) => {
     await openStudio(page);
-    await page.getByTestId("studio-remove-rail-loose").click();
+    await page.getByTestId("studio-remove-carousel-loose").click();
     await expectNoAxeViolations(page, "reference only");
-    await page.getByTestId("studio-remove-rail-tight").click();
+    await page.getByTestId("studio-remove-carousel-tight").click();
     await expectNoAxeViolations(page, "empty");
   });
 
@@ -349,12 +352,12 @@ test.describe("document-level listeners", () => {
       await expect(studio.detail(page)).toBeVisible();
       await page.getByTestId("studio-detail-shortlist").click();
       await page.getByTestId("studio-detail-back").click();
-      await page.getByTestId("studio-shortlist-rail-balanced").click();
+      await page.getByTestId("studio-shortlist-carousel-balanced").click();
       await page.getByTestId("studio-swap").click();
       await page.getByTestId("studio-driver-replay").click();
       await page.getByTestId("studio-driver-replay").click();
       await page.getByTestId("studio-remove-deck-direct").click();
-      await page.getByTestId("studio-remove-rail-balanced").click();
+      await page.getByTestId("studio-remove-carousel-balanced").click();
       await page.getByTestId("studio-swap").click();
       await page.getByTestId("studio-choose-a").click();
       await page.getByTestId("studio-open-implementation").click();

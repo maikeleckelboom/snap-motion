@@ -21,7 +21,11 @@ import { computed, ref, type ComputedRef, type Ref } from "vue";
  *   itself. During an exchange it trails `candidateId`. It exists only so text can name the card
  *   the visitor can see; nothing reads it as intent.
  * - `inspectedId` is which candidate's detail is open in the collection, or `undefined` for the list.
- * - `overlay` is the single native modal that owns modality.
+ * - `overlay` is the single native modal that owns modality: the implementation sheet, or the viewer a
+ *   tapped photo opens.
+ * - `shortlistExchange` is how the Shortlist's own Deck turns its cards. It belongs to that list, a
+ *   piece of this page's furniture, and never to the behaviour A or B is running: nothing reads it to
+ *   configure a comparison.
  *
  * Nothing here knows about motion. A surface's gesture, target and settlement are its own; this
  * model only records the accepted outcome.
@@ -34,7 +38,9 @@ export const MIN_DECK = 2;
 export const REASON_LIMIT = 240;
 
 export type StudioView = "candidates" | "compare";
-export type StudioOverlay = "none" | "sheet";
+export type StudioOverlay = "none" | "sheet" | "media";
+/** How the Shortlist's Deck turns its cards. It is the list's own, not the compared behaviour's. */
+export type ShortlistExchange = "shuffle" | "direct";
 /** How many candidates the Deck holds: none, one (shown as state, not exchanged), or several. */
 export type DeckState = "empty" | "single" | "deck";
 /** What the comparison can show: nothing, only the reference, or both A and B. */
@@ -75,6 +81,9 @@ export interface StudioModel<Id extends string> {
   readonly overlayOpen: Readonly<Ref<boolean>>;
   /** Which candidate the Sheet is describing. */
   readonly sheetId: Readonly<Ref<Id | undefined>>;
+  /** Which photo the viewer is showing. A photo's id, not a candidate's. */
+  readonly mediaId: Readonly<Ref<string | undefined>>;
+  readonly shortlistExchange: Readonly<Ref<ShortlistExchange>>;
   hasId(id: string): id is Id;
   inShortlist(id: Id): boolean;
   addToShortlist(id: Id): ShortlistOutcome;
@@ -84,6 +93,12 @@ export interface StudioModel<Id extends string> {
   pinReference(id: Id): PinOutcome;
   /** Chooses B. It must not be A; a candidate outside the shortlist is added when there is room. */
   setCandidate(id: Id): CandidateOutcome;
+  /**
+   * Puts a candidate in B's place. Like {@link StudioModel.setCandidate}, except that a full shortlist
+   * gives B's slot to it instead of refusing: B leaves the list and the newcomer takes its position.
+   * It is how editing a reference configuration becomes a copy without losing the comparison.
+   */
+  adoptCandidate(id: Id): CandidateOutcome;
   /** Exchanges A and B. False when there is no B. */
   swapRoles(): boolean;
   /** Records the card the Deck is showing. It is presentation, never intent. */
@@ -94,6 +109,9 @@ export interface StudioModel<Id extends string> {
   setReason(text: string): string;
   setView(view: StudioView): void;
   openSheet(id: Id): boolean;
+  /** Opens the photo viewer. It refuses while another overlay owns modality. */
+  openMedia(mediaId: string): boolean;
+  setShortlistExchange(exchange: ShortlistExchange): void;
   /** The visitor asked to leave the Sheet. Modality stays until `completeClose`. */
   requestClose(): void;
   /** Hands modality back after the native dialog has actually closed. */
@@ -121,6 +139,8 @@ export function createStudioModel<Id extends string>(
   const overlay = ref<StudioOverlay>("none");
   const overlayOpen = ref(false);
   const sheetId = ref<Id | undefined>() as Ref<Id | undefined>;
+  const mediaId = ref<string | undefined>();
+  const shortlistExchange = ref<ShortlistExchange>("shuffle");
 
   const deckIds = computed<readonly Id[]>(() =>
     shortlist.value.filter((id) => id !== referenceId.value),
@@ -219,6 +239,20 @@ export function createStudioModel<Id extends string>(
     return "changed";
   }
 
+  function adoptCandidate(id: Id): CandidateOutcome {
+    if (!hasId(id)) return "unknown";
+    if (id === referenceId.value) return "is-reference";
+    if (!inShortlist(id) && shortlistFull.value) {
+      const replaced = candidateId.value;
+      if (replaced === undefined) return "full";
+      // The newcomer takes the position B had, so the pile keeps its order.
+      shortlist.value = shortlist.value.map((member) => (member === replaced ? id : member));
+      candidateId.value = id;
+      return "changed";
+    }
+    return setCandidate(id);
+  }
+
   function swapRoles(): boolean {
     const a = referenceId.value;
     const b = candidateId.value;
@@ -246,6 +280,8 @@ export function createStudioModel<Id extends string>(
     overlay,
     overlayOpen,
     sheetId,
+    mediaId,
+    shortlistExchange,
     hasId,
     inShortlist,
     addToShortlist,
@@ -253,6 +289,7 @@ export function createStudioModel<Id extends string>(
     toggleShortlist,
     pinReference,
     setCandidate,
+    adoptCandidate,
     swapRoles,
     reportPresented(id) {
       presentedCandidateId.value = id;
@@ -284,6 +321,16 @@ export function createStudioModel<Id extends string>(
       sheetId.value = id;
       return true;
     },
+    openMedia(id) {
+      if (overlay.value !== "none") return false;
+      overlay.value = "media";
+      overlayOpen.value = true;
+      mediaId.value = id;
+      return true;
+    },
+    setShortlistExchange(exchange) {
+      shortlistExchange.value = exchange;
+    },
     requestClose() {
       if (overlay.value === "none") return;
       overlayOpen.value = false;
@@ -291,6 +338,7 @@ export function createStudioModel<Id extends string>(
     completeClose() {
       overlay.value = "none";
       overlayOpen.value = false;
+      mediaId.value = undefined;
     },
   };
 }

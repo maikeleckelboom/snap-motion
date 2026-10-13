@@ -1,28 +1,35 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 
-import type { ShowcaseScreen, ShowcaseScreenId } from "@/demos/showcaseScreens";
-
-import CandidatePreview from "./CandidatePreview.vue";
-import { differenceRows, responseChart, summarizeDifference } from "./candidates";
+import { PREVIEW_TRAVEL_PX } from "../spring-response";
+import {
+  compareCandidates,
+  describeShape,
+  differenceRows,
+  responseChart,
+  type CandidateBehavior,
+  type CandidateId,
+} from "./candidates";
+import MediaStage from "./media/MediaStage.vue";
+import { homeMediaId } from "./media/shared-media-data";
 import { useStudio } from "./studio-context";
 import { REASON_LIMIT } from "./studio-model";
 import { whenReady } from "./studio-replay";
-import { carryOverScreen, middleScreenId, stagesLevel } from "./studio-stage";
+import { carryOverScreen, stagesLevel } from "./studio-stage";
+import StudioTuneB from "./StudioTuneB.vue";
 
 const props = defineProps<{
   reducedMotionOverride: boolean | undefined;
-  screens: readonly ShowcaseScreen[];
 }>();
 
-const { announce, behavior, commands, model } = useStudio();
+const { announce, behavior, commands, continuity, media, model } = useStudio();
 const titleId = `${useId()}-title`;
 const decisionTitleId = `${useId()}-decision`;
 const reasonId = `${useId()}-reason`;
 const chartTitleId = `${useId()}-chart`;
 const statusId = `${useId()}-status`;
-const stageA = ref<InstanceType<typeof CandidatePreview>>();
-const stageB = ref<InstanceType<typeof CandidatePreview>>();
+const stageA = ref<InstanceType<typeof MediaStage>>();
+const stageB = ref<InstanceType<typeof MediaStage>>();
 
 const a = computed(() =>
   model.referenceId.value === undefined ? undefined : behavior(model.referenceId.value),
@@ -36,11 +43,34 @@ const b = computed(() =>
   model.shownCandidateId.value === undefined ? undefined : behavior(model.shownCandidateId.value),
 );
 const both = computed(() => (a.value && b.value ? { a: a.value, b: b.value } : undefined));
+
+/**
+ * What a stage is, as far as mounting it goes: the candidate and the surface and exchange it runs.
+ * A change of the key replaces the stage, so Custom changing its layout (same id, new surface) gets
+ * a fresh stage, while a change of its numbers only reaches the live surface. The physics are not in
+ * the key on purpose: they reconfigure the running controller and the stage keeps its place.
+ */
+const stageKey = (candidate: CandidateBehavior | undefined) =>
+  candidate === undefined
+    ? undefined
+    : `${candidate.id}|${candidate.surface}|${candidate.exchange ?? ""}`;
+/** The candidate a stage key names. */
+const idOf = (key: string | undefined) => key?.split("|")[0];
+const keys = computed(() => ({ a: stageKey(a.value), b: stageKey(b.value) }));
+/** Everything a replay depends on, physics included: changing any of it ends the run. */
+const configKey = (id: CandidateId | undefined) => {
+  if (id === undefined) return "";
+  const configured = behavior(id);
+  return `${stageKey(configured)}|${JSON.stringify(configured.settings)}`;
+};
 const rows = computed(() => (both.value ? differenceRows(both.value.a, both.value.b) : []));
-const summary = computed(() => (both.value ? summarizeDifference(both.value.a, both.value.b) : ""));
+const comparison = computed(() =>
+  both.value ? compareCandidates(both.value.a, both.value.b) : undefined,
+);
 const chart = computed(() =>
   both.value ? responseChart([both.value.a, both.value.b]) : undefined,
 );
+const chartTotalMs = computed(() => (chart.value ? Math.round(chart.value.seconds * 1000) : 0));
 const decided = computed(() =>
   model.decidedId.value === undefined ? undefined : behavior(model.decidedId.value),
 );
@@ -66,7 +96,7 @@ const driverNote = computed(() => {
     case "apart":
       return `A is on ${screenTitle(positions.value.a)}, B is on ${screenTitle(positions.value.b)}. Reset puts both on ${screenTitle(homeId.value)}.`;
     default:
-      return "The same input on both, on the same screen. Drag either to explore.";
+      return "The same input on both, on the same photo. Drag either to explore.";
   }
 });
 const driverLabel = computed(
@@ -78,12 +108,12 @@ const driverLabel = computed(
 
 // ----------------------------------------------------------------------------- the conditions
 
-/** The screen a run begins on and a reset returns to. */
-const homeId = computed(() => middleScreenId(props.screens));
+/** The photo a run begins on and a reset returns to. */
+const homeId = computed(() => homeMediaId(media));
 /** Where a stage mounted by a role change begins: level with the stage that stayed. */
-const anchorId = ref<ShowcaseScreenId>(homeId.value);
-const screenTitle = (id: ShowcaseScreenId | undefined) =>
-  props.screens.find((screen) => screen.id === id)?.title ?? "another screen";
+const anchorId = ref<string>(homeId.value);
+const screenTitle = (id: string | undefined) =>
+  media.find((item) => item.id === id)?.title ?? "another photo";
 
 const positions = computed(() => ({
   a: stageA.value?.position,
@@ -95,23 +125,37 @@ const level = computed(() => stagesLevel(positions.value));
 // accepted the instant it is chosen while the Deck is still showing the card that was B, so waiting
 // for the shown card would leave a replay driving a stage the visitor has already replaced. The
 // watcher is synchronous so no step that was scheduled can land between the choice and its effect.
-watch([() => model.referenceId.value, () => model.candidateId.value], () => stopReplay(), {
-  flush: "sync",
-});
+watch(
+  () => [configKey(model.referenceId.value), configKey(model.candidateId.value)].join("||"),
+  () => stopReplay(),
+  { flush: "sync" },
+);
 
 // A run is a controlled comparison only while both stages are on the same screen, so a change of
 // role must not leave one of them behind. The stage that stays keeps its screen and its motion;
 // the stage that arrives is mounted level with it. The watcher runs before the stages are replaced,
 // while the one that stays can still be asked where it is.
 watch(
-  () => [a.value?.id, b.value?.id] as const,
+  () => [keys.value.a, keys.value.b] as const,
   ([nextA, nextB], [prevA, prevB]) => {
-    anchorId.value = carryOverScreen(
-      { a: prevA, b: prevB },
-      { a: nextA, b: nextB },
-      positions.value,
-      homeId.value,
-    );
+    // A stage that continues keeps the photo it was on: editing B copies a reference into Custom
+    // (a different candidate, the same B), and changing a candidate's layout replaces its stage (the
+    // same candidate, a new surface). Any other change of role starts level with the stage that stayed.
+    const forked = continuity.forked;
+    continuity.forked = false;
+    const bContinues = forked || (idOf(nextB) !== undefined && idOf(nextB) === idOf(prevB));
+    const aContinues = idOf(nextA) !== undefined && idOf(nextA) === idOf(prevA);
+    anchorId.value =
+      bContinues && positions.value.b !== undefined
+        ? positions.value.b
+        : aContinues && positions.value.a !== undefined
+          ? positions.value.a
+          : carryOverScreen(
+              { a: prevA, b: prevB },
+              { a: nextA, b: nextB },
+              positions.value,
+              homeId.value,
+            );
   },
   { flush: "pre" },
 );
@@ -262,17 +306,19 @@ defineExpose({ stopReplay });
           <figcaption class="stage-head">
             <span class="stage-role">A · Reference</span>
             <strong class="stage-name" data-testid="studio-a-name">{{ a.name }}</strong>
+            <span class="stage-shape" data-testid="studio-a-shape">{{ describeShape(a) }}</span>
           </figcaption>
-          <CandidatePreview
-            :key="a.id"
+          <MediaStage
+            :key="keys.a ?? 'a'"
             ref="stageA"
             :behavior="a"
-            :label="`A, ${a.name}, live preview`"
+            :items="media"
+            :label="`A, ${a.name}, shared photos`"
             :reduced-motion-override="props.reducedMotionOverride"
             role="reference"
-            :screens="screens"
             :start-id="anchorId"
             @manual="onManual"
+            @open="commands.openMedia"
           />
         </figure>
 
@@ -280,17 +326,19 @@ defineExpose({ stopReplay });
           <figcaption class="stage-head">
             <span class="stage-role">B · Candidate</span>
             <strong class="stage-name" data-testid="studio-b-name">{{ b.name }}</strong>
+            <span class="stage-shape" data-testid="studio-b-shape">{{ describeShape(b) }}</span>
           </figcaption>
-          <CandidatePreview
-            :key="b.id"
+          <MediaStage
+            :key="keys.b ?? 'b'"
             ref="stageB"
             :behavior="b"
-            :label="`B, ${b.name}, live preview`"
+            :items="media"
+            :label="`B, ${b.name}, shared photos`"
             :reduced-motion-override="props.reducedMotionOverride"
             role="candidate"
-            :screens="screens"
             :start-id="anchorId"
             @manual="onManual"
+            @open="commands.openMedia"
           />
         </figure>
         <div v-else class="stage stage-vacant" data-testid="studio-stage-b-vacant">
@@ -348,84 +396,119 @@ defineExpose({ stopReplay });
         <span :id="statusId" data-testid="studio-driver-note">{{ driverNote }}</span>
       </p>
 
+      <StudioTuneB />
+
       <slot name="shortlist" />
 
       <section
-        v-if="both && chart"
+        v-if="both && chart && comparison"
         class="differences"
         aria-labelledby="studio-differences-title"
         data-testid="studio-differences"
+        :data-layout-differs="comparison.layoutDiffers ? 'true' : 'false'"
         role="group"
       >
-        <h5 id="studio-differences-title" class="sub-title">What differs</h5>
-        <p class="summary" data-testid="studio-summary-text">{{ summary }}</p>
-
-        <table class="diff-table" data-testid="studio-diff-table">
-          <caption class="sr-only">
-            Settings of the reference A and the candidate B. Rows that differ are marked.
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">Setting</th>
-              <th scope="col">A · {{ both.a.name }}</th>
-              <th scope="col">B · {{ both.b.name }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in rows"
-              :key="row.key"
-              :data-differs="row.differs ? 'true' : 'false'"
-              :data-row="row.key"
-              :data-source="row.source"
-            >
-              <th scope="row">
-                {{ row.label }}
-                <span v-if="row.source === 'computed'" class="source">computed</span>
-              </th>
-              <td>{{ row.a }}</td>
-              <td>
-                {{ row.b }}
-                <span v-if="row.differs" class="differs">differs</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p class="legend">
-          Declared values are the settings each candidate is given. Computed values come from
-          stepping each spring once on a one-screen move: the spring alone, not a measurement of
-          this page.
+        <p class="region-kicker">Compare</p>
+        <h5 id="studio-differences-title" class="sub-title">What you will notice</h5>
+        <p class="summary" data-testid="studio-summary-text">{{ comparison.headline }}</p>
+        <p v-if="comparison.caveat" class="callout" data-testid="studio-caveat" role="note">
+          {{ comparison.caveat }}
         </p>
 
-        <figure class="chart">
-          <svg
-            :aria-labelledby="chartTitleId"
-            class="chart-svg"
-            data-testid="studio-chart"
-            role="img"
-            :viewBox="`0 0 ${chart.width} ${chart.height}`"
+        <ol v-if="comparison.notable.length > 0" class="notable" data-testid="studio-notable">
+          <li
+            v-for="item in comparison.notable"
+            :key="item.key"
+            class="notable-item"
+            :data-key="item.key"
+            :data-source="item.source"
           >
-            <title :id="chartTitleId">
-              Step response of one screen move. A settles in
-              {{ both.a.settleMs === undefined ? "over 4 s" : `${both.a.settleMs} ms` }}; B settles
-              in {{ both.b.settleMs === undefined ? "over 4 s" : `${both.b.settleMs} ms` }}.
-            </title>
-            <line
-              class="chart-target"
-              :x1="8"
-              :x2="chart.width - 8"
-              :y1="chart.targetY"
-              :y2="chart.targetY"
-            />
-            <path class="chart-a" :d="chart.curves[0]!.path" />
-            <path class="chart-b" :d="chart.curves[1]!.path" />
-          </svg>
-          <figcaption class="chart-legend">
-            <span class="key key-a">A · {{ both.a.name }}</span>
-            <span class="key key-b">B · {{ both.b.name }}</span>
-            <span class="chart-axis">0 to {{ Math.round(chart.seconds * 1000) }} ms</span>
-          </figcaption>
-        </figure>
+            <p class="notable-title">
+              {{ item.title }}
+              <span v-if="item.source === 'calculated'" class="source">calculated</span>
+            </p>
+            <p class="notable-values">
+              <span><span class="role">A</span> {{ item.a }}</span>
+              <span><span class="role role-b">B</span> {{ item.b }}</span>
+            </p>
+            <p class="notable-meaning">{{ item.meaning }}</p>
+          </li>
+        </ol>
+        <p v-if="comparison.unchanged.length > 0" class="unchanged" data-testid="studio-unchanged">
+          Same in both: {{ comparison.unchanged.join(", ").toLowerCase() }}.
+        </p>
+
+        <details class="advanced" data-testid="studio-advanced">
+          <summary>Advanced details</summary>
+
+          <table class="diff-table" data-testid="studio-diff-table">
+            <caption class="sr-only">
+              Every setting of the reference A and the candidate B. Rows that differ are marked.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Setting</th>
+                <th scope="col">A · {{ both.a.name }}</th>
+                <th scope="col">B · {{ both.b.name }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in rows"
+                :key="row.key"
+                :data-differs="row.differs ? 'true' : 'false'"
+                :data-row="row.key"
+                :data-source="row.source"
+              >
+                <th scope="row">
+                  {{ row.label }}
+                  <span v-if="row.source === 'calculated'" class="source">calculated</span>
+                </th>
+                <td>{{ row.a }}</td>
+                <td>
+                  {{ row.b }}
+                  <span v-if="row.differs" class="differs">differs</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="legend">
+            Declared values are the settings each candidate is given. Calculated values come from
+            stepping each spring once on a fixed {{ PREVIEW_TRAVEL_PX }} px move: the spring alone,
+            not a measurement of this page, and not the distance either layout really travels.
+          </p>
+
+          <figure class="chart">
+            <svg
+              :aria-labelledby="chartTitleId"
+              class="chart-svg"
+              data-testid="studio-chart"
+              role="img"
+              :viewBox="`0 0 ${chart.width} ${chart.height}`"
+            >
+              <title :id="chartTitleId">
+                Calculated step response of one move. A settles in
+                {{ both.a.settleMs === undefined ? "over 4 s" : `${both.a.settleMs} ms` }}; B
+                settles in
+                {{ both.b.settleMs === undefined ? "over 4 s" : `${both.b.settleMs} ms` }}.
+              </title>
+              <line
+                class="chart-target"
+                :x1="8"
+                :x2="chart.width - 8"
+                :y1="chart.targetY"
+                :y2="chart.targetY"
+              />
+              <path class="chart-a" :d="chart.curves[0]!.path" />
+              <path class="chart-b" :d="chart.curves[1]!.path" />
+            </svg>
+            <figcaption class="chart-legend">
+              <span class="key key-a">A · {{ both.a.name }}</span>
+              <span class="key key-b">B · {{ both.b.name }}</span>
+              <span class="chart-axis">0 to {{ chartTotalMs }} ms, calculated</span>
+            </figcaption>
+          </figure>
+        </details>
       </section>
 
       <section
@@ -517,8 +600,24 @@ defineExpose({ stopReplay });
 }
 
 .stage-head {
-  display: grid;
-  gap: 0.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.6rem;
+}
+
+.stage-shape {
+  flex-basis: 100%;
+}
+
+.studio-compare {
+  padding-block: 0.9rem;
+}
+
+.studio-compare .region-head > div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.2rem 0.7rem;
 }
 
 .stage-role {
@@ -803,6 +902,104 @@ defineExpose({ stopReplay });
   color: var(--pg-muted);
   font-family: var(--pg-font-mono);
   font-size: 0.72rem;
+}
+
+.stage-shape {
+  color: var(--pg-muted);
+  font-size: 0.8rem;
+}
+
+.callout {
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--pg-line);
+  border-inline-start: 3px solid var(--pg-accent);
+  border-radius: 0.5rem;
+  background: var(--pg-panel);
+  color: var(--pg-ink-soft);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.notable {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notable-item {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--pg-line);
+  border-radius: 0.6rem;
+  background: var(--pg-white);
+}
+
+.notable-title {
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.notable-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.25rem;
+  font-size: 0.9rem;
+}
+
+.role {
+  display: inline-block;
+  min-inline-size: 1.15rem;
+  margin-inline-end: 0.25rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--pg-ink);
+  border-radius: 0.3rem;
+  font-family: var(--pg-font-mono);
+  font-size: 0.68rem;
+  text-align: center;
+}
+
+.role-b {
+  border-color: var(--pg-accent);
+  color: var(--pg-accent);
+}
+
+.notable-meaning,
+.unchanged {
+  color: var(--pg-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.advanced {
+  display: grid;
+  gap: 0.6rem;
+  border-block: 1px solid var(--pg-line);
+}
+
+.advanced > summary {
+  display: flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  font-size: 0.9rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.advanced > summary::after {
+  content: "▾";
+  margin-inline-start: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.advanced[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.advanced[open] > summary {
+  margin-block-end: 0.5rem;
 }
 
 @media (max-width: 40rem) {

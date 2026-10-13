@@ -106,7 +106,7 @@ test.describe("opening and leaving a candidate's detail", () => {
     page,
   }) => {
     await openStudioForTransitions(page);
-    await page.getByTestId("studio-open-rail-balanced").click();
+    await page.getByTestId("studio-open-carousel-balanced").click();
     await expect(studio.detail(page)).toBeVisible();
     await expect.poll(async () => (await entries(page)).at(0)?.finished).toBe(true);
     const [opening] = await entries(page);
@@ -145,7 +145,7 @@ test.describe("opening and leaving a candidate's detail", () => {
     );
     await openStudioForTransitions(page);
     const source = await page
-      .locator("[data-candidate-row='rail-balanced'] [data-shared-glyph]")
+      .locator("[data-candidate-row='carousel-balanced'] [data-shared-glyph]")
       .boundingBox();
     // Hold the transition at its start and at its end, and read where the glyph's group is drawn.
     const geometry = await page.evaluate(async () => {
@@ -188,7 +188,7 @@ test.describe("opening and leaving a candidate's detail", () => {
           return transition;
         }) as typeof document.startViewTransition;
       });
-      document.querySelector<HTMLElement>("[data-testid='studio-open-rail-balanced']")!.click();
+      document.querySelector<HTMLElement>("[data-testid='studio-open-carousel-balanced']")!.click();
       return ready;
     });
     const destination = (await page
@@ -205,7 +205,7 @@ test.describe("opening and leaving a candidate's detail", () => {
     page,
   }) => {
     await openStudioForTransitions(page);
-    await page.getByTestId("studio-open-rail-balanced").click();
+    await page.getByTestId("studio-open-carousel-balanced").click();
     await expect.poll(async () => (await entries(page)).at(0)?.finished).toBe(true);
     await page.getByTestId("studio-detail-back").click();
     await expect.poll(async () => (await entries(page)).at(1)?.finished).toBe(true);
@@ -214,17 +214,17 @@ test.describe("opening and leaving a candidate's detail", () => {
     expect(leaving!.dataset).toMatchObject({ studioDirection: "back" });
     expect(leaving!.namedAtStart.toSorted()).toEqual(["studio-detail", "studio-glyph"]);
     expect(leaving!.namedAfterUpdate.toSorted()).toEqual(["studio-detail", "studio-glyph"]);
-    await expect(page.getByTestId("studio-open-rail-balanced")).toBeFocused();
+    await expect(page.getByTestId("studio-open-carousel-balanced")).toBeFocused();
     expect(await residue(page)).toEqual({ names: 0, marks: [] });
   });
 
   test("keeps the page where it was", async ({ page }) => {
     await openStudioForTransitions(page);
     await page
-      .getByTestId("studio-open-rail-balanced")
+      .getByTestId("studio-open-carousel-balanced")
       .evaluate((element) => element.scrollIntoView({ block: "center" }));
     const before = await scrollY(page);
-    await page.getByTestId("studio-open-rail-balanced").click();
+    await page.getByTestId("studio-open-carousel-balanced").click();
     await expect(studio.detail(page)).toBeVisible();
     await expect.poll(async () => (await entries(page)).at(0)?.finished).toBe(true);
     expect(Math.abs((await scrollY(page)) - before)).toBeLessThanOrEqual(1);
@@ -336,21 +336,21 @@ test.describe("when a transition must not run", () => {
 
   test("under reduced motion nothing is started, and the state still changes", async ({ page }) => {
     await openStudioForTransitions(page, { motion: "reduce" });
-    await page.getByTestId("studio-open-rail-balanced").click();
+    await page.getByTestId("studio-open-carousel-balanced").click();
     await expect(page.getByTestId("studio-detail-name")).toBeFocused();
     await page.getByTestId("studio-detail-back").click();
-    await expect(page.getByTestId("studio-open-rail-balanced")).toBeFocused();
+    await expect(page.getByTestId("studio-open-carousel-balanced")).toBeFocused();
     expect(await entries(page)).toEqual([]);
   });
 
   test("never runs over a Deck exchange, a rail step or the Sheet", async ({ page }) => {
     await openStudioForTransitions(page);
-    await page.getByTestId("studio-shortlist-rail-balanced").click();
+    await page.getByTestId("studio-shortlist-carousel-balanced").click();
     await expect(studio.deck(page)).toHaveAttribute("data-deck-state", "deck");
     await page.getByTestId("studio-deck-next").click();
     await expect(studio.deck(page)).toHaveAttribute("data-phase", "idle", { timeout: 8_000 });
     await page.getByTestId("studio-driver-next").click();
-    await page.getByTestId("studio-shortlist-rail-balanced").click();
+    await page.getByTestId("studio-shortlist-carousel-balanced").click();
     await page.getByTestId("studio-choose-a").click();
     await page.getByTestId("studio-open-implementation").click();
     await expect(studio.sheet(page)).toBeVisible();

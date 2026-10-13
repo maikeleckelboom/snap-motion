@@ -100,12 +100,12 @@ async function copy() {
             <dt>Settles in</dt>
             <dd>
               {{ candidate.settleMs === undefined ? "Over 4 s" : `${candidate.settleMs} ms` }}
-              <span class="source">computed</span>
+              <span class="source">calculated</span>
             </dd>
           </div>
           <div>
             <dt>Overshoot</dt>
-            <dd>{{ candidate.overshootPercent }}% <span class="source">computed</span></dd>
+            <dd>{{ candidate.overshootPercent }}% <span class="source">calculated</span></dd>
           </div>
         </dl>
       </section>
@@ -128,7 +128,7 @@ async function copy() {
           </p>
         </div>
         <p class="details-line">
-          These are the values the live previews were given. Computed figures describe the spring
+          These are the values the live previews were given. Calculated figures describe the spring
           alone; they are not measurements of your interface.
         </p>
       </section>

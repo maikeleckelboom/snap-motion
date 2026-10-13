@@ -302,6 +302,74 @@ describe("the one native modal", () => {
   });
 });
 
+describe("adopting a candidate as B", () => {
+  it("behaves as choosing B while there is room", () => {
+    const studio = model(["a", "b"]);
+    expect(studio.adoptCandidate("e")).toBe("changed");
+    expect(state(studio)).toMatchObject({ a: "a", b: "e", deck: ["b", "e"] });
+    expect(studio.adoptCandidate("e")).toBe("unchanged");
+  });
+
+  it("gives B's slot to the newcomer when the shortlist is full, keeping the pile's order", () => {
+    const studio = model(["a", "b", "c", "d"]);
+    studio.setCandidate("c");
+    expect(studio.adoptCandidate("e")).toBe("changed");
+    expect(state(studio)).toMatchObject({ a: "a", b: "e", shortlist: ["a", "b", "e", "d"] });
+    expectInvariants(studio, "after adopting into a full shortlist");
+  });
+
+  it("refuses the reference and an unknown id, and never replaces A", () => {
+    const studio = model(["a", "b", "c", "d"]);
+    expect(studio.adoptCandidate("a")).toBe("is-reference");
+    expect(studio.adoptCandidate("nope" as Id)).toBe("unknown");
+    expect(studio.referenceId.value).toBe("a");
+  });
+
+  it("works from an empty and a one-member shortlist", () => {
+    const one = model(["a"]);
+    expect(one.adoptCandidate("b")).toBe("changed");
+    expect(state(one)).toMatchObject({ a: "a", b: "b" });
+    const none = model();
+    expect(none.adoptCandidate("a")).toBe("unchanged");
+    expect(none.referenceId.value).toBe("a");
+  });
+});
+
+describe("the shortlist's own Deck", () => {
+  it("turns its cards with Shuffle until told otherwise, as a setting of its own", () => {
+    const studio = model(["a", "b", "c"]);
+    expect(studio.shortlistExchange.value).toBe("shuffle");
+    studio.setShortlistExchange("direct");
+    expect(studio.shortlistExchange.value).toBe("direct");
+  });
+
+  it("never changes who A and B are, or what is shortlisted", () => {
+    const studio = model(["a", "b", "c"]);
+    const before = state(studio);
+    studio.setShortlistExchange("direct");
+    studio.setShortlistExchange("shuffle");
+    expect(state(studio)).toEqual(before);
+  });
+});
+
+describe("the photo viewer", () => {
+  it("is the one modal: it refuses while the sheet is open, and the sheet while it is", () => {
+    const studio = model(["a", "b"]);
+    expect(studio.openMedia("photo-1")).toBe(true);
+    expect(studio.overlay.value).toBe("media");
+    expect(studio.mediaId.value).toBe("photo-1");
+    expect(studio.openSheet("a")).toBe(false);
+    expect(studio.openMedia("photo-2")).toBe(false);
+    studio.requestClose();
+    expect(studio.overlay.value).toBe("media");
+    studio.completeClose();
+    expect(studio.overlay.value).toBe("none");
+    expect(studio.mediaId.value).toBeUndefined();
+    expect(studio.openSheet("a")).toBe(true);
+    expect(studio.openMedia("photo-1")).toBe(false);
+  });
+});
+
 describe("invariants over arbitrary sequences", () => {
   for (let seed = 1; seed <= 40; seed += 1) {
     it(`holds after every operation (seed ${seed})`, () => {
@@ -311,7 +379,7 @@ describe("invariants over arbitrary sequences", () => {
       expectInvariants(studio, "start");
       for (let step = 0; step < 150; step += 1) {
         const id = pick();
-        const operation = Math.floor(next() * 7);
+        const operation = Math.floor(next() * 9);
         const label = `seed ${seed} step ${step} op ${operation} ${id}`;
         if (operation === 0) studio.addToShortlist(id);
         else if (operation === 1) studio.removeFromShortlist(id);
@@ -319,6 +387,8 @@ describe("invariants over arbitrary sequences", () => {
         else if (operation === 3) studio.pinReference(id);
         else if (operation === 4) studio.setCandidate(id);
         else if (operation === 5) studio.swapRoles();
+        else if (operation === 6) studio.adoptCandidate(id);
+        else if (operation === 7) studio.setShortlistExchange(next() < 0.5 ? "direct" : "shuffle");
         else studio.reportPresented(next() < 0.5 ? id : undefined);
         expectInvariants(studio, label);
         // The shown candidate is always something the visitor could actually see in the Deck.
