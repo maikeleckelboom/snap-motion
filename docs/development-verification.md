@@ -118,3 +118,28 @@ CI times for these owners are in [test architecture](test-architecture-and-perfo
 
 The numbers are one host, two workers, and a Vite development server. They show where time goes and
 whether a change helped; they are not a CI prediction and are never asserted on.
+
+### After the item carousel
+
+The Studio's task changed from five screens on a rail to eleven photos in a conversation, and B became
+editable (see [Motion Studio](motion-studio.md)). One host, two workers, a Vite development server:
+
+| Local run                                    |                                   Result |
+| -------------------------------------------- | ---------------------------------------: |
+| `pnpm check:lab` (lint, typecheck, 243 unit) |                       about 9 s, passing |
+| `pnpm test:studio` (Chromium)                |                       162 tests in 138 s |
+| `pnpm test:studio:witness` (Firefox, WebKit) | 238 passed, 4 skipped by design, 6.1 min |
+| `pnpm test:preview` (build, then built page) |             9 tests, 6 s after the build |
+
+Three new browser specs carry the change (`studio-media`, `studio-tune`, `studio-media-touch`); the
+tap decision, the strip's geometry, the Custom candidate and editing B are unit tests, so the
+combinatorial parts (what editing B copies, what a full shortlist does, when a layout call-out appears)
+cost no browser time. Two lessons from writing the browser specs belong here because they cost a
+failing run each:
+
+- A page that scrolls smoothly, and a View Transition that holds the page for a few hundred
+  milliseconds, both cancel a touch or a pointer that arrives during them. A spec that aims input at a
+  surface centres it, waits for the scroll to stop (`centreOnScreen` in `studioHelpers.ts`) and, after a
+  view change, waits for `document.documentElement.dataset.studioTransition` to clear.
+- Dragging or clicking a stage scrolls the page to reach it, so a stability assertion compares document
+  coordinates (`y + scrollY`), not viewport ones.
