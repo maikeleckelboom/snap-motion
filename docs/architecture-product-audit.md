@@ -44,6 +44,11 @@ Most important findings:
    `coverflow`, `dialog`, `sheet` and `media-gallery` entries do not drag in unrelated surfaces;
    `media-gallery` is isolated by a hard emitted-graph blocklist; packed tarballs were rebuilt and
    certified in this audit.
+8. **The test portfolio protects demos as much as the library.** ~35% of e2e spec lines pin
+   Playground/Studio/Lab app behavior (demo markup, tuning-editor semantics, Studio narrative),
+   and the deck's paint-order evidence exists in three overlapping layers. Test hygiene is
+   excellent (flakes are fixed with controlled clocks, CI is optimized), but portfolio direction
+   must shift to contract-first consumer tests before React parity work starts (Section 16).
 
 Bottom line: the architecture is worth evolving (option A, Audit 8). The single biggest product-level
 mistake so far is not a bad component — it is that public-surface polish and demonstration work
@@ -577,6 +582,9 @@ provably portable, and the missing piece is a sibling package, not a restructure
 5. Fix the two documented flaky tests (readiness threshold; pile envelope oracle).
 6. Decide Studio placement: keep as internal tool (recommended) and cut the public narrative chrome
    and the third tuning-editor copy.
+7. Begin test-portfolio phase 1 (Section 16.5): shared contract spec modules for `carousel`,
+   `sheet`, `dialog` running against source and packed bytes; no existing test is removed until
+   its contract twin passes.
 
 ### NEXT
 
@@ -625,6 +633,9 @@ Evidence supports stopping the following:
    The uncertified Gallery-above-Sheet composition should remain unsupported rather than funded.
 5. **Public-facing Studio features** (persistence, sharing, more candidates) — the Studio is an
    internal research instrument, not a product.
+6. **New demo-hosted e2e specs.** Default new browser coverage to the contract-consumer layer
+   (Section 16.5, L3); every additional Playground/Studio spec must justify itself as package
+   stress coverage, because demo-hosted specs pin the very chrome the product direction shrinks.
 
 ---
 
@@ -682,6 +693,10 @@ skipped.
 | 10 | `pnpm build:fixtures:prepared && pnpm test:fixtures:prepared` | **12/12 passed** (router authority, Nuxt hydration, JS-disabled route, adaptive sheet, surface preferences) |
 | 11 | `playwright test --config playwright.config.ts --project=chromium e2e/sheet.spec.ts e2e/accessibility.spec.ts e2e/coverflow-motion.spec.ts` | **17/17 passed** |
 | 12 | `pnpm verify:packages:browser:prepared` | passed: packed Nuxt build, SSR markers, 48 preference cells in chromium/firefox/webkit, focus + composition certification |
+| 13 | `vitest run --project core` | 302 passed (test-audit re-count) |
+| 14 | `vitest run --project lab` | 243 passed |
+| 15 | `vitest run --project scripts` | 185 passed |
+| 16 | grep-based portfolio measurement | e2e spec line counts, harness sizes, per-file test sizes (Section 16.1); visual configs confirmed absent from `.github/workflows` |
 
 Not executed (recorded for completeness): full 8-project browser matrix, preview gate, visual
 review suites, release-candidate workflow, physical AT certification.
@@ -709,3 +724,256 @@ were possible; no React/Next.js evidence could be produced because none exists i
 | F12 | Studio has a distinct, defensible workflow; it forced a real package fix | `docs/motion-studio.md:286-291`, `studio*.spec.ts` | internal research value confirmed | (positive) | Keep internally; cut public narrative chrome (NOW-6) | High |
 | F13 | Paged Grid is a demo, not a component | only consumer is `PagedGridDemo.vue:2` | product-brief expectation unmet | Medium | Ship primitive or demote (LATER-12) | Certain |
 | F14 | vue/tsc toolchain split (TS 7 vs TS 6 bridge) | `docs/package-contract.md:107-123` | SFC tooling pinned to a bridge | Low | Monitor upstream Vue Language Tools | High |
+| F15 | ~35% of the e2e portfolio protects demo apps, not the library | Section 16.1: playground/studio/lab specs ≈ 6,426 of ~18,600 spec lines | most expensive tests protect the layer the product direction shrinks | High | Re-anchor package behavior in contract consumers; scoped demo groups (16.5) | Certain |
+| F16 | Deck paint-order evidence exists in three overlapping layers | unit `stacked-deck-direct-paint-safety.test.ts` (1,281 lines) + e2e paint witnesses (`stacked-deck-direct(-reversal)`/`pile`, ~46 style assertions each) + 5 local visual scenarios (~2,456 lines) | redundant evidence, slowest CI tests (75.8s pile perimeter) | Medium | Keep unit contract + one compositor witness; visual stays release-time (16.5, phase 3) | Certain |
+| F17 | Demo-hosted specs pin demo markup, not public contracts | `paged-grid.spec.ts` reads `[data-testid="paged-grid"]` and demo grid items; `showcase-smoke.spec.ts` asserts Lab chrome; `lab-physics-settings.spec.ts` (656 lines) pins the tuning editor UI | tests break on demo refactors, not on product regressions; they protect the wrong thing | Medium | REPLACE with consumer/contract specs; retire chrome coverage as sections are cut | Certain |
+| F18 | 15% of the unit layer protects release tooling, not product | scripts project: 185 tests across 15 files (classifier, certification, release candidates, assembly) | justified infrastructure protection, but invisible to product quality metrics | Low | Keep; label as infrastructure coverage in reports | Certain |
+| F19 | Zero cross-framework test parity | no React/Next.js tests exist; core tests are the only transferable layer | parity work has no regression safety net to land into | High (once React starts) | Contract-first template: shared spec modules run against Vue today, React tomorrow (16.5) | Certain |
+
+---
+
+## 16. Test Architecture & Test Portfolio Audit
+
+This section critically reviews whether the existing test investment protects the newly defined
+product direction (reusable, framework-parity components) or disproportionately protects legacy
+Playground/Motion Studio behavior and internal implementation details. Test count and historical
+effort are treated as evidence of past activity, not as a reason to preserve anything.
+
+### 16.1 Portfolio inventory (facts)
+
+Unit layer (executed in this audit, 94 files / 1,352 tests / ~20s native wall):
+
+| Project | Files | Tests | Protects |
+|---|---|---|---|
+| core | 20 | 302 | framework-independent physics, models, controller, geometry |
+| vue (+ vue-ssr) | 45 | 622 | component state machines, composables, focus, input, SSR render |
+| lab | 14 | 243 | Studio model/candidates/tap/physics, Playground tuning logic |
+| scripts | 15 | 185 | verification pipeline itself (classifier, certification, release candidates) |
+
+Browser layer:
+
+| Layer | Specs | Approx. lines | CI |
+|---|---|---|---|
+| e2e (source, via lab app) | 42 | ~18,600 (+ ~5,600 helpers/harness) | Chromium 208 tests / 3 jobs; Firefox 55; WebKit interop 55 + deck 13 + direct 25 + pile 12 |
+| fixture-e2e | 2 | ~1,200 | 12 tests, integration job (router + Nuxt hydration) |
+| preview e2e | 2 | ~220 | built preview under non-root base |
+| visual scenarios | 5 | ~2,456 | **not in CI** (verified: no visual config referenced in `.github/workflows`) |
+| packed consumers | script-driven | — | part of `verify:packages` / `verify:packages:browser` |
+
+e2e spec distribution by what they protect (line-based estimate):
+
+- **Stacked Deck family** (stacked-deck, -direct, -direct-reversal, -pile, stackedDeckConsumer,
+  stackedDeckTrace): ~6,490 lines (~35%) — the two most complex surfaces.
+- **Gallery family** (coverflow-gallery, galleryTakeover, galleryReturn, galleryNativeTransition,
+  media-gallery-at-harness): ~3,065 lines (~16%).
+- **Playground/Studio/Lab demo apps** (playground, playground-layout, playground-preview,
+  media-preview, 8 studio specs, lab-physics-settings, paged-grid, variable-rail,
+  showcase-smoke, lab-navigation): ~6,426 lines (~35%).
+- **Package behavior hosted in demos** (sheet family, coverflow family, overlay/pointer/realm,
+  a11y, surfaceState): ~3,285 lines (~18%).
+
+### 16.2 Critical assessment (judgment)
+
+The test hygiene is excellent — flakes are investigated with controlled clocks rather than waived
+(`docs/test-architecture-and-performance.md:89-124`), CI cost was already optimized 626s → 310s,
+and every test layer has a documented purpose. The critique is about **portfolio direction**, not
+quality:
+
+1. **The most expensive tests protect the layer the product direction shrinks.** ~35% of e2e
+   spec lines assert Playground/Studio/Lab app behavior (demo chrome, tuning editor semantics,
+   Studio narrative flows, paged-grid demo geometry). Per the product audit (Section 8), the
+   Playground demos should become documentation examples and the Studio should move behind the
+   Lab. Those specs therefore pin the thing being cut, not the reusable library. The library's
+   most costly layer (full browser matrix) is partially a demo-app regression suite.
+2. **Demo-hosted specs couple to demo markup.** `paged-grid.spec.ts` reads
+   `[data-testid="paged-grid"]`, demo grid item classes and Lab query params
+   (`openLabDemo(page, "grid")`); `showcase-smoke.spec.ts` asserts Lab chrome (`#nav-*`,
+   `.lab-inspector`); `lab-physics-settings.spec.ts` (656 lines) pins the tuning editor UI that
+   the audit recommends consolidating to one editor. These tests break when demos refactor and
+   stay green when product contracts break.
+3. **The deck's paint-order evidence exists in three overlapping layers.** Unit
+   `stacked-deck-direct-paint-safety.test.ts` (1,281 lines; 46 transform/opacity/translate
+   assertions), e2e paint witnesses (46 style assertions in `stacked-deck-direct.spec.ts` alone),
+   and five local-only visual scenarios (~2,456 lines + 7 runner scripts + 5 configs). Each layer
+   has a documented justification (`docs/production-certification.md:48-60`) but the redundancy is
+   real, and the WebKit pile perimeter test (75.8s) is the slowest test in the suite.
+4. **The Studio specs are package stress tests in Studio clothing.** 8 specs (~3,659 lines) do
+   real work (frame-accurate authority, reconciliation, interruption) but are unreachable as
+   consumer-facing regression evidence: they cannot run without the Studio app. If the Studio
+   moves to internal scope, that coverage must be re-anchored to contract consumers first.
+5. **The gallery AT harness is heavy.** `media-gallery-at-harness.spec.ts` (844 lines) drives 11
+   deterministic scenarios through fake `__at-media__` endpoints served by a Vite plugin
+   (`apps/lab/vite.config.ts:9-78`). Its unique value (loading/retry/delay behavior + axe) is
+   partially duplicated by `media-gallery-component.test.ts` (1,974 lines, the largest unit file).
+6. **Cross-framework parity has no test story.** Zero React/Next.js tests exist (structural). The
+   only transferable coverage is core (302 tests) and the packed-consumer contract model.
+
+What is *not* criticized: core unit tests (the template for everything else), fixture-e2e and
+packed-consumer certification (the strongest assets in the portfolio), the verification-tooling
+tests (they protect the pipeline that certifies everything above — 15% of the unit layer, worth
+it), and the axe/keyboard/focus gates.
+
+### 16.3 Classification
+
+#### PRESERVE (essential behavioral, accessibility, SSR/hydration, interaction guarantees)
+
+- `packages/core/test/*` (20 files, 302 tests) — framework-independent contracts; the transferable
+  regression layer for both frameworks.
+- `packages/vue/test`: `ssr-render`, `component-layer`, `sheet-*` (component/policy/geometry/
+  focus-lifecycle/dismissal/preferences), `use-sheet-motion`, `focus`, `focus-restore`,
+  `surfaceFocus`, `reduced-motion`, `remeasurement`, `realm-dom`, `pointer-drag`,
+  `pointerCaptureOwnership`, `input-policy`, `surfaceGestureEpoch`, `wheel`, `motion-driver`,
+  `use-snap-motion`, `carousel-keyboard-lifecycle`, `carousel-window`,
+  `carousel-geometry-strategy`, `settlement-authority`, `controlled-settlement-chaining`,
+  `coverflow-component`, `stackedDeckDisabled`, `stackedDeckInspection`, `spatial-surface-*`,
+  `use-carousel-motion`, `media-gallery-math`, `galleryTrackCorridor`, `reduced-motion`.
+- `fixture-e2e/*` (routing authority, Nuxt hydration, adaptive sheet, surface preferences).
+- `e2e`: `sheet.spec`, `sheetContent.spec`, `sheetDismissal.spec`, `overlay-lifecycle.spec`,
+  `pointerCapture.spec`, `realm-overlay.spec`, `accessibility.spec`, `keyboard-certification.spec`,
+  `default-surfaces.spec`, `galleryTakeover.spec`, `galleryReturn.spec`,
+  `galleryNativeTransition.spec`, `coverflow-motion.spec`, `coverflow-navigation.spec`,
+  `coverflow-pagination-focus.spec`, `coverflow-wheel.spec`, `stackedDeckConsumer.spec`,
+  `surfaceState.spec`.
+- Packed-consumer certification scripts and their fixture templates (the contract-first model to
+  scale, see 16.9).
+- `scripts/*.test.ts` (185 tests) — infrastructure protection, PRESERVE but labeled as such.
+
+#### RESTRUCTURE (valuable coverage with excessive coupling, duplication, or poor boundaries)
+
+- `packages/vue/test/stacked-deck-direct-paint-safety.test.ts` (1,281 lines) — keep one
+  paint-contract suite; consolidate overlapping assertions with the e2e paint witnesses and
+  document which layer owns which invariant.
+- `packages/vue/test/media-gallery-component.test.ts` (1,974 lines) and
+  `packages/vue/test/stacked-deck-component.test.ts` / `sheet-component.test.ts` — split along
+  public contracts (open/close lifecycle, gesture, loading, focus, controlled authority) so
+  consumer contract tests (16.9) can reuse the same scenarios.
+- `e2e/stacked-deck.spec.ts` (2,272) + `stacked-deck-direct.spec.ts` (2,599) + harnesses
+  (`stackedDeckHarness.ts` 444, `stackedDeckTrace.ts` 403, `stackedDeckPileTrace.ts` 741,
+  `stackedDeckPileGeometry.ts` 201, `deckReconciliationTrace.ts` 294) — harness code duplicates
+  unit-level math; restructure so harnesses consume shared geometry helpers from a test-support
+  module instead of reimplementing them.
+- `e2e/lab-physics-settings.spec.ts` (656) — valuable for the *one surviving* tuning editor;
+  restructure after the editor consolidation (Audit 7 recommendation).
+- `e2e/media-gallery-at-harness.spec.ts` (844) — restructure into (a) component-level loading/
+  retry tests and (b) a consumer-level axe/keyboard check; retire the demo-hosted AT harness
+  after physical AT certification runs are recorded.
+- Visual scenario corpus (5 scenarios, 5 configs, 7 runners) — keep as **release-time evidence**
+  (already CI-excluded); restructure configs into one parameterized runner.
+- `packages/vue/test/performance-budget.test.ts`, `packages/core/test/performance-budget.test.ts`
+  — intentionally implementation-coupled (allocation/emission budgets); keep but move to a
+  clearly labeled "internal budgets" layer so they are never mistaken for behavioral contracts.
+- The 5× authority-protocol test clusters (`component-layer`, `settlement-authority`,
+  `controlled-settlement-chaining`, per-component authority cases) — after the protocol is
+  extracted into a shared module (roadmap NOW-3), these tests should exercise the shared module
+  plus one public surface each, instead of re-pinning the same protocol five times.
+
+#### REPLACE (tests better expressed as framework-independent or public contract tests)
+
+- `e2e/paged-grid.spec.ts` → the geometry is already unit-tested in core
+  (`carousel-geometry.test.ts`); if a Paged Grid component ships, cover it with a consumer
+  contract spec; otherwise this spec retires with the demo (Audit 2: Paged Grid is a demo).
+- `e2e/variable-rail.spec.ts` → a `useCarouselMotion` variable-width contract spec in a minimal
+  consumer, decoupled from the Lab fixture.
+- `e2e/showcase-smoke.spec.ts`, `e2e/lab-navigation.spec.ts` → replaced by a docs-site smoke once
+  documentation replaces the public Playground sections; they protect Lab chrome, not the library.
+- `e2e/playground.spec.ts` — split: the "live surfaces" and "reduced motion" groups are package
+  contract tests in disguise → consumer-hosted contract specs; the "shared Motion Tuning" group is
+  demo-editor behavior → follows the editor consolidation.
+- `e2e/studio-*.spec.ts` (8 specs) → re-anchor the *package-relevant* invariants (frame-accurate
+  authority, reconciliation, interruption, tap-vs-drag, media keyboard) into consumer-hosted
+  specs before any Studio demotion; the Studio-chrome assertions (narrative, layout, decision
+  form) follow the Studio to the Lab scope.
+- `apps/lab/test/studio-*` unit files (243 tests) → keep the model tests (they pin real state
+  logic) but they remain app-scoped, not library coverage.
+
+#### RETIRE (exclusively supporting obsolete features or demonstrations)
+
+No file should be deleted as part of this audit. Candidates for retirement, in order, once the
+replacement coverage above is green:
+1. `e2e/paged-grid.spec.ts` (if no Paged Grid product decision happens; its core geometry tests
+   already exist).
+2. `e2e/showcase-smoke.spec.ts` and `e2e/lab-navigation.spec.ts` (Lab chrome; demo registry
+   behavior is app-internal).
+3. `e2e/lab-physics-settings.spec.ts` editor-UI sections that pin one of the three editors being
+   consolidated.
+4. `e2e/media-gallery-at-harness.spec.ts` + `certificationMediaPlugin` fake-endpoint machinery
+   (after physical AT runs are recorded and loading/retry is covered at component level).
+5. Studio narrative-chrome assertions in `studio.spec.ts` ("the decision journey" describe
+   blocks, the implementation-sheet describe block) if the Studio moves out of the public path.
+
+### 16.4 Duplication, cost, brittleness, fixture complexity (facts)
+
+- **Execution cost**: unit ~20s (healthy); Chromium 208 tests across 3 jobs (~140s longest test
+  step post-optimization); WebKit carries 13 deck + 25 direct + 12 pile extra witnesses; slowest
+  single test is WebKit pile perimeter ownership (75.8s) followed by WebKit Direct visual
+  authority (40.2s) and packed Nuxt build/hydration (82s). Source: the repository's own baseline
+  (`docs/test-architecture-and-performance.md:352-433`).
+- **Brittleness history**: Sheet reopen flake, WebKit Direct airborne-reversal race, Gallery
+  mixed-aspect snap-back race — each fixed with Playwright clock control, not tolerance widening
+  (`docs/test-architecture-and-performance.md:89-124`). Two open flaky-test defects remain
+  (F7). Four engine-conditional skips exist. ~220 ResizeObserver-loop diagnostics remain
+  unclassified (F8).
+- **Fixture complexity**: 6 certification fixtures + fake-media Vite plugin + realm-overlay
+  iframe fixture + 5 visual scenarios + 7 visual runner scripts + 4 trace harnesses. High
+  maintenance surface concentrated on one component (the deck).
+- **Implementation coupling**: the paint-safety unit suite and the performance-budget suites are
+  intentionally coupled to internals (compositor matrices, allocation counts). That is defensible
+  — paint order *is* the behavior — but the tests must be labeled internal evidence so a future
+  refactor can rewrite them without being mistaken for a behavior regression.
+- **Cross-framework parity**: none (F19). The packed `Inference.vue`/`contracts.ts`/`ssr.mjs`
+  consumer is the proven template; it currently exists for Vue only.
+
+### 16.5 Contract-first, incremental restructuring strategy (proposal)
+
+Layer model for the future portfolio:
+
+```
+L1 Core contracts      packages/core/test  (already contract-shaped; unchanged)
+L2 Public entrypoint contracts
+      shared spec modules that run twice: against source (vitest) and against packed
+      bytes (verify-packages). Today: Inference.vue/contracts.ts/ssr.mjs. Extend per
+      entrypoint: carousel, sheet, dialog first; coverflow/deck/gallery second.
+L3 Minimal consumer-hosted browser specs
+      one tiny consumer app (like router-fixture) hosting each entrypoint's observable
+      behavior (authority, gesture, keyboard, focus, remeasure, reduced motion).
+      This is where the demo-hosted e2e assertions move.
+L4 App-level specs (Playground/Studio/Lab)
+      clearly scoped demo coverage; runs in its own group; shrinks as demo surface shrinks.
+L5 Release-time evidence (visual scenarios, AT harness, physical AT)
+      local/manual; never per-commit; consolidated runners.
+```
+
+Migration sequence (each phase gates on the previous being green; nothing is deleted before its
+replacement passes):
+
+- **Phase 0 (this audit)**: classification is published; no test changes.
+- **Phase 1**: extend L2 — shared contract spec modules for `carousel`, `sheet`, `dialog` running
+  against source and packed bytes; keep all existing specs untouched until the shared versions
+  cover the same assertions.
+- **Phase 2**: stand up L3 minimal consumer; migrate package-behavior assertions out of
+  `playground.spec.ts` (live surfaces, reduced motion), `variable-rail.spec.ts`, and the
+  sheet/coverflow specs that currently depend on demo markup. Delete each demo assertion only
+  after its L3 twin passes.
+- **Phase 3**: consolidate deck paint evidence: one unit paint-contract suite + one compositor
+  witness e2e + release-time visual scenarios with a single parameterized runner. Split
+  `media-gallery-component.test.ts` along public contracts. Re-anchor Studio package invariants
+  to L3 before any Studio demotion.
+- **Phase 4**: retire the RETIRE list as the Playground sections are cut; consolidate the three
+  physics editors and shrink `lab-physics-settings.spec.ts` to the survivor.
+- **Phase 5**: React adapter ships with L1 reuse + its own L2/L3 twins; parity rule: no new
+  component in either framework without L2 contract coverage.
+
+Regression-risk management: the existing gates stay authoritative throughout — architecture
+check, size budgets, API report, ownership partition (`browserOwnership.test.ts`), packed-consumer
+certification, and the final Browser certification gate. The certification gate's changed-path
+classifier already scopes runs by touched paths, so moving specs between groups is a config change
+with its own deterministic unit test.
+
+### 16.6 What this means for product work (judgment)
+
+The test portfolio is the strongest argument for the "evolve, don't restructure" decision in
+Section 10: the contract layers that exist (core, packed consumers, fixture-e2e) are exactly the
+foundation a React adapter needs, and the demo-app coupling is the one structural weakness. The
+portfolio should stop growing at the demo layer: every new e2e spec should default to L3
+(consumer-hosted) instead of a new Playground section, and Playground/Studio spec growth should
+be explicitly justified as package stress coverage each time.
